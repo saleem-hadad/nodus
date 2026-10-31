@@ -22,6 +22,7 @@ import {
   ensurePrivateDir,
   hostPaths,
   messageReader,
+  writeHookConfig,
   type ClientMessage,
   type HostMessage,
   type HostPaths
@@ -187,9 +188,25 @@ function handle(msg: HostMessage) {
   }
 }
 
+/**
+ * Puts the host's token where hook commands read it. Undefined when it can't,
+ * and then they send it in the URL.
+ */
+function hookConfig(token: string): string | undefined {
+  const paths = hostPaths(app.getPath('userData'))
+  try {
+    writeHookConfig(paths, token)
+    return paths.hookConfig
+  } catch (err) {
+    console.error('[host] could not write the hook config', err)
+    return undefined
+  }
+}
+
 /** Takes on the sessions a host is already running, with what has happened in them. */
 function adopt(welcome: Extract<HostMessage, { type: 'welcome' }>) {
-  setHookEndpoint(welcome.hookPort, welcome.hookToken)
+  const config = welcome.hookAuthHeader ? hookConfig(welcome.hookToken) : undefined
+  setHookEndpoint(welcome.hookPort, welcome.hookToken, config)
   hostRelaysMcp = welcome.mcp === true
   for (const s of welcome.sessions) {
     track(s.sessionId, s.projectId, s.initial, s.buffer)
@@ -351,7 +368,8 @@ function commandFor(opts: SpawnOptions): { file: string; args: string[]; env: Re
   if (hostRelaysMcp) args.push('--mcp-config', BOARD_MCP_CONFIG, '--allowedTools', ...BOARD_TOOL_RULES)
   if (opts.extraArgs) args.push(...opts.extraArgs)
   args.push('--settings', hookSettings())
-  if (opts.initialPrompt) args.push(opts.initialPrompt)
+  // After `--`, so a prompt that starts with a dash isn't read as an option.
+  if (opts.initialPrompt) args.push('--', opts.initialPrompt)
   return { file: requireClaude(), args, env: spawnEnv(hookEnv(opts.sessionId)) }
 }
 

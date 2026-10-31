@@ -94,7 +94,9 @@ export function createNote(projectId: string, from: string, { text, color }: Not
 
 /** Changes a note's text or colour. It keeps its size, which may be the user's. */
 export function updateNote(projectId: string, noteId: string, { text, color }: NotePatch): BoardNote {
-  const note = getBoard(projectId).notes![noteId]
+  const notes = getBoard(projectId).notes!
+  // The id comes from Claude: "__proto__" must not reach Object.prototype.
+  const note = Object.hasOwn(notes, noteId) ? notes[noteId] : undefined
   if (!note) throw new Error('There’s no note with that id on this board')
   if (text !== undefined) {
     const body = noteText(text)

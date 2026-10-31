@@ -53,6 +53,7 @@ const sessions = new Map<string, Session>()
 /** Connected apps that speak our protocol. */
 const clients = new Set<net.Socket>()
 const hookToken = crypto.randomBytes(16).toString('hex')
+const hookTokenBytes = Buffer.from(hookToken)
 let hookPort = 0
 let stopping = false
 
@@ -214,7 +215,15 @@ const server = net.createServer((socket) => {
             statusLine: s.statusLine
           }))
           socket.write(
-            encode({ type: 'welcome', protocol: PROTOCOL, hookPort, hookToken, sessions: sessionList, mcp: true })
+            encode({
+              type: 'welcome',
+              protocol: PROTOCOL,
+              hookPort,
+              hookToken,
+              sessions: sessionList,
+              mcp: true,
+              hookAuthHeader: true
+            })
           )
           // An app on another protocol may only ask us to stop.
           if (msg.protocol === PROTOCOL) clients.add(socket)
@@ -240,6 +249,14 @@ const server = net.createServer((socket) => {
 // Hooks: the same endpoint hooks.ts registers with every claude process, and
 // its status line.
 
+const bearer = (req: http.IncomingMessage) => /^Bearer (\S+)$/.exec(req.headers.authorization ?? '')?.[1]
+
+/** Compared in constant time, so the token can't be worked out from how long a check takes. */
+function isHookToken(value: string | null | undefined) {
+  const given = Buffer.from(value ?? '')
+  return given.length === hookTokenBytes.length && crypto.timingSafeEqual(given, hookTokenBytes)
+}
+
 const hookServer = http.createServer((req, res) => {
   const url = new URL(req.url ?? '/', 'http://127.0.0.1')
   if (url.pathname === MCP_PATH) {
@@ -250,7 +267,9 @@ const hookServer = http.createServer((req, res) => {
     })
     return
   }
-  if (req.method !== 'POST' || url.pathname !== '/hook' || url.searchParams.get('token') !== hookToken) {
+  // Processes started by an older app send the token in the URL.
+  const token = bearer(req) ?? url.searchParams.get('token')
+  if (req.method !== 'POST' || url.pathname !== '/hook' || !isHookToken(token)) {
     res.writeHead(404).end()
     req.resume()
     return
@@ -327,12 +346,12 @@ function unanswered(msg: RpcRequest) {
 
 /** The MCP streamable HTTP transport, answering every request on its POST: there are no streams. */
 async function serveMcp(req: http.IncomingMessage, res: http.ServerResponse) {
-  const token = /^Bearer (\S+)$/.exec(req.headers.authorization ?? '')?.[1]
+  const authorized = isHookToken(bearer(req))
   const s = sessions.get(String(req.headers[MCP_SESSION_HEADER.toLowerCase()] ?? ''))
-  if (token !== hookToken || !s || req.method !== 'POST') {
+  if (!authorized || !s || req.method !== 'POST') {
     req.resume()
     // There's no stream to open (GET) and no session to end (DELETE).
-    const status = token !== hookToken || !s ? 401 : req.method === 'DELETE' ? 204 : 405
+    const status = !authorized || !s ? 401 : req.method === 'DELETE' ? 204 : 405
     return void res.writeHead(status, status === 405 ? { Allow: 'POST' } : {}).end()
   }
 

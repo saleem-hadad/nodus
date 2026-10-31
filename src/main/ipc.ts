@@ -591,7 +591,8 @@ export async function registerIpc(getWindow: () => BrowserWindow | null) {
       const removed: string[] = []
       const skipped: { id: string; reason: string }[] = []
       for (const id of sessionIds) {
-        const node = board.nodes[id]
+        // Ids come from Claude: "__proto__" must not reach Object.prototype.
+        const node = Object.hasOwn(board.nodes, id) ? board.nodes[id] : undefined
         const status = getStatus(id)
         const reason = !node
           ? 'not on the board'

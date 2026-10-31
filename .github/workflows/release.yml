@@ -37,6 +37,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
+      - run: pnpm test
       - run: pnpm dist
 
       - name: Attach the DMGs to the release

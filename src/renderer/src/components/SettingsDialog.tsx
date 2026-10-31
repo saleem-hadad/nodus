@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { X } from 'lucide-react'
 import clsx from 'clsx'
-import type { AppSettings, ThemePreference, VoiceKeySource } from '@shared/types'
+import type { AppSettings, ThemePreference, UpdateStatus, VoiceKeySource } from '@shared/types'
 import { useApp } from '@renderer/store'
 import { Modal } from './Modal'
+import { useUpdateStatus } from './UpdateButton'
 import './SettingsDialog.css'
 
 const THEMES: { value: ThemePreference; label: string }[] = [
@@ -94,6 +95,8 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
         </fieldset>
 
         <VoiceSettings />
+
+        <UpdateSettings settings={settings} update={update} />
       </div>
     </div>
   )
@@ -180,6 +183,88 @@ function VoiceSettings() {
       {error && <p className="settings-error">{error}</p>}
     </fieldset>
   )
+}
+
+const RELEASES_URL = 'https://github.com/saleem-hadad/nodus/releases/latest'
+
+/** The running version, how its update is going, and whether updates come by themselves. */
+function UpdateSettings({
+  settings,
+  update
+}: {
+  settings: AppSettings | null
+  update: (patch: Partial<AppSettings>) => void
+}) {
+  const status = useUpdateStatus()
+  const busy = status?.state === 'checking' || status?.state === 'downloading'
+  const text = status && updateText(status)
+
+  return (
+    <fieldset className="settings-group">
+      <legend className="settings-label">Updates</legend>
+      <div className="settings-row">
+        <span className="settings-row-text">
+          <span className="settings-row-title">Nodus {status?.current}</span>
+          {text && <span className="settings-row-hint">{text}</span>}
+        </span>
+        {status?.state === 'ready' ? (
+          <button type="button" className="btn btn-primary" onClick={() => window.api.updates.install()}>
+            Restart to Update
+          </button>
+        ) : (
+          status?.state !== 'off' && (
+            <button type="button" className="btn" disabled={!status || busy} onClick={() => window.api.updates.check()}>
+              Check Now
+            </button>
+          )
+        )}
+      </div>
+      {status?.state !== 'off' && (
+        <label className="settings-row">
+          <span className="settings-row-text">
+            <span className="settings-row-title">Download updates automatically</span>
+            <span className="settings-row-hint">They install when you quit Nodus. Sessions keep running.</span>
+          </span>
+          <input
+            type="checkbox"
+            role="switch"
+            className="switch"
+            checked={settings?.autoUpdate ?? false}
+            disabled={!settings}
+            onChange={(e) => update({ autoUpdate: e.target.checked })}
+          />
+        </label>
+      )}
+      {status?.state === 'error' && (
+        <p className="settings-hint">
+          You can also{' '}
+          <a href={RELEASES_URL} target="_blank" rel="noreferrer">
+            download the latest version
+          </a>{' '}
+          yourself.
+        </p>
+      )}
+    </fieldset>
+  )
+}
+
+function updateText(status: UpdateStatus): string | null {
+  switch (status.state) {
+    case 'off':
+      return status.reason
+    case 'idle':
+      return null
+    case 'checking':
+      return 'Checking for updates…'
+    case 'latest':
+      return 'You’re up to date.'
+    case 'downloading':
+      return `Downloading version ${status.version}… ${status.percent}%`
+    case 'ready':
+      return `Version ${status.version} is ready to install.`
+    case 'error':
+      return status.message
+  }
 }
 
 /** Keeps Tab cycling inside the dialog instead of escaping to the page behind it. */

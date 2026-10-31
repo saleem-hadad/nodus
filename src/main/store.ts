@@ -23,7 +23,8 @@ const THEMES: AppSettings['theme'][] = ['system', 'light', 'dark']
 export function normalizeSettings(raw: unknown): AppSettings {
   const s = (raw && typeof raw === 'object' ? raw : {}) as Partial<AppSettings>
   return {
-    theme: s.theme && THEMES.includes(s.theme) ? s.theme : 'system'
+    theme: s.theme && THEMES.includes(s.theme) ? s.theme : 'system',
+    autoUpdate: s.autoUpdate !== false
   }
 }
 

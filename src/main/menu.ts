@@ -1,6 +1,7 @@
 import { app, Menu, shell, type MenuItemConstructorOptions } from 'electron'
 import type { MenuCommand } from '@shared/api'
 import { stopAll } from './pty'
+import { check } from './updater'
 
 const REPO_URL = 'https://github.com/saleem-hadad/nodus'
 
@@ -33,6 +34,14 @@ export function installMenu(send: (command: MenuCommand) => void) {
       label: app.name,
       submenu: [
         { role: 'about' },
+        // Settings shows how the check goes, and the download after it.
+        {
+          label: 'Check for Updates…',
+          click: () => {
+            send('settings')
+            void check(true)
+          }
+        },
         { type: 'separator' },
         { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => send('settings') },
         { type: 'separator' },

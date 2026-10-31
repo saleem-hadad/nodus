@@ -76,6 +76,10 @@ export function draftAction(repoPath: string, description: string, global: boole
     '-p',
     '--model',
     'sonnet',
+    // At the default effort Sonnet can think for over a minute before
+    // answering, which runs into the timeout while the dialog says "Drafting…".
+    '--effort',
+    'low',
     '--tools',
     readOnly.join(','),
     '--allowedTools',

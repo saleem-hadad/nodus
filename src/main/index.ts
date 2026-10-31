@@ -1,11 +1,26 @@
 import { app, BrowserWindow, nativeTheme, shell } from 'electron'
 import { join } from 'path'
+import { pathToFileURL } from 'url'
 import { registerIpc, shutdown } from './ipc'
 
 let mainWindow: BrowserWindow | null = null
 
 /** Matches --bg-window, so resizing or reloading never flashes the other theme. */
 const windowBackground = () => (nativeTheme.shouldUseDarkColors ? '#1e1e20' : '#f5f5f4')
+
+const rendererUrl =
+  process.env.ELECTRON_RENDERER_URL ?? pathToFileURL(join(__dirname, '../renderer/index.html')).href
+
+/** Whether a URL is the app's own page, the only one the window may show. */
+function isRenderer(url: string) {
+  try {
+    const target = new URL(url)
+    target.hash = ''
+    return target.href === new URL(rendererUrl).href
+  } catch {
+    return false
+  }
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -20,7 +35,7 @@ function createWindow() {
     backgroundColor: windowBackground(),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false
     }
@@ -32,6 +47,14 @@ function createWindow() {
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/.test(url)) shell.openExternal(url)
     return { action: 'deny' }
+  })
+
+  // Any page shown here would get window.api, which runs commands, so the
+  // window never leaves the app. Web links go to the browser instead.
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (isRenderer(url)) return
+    event.preventDefault()
+    if (/^https?:/.test(url)) shell.openExternal(url)
   })
 
   if (process.env.ELECTRON_RENDERER_URL) {

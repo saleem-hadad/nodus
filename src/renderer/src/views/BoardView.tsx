@@ -191,8 +191,6 @@ const STATUS_COLOR = {
 
 const sectionHue = (n: FlowNode) => FOLDER_HUES[(n as SectionFlowNode).data.section.color].backBottom
 const isDraft = (n: FlowNode) => n.type === 'note' && Boolean((n as NoteFlowNode).data.draft)
-/** A note's first line, for naming it in a dialog. */
-const noteExcerpt = (note: BoardNote) => truncate(note.text.trim().split('\n')[0], 60)
 /** A new card opens in its window, then stays expanded on the board once that closes. */
 const NEW_CARD_SIZE = cardSize({ archived: false, expanded: true })
 
@@ -1128,29 +1126,13 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
     [saveNote]
   )
 
-  /** Deletes notes. Resolves false if the user kept them after all. */
+  /** Deletes notes straight away, written on or not. */
   const deleteNotes = useCallback(
-    async (ids: string[]) => {
+    (ids: string[]) => {
       const targets = notesRef.current.filter((n) => ids.includes(n.id))
-      if (targets.length === 0) return true
-      // An empty note has nothing to lose; one with writing on it asks first.
-      const written = targets.filter((n) => n.text.trim())
-      if (written.length > 0) {
-        const ok = await confirm({
-          title: targets.length === 1 ? 'Delete note?' : `Delete ${targets.length} notes?`,
-          message:
-            targets.length === 1
-              ? `“${noteExcerpt(written[0])}” will be deleted from this board.`
-              : 'They will be deleted from this board, along with what’s written on them.',
-          confirmLabel: 'Delete',
-          danger: true
-        })
-        if (!ok) return false
-      }
-      removeNotes(targets.map((n) => n.id))
-      return true
+      if (targets.length > 0) removeNotes(targets.map((n) => n.id))
     },
-    [confirm, removeNotes]
+    [removeNotes]
   )
 
   /** Notes whose session is starting, so a second click doesn't start another. */
@@ -1996,10 +1978,9 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
       } else if ((e.key === 'Backspace' || e.key === 'Delete') && !e.metaKey && !e.altKey) {
         if (sel.length || noteSel.length) {
           e.preventDefault()
-          // Selected notes are deleted and cards archived; keeping the notes keeps the cards too.
-          void fns.deleteNotes(noteSel).then((ok) => {
-            if (ok) return fns.archiveCards(sel)
-          })
+          // Selected notes are deleted and cards archived.
+          fns.deleteNotes(noteSel)
+          void fns.archiveCards(sel)
         }
       } else if (e.key === 'Enter' && !e.metaKey && !e.shiftKey && sel.length === 1) {
         e.preventDefault()

@@ -162,10 +162,26 @@ export async function registerIpc(getWindow: () => BrowserWindow | null) {
     send(IPC.evBoardChanged, projectId)
   }
 
+  /** Sessions that asked to be archived (archive_self), archived when their turn ends. */
+  const archiveWhenDone = new Set<string>()
+  const archiveIfAsked = (sessionId: string) => {
+    if (!archiveWhenDone.delete(sessionId)) return
+    const projectId = projectIdForSession(sessionId)
+    const board = projectId ? getBoard(projectId) : undefined
+    const node = board?.nodes[sessionId]
+    if (!projectId || !board || !node || node.archived) return
+    archiveNode(board, node)
+    save()
+    send(IPC.evBoardChanged, projectId)
+  }
+
   configureStatus({
     onChange: (sessionId, status, live) => {
       send(IPC.evStatus, sessionId, status, live)
-      if (status === 'done') finishRun(sessionId)
+      if (status === 'done') {
+        finishRun(sessionId)
+        archiveIfAsked(sessionId)
+      }
     },
     onAgentChange: (sessionId, agentId, status) => send(IPC.evAgentStatus, sessionId, agentId, status),
     onUsage: (sessionId, usage) => send(IPC.evUsage, sessionId, usage),
@@ -608,6 +624,16 @@ export async function registerIpc(getWindow: () => BrowserWindow | null) {
         send(IPC.evBoardChanged, projectId)
       }
       return { archived, removed, skipped }
+    },
+    archiveSelf(projectId, self) {
+      const node = getBoard(projectId).nodes[self]
+      if (!node) throw new Error('This session is no longer on the board')
+      if (node.kind === 'terminal') throw new Error('Terminals can’t be archived')
+      if (node.archived) throw new Error('This session is already archived')
+      // A run leaves the board when it finishes (finishRun), with nothing to archive.
+      if (node.runOf) throw new Error('An action run leaves the board by itself when its turn ends')
+      archiveWhenDone.add(self)
+      return { archiving: 'This session moves to the archive when this turn ends.' }
     },
     listNotes: notes.listNotes,
     createNote(projectId, self, note) {

@@ -30,18 +30,20 @@ export interface BoardToolHandlers {
   /** The project's sessions, leaving out the calling run. */
   listSessions(projectId: string, self: string, includeArchived: boolean): unknown
   archiveSessions(projectId: string, self: string, sessionIds: string[], force: boolean): unknown
+  /** Archives the calling session once its turn ends. */
+  archiveSelf(projectId: string, self: string): unknown
   listNotes(projectId: string, self: string): unknown
   createNote(projectId: string, self: string, note: NotePatch): unknown
   updateNote(projectId: string, noteId: string, patch: NotePatch): unknown
 }
 
 const INSTRUCTIONS =
-  'Claude Nodes is the board of Claude Code sessions the user runs this session from. Besides the session cards, it holds sticky notes. When the user asks you to put something on the board, or to make notes of it, write it with create_note. Read the notes they have put up with list_notes. Only write notes when the user asks for them.'
+  'Claude Nodes is the board of Claude Code sessions the user runs this session from. Besides the session cards, it holds sticky notes. When the user asks you to put something on the board, or to make notes of it, write it with create_note. Read the notes they have put up with list_notes. Only write notes when the user asks for them. When the user asks you to archive yourself, use archive_self.'
 
 const colorProperty = (description: string) => ({ type: 'string', enum: FOLDER_COLORS, description })
 
 /** Every session's tools. */
-const NOTE_TOOLS = [
+const COMMON_TOOLS = [
   {
     name: 'create_note',
     description:
@@ -74,10 +76,16 @@ const NOTE_TOOLS = [
     description:
       'Lists the sticky notes on the board, the user’s and any Claude wrote: each one’s id, text and colour, and whether this session wrote it.',
     inputSchema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'archive_self',
+    description:
+      'Moves this session into the board’s archive when your current reply ends, and stops it. Its transcript is kept, so the user can pick it up again later. Use it only when the user asks you to archive yourself, and call it as the last thing you do: the session stops as soon as this turn ends.',
+    inputSchema: { type: 'object', properties: {} }
   }
 ]
 
-/** An action run's tools, on top of the note tools. */
+/** An action run's tools, on top of the common ones. */
 const SESSION_TOOLS = [
   {
     name: 'list_sessions',
@@ -108,7 +116,7 @@ const SESSION_TOOLS = [
 const SESSION_TOOL_NAMES = new Set(SESSION_TOOLS.map((t) => t.name))
 
 /** Allow rules that let a session use every board tool it has without asking. */
-export const BOARD_TOOL_RULES = [...NOTE_TOOLS, ...SESSION_TOOLS].map((t) => `mcp__${BOARD_SERVER}__${t.name}`)
+export const BOARD_TOOL_RULES = [...COMMON_TOOLS, ...SESSION_TOOLS].map((t) => `mcp__${BOARD_SERVER}__${t.name}`)
 
 /** The `--mcp-config` for every claude process. Claude Code expands the ${…} from its env (hookEnv). */
 export const BOARD_MCP_CONFIG = JSON.stringify({
@@ -153,7 +161,7 @@ export function answerMcp(sessionId: string, message: unknown) {
     case 'ping':
       return ok({})
     case 'tools/list':
-      return ok({ tools: handlers?.isRun(sessionId) ? [...NOTE_TOOLS, ...SESSION_TOOLS] : NOTE_TOOLS })
+      return ok({ tools: handlers?.isRun(sessionId) ? [...COMMON_TOOLS, ...SESSION_TOOLS] : COMMON_TOOLS })
     case 'tools/call':
       return ok(callTool(msg.params ?? {}, sessionId))
     default:
@@ -195,6 +203,8 @@ function callTool(params: Record<string, unknown>, sessionId: string) {
         const ids = Array.isArray(args.session_ids) ? args.session_ids.filter((id) => typeof id === 'string') : []
         return text(handlers.archiveSessions(projectId, sessionId, ids, args.force === true))
       }
+      case 'archive_self':
+        return text(handlers.archiveSelf(projectId, sessionId))
       default:
         throw new Error(`Unknown tool ${String(params.name)}`)
     }

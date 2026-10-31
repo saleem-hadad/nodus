@@ -138,7 +138,12 @@ export const useApp = create<AppState>((set, get) => ({
     try {
       const board = await window.api.board.load(projectId)
       // Ignore stale responses if the user navigated away meanwhile.
-      if (projectIdOf(get().route) === projectId) set({ board })
+      if (projectIdOf(get().route) === projectId) {
+        // A session archived from outside the renderer (archive_self) closes its terminal.
+        const open = get().terminalSessionId
+        const archived = board.cards.some((c) => c.sessionId === open && c.archived)
+        set(archived ? { board, terminalSessionId: null } : { board })
+      }
     } finally {
       set({ boardLoading: false })
     }

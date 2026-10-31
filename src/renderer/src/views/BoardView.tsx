@@ -865,7 +865,8 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
       // A card started inside a section's frame joins it.
       const joins = sectionId ?? sectionAt(pos, groupsRef.current)
       try {
-        const card = await window.api.sessions.create(projectId, { ...pos, kind })
+        // A Claude session starts in auto mode; a terminal ignores it.
+        const card = await window.api.sessions.create(projectId, { ...pos, kind, autoMode: true })
         upsertCard(card)
         if (joins) patchCards([{ sessionId: card.sessionId, sectionId: joins }])
         ensureVisible(pos, size)
@@ -1141,7 +1142,7 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
   /**
    * Starts a Claude session with a note's text as its first prompt. The card
    * takes the note's place on the board and the note sticks to it. The session
-   * gets on with it on the board rather than opening in its window.
+   * gets on with it in auto mode, on the board rather than opening in its window.
    */
   const startNote = useCallback(
     async (noteId: string) => {
@@ -1158,7 +1159,7 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
       const pos = { x: Math.round(spot.x), y: Math.round(spot.y) }
       const joins = sectionAt(pos, groupsRef.current)
       try {
-        const card = await window.api.sessions.create(projectId, { ...pos, initialPrompt: note.text })
+        const card = await window.api.sessions.create(projectId, { ...pos, initialPrompt: note.text, autoMode: true })
         upsertCard(card)
         if (joins) patchCards([{ sessionId: card.sessionId, sectionId: joins }])
         // As it is now: it may have been moved or recoloured while the session started.

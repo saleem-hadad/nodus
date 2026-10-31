@@ -145,7 +145,7 @@ export interface BoardNode {
    * go when their turn ends; one the user takes over joins the board.
    */
   runOf?: string
-  /** Runs in auto mode, as a spoken prompt's session does, and resumes in it too. */
+  /** Runs in auto mode, as sessions started on the board do, and resumes in it too. */
   autoMode?: boolean
   createdAt: number
 }

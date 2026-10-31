@@ -368,7 +368,8 @@ function commandFor(opts: SpawnOptions): { file: string; args: string[]; env: Re
   if (hostRelaysMcp) args.push('--mcp-config', BOARD_MCP_CONFIG, '--allowedTools', ...BOARD_TOOL_RULES)
   if (opts.extraArgs) args.push(...opts.extraArgs)
   args.push('--settings', hookSettings())
-  if (opts.initialPrompt) args.push(opts.initialPrompt)
+  // After `--`, so a prompt that starts with a dash isn't read as an option.
+  if (opts.initialPrompt) args.push('--', opts.initialPrompt)
   return { file: requireClaude(), args, env: spawnEnv(hookEnv(opts.sessionId)) }
 }
 

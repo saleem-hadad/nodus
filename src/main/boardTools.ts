@@ -14,8 +14,8 @@ import { FOLDER_COLORS, type FolderColor } from '@shared/types'
 import { MCP_PATH, MCP_SESSION_HEADER } from './hostProtocol'
 import { projectIdForSession } from './store'
 
-/** The server's name in Claude Code: its tools are mcp__claude-nodes__<tool>. */
-export const BOARD_SERVER = 'claude-nodes'
+/** The server's name in Claude Code: its tools are mcp__nodus__<tool>. */
+export const BOARD_SERVER = 'nodus'
 const PROTOCOL_VERSION = '2025-06-18'
 
 /** What a note tool may change about a note. */
@@ -38,7 +38,7 @@ export interface BoardToolHandlers {
 }
 
 const INSTRUCTIONS =
-  'Claude Nodes is the board of Claude Code sessions the user runs this session from. Besides the session cards, it holds sticky notes. When the user asks you to put something on the board, or to make notes of it, write it with create_note. Read the notes they have put up with list_notes. Only write notes when the user asks for them. When the user asks you to archive yourself, use archive_self.'
+  'Nodus is the board of Claude Code sessions the user runs this session from. Besides the session cards, it holds sticky notes. When the user asks you to put something on the board, or to make notes of it, write it with create_note. Read the notes they have put up with list_notes. Only write notes when the user asks for them. When the user asks you to archive yourself, use archive_self.'
 
 const colorProperty = (description: string) => ({ type: 'string', enum: FOLDER_COLORS, description })
 
@@ -47,7 +47,7 @@ const COMMON_TOOLS = [
   {
     name: 'create_note',
     description:
-      'Puts a sticky note on the user’s Claude Nodes board, beside this session’s card. Use it when the user asks you to put something on the board: findings, a summary, a plan, a list to come back to. A note shows its text as written, so Markdown is not rendered: skip **bold** and # headings, though "- " bullets and blank lines read well. Keep each note to one topic someone can take in at a glance, starting with a short line that says what it is about, and write several notes for several topics. Returns the note’s id.',
+      'Puts a sticky note on the user’s Nodus board, beside this session’s card. Use it when the user asks you to put something on the board: findings, a summary, a plan, a list to come back to. A note shows its text as written, so Markdown is not rendered: skip **bold** and # headings, though "- " bullets and blank lines read well. Keep each note to one topic someone can take in at a glance, starting with a short line that says what it is about, and write several notes for several topics. Returns the note’s id.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -90,7 +90,7 @@ const SESSION_TOOLS = [
   {
     name: 'list_sessions',
     description:
-      'Lists the sessions on this project’s Claude Nodes board. Each has its id, title, kind (claude or terminal), status (working, waiting for the user, or done), whether its process is running, whether it is archived, the section it is in, Claude’s last reply, and when it was last active. The session running this action is not listed.',
+      'Lists the sessions on this project’s Nodus board. Each has its id, title, kind (claude or terminal), status (working, waiting for the user, or done), whether its process is running, whether it is archived, the section it is in, Claude’s last reply, and when it was last active. The session running this action is not listed.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -123,10 +123,10 @@ export const BOARD_MCP_CONFIG = JSON.stringify({
   mcpServers: {
     [BOARD_SERVER]: {
       type: 'http',
-      url: `http://127.0.0.1:\${CLAUDE_NODES_PORT}${MCP_PATH}`,
+      url: `http://127.0.0.1:\${NODUS_PORT}${MCP_PATH}`,
       headers: {
-        Authorization: 'Bearer ${CLAUDE_NODES_TOKEN}',
-        [MCP_SESSION_HEADER]: '${CLAUDE_NODES_SESSION}'
+        Authorization: 'Bearer ${NODUS_TOKEN}',
+        [MCP_SESSION_HEADER]: '${NODUS_SESSION}'
       }
     }
   }
@@ -184,7 +184,7 @@ function callTool(params: Record<string, unknown>, sessionId: string) {
   try {
     if (!handlers) throw new Error('The board is not available')
     const projectId = projectIdForSession(sessionId)
-    if (!projectId) throw new Error('This session is no longer on a Claude Nodes board')
+    if (!projectId) throw new Error('This session is no longer on a Nodus board')
     // A run the user took over is an ordinary session now.
     if (SESSION_TOOL_NAMES.has(String(params.name)) && !handlers.isRun(sessionId)) {
       throw new Error(`${String(params.name)} is only for action runs`)

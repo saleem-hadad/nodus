@@ -8,8 +8,8 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 
-const MARK_START = '__CLAUDE_NODES_ENV_START__'
-const MARK_END = '__CLAUDE_NODES_ENV_END__'
+const MARK_START = '__NODUS_ENV_START__'
+const MARK_END = '__NODUS_ENV_END__'
 
 let baseEnv: Record<string, string> = toStringEnv(process.env)
 let claudePath: string | null = null
@@ -36,7 +36,7 @@ const STRIP_PREFIXES = [
   'CLAUDE_CODE_MESSAGING',
   'CLAUDE_CODE_SSE',
   'CLAUDE_AGENT_SDK',
-  'CLAUDE_NODES_',
+  'NODUS_',
   'ELECTRON_'
 ]
 
@@ -150,7 +150,7 @@ export function getClaudeVersion() {
 export function requireClaude(): string {
   if (!claudePath) {
     throw new Error(
-      'Claude Code CLI not found. Install it (npm i -g @anthropic-ai/claude-code) and restart Claude Nodes.'
+      'Claude Code CLI not found. Install it (npm i -g @anthropic-ai/claude-code) and restart Nodus.'
     )
   }
   return claudePath

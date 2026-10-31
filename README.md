@@ -2,13 +2,13 @@
 
 <img src="build/icon.png" width="96" alt="">
 
-# Claude Nodes
+# Nodus
 
 **Agentic coding, on one board.**
 
 Every Claude Code session in a repo, as a live card. See which ones need you, and start new sessions from the context of old ones.
 
-**[Download for Mac](https://github.com/saleem-hadad/claude-nodes/releases/latest/download/Claude-Nodes-arm64.dmg)** · [Intel](https://github.com/saleem-hadad/claude-nodes/releases/latest/download/Claude-Nodes-x64.dmg) · [Website](https://saleem-hadad.github.io/claude-nodes/) · Free and open source
+**[Download for Mac](https://github.com/saleem-hadad/nodus/releases/latest/download/Nodus-arm64.dmg)** · [Intel](https://github.com/saleem-hadad/nodus/releases/latest/download/Nodus-x64.dmg) · [Website](https://saleem-hadad.github.io/nodus/) · Free and open source
 
 <a href="https://www.youtube.com/watch?v=c33K4QcVxFQ"><img src="https://img.youtube.com/vi/c33K4QcVxFQ/maxresdefault.jpg" width="640" alt="Watch the video: I Was Drowning in Claude Code Sessions, So I Built This"></a>
 
@@ -75,7 +75,7 @@ Every Claude Code session in a repo, as a live card. See which ones need you, an
 
 ## Get started
 
-1. **Download** for [Apple Silicon](https://github.com/saleem-hadad/claude-nodes/releases/latest/download/Claude-Nodes-arm64.dmg) or [Intel](https://github.com/saleem-hadad/claude-nodes/releases/latest/download/Claude-Nodes-x64.dmg), open the DMG and drag Claude Nodes into Applications.
+1. **Download** for [Apple Silicon](https://github.com/saleem-hadad/nodus/releases/latest/download/Nodus-arm64.dmg) or [Intel](https://github.com/saleem-hadad/nodus/releases/latest/download/Nodus-x64.dmg), open the DMG and drag Nodus into Applications.
 2. **Open it once.** The app isn't notarized yet, so macOS blocks the first launch. Go to **System Settings → Privacy & Security** and click **Open Anyway**.
 3. **Have Claude Code installed**, with `claude` on your `PATH`. ([Install Claude Code](https://code.claude.com/docs/en/overview))
 4. **Click New Project**, pick a repo, and press **N** for your first session.
@@ -86,4 +86,4 @@ Every Claude Code session in a repo, as a live card. See which ones need you, an
 - **Spoken prompts** use xAI's speech to text with your own API key.
 - **[How it works](docs/how-it-works.md)** covers the architecture, every shortcut, known limitations and [building from source](docs/how-it-works.md#development).
 
-<sub>Claude Nodes is an independent project, not affiliated with or endorsed by Anthropic. Claude is a trademark of Anthropic, PBC.</sub>
+<sub>Nodus is an independent project, not affiliated with or endorsed by Anthropic. Claude is a trademark of Anthropic, PBC.</sub>

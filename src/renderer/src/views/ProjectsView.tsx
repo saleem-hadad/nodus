@@ -332,7 +332,7 @@ export function ProjectsView() {
           onSelect: () => setArchived(menuProject.id, !menuProject.archived)
         },
         {
-          label: 'Remove from Claude Nodes…',
+          label: 'Remove from Nodus…',
           icon: <Trash2 />,
           danger: true,
           onSelect: () => setRemoveTarget(menuProject)
@@ -494,7 +494,7 @@ export function ProjectsView() {
               <div>
                 <h2 id="pv-confirm-title">Remove “{removeTarget.name}”?</h2>
                 <p>
-                  The project and its board layout are removed from Claude Nodes. The repository
+                  The project and its board layout are removed from Nodus. The repository
                   and its Claude session transcripts stay on disk, untouched.
                 </p>
                 <p className="pv-confirm-path selectable">{removeTarget.repoPath}</p>

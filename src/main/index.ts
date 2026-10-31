@@ -14,7 +14,7 @@ function createWindow() {
     minWidth: 960,
     minHeight: 620,
     show: false,
-    title: 'Claude Nodes',
+    title: 'Nodus',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 18, y: 18 },
     backgroundColor: windowBackground(),
@@ -45,10 +45,10 @@ function createWindow() {
   })
 }
 
-app.setName('Claude Nodes')
+app.setName('Nodus')
 
 // Keeps development or test state separate from the real app data.
-if (process.env.CLAUDE_NODES_USER_DATA) app.setPath('userData', process.env.CLAUDE_NODES_USER_DATA)
+if (process.env.NODUS_USER_DATA) app.setPath('userData', process.env.NODUS_USER_DATA)
 
 app.whenReady().then(async () => {
   await registerIpc(() => mainWindow)

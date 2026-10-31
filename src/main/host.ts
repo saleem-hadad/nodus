@@ -282,7 +282,7 @@ const hookServer = http.createServer((req, res) => {
 
 const RELAY_TIMEOUT_MS = 20_000
 const MCP_MAX_BYTES = 1024 * 1024
-const APP_CLOSED = 'Claude Nodes isn’t open, so the board can’t be reached right now.'
+const APP_CLOSED = 'Nodus isn’t open, so the board can’t be reached right now.'
 
 interface Relay {
   client: net.Socket

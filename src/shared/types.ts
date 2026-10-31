@@ -131,7 +131,7 @@ export interface BoardNode {
   title?: string
   /** Session ids whose context was merged to create this one (drawn as edges). */
   parents?: string[]
-  /** True when the session was started from Claude Nodes (vs. imported). */
+  /** True when the session was started from Nodus (vs. imported). */
   createdByApp?: boolean
   /** Section the card is grouped under. Archived cards never belong to one. */
   sectionId?: string

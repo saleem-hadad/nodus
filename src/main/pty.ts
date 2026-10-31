@@ -278,7 +278,7 @@ async function startAndConnect(paths: HostPaths): Promise<net.Socket> {
 async function replaceHost(socket: net.Socket) {
   const { response } = await dialog.showMessageBox({
     type: 'warning',
-    message: 'Sessions from another version of Claude Nodes are still running',
+    message: 'Sessions from another version of Nodus are still running',
     detail: 'This version can’t connect to them. Stop them to carry on, or quit and let them finish.',
     buttons: ['Stop Sessions', 'Quit'],
     defaultId: 0,

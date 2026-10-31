@@ -17,7 +17,7 @@ const MAX_NAME_CHARS = 40
 const MAX_DESCRIPTION_CHARS = 4000
 const MAX_PROMPT_CHARS = 20_000
 
-const DRAFT_SYSTEM_PROMPT = `You design action buttons for Claude Nodes, a board of Claude Code sessions for one project. Pressing a button starts a fresh Claude Code session in the project's repository on the button's prompt. Nobody watches the session while it works, and it goes away when its turn ends, so the prompt has to stand on its own. It runs in auto mode: Claude Code approves routine steps by itself and blocks risky ones.
+const DRAFT_SYSTEM_PROMPT = `You design action buttons for Nodus, a board of Claude Code sessions for one project. Pressing a button starts a fresh Claude Code session in the project's repository on the button's prompt. Nobody watches the session while it works, and it goes away when its turn ends, so the prompt has to stand on its own. It runs in auto mode: Claude Code approves routine steps by itself and blocks risky ones.
 
 Besides the usual tools (reading and editing files, running commands), a run has these board tools:
 - list_sessions: the board's sessions, with their status (working, waiting for the user, or done), whether they are archived, their section, Claude's last reply and when they were last active.
@@ -43,7 +43,7 @@ const DRAFT_SCHEMA = {
 }
 
 const runSystemPrompt = (action: ProjectAction) =>
-  `You are running "${action.name}", an action button the user pressed on the Claude Nodes board for this project. Nobody is watching while you work, so do the job in the prompt without stopping to chat. If you need the user to decide something, ask with AskUserQuestion: that turns the action's button red to call them. When you are done, end with one line saying what you did. The user is shown that line, and this session then goes away. The mcp__claude-nodes__* tools let you list and archive the board's sessions, and write sticky notes on the board.`
+  `You are running "${action.name}", an action button the user pressed on the Nodus board for this project. Nobody is watching while you work, so do the job in the prompt without stopping to chat. If you need the user to decide something, ask with AskUserQuestion: that turns the action's button red to call them. When you are done, end with one line saying what you did. The user is shown that line, and this session then goes away. The mcp__nodus__* tools let you list and archive the board's sessions, and write sticky notes on the board.`
 
 const clip = (s: unknown, max: number) => (typeof s === 'string' ? s.trim().slice(0, max) : '')
 

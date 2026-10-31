@@ -89,7 +89,7 @@ export type HostMessage =
  * hook token as its bearer token and its session id in this header.
  */
 export const MCP_PATH = '/mcp'
-export const MCP_SESSION_HEADER = 'X-Claude-Nodes-Session'
+export const MCP_SESSION_HEADER = 'X-Nodus-Session'
 
 /** Keystrokes the status heuristics act on (noteUserInput in hooks.ts). */
 export const STATUS_KEY = /^(?:\r|\x1b|\x03|[1-9])$/
@@ -107,7 +107,7 @@ export function hostPaths(userData: string): HostPaths {
   // macOS caps socket paths at 104 bytes; the per-user temp folder is private too.
   if (Buffer.byteLength(socket) > 100) {
     const hash = crypto.createHash('sha1').update(dir).digest('hex').slice(0, 12)
-    socket = path.join(os.tmpdir(), `claude-nodes-${hash}.sock`)
+    socket = path.join(os.tmpdir(), `nodus-${hash}.sock`)
   }
   return { dir, socket, log: path.join(dir, 'host.log') }
 }

@@ -55,7 +55,30 @@ function statePath() {
   return path.join(app.getPath('userData'), 'state.json')
 }
 
+/** The app's name before Nodus. Its data sits beside ours in Application Support. */
+const OLD_APP_NAME = 'Claude Nodes'
+
+/**
+ * Brings the projects, boards and notes over from the old app on the first
+ * launch under the new name. The voice key stays behind: the old app's
+ * Keychain entry encrypted it, and this app can't read that entry.
+ */
+function migrateOldState() {
+  const file = statePath()
+  if (fs.existsSync(file)) return
+  const oldFile = path.join(path.dirname(app.getPath('userData')), OLD_APP_NAME, 'state.json')
+  try {
+    const old = JSON.parse(fs.readFileSync(oldFile, 'utf8')) as Partial<State>
+    delete old.voiceKey
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(file, JSON.stringify(old, null, 2))
+  } catch {
+    // Nothing to bring over.
+  }
+}
+
 export function loadState() {
+  migrateOldState()
   try {
     const raw = JSON.parse(fs.readFileSync(statePath(), 'utf8')) as Partial<State>
     state = {

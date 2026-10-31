@@ -2,7 +2,7 @@ import { app, Menu, shell, type MenuItemConstructorOptions } from 'electron'
 import type { MenuCommand } from '@shared/api'
 import { stopAll } from './pty'
 
-const REPO_URL = 'https://github.com/saleem-hadad/claude-nodes'
+const REPO_URL = 'https://github.com/saleem-hadad/nodus'
 
 /** A new GitHub issue with the app and macOS versions filled in. */
 function bugReportUrl(): string {
@@ -17,7 +17,7 @@ function bugReportUrl(): string {
     '',
     '',
     '---',
-    `Claude Nodes ${app.getVersion()} · macOS ${process.getSystemVersion()} · ${process.arch}`
+    `Nodus ${app.getVersion()} · macOS ${process.getSystemVersion()} · ${process.arch}`
   ].join('\n')
   return `${REPO_URL}/issues/new?${new URLSearchParams({ body })}`
 }

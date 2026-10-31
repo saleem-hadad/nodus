@@ -1,10 +1,10 @@
-# How Claude Nodes works
+# How Nodus works
 
 The details behind the [README](../README.md): what the app runs, where status comes from, every shortcut, and how to work on the code.
 
 ```mermaid
 flowchart LR
-  subgraph app["Claude Nodes"]
+  subgraph app["Nodus"]
     ui["Renderer<br/>React Flow · xterm.js"]
     main["Main process"]
   end
@@ -29,9 +29,9 @@ Sessions are ordinary Claude Code sessions. New cards run `claude --session-id <
 
 ## Sessions keep running after you quit
 
-The app doesn't run sessions itself. A background process, the session host, owns their terminals, so quitting Claude Nodes (or a crash) leaves them running. Open the app again and the cards are still live, with their recent output and an up-to-date status.
+The app doesn't run sessions itself. A background process, the session host, owns their terminals, so quitting Nodus (or a crash) leaves them running. Open the app again and the cards are still live, with their recent output and an up-to-date status.
 
-The host starts with the first session you open, and runs Claude Nodes' own binary as plain Node, so it has no Dock icon. It also receives the sessions' hooks, and keeps them along with the keypresses that move status (Esc, Ctrl+C, Enter and number keys), so a relaunched app can work out each session's status. The host exits by itself once no sessions are left and the app isn't open. **Quit and Stop Sessions** (⌥⌘Q) stops every session along with the app.
+The host starts with the first session you open, and runs Nodus's own binary as plain Node, so it has no Dock icon. It also receives the sessions' hooks, and keeps them along with the keypresses that move status (Esc, Ctrl+C, Enter and number keys), so a relaunched app can work out each session's status. The host exits by itself once no sessions are left and the app isn't open. **Quit and Stop Sessions** (⌥⌘Q) stops every session along with the app.
 
 ## Terminal cards
 
@@ -75,7 +75,7 @@ Claude writes notes too. Ask a session to do some research and put what it found
 
 ## Board tools
 
-Every Claude session started from the app gets an MCP server named `claude-nodes`, through `--mcp-config`, with tools for its board: `create_note`, `update_note` and `list_notes`. Action runs get `list_sessions` and `archive_sessions` as well. They're allowed with `--allowedTools`, so they never stop to ask.
+Every Claude session started from the app gets an MCP server named `nodus`, through `--mcp-config`, with tools for its board: `create_note`, `update_note` and `list_notes`. Action runs get `list_sessions` and `archive_sessions` as well. They're allowed with `--allowedTools`, so they never stop to ask.
 
 The server lives in the session host, next to the hook server, and passes each request on to the app. So a session keeps its tools when you quit and reopen the app; while the app is closed, a tool call fails and says why. Every process gets the same config, and Claude Code fills in the host's port and token, and the session's id, from the process's environment, so the token never shows up in a process listing. Sessions started outside the app don't get the tools.
 
@@ -119,8 +119,7 @@ When the run's turn ends, the session goes, its transcript is hidden like a remo
 
 ## Your data
 
-Transcripts stay where Claude Code keeps them. The app stores only the board layout (projects, card positions, sections, notes, archive, custom titles and lineage) and its settings (theme, and the xAI key for voice prompts if you save one, encrypted with the macOS Keychain) in `~/Library/Application Support/Claude Nodes/state.json`. *Remove from board* hides a card and never deletes a transcript.
-
+Transcripts stay where Claude Code keeps them. The app stores only the board layout (projects, card positions, sections, notes, archive, custom titles and lineage) and its settings (theme, and the xAI key for voice prompts if you save one, encrypted with the macOS Keychain) in `~/Library/Application Support/Nodus/state.json`. *Remove from board* hides a card and never deletes a transcript.
 The session host keeps its socket and log in the `host` folder next to it. Only your user can open the folder, which matters because anything that can connect to the socket can start processes as you.
 
 ## Shortcuts
@@ -211,11 +210,11 @@ pnpm typecheck    # type-check main, preload and renderer
 pnpm dist         # build the arm64 and x64 DMGs into dist/
 ```
 
-`CLAUDE_NODES_USER_DATA=/some/dir pnpm dev` keeps app state separate from your real board, which is useful for testing. It gets its own session host too.
+`NODUS_USER_DATA=/some/dir pnpm dev` keeps app state separate from your real board, which is useful for testing. It gets its own session host too.
 
 A running session host keeps the code it started with. After changing `host.ts`, use **Quit and Stop Sessions** so the next session starts a fresh host. Bump `PROTOCOL` in `hostProtocol.ts` whenever a message changes shape.
 
-`pnpm dist` writes `dist/Claude-Nodes-arm64.dmg` and `dist/Claude-Nodes-x64.dmg`, with the unpacked apps in `dist/mac-arm64/` and `dist/mac/`. The apps are ad-hoc signed and not notarized, so a downloaded copy needs **Open Anyway** in Privacy & Security on first launch. The packaged app shares its board with `pnpm dev`, so don't run both at once.
+`pnpm dist` writes `dist/Nodus-arm64.dmg` and `dist/Nodus-x64.dmg`, with the unpacked apps in `dist/mac-arm64/` and `dist/mac/`. The apps are ad-hoc signed and not notarized, so a downloaded copy needs **Open Anyway** in Privacy & Security on first launch. The packaged app shares its board with `pnpm dev`, so don't run both at once.
 
 ### Releasing
 

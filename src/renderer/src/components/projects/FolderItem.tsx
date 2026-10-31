@@ -5,7 +5,7 @@ import { FolderIcon } from '../FolderIcon'
 import { projectGlyph } from './projectsUi'
 
 /** Drag data type for a project folder dragged between sections of the grid. */
-export const PROJECT_DRAG_TYPE = 'application/x-claude-nodes-project'
+export const PROJECT_DRAG_TYPE = 'application/x-nodus-project'
 
 interface Props {
   project: Project

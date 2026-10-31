@@ -109,7 +109,7 @@ export function useVoice(projectId: string, onText: (text: string) => void, { fi
       return
     }
     if (!(await window.api.voice.microphone())) {
-      return fail({ message: 'Claude Nodes isn’t allowed to use the microphone.', microphone: true })
+      return fail({ message: 'Nodus isn’t allowed to use the microphone.', microphone: true })
     }
     let rec: Recording
     try {

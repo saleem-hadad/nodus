@@ -1,7 +1,7 @@
 // Session status driven by Claude Code hooks.
 //
 // Every claude process we spawn gets `--settings` registering hooks that POST
-// the hook payload to a localhost server. The CLAUDE_NODES_* variables in the
+// the hook payload to a localhost server. The NODUS_* variables in the
 // process env tell the hook which card it belongs to.
 //
 // Hooks fired inside a subagent carry its agent_id. Those drive the agent's own
@@ -354,9 +354,9 @@ export function receiveHook(event: string, sessionId: string, payload: Json, at 
 /** Env vars a spawned claude process needs so its hooks can reach us. */
 export function hookEnv(sessionId: string): Record<string, string> {
   return {
-    CLAUDE_NODES_PORT: String(endpoint.port),
-    CLAUDE_NODES_TOKEN: endpoint.token,
-    CLAUDE_NODES_SESSION: sessionId
+    NODUS_PORT: String(endpoint.port),
+    NODUS_TOKEN: endpoint.token,
+    NODUS_SESSION: sessionId
   }
 }
 
@@ -365,7 +365,7 @@ let settingsJson: string | null = null
 /** A command posting its stdin to the host under `event`, and printing nothing. */
 const postCommand = (event: string) =>
   `curl -s -m 2 -X POST -H 'Content-Type: application/json' --data-binary @- ` +
-  `"http://127.0.0.1:$CLAUDE_NODES_PORT/hook?evt=${event}&sid=$CLAUDE_NODES_SESSION&token=$CLAUDE_NODES_TOKEN" ` +
+  `"http://127.0.0.1:$NODUS_PORT/hook?evt=${event}&sid=$NODUS_SESSION&token=$NODUS_TOKEN" ` +
   `>/dev/null 2>&1; exit 0`
 
 /**

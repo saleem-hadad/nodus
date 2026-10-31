@@ -1292,6 +1292,7 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
     () => ({
       rename: (sessionId, title) => patchCards([{ sessionId, title }]),
       expand: expandCards,
+      archive: (ids) => void archiveCards(ids),
       setRenaming,
       renameSection: (sectionId, name) => {
         const section = groupsRef.current.find((g) => g.section.id === sectionId)?.section
@@ -1306,7 +1307,7 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
       startNote: (noteId) => void startNote(noteId),
       openSession: openCard
     }),
-    [patchCards, saveSection, expandCards, saveNote, projectId, startNote, openCard]
+    [patchCards, saveSection, expandCards, archiveCards, saveNote, projectId, startNote, openCard]
   )
 
   // ---- React Flow handlers -------------------------------------------------

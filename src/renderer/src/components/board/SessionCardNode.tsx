@@ -1,6 +1,6 @@
 import { memo, useCallback, useContext, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import { Handle, NodeResizer, Position, type Node, type NodeProps, type OnResizeEnd } from '@xyflow/react'
-import { Bot, GitBranch, GitMerge, Maximize2, MessageSquare, SquareTerminal } from 'lucide-react'
+import { Archive, Bot, GitBranch, GitMerge, Maximize2, MessageSquare, SquareTerminal } from 'lucide-react'
 import clsx from 'clsx'
 import type { BoardNote, SessionCard } from '@shared/types'
 import { cardTitle, isTerminal, tildePath, useApp } from '@renderer/store'
@@ -33,7 +33,7 @@ const stop = (e: MouseEvent) => e.stopPropagation()
 function SessionCardNodeComponent({ data, selected, dragging }: NodeProps<SessionFlowNode>) {
   const { card } = data
   const renaming = useContext(RenamingContext) === card.sessionId
-  const { expand } = useBoardActions()
+  const { expand, archive } = useBoardActions()
   const patchCards = useApp((s) => s.patchCards)
   const openAgents = useApp((s) => s.openAgents)
   const id = card.sessionId
@@ -174,18 +174,26 @@ function SessionCardNodeComponent({ data, selected, dragging }: NodeProps<Sessio
 
       <header className="card-head">{heading}</header>
       {!card.archived && (
-        <button
-          className="card-expand nodrag"
-          onClick={(e) => {
-            e.stopPropagation()
-            expand([card.sessionId], true)
-          }}
-          onDoubleClick={stop}
-          title="Expand on the board (E)"
-          aria-label="Expand on the board"
-        >
-          <Maximize2 size={13} strokeWidth={2} />
-        </button>
+        <div className="card-corner nodrag" onClick={stop} onDoubleClick={stop}>
+          {!shell && (
+            <button
+              className="card-expand"
+              onClick={() => archive([id])}
+              title="Archive (⌫)"
+              aria-label="Archive"
+            >
+              <Archive size={13} strokeWidth={2} />
+            </button>
+          )}
+          <button
+            className="card-expand"
+            onClick={() => expand([id], true)}
+            title="Expand on the board (E)"
+            aria-label="Expand on the board"
+          >
+            <Maximize2 size={13} strokeWidth={2} />
+          </button>
+        </div>
       )}
 
       {card.parents && card.parents.length > 0 && (

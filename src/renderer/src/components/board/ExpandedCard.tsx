@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
-import { AppWindowMac, LoaderCircle, Minimize2, Play, RotateCcw, SquareTerminal } from 'lucide-react'
+import { AppWindowMac, Archive, LoaderCircle, Minimize2, Play, RotateCcw, SquareTerminal } from 'lucide-react'
 import type { SessionCard } from '@shared/types'
 import { useApp } from '@renderer/store'
 import { UsageStats } from '@renderer/components/UsageStats'
@@ -39,7 +39,7 @@ export function ExpandedCard({ card, heading, tools }: { card: SessionCard; head
   const openTerminal = useApp((s) => s.openTerminal)
   // A terminal shows in one place at a time; the modal has it while it's open.
   const inModal = useApp((s) => s.terminalSessionId === id)
-  const { expand } = useBoardActions()
+  const { expand, archive } = useBoardActions()
 
   // A card that comes back expanded (after a restart, say) waits to be asked
   // before it starts Claude or a shell; one expanded just now starts right away.
@@ -115,6 +115,11 @@ export function ExpandedCard({ card, heading, tools }: { card: SessionCard; head
             >
               {shell ? <RotateCcw size={12} strokeWidth={2.2} /> : <Play size={12} strokeWidth={2.2} />}
               {shell ? 'Restart' : 'Resume'}
+            </button>
+          )}
+          {!shell && (
+            <button className="card-tool" onClick={() => archive([id])} title="Archive (⌫)" aria-label="Archive">
+              <Archive size={14} strokeWidth={2} />
             </button>
           )}
           <button

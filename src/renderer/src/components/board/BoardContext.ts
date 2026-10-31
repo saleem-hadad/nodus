@@ -10,6 +10,8 @@ export interface BoardActions {
   renameSection(sectionId: string, name: string): void
   /** Expands active cards in place, showing their terminals, or folds them back into cards. */
   expand(sessionIds: string[], expanded: boolean): void
+  /** Moves active sessions to the archive, asking first when one is still running. */
+  archive(sessionIds: string[]): void
   /** Saves what's written on a sticky note. */
   editNote(note: BoardNote, text: string): void
   /** Starts a Claude session on a note's text; the note then sticks to the session's card. */

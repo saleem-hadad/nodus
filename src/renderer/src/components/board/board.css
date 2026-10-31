@@ -267,10 +267,15 @@ kbd {
 }
 
 /* Expands the card in place; shows on hover over the corner the live glyph sits in. */
-.card-expand {
+/* Archive and expand, shown on hover in the card's top-right corner. */
+.card-corner {
   position: absolute;
   top: 9px;
   right: 9px;
+  display: flex;
+  gap: 2px;
+}
+.card-expand {
   display: grid;
   place-items: center;
   width: 26px;

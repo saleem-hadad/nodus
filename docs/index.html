@@ -551,6 +551,38 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
 .footer .zoom { position: static; }
 .footer .disclaimer { flex-basis: 100%; font-size: 12px; text-align: center; }
 
+/* ---------------------------------------------------------- video player */
+
+.video-dialog {
+  width: min(1120px, calc(100vw - 32px));
+  max-width: none;
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  overflow: visible;
+  background: transparent;
+}
+.video-dialog::backdrop { background: rgba(0, 0, 0, 0.72); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.video-dialog[open] { animation: rise 220ms var(--ease-out); }
+@keyframes rise { from { opacity: 0; transform: translateY(12px) scale(0.98); } }
+.video-frame { aspect-ratio: 16 / 9; overflow: hidden; border-radius: 14px; background: #000; box-shadow: 0 30px 90px rgba(0, 0, 0, 0.5); }
+.video-frame iframe { display: block; width: 100%; height: 100%; border: 0; }
+.video-close {
+  position: absolute;
+  top: -48px;
+  right: 0;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  cursor: pointer;
+}
+.video-close:hover { background: rgba(255, 255, 255, 0.28); }
+
 @media (max-width: 1100px) { .hide-md { display: none !important; } }
 @media (max-width: 640px) {
   .hide-sm { display: none !important; }
@@ -609,7 +641,7 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
         <svg class="icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M11.5 2.9a.6.6 0 0 1 1 0l2.6 5.3 5.8.8a.6.6 0 0 1 .3 1l-4.2 4.1 1 5.8a.6.6 0 0 1-.8.6L12 17.8l-5.2 2.7a.6.6 0 0 1-.8-.6l1-5.8-4.2-4.1a.6.6 0 0 1 .3-1l5.8-.8z"/></svg>
         Star on GitHub
       </a>
-      <a class="button is-plain" href="https://www.youtube.com/@saleem-hadad">
+      <a class="button is-plain" href="https://www.youtube.com/watch?v=c33K4QcVxFQ" data-video="c33K4QcVxFQ">
         <span class="play" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24"><path d="M7 4.5v15l12.5-7.5z"/></svg></span>
         Watch the video
       </a>
@@ -839,6 +871,40 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
     </footer>
   </div>
 </main>
+
+<dialog class="video-dialog" data-video-dialog aria-label="Demo video">
+  <button class="video-close" type="button" aria-label="Close video" data-video-close>
+    <svg class="icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+  </button>
+  <div class="video-frame" data-video-frame></div>
+</dialog>
+
+<script>
+// "Watch the video" plays the demo in a player over the page; the link still opens YouTube without script.
+(() => {
+  const dialog = document.querySelector('[data-video-dialog]')
+  const frame = document.querySelector('[data-video-frame]')
+  if (!dialog || !frame || !dialog.showModal) return
+
+  document.addEventListener('click', (e) => {
+    const link = e.target.closest('[data-video]')
+    if (!link || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
+    e.preventDefault()
+    const iframe = document.createElement('iframe')
+    iframe.src = `https://www.youtube-nocookie.com/embed/${link.dataset.video}?autoplay=1&rel=0`
+    iframe.title = 'I Was Drowning in Claude Code Sessions, So I Built This'
+    iframe.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen'
+    iframe.allowFullscreen = true
+    frame.replaceChildren(iframe)
+    dialog.showModal()
+  })
+
+  // Closing removes the player, which stops the video.
+  dialog.addEventListener('close', () => frame.replaceChildren())
+  dialog.querySelector('[data-video-close]').addEventListener('click', () => dialog.close())
+  dialog.addEventListener('click', (e) => { if (e.target === dialog) dialog.close() })
+})()
+</script>
 
 <script>
 // The hero's board works like the real one: drag cards (and the note) around, and the lineage lines follow.

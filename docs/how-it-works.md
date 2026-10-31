@@ -85,6 +85,8 @@ The mic button sits above the minimap, in the board's bottom-right corner. Click
 
 The recording goes to xAI's speech to text (`grok-voice-transcribe-2.0`), and what you said opens in a box for review. Edit it if you like, then press Enter (or **Start session**) to start a Claude session on it. Shift+Enter starts a new line, and Esc or **Discard** throws it away. **Keep talking** records more and adds it to the end. The session runs in auto mode, where Claude Code approves routine steps by itself and blocks risky ones, and it stays in auto mode when it resumes. Its card lands expanded in a free spot in view, so you can watch it work there, with your words stuck on it. It leaves the keyboard on the board, so **V** speaks the next prompt. If the session can't start, your words are left on the board as a note.
 
+You can also speak into a session that's already there. Select its card and press **V** (or click the mic): the mic says which session it's listening for, and what you said is typed at that session's prompt instead of opening the review box. Nothing is sent: finish it there and press Return yourself. An open session has its own mic in its title bar, in its window and on its expanded card, which does the same for that session. A session that isn't running resumes first, and your words go in once Claude is listening. Each one ends with a space, so you can keep talking into the same prompt.
+
 Each recording goes with up to 100 hint words, so code names come back spelled as in the repo: the project's name, its branch and the names of the files it has changed. If xAI can't transcribe a recording, it's kept, and **Retry** sends it again.
 
 The xAI API key comes from Settings or from `XAI_API_KEY` in your shell, and a saved one wins. Settings encrypts it with the macOS Keychain before it goes into `state.json`, and it never leaves the main process: the window only learns where the key comes from. With no key, the mic button opens Settings. The first recording asks macOS for the microphone. If you turned it down, the notice links to Privacy & Security › Microphone.
@@ -147,6 +149,7 @@ The session host keeps its socket and log in the `host` folder next to it. Only 
 | | Start a session from a note | Its ▶ button · right-click › Start session |
 | | Speak a prompt · stop | V · the mic button above the minimap |
 | | Start a session on what you said · discard it | Enter · Esc |
+| | Speak into a session, typed in but not sent | Select its card, then V · the mic in its title bar |
 | | Delete the selected notes | ⌫ |
 | | Fan out a card's agents | Point at the deck under it · click to pin |
 | | Pan · zoom | Two-finger scroll, Space-drag or middle-drag · pinch |

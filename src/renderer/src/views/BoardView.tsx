@@ -152,7 +152,7 @@ import {
   type Size
 } from '@renderer/components/board/layout'
 import { wakeCardTerminal } from '@renderer/components/board/ExpandedCard'
-import { dispose as disposeTerminal, focus as focusTerminal } from '@renderer/terminal/registry'
+import { dispose as disposeTerminal, focus as focusTerminal, typeIn as typeInTerminal } from '@renderer/terminal/registry'
 import { ActionRail } from '@renderer/components/actions/ActionRail'
 import { VoicePrompt, type VoiceHandle } from '@renderer/components/voice/VoicePrompt'
 import { fuzzyMatch } from '@renderer/components/board/fuzzy'
@@ -1217,6 +1217,21 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
     [projectId, rf, upsertCard, patchCards, saveNote, ensureVisible, showToast]
   )
 
+  /**
+   * Types spoken words at a session's prompt without sending them, and shows
+   * the session to finish them there. False if it's no longer on the board.
+   */
+  const typeSpokenPrompt = useCallback(
+    (sessionId: string, text: string) => {
+      const card = cardsRef.current.find((c) => c.sessionId === sessionId)
+      if (!card || card.archived) return false
+      typeInTerminal(sessionId, text, { starting: !card.live })
+      openCard(sessionId)
+      return true
+    },
+    [openCard]
+  )
+
   const selectCards = useCallback((ids: Set<string>) => {
     setNodes((nds) => nds.map((n) => (n.type === 'session' ? { ...n, selected: ids.has(n.id) } : n)))
   }, [])
@@ -2024,6 +2039,9 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
 
   const activeCount = cards.filter((c) => !c.archived).length
   const selectedCards = cards.filter((c) => selection.includes(c.sessionId))
+  // With one Claude session selected, the mic speaks into it rather than starting another.
+  const spokenInto =
+    selectedCards.length === 1 && !selectedCards[0].archived && !isTerminal(selectedCards[0]) ? selectedCards[0] : null
 
   return (
     <BoardActionsContext.Provider value={actions}>
@@ -2146,7 +2164,13 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
 
                   <ActionRail onRun={runAction} onOverlayChange={setDockOverlay} />
 
-                  <VoicePrompt ref={voiceRef} projectId={projectId} onStart={(text) => void startSpokenPrompt(text)} />
+                  <VoicePrompt
+                    ref={voiceRef}
+                    projectId={projectId}
+                    target={spokenInto && { sessionId: spokenInto.sessionId, title: cardTitle(spokenInto) }}
+                    onStart={(text) => void startSpokenPrompt(text)}
+                    onTypeIn={typeSpokenPrompt}
+                  />
 
                   {selectedCards.length > 0 && !merge && (
                     <SelectionBar

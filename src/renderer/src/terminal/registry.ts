@@ -37,6 +37,11 @@ interface Entry {
 
 const entries = new Map<string, Entry>()
 
+/** Words to type into a session once its terminal is open, and, if it's `starting`, listening. */
+const pendingText = new Map<string, { text: string; starting: boolean }>()
+/** A starting session that never says it's listening gets its words after this long anyway. */
+const LISTEN_LIMIT_MS = 30_000
+
 const EXIT_LINE: Record<SessionKind, string> = {
   claude: '\r\n\x1b[2m[process exited · press Resume or reopen the card to continue]\x1b[0m\r\n',
   terminal: '\r\n\x1b[2m[shell exited · press Restart or reopen the card for a new shell]\x1b[0m\r\n'
@@ -305,6 +310,8 @@ async function openProcess(sessionId: string, projectId: string, entry: Entry) {
     if (entry.exitPending) {
       entry.exitPending = false
       markExited(entry)
+    } else if (pendingText.has(sessionId)) {
+      typePending(sessionId, entry)
     }
   } catch (err) {
     // Leave it resumable: the next attach retries open().
@@ -376,6 +383,7 @@ export function detach(sessionId: string, container?: HTMLElement) {
 
 /** Destroys the terminal, e.g. when its card is removed from the board. */
 export function dispose(sessionId: string) {
+  pendingText.delete(sessionId)
   const entry = entries.get(sessionId)
   if (!entry) return
   entries.delete(sessionId)
@@ -403,6 +411,53 @@ export function hasOutput(sessionId: string): boolean {
 export function needsOpen(sessionId: string): boolean {
   const entry = entries.get(sessionId)
   return !entry || entry.state !== 'ready'
+}
+
+/**
+ * Types `text` at the session's prompt without sending it: it goes in as a
+ * paste, so not even a line break submits it. A session whose terminal isn't
+ * open yet gets it once it is; one whose process is only now `starting`, once
+ * Claude is listening at its prompt. Like a dropped file's path, it ends in a
+ * space, so more words don't run into it.
+ */
+export function typeIn(sessionId: string, text: string, { starting = false } = {}) {
+  const entry = entries.get(sessionId)
+  const queued = pendingText.get(sessionId)
+  const words = `${text.trim()} `
+  if (entry?.state === 'ready' && !queued) {
+    entry.term.paste(words)
+    return
+  }
+  pendingText.set(sessionId, {
+    text: (queued?.text ?? '') + words,
+    starting: starting || Boolean(queued?.starting)
+  })
+}
+
+function typePending(sessionId: string, entry: Entry) {
+  const type = () => {
+    const pending = pendingText.get(sessionId)
+    // Gone, or exited meanwhile: the words wait for the next open.
+    if (!pending || entries.get(sessionId) !== entry || entry.state !== 'ready') return
+    pendingText.delete(sessionId)
+    entry.term.paste(pending.text)
+  }
+  // Claude turns on bracketed paste once its prompt reads the keyboard; typed
+  // any sooner, the words would be echoed onto the screen or lost.
+  const listening = () => entry.term.modes.bracketedPasteMode
+  // A running one already is, once the replay saying so has been read.
+  if (!pendingText.get(sessionId)?.starting) return entry.term.write('', type)
+  if (listening()) return type()
+
+  const done = () => {
+    parsed.dispose()
+    window.clearTimeout(limit)
+    type()
+  }
+  const parsed = entry.term.onWriteParsed(() => {
+    if (listening()) done()
+  })
+  const limit = window.setTimeout(done, LISTEN_LIMIT_MS)
 }
 
 /** Calls `listener` whenever output is written to the session's terminal. */

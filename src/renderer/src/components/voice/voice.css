@@ -64,7 +64,8 @@
 
 /* The pill beside the button: listening, transcribing, or something to tell. */
 .voice-pill,
-.voice-dock .voice-notice {
+.voice-dock .voice-notice,
+.session-mic .voice-notice {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -80,9 +81,28 @@
 .voice-pill {
   padding: 0 6px 0 14px;
 }
-.voice-dock .voice-notice {
+.voice-dock .voice-notice,
+.session-mic .voice-notice {
   max-width: 440px;
   padding: 6px 6px 6px 12px;
+}
+
+/* The session a recording is typed into, when one is selected. */
+.voice-into {
+  display: inline-flex;
+  min-width: 0;
+  gap: 4px;
+  padding-left: 8px;
+  border-left: 0.5px solid var(--separator);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.voice-into-title {
+  max-width: 200px;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-weight: 500;
+  text-overflow: ellipsis;
 }
 @keyframes voice-pill-in {
   from {
@@ -267,4 +287,38 @@
 .voice-key {
   opacity: 0.75;
   font-size: var(--text-xs);
+}
+
+/* ───────────── The mic in an open session's title bar ───────────── */
+
+.session-mic {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.session-mic.is-recording .session-mic-button {
+  border-radius: 50%;
+  background: var(--status-waiting);
+  color: #fff;
+  box-shadow: 0 0 0 calc(2px + var(--level, 0) * 6px) color-mix(in srgb, var(--status-waiting) 20%, transparent);
+  transition: box-shadow 80ms linear;
+}
+/* The red button already says it's listening. */
+.session-mic .voice-rec-dot {
+  display: none;
+}
+
+/* Hangs below the title bar, over the terminal. */
+.session-mic-notice {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  right: 0;
+  width: max-content;
+}
+.session-mic-notice .voice-notice {
+  max-width: min(440px, 80vw);
+  transform-origin: top right;
 }

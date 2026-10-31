@@ -3,6 +3,7 @@ import { AppWindowMac, Archive, LoaderCircle, Minimize2, Play, RotateCcw, Square
 import type { SessionCard } from '@shared/types'
 import { useApp } from '@renderer/store'
 import { UsageStats } from '@renderer/components/UsageStats'
+import { SessionMic } from '@renderer/components/voice/SessionMic'
 import * as registry from '@renderer/terminal/registry'
 import { useAttachedTerminal } from '@renderer/terminal/useAttachedTerminal'
 import '@renderer/terminal/terminal.css'
@@ -100,6 +101,12 @@ export function ExpandedCard({ card, heading, tools }: { card: SessionCard; head
 
   const canResume = started && !card.live && phase !== 'loading'
 
+  // What's said waits at the prompt, for Return; waking shows the session, starting it if need be.
+  const typeIn = (text: string) => {
+    registry.typeIn(id, text, { starting: !card.live })
+    wake.current()
+  }
+
   return (
     <>
       <header className="card-xhead">
@@ -107,6 +114,7 @@ export function ExpandedCard({ card, heading, tools }: { card: SessionCard; head
         {!shell && <UsageStats usage={card.usage} live={card.live} />}
         <div className="card-tools nodrag" onClick={stop} onDoubleClick={stop}>
           {tools}
+          {!shell && <SessionMic variant="card" projectId={projectId} onText={typeIn} />}
           {canResume && (
             <button
               className="card-tool is-labelled"

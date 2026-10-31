@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { Modal } from '@renderer/components/Modal'
 import { UsageStats } from '@renderer/components/UsageStats'
+import { SessionMic } from '@renderer/components/voice/SessionMic'
 import { cardTitle, isTerminal, tildePath, useApp, useCard } from '@renderer/store'
 import type { SessionCard } from '@shared/types'
 import * as registry from './registry'
@@ -60,6 +61,7 @@ function TerminalPanel({ sessionId, projectId }: { sessionId: string; projectId:
       <TerminalHeader
         card={card}
         sessionId={sessionId}
+        projectId={projectId}
         canResume={!card?.live && phase !== 'loading'}
         onResume={resume}
       />
@@ -102,11 +104,13 @@ function statusLabel(card: SessionCard | undefined): string {
 function TerminalHeader({
   card,
   sessionId,
+  projectId,
   canResume,
   onResume
 }: {
   card: SessionCard | undefined
   sessionId: string
+  projectId: string
   canResume: boolean
   onResume: () => void
 }) {
@@ -138,6 +142,13 @@ function TerminalHeader({
   const remove = () => {
     closeTerminal()
     removeCard(sessionId)
+  }
+
+  // What's said waits at the prompt, for Return; a session that isn't running resumes to take it.
+  const typeIn = (text: string) => {
+    registry.typeIn(sessionId, text, { starting: !card?.live })
+    if (canResume) onResume()
+    registry.focus(sessionId)
   }
 
   return (
@@ -191,6 +202,7 @@ function TerminalHeader({
       </div>
 
       <div className="term-actions">
+        {!shell && <SessionMic variant="window" projectId={projectId} onText={typeIn} />}
         {canResume &&
           (shell ? (
             <button className="btn" onClick={onResume} title="Start a new shell in the project folder">

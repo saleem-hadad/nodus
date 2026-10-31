@@ -518,81 +518,98 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
 /* ------------------------------------------------------------- features */
 
 .below { padding-bottom: 32px; }
-.link-line { display: block; max-width: 100%; margin: 0 auto; overflow: visible; }
-.link-line path { fill: none; stroke: var(--border-strong); stroke-width: 1.5; }
-.link-line circle { fill: var(--elevated); stroke: var(--border-strong); stroke-width: 1.5; }
-
 .wrap { max-width: 1280px; margin: 0 auto; padding: 0 24px; }
-.section {
-  padding: 0 20px 22px;
-  border-radius: 26px;
-  border: 1.5px solid color-mix(in srgb, var(--hue) 30%, transparent);
-  background: color-mix(in srgb, var(--hue) 6%, transparent);
-}
-.section h2 {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 72px;
-  margin: 0;
-  color: color-mix(in srgb, var(--hue) 62%, var(--text));
-  font-size: clamp(22px, 2.2vw, 30px);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-.section h2 .count { padding: 0 9px; font-size: 13px; line-height: 22px; font-weight: 600; letter-spacing: 0; }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(288px, 100%), 1fr)); gap: 22px; }
 
-.feature {
-  position: relative;
+/* One feature per row: the value as a headline, a line on how, and the real thing beside it. */
+.features {
   display: flex;
   flex-direction: column;
-  gap: 9px;
-  min-height: 216px;
-  padding: 16px 18px 12px;
-  border-radius: 14px;
-  background: var(--elevated);
-  box-shadow: var(--shadow-sm);
+  gap: clamp(96px, 12vw, 168px);
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: clamp(112px, 13vw, 176px) 24px clamp(96px, 12vw, 160px);
 }
-.feature-stack { position: relative; }
-.feature-stack .feature { height: 100%; }
-.feature .dot { margin-top: 6px; }
-.feature h3 { margin: 0; font-family: var(--font-display); font-size: 17px; font-weight: 600; line-height: 1.3; letter-spacing: -0.015em; }
-.feature p { margin: 0; color: var(--text-2); font-size: 14px; line-height: 1.5; text-wrap: pretty; }
-.feature .card-foot { gap: 10px; padding-top: 10px; font-size: 12px; }
-.feature .card-foot span { gap: 5px; }
-.feature .chip { height: 20px; padding: 0 8px; font-size: 12px; }
+.feature-row {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  align-items: center;
+  gap: clamp(40px, 6vw, 96px);
+}
+.feature-row.is-flipped { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+.feature-row.is-flipped .feature-copy { order: 2; }
+.feature-label { display: flex; align-items: center; gap: 9px; margin: 0 0 18px; color: var(--text-2); font-size: 15px; font-weight: 600; }
+.feature-label i { width: 10px; height: 10px; border-radius: 50%; }
+.feature-copy h2 { margin: 0; font-size: clamp(34px, 4.4vw, 58px); font-weight: 700; line-height: 1.02; letter-spacing: -0.04em; text-wrap: balance; }
+.feature-copy .body { max-width: 470px; margin: 22px 0 0; color: var(--text-2); font-size: 18px; line-height: 1.55; text-wrap: pretty; }
+.feature-keys { display: flex; flex-wrap: wrap; gap: 10px 18px; margin: 24px 0 0; padding: 0; list-style: none; color: var(--text-3); font-size: 14px; }
+.feature-keys li { display: inline-flex; align-items: center; gap: 7px; }
 .kbd {
   display: inline-grid;
   place-items: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 5px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
   border-radius: 5px;
-  background: var(--canvas);
+  background: var(--elevated);
   box-shadow: inset 0 0 0 0.5px var(--border-strong), 0 1px 0 var(--border-strong);
   color: var(--text-2);
-  font-size: 11px;
+  font-family: var(--font-ui);
+  font-size: 12px;
   font-weight: 600;
 }
-.status-dots { display: inline-flex; gap: 5px; }
-.status-dots i { width: 8px; height: 8px; border-radius: 50%; }
-.rail { display: flex; gap: 8px; }
-.rail span { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--elevated); box-shadow: var(--shadow-md); color: var(--text-2); }
-.mic { display: grid; place-items: center; width: 36px; height: 36px; margin-left: auto; border-radius: 50%; background: var(--button); color: #fff; }
-.note-feature {
-  min-height: 216px;
-  padding: 18px 20px;
-  border-radius: 4px;
-  background: linear-gradient(rgba(0, 0, 0, 0.035), transparent 22px), var(--note);
-  box-shadow: 0 1px 1.5px rgba(0, 0, 0, 0.08), 0 8px 16px -8px rgba(0, 0, 0, 0.3);
-  color: rgba(0, 0, 0, 0.82);
-  font-size: 16px;
-  line-height: 1.42;
-  transform: rotate(-1.2deg);
+
+/* The app's screenshots carry their own window frame and shadow; the bleed takes back their margin. */
+.shot { display: block; width: 108%; max-width: none; height: auto; margin: -4%; }
+
+/* Visuals built from the board's own cards. */
+.status-visual, .deck-visual { position: relative; aspect-ratio: 7 / 5; container-type: inline-size; }
+.vnode { position: absolute; width: 52%; aspect-ratio: 4 / 3; }
+/* A cascade, so every title shows and the card that needs you comes to the front. */
+.status-visual .vnode:nth-child(1) { left: 0; top: 0; }
+.status-visual .vnode:nth-child(2) { left: 24%; top: 22.5%; }
+.status-visual .vnode:nth-child(3) { left: 48%; top: 45%; }
+.state { font-weight: 600; }
+.state.is-working { color: color-mix(in srgb, var(--working) 75%, var(--text)); }
+.state.is-waiting { color: color-mix(in srgb, var(--waiting) 80%, var(--text)); }
+.state.is-done { color: color-mix(in srgb, var(--done) 80%, var(--text)); }
+
+.deck-visual .vnode { left: 0; top: 20%; width: 50%; z-index: 2; }
+.agent {
+  position: absolute;
+  left: 54%;
+  width: 46%;
+  padding: 14px 16px 16px;
+  border-radius: 14px;
+  background: var(--elevated);
+  box-shadow: inset 0 -3px 0 var(--edge), var(--shadow-md);
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.45;
 }
-.note-feature h3 { margin: 0 0 10px; font-size: 16px; font-weight: 700; }
-.note-feature p { margin: 0; }
+.agent b { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; color: var(--text); font-family: var(--font-display); font-size: 14px; font-weight: 600; }
+.agent b i { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--edge); }
+.agent.a1 { top: 2%; transform: rotate(-3deg); }
+.agent.a2 { top: 36%; transform: rotate(1.5deg); }
+.agent.a3 { top: 70%; transform: rotate(4deg); }
+@container (max-width: 460px) {
+  .vnode .card-text { -webkit-line-clamp: 2; }
+  .agent { padding: 10px 12px 12px; }
+  .agent b { margin: 0; font-size: 13px; }
+  .agent-text { display: none; }
+}
+
+/* The smaller things, one line each. */
+.extras { max-width: 1200px; margin: 0 auto; padding: 0 24px clamp(112px, 13vw, 168px); }
+.extras h2 { margin: 0 0 44px; font-size: clamp(28px, 2.8vw, 36px); font-weight: 700; letter-spacing: -0.03em; }
+.extras-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 44px 48px; }
+.extra-icon { display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 18px; border-radius: 12px; background: var(--elevated); box-shadow: var(--shadow-sm); color: var(--text); }
+.extras h3 { margin: 0; font-family: var(--font-display); font-size: 18px; font-weight: 600; letter-spacing: -0.015em; }
+.extras p { margin: 8px 0 0; color: var(--text-2); font-size: 16px; line-height: 1.55; text-wrap: pretty; }
+
+@media (max-width: 860px) {
+  .feature-row, .feature-row.is-flipped { grid-template-columns: minmax(0, 1fr); }
+  .feature-row.is-flipped .feature-copy { order: 0; }
+}
 
 /* ------------------------------------------------------------------ end */
 
@@ -830,97 +847,131 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
       </div>
     </div>
 
-    <svg class="link-line" width="240" height="96" viewBox="0 0 240 96" aria-hidden="true"><path d="M120 4 C120 52 60 44 60 92"/><circle cx="120" cy="4" r="3.5"/><circle cx="60" cy="92" r="3.5"/></svg>
+    <div class="features">
+      <section class="feature-row">
+        <div class="feature-copy">
+          <p class="feature-label"><i style="background: var(--waiting)" aria-hidden="true"></i>Live status</p>
+          <h2 class="display">Know which session needs you.</h2>
+          <p class="body">Every card shows its status, straight from Claude Code's own hooks. Orange is working, blue is done, and red means Claude is waiting on you. No more cycling through terminal tabs to find out.</p>
+        </div>
+        <div class="status-visual" aria-hidden="true">
+          <div class="vnode">
+            <div class="card">
+              <div class="card-head"><i class="dot is-working"></i><p class="card-title">Discount codes at checkout</p></div>
+              <p class="card-text">Adding SAVE10 and WELCOME5 to src/discounts.js, then running the checkout tests.</p>
+              <div class="card-foot"><span>feat/discount-codes</span><span class="time state is-working">Working</span></div>
+            </div>
+          </div>
+          <div class="vnode">
+            <div class="card">
+              <div class="card-head"><i class="dot"></i><p class="card-title">Fix cart rounding</p></div>
+              <p class="card-text">All 6 tests pass now. Prices are summed in cents.</p>
+              <div class="card-foot"><span>fix/cart-rounding</span><span class="time state is-done">Done</span></div>
+            </div>
+          </div>
+          <div class="vnode">
+            <div class="card is-waiting">
+              <div class="card-head"><i class="dot is-waiting"></i><p class="card-title">Free-shipping progress bar</p></div>
+              <p class="card-text">Should the bar show in the mini cart too, or only on the cart page?</p>
+              <div class="card-foot"><span>main</span><span class="time state is-waiting">Needs you</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
 
-    <div class="wrap">
-      <section class="section" style="--hue: #0a84ff">
-        <h2 class="display">See every session at once <span class="count">3</span></h2>
-        <div class="grid">
-          <article class="feature">
-            <div class="card-head"><i class="dot is-working"></i><h3>Live status</h3></div>
-            <p>Orange is working, red needs you, blue is done. Straight from Claude Code's own hooks.</p>
-            <div class="card-foot"><span class="status-dots" aria-hidden="true"><i style="background: var(--working)"></i><i style="background: var(--waiting)"></i><i style="background: var(--done)"></i></span><span class="time">live</span></div>
-          </article>
-          <article class="feature">
-            <div class="card-head"><i class="dot"></i><h3>The real terminal</h3></div>
-            <p>Click a card for the actual <code>claude</code> TUI, or expand it right on the board and watch it work.</p>
-            <div class="card-foot"><span><kbd class="kbd">Click</kbd>open</span><span><kbd class="kbd">E</kbd>expand</span><span><kbd class="kbd">T</kbd>shell</span></div>
-          </article>
-          <div class="feature-stack">
+      <section class="feature-row is-flipped">
+        <div class="feature-copy">
+          <p class="feature-label"><i style="background: var(--done)" aria-hidden="true"></i>The real terminal</p>
+          <h2 class="display">The real Claude Code, one click away.</h2>
+          <p class="body">Click a card and you're in the actual <code>claude</code> TUI, not a copy of it. Or expand the card right on the board and watch it work while you keep an eye on the rest.</p>
+          <ul class="feature-keys">
+            <li><kbd class="kbd">Click</kbd>open a card</li>
+            <li><kbd class="kbd">E</kbd>expand it in place</li>
+            <li><kbd class="kbd">T</kbd>a shell in the project</li>
+          </ul>
+        </div>
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="screenshots/terminal-dark.png">
+          <img class="shot" src="screenshots/terminal.png" width="1620" height="1058" loading="lazy" alt="A card open in the terminal, with Claude asking for permission">
+        </picture>
+      </section>
+
+      <section class="feature-row">
+        <div class="feature-copy">
+          <p class="feature-label"><i style="background: #af52de" aria-hidden="true"></i>New session from context</p>
+          <h2 class="display">Never re-explain what you just did.</h2>
+          <p class="body">Select a few cards and start a session from their context. You get a handoff of what each one did, edit it if you like, say what's next, and the new session picks up from there.</p>
+          <ul class="feature-keys">
+            <li><kbd class="kbd">⇧</kbd>click cards to select them</li>
+          </ul>
+        </div>
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="screenshots/context-dark.png">
+          <img class="shot" src="screenshots/context.png" width="1620" height="1058" loading="lazy" alt="Starting a new session from the context of two others, with their handoff summaries">
+        </picture>
+      </section>
+
+      <section class="feature-row is-flipped">
+        <div class="feature-copy">
+          <p class="feature-label"><i style="background: var(--working)" aria-hidden="true"></i>Agents as a deck</p>
+          <h2 class="display">See what every agent is up to.</h2>
+          <p class="body">When Claude runs agents, they peek out from under its card in their status colours. Point at the deck to fan them out, or click one for its live transcript.</p>
+        </div>
+        <div class="deck-visual" aria-hidden="true">
+          <div class="vnode">
             <div class="layer depth-3" style="--edge: var(--working)"></div>
             <div class="layer depth-2" style="--edge: var(--done)"></div>
             <div class="layer depth-1" style="--edge: var(--working)"></div>
-            <article class="feature">
-              <div class="card-head"><i class="dot is-working"></i><h3>Agents as a deck</h3></div>
-              <p>When Claude runs agents, they peek out from under its card. Point at the deck to fan them out.</p>
-              <div class="card-foot"><span>3 agents</span><span class="time">2 working</span></div>
-            </article>
-          </div>
-        </div>
-      </section>
-    </div>
-
-    <svg class="link-line" width="240" height="88" viewBox="0 0 240 88" aria-hidden="true"><path d="M60 4 C60 52 180 36 180 84"/><circle cx="60" cy="4" r="3.5"/><circle cx="180" cy="84" r="3.5"/></svg>
-
-    <div class="wrap">
-      <section class="section" style="--hue: #af52de">
-        <h2 class="display">Pick up where you left off <span class="count">3</span></h2>
-        <div class="grid">
-          <article class="feature">
-            <div class="card-head"><i class="dot is-working"></i><h3>New session from context</h3></div>
-            <span class="chip"><svg class="icon" width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>merged from 2</span>
-            <p>Select a few cards and start a session that already knows what they did.</p>
-            <div class="card-foot"><span><kbd class="kbd">⇧</kbd>click to select</span></div>
-          </article>
-          <div class="feature-stack">
-            <div class="layer depth-2" style="opacity: 0.8"></div>
-            <div class="layer depth-1" style="opacity: 0.9"></div>
-            <article class="feature">
-              <div class="card-head"><svg class="icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" style="margin-top: 3px; color: var(--text-3)"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg><h3>A searchable archive</h3></div>
-              <p>Old sessions stack up in one pile. Hover it, type to search, and drag a card back out.</p>
-              <div class="card-foot"><span>Archive</span><span class="time">9 sessions</span></div>
-            </article>
-          </div>
-          <article class="feature">
-            <div class="card-head"><i class="dot is-working"></i><h3>Sessions outlive the app</h3></div>
-            <p>Quit Claude Nodes and your sessions keep working. Open it again and they're right where you left them.</p>
-            <div class="card-foot"><span>still running</span><span class="time">after quit</span></div>
-          </article>
-        </div>
-      </section>
-    </div>
-
-    <svg class="link-line" width="240" height="88" viewBox="0 0 240 88" aria-hidden="true"><path d="M180 4 C180 52 60 36 60 84"/><circle cx="180" cy="4" r="3.5"/><circle cx="60" cy="84" r="3.5"/></svg>
-
-    <div class="wrap">
-      <section class="section" style="--hue: #ff9500">
-        <h2 class="display">Hand Claude the chores <span class="count">3</span></h2>
-        <div class="grid">
-          <article class="feature">
-            <div class="card-head"><i class="dot"></i><h3>Action buttons</h3></div>
-            <p>Describe a button, like “pull and push, resolving conflicts”, and Claude writes it. A press runs Claude in the background.</p>
-            <div class="card-foot" style="border-top: 0">
-              <span class="rail" aria-hidden="true">
-                <span><svg class="icon" width="16" height="16" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></span>
-                <span><svg class="icon" width="16" height="16" viewBox="0 0 24 24"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/></svg></span>
-                <span><svg class="icon" width="16" height="16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 12 2 2 4-4"/></svg></span>
-              </span>
+            <div class="card">
+              <div class="card-head"><i class="dot is-working"></i><p class="card-title">Product search</p></div>
+              <p class="card-text">Running 3 agents, one per search approach, to compare them on the 10k-product fixture.</p>
+              <div class="card-foot"><span>feat/search</span><span class="time">3 agents</span></div>
             </div>
-          </article>
-          <article class="note-feature">
-            <h3>Sticky notes</h3>
-            <p>Peel a note off the pad and stick it anywhere. Or ask Claude to research something and pin what it found beside its card.</p>
-          </article>
-          <article class="feature">
-            <div class="card-head"><i class="dot"></i><h3>Speak a prompt</h3></div>
-            <p>Say what you want, check the text, and press Enter to start a session on it.</p>
-            <div class="card-foot"><span><kbd class="kbd">V</kbd>to talk</span><span class="mic" aria-hidden="true"><svg class="icon" width="16" height="16" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg></span></div>
-          </article>
+          </div>
+          <div class="agent a1" style="--edge: var(--working)"><b><i></i>Full-text search</b><span class="agent-text">Indexing 10,000 products and timing 200 queries.</span></div>
+          <div class="agent a2" style="--edge: var(--done)"><b><i></i>Trigram index</b><span class="agent-text">Done. Best with typos, slower on long queries.</span></div>
+          <div class="agent a3" style="--edge: var(--working)"><b><i></i>Plain filter</b><span class="agent-text">Timing the baseline the other two have to beat.</span></div>
         </div>
+      </section>
+
+      <section class="feature-row">
+        <div class="feature-copy">
+          <p class="feature-label"><i style="background: #8e8e93" aria-hidden="true"></i>Archive</p>
+          <h2 class="display">Nothing gets lost.</h2>
+          <p class="body">Finished sessions stack up in one pile instead of cluttering the board. Hover it and type to search, then drag a card back out to pick the session up again.</p>
+        </div>
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="screenshots/archive-dark.png">
+          <img class="shot" src="screenshots/archive.png" width="1620" height="1058" loading="lazy" alt="The archive stack open, with search results">
+        </picture>
       </section>
     </div>
 
-    <svg class="link-line" width="240" height="88" viewBox="0 0 240 88" aria-hidden="true"><path d="M60 4 C60 52 120 36 120 84"/><circle cx="60" cy="4" r="3.5"/><circle cx="120" cy="84" r="3.5"/></svg>
+    <section class="extras">
+      <h2 class="display">Also on the board</h2>
+      <div class="extras-grid">
+        <div>
+          <span class="extra-icon" aria-hidden="true"><svg class="icon" width="20" height="20" viewBox="0 0 24 24"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg></span>
+          <h3>Action buttons</h3>
+          <p>Describe a chore once, like “pull and push, resolving conflicts”. Claude writes the button, and a press runs it in the background.</p>
+        </div>
+        <div>
+          <span class="extra-icon" aria-hidden="true"><svg class="icon" width="20" height="20" viewBox="0 0 24 24"><path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z"/><path d="M15 3v4a2 2 0 0 0 2 2h4"/></svg></span>
+          <h3>Sticky notes</h3>
+          <p>Pin reminders anywhere on the board, or ask Claude to research something and pin what it found beside its card.</p>
+        </div>
+        <div>
+          <span class="extra-icon" aria-hidden="true"><svg class="icon" width="20" height="20" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg></span>
+          <h3>Speak a prompt</h3>
+          <p>Press V, say what you want, check the text, and press Enter to start a session on it.</p>
+        </div>
+        <div>
+          <span class="extra-icon" aria-hidden="true"><svg class="icon" width="20" height="20" viewBox="0 0 24 24"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></svg></span>
+          <h3>Sessions outlive the app</h3>
+          <p>Quit Claude Nodes and Claude keeps working. Open it again and everything is right where you left it.</p>
+        </div>
+      </div>
+    </section>
 
     <div class="wrap">
       <section class="finale">

@@ -29,8 +29,6 @@ Every Claude Code session in a repo, as a live card. See which ones need you, an
 
 ## See it in action
 
-https://github.com/user-attachments/assets/21921a47-2635-4bc4-83f8-166f83134bde
-
 <table>
   <tr>
     <td colspan="2">
@@ -81,19 +79,6 @@ https://github.com/user-attachments/assets/21921a47-2635-4bc4-83f8-166f83134bde
 2. **Open it once.** The app isn't notarized yet, so macOS blocks the first launch. Go to **System Settings → Privacy & Security** and click **Open Anyway**.
 3. **Have Claude Code installed**, with `claude` on your `PATH`. ([Install Claude Code](https://code.claude.com/docs/en/overview))
 4. **Click New Project**, pick a repo, and press **N** for your first session.
-
-## Shortcuts
-
-| Do this | Press |
-| --- | --- |
-| New session · new terminal | N · T |
-| Speak a prompt | V |
-| Open a card | Click · Enter |
-| Expand or collapse a card on the board | E |
-| Select cards | Drag on empty canvas · ⇧-click |
-| Group the selection into a section | ⌘G |
-| Archive the selection | ⌫ |
-| Search the archive | Hover the stack and type |
 
 ## Learn more
 

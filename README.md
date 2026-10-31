@@ -4,16 +4,30 @@
 
 # Claude Nodes
 
-**A spatial board for your Claude Code sessions.**
+**Agentic coding, on one board.**
 
-See every session in a repo at once, spot the ones waiting on you,<br>
-and start new sessions from the context of old ones.
+Every Claude Code session in a repo, as a live card. See which ones need you, and start new sessions from the context of old ones.
 
 **[Download for Mac](https://github.com/saleem-hadad/claude-nodes/releases/latest/download/Claude-Nodes-arm64.dmg)** · [Intel](https://github.com/saleem-hadad/claude-nodes/releases/latest/download/Claude-Nodes-x64.dmg) · [Website](https://saleem-hadad.github.io/claude-nodes/) · Free and open source
 
-<sub>If it saves you time, a star helps other people find it.</sub>
+<a href="https://www.youtube.com/watch?v=c33K4QcVxFQ"><img src="https://img.youtube.com/vi/c33K4QcVxFQ/maxresdefault.jpg" width="640" alt="Watch the video: I Was Drowning in Claude Code Sessions, So I Built This"></a>
+
+<sub>▶ <a href="https://www.youtube.com/watch?v=c33K4QcVxFQ">Watch the 2-minute video</a> · If it saves you time, a star helps other people find it.</sub>
 
 </div>
+
+## What you get
+
+- **Every session at once.** One card per session, with Claude's latest reply, the branch and the last activity.
+- **Know which one needs you.** 🟠 working · 🔴 needs you · 🔵 done, live from Claude Code's hooks.
+- **The real terminal.** Click a card for the actual `claude` TUI, or expand it right on the board.
+- **Never re-explain.** Select a few cards and start a session that already knows what they did.
+- **Agents as a deck.** See what each of Claude's agents is doing, right under its card.
+- **Nothing gets lost.** Finished sessions stack up in a searchable archive. Drag one out to pick it up again.
+- **Sessions keep running** when you quit the app. Open it again and they're right where you left them.
+- **For the small stuff:** action buttons Claude writes for your chores, sticky notes, and spoken prompts.
+
+## See it in action
 
 https://github.com/user-attachments/assets/21921a47-2635-4bc4-83f8-166f83134bde
 
@@ -61,49 +75,30 @@ https://github.com/user-attachments/assets/21921a47-2635-4bc4-83f8-166f83134bde
   </tr>
 </table>
 
-## Features
-
-- **A card per session** with Claude's latest reply, the branch and the last activity. Arrange cards and group them into sections.
-- **Live status** from Claude Code hooks: 🟠 working · 🔴 needs you · 🔵 done.
-- **The real terminal.** Click a card to open the actual `claude` TUI, or expand it right on the board and resize it. Press **T** for a shell in the project folder.
-- **Agents as a deck.** When Claude runs agents, they peek out from under the session's card in their status colours. Point at the deck to fan them out and see what each is doing, or click one for its live transcript.
-- **Sessions outlive the app.** Quit Claude Nodes and your sessions keep working. Open it again and they're right where you left them.
-- **New session from context.** Select a few cards and start a session that already knows what they did.
-- **Action buttons.** Describe a button ("pull and push, resolving conflicts", "archive the sessions that are done") and Claude writes it. Buttons sit in a rail on the right edge. A press runs Claude in the background, with its session fanned out beside the button until it's done.
-- **A searchable archive.** Old sessions stack up in one pile. Drag a card out to pick it up again.
-- **Sticky notes.** Peel a note off the pad under the archive and stick it anywhere on the board, for reminders and scratch notes. Or ask Claude to do some research and put what it found on the board: its notes go up beside its card.
-- **Speak a prompt.** Press the mic button (or **V**), say what you want, check the text, and press Enter to start a session on it. Uses xAI's speech to text with your own API key.
-
 ## Get started
 
-**[Download for Apple Silicon](https://github.com/saleem-hadad/claude-nodes/releases/latest/download/Claude-Nodes-arm64.dmg)** · [Intel](https://github.com/saleem-hadad/claude-nodes/releases/latest/download/Claude-Nodes-x64.dmg)
-
-Open the DMG and drag Claude Nodes into Applications. You also need [Claude Code](https://code.claude.com/docs/en/overview) with `claude` on your `PATH`.
-
-The app isn't notarized yet, so macOS blocks the first launch. Open it once, then go to **System Settings → Privacy & Security** and click **Open Anyway**.
-
-Click **New Project**, pick a repo and open it. Press **N** for a new session, or drag one out of the archive to resume it.
-
-To build from source, see [Development](docs/how-it-works.md#development).
+1. **Download** for [Apple Silicon](https://github.com/saleem-hadad/claude-nodes/releases/latest/download/Claude-Nodes-arm64.dmg) or [Intel](https://github.com/saleem-hadad/claude-nodes/releases/latest/download/Claude-Nodes-x64.dmg), open the DMG and drag Claude Nodes into Applications.
+2. **Open it once.** The app isn't notarized yet, so macOS blocks the first launch. Go to **System Settings → Privacy & Security** and click **Open Anyway**.
+3. **Have Claude Code installed**, with `claude` on your `PATH`. ([Install Claude Code](https://code.claude.com/docs/en/overview))
+4. **Click New Project**, pick a repo, and press **N** for your first session.
 
 ## Shortcuts
 
-| Action | Shortcut |
+| Do this | Press |
 | --- | --- |
 | New session · new terminal | N · T |
-| Speak a prompt · stop | V · the mic button |
+| Speak a prompt | V |
 | Open a card | Click · Enter |
-| Expand a card on the board · collapse it | E |
+| Expand or collapse a card on the board | E |
 | Select cards | Drag on empty canvas · ⇧-click |
 | Group the selection into a section | ⌘G |
 | Archive the selection | ⌫ |
 | Search the archive | Hover the stack and type |
-| New sticky note | Drag one off the pad under the archive |
 
 ## Learn more
 
-Everything stays on your machine. The app reads transcripts where Claude Code keeps them and saves only the board layout.
-
-[How it works](docs/how-it-works.md) covers the architecture, every shortcut, known limitations and development.
+- **Private by design.** Everything stays on your machine. The app reads transcripts where Claude Code keeps them and saves only the board layout.
+- **Spoken prompts** use xAI's speech to text with your own API key.
+- **[How it works](docs/how-it-works.md)** covers the architecture, every shortcut, known limitations and [building from source](docs/how-it-works.md#development).
 
 <sub>Claude Nodes is an independent project, not affiliated with or endorsed by Anthropic. Claude is a trademark of Anthropic, PBC.</sub>

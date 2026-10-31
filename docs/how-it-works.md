@@ -117,6 +117,14 @@ Pressing a button starts a session on the action's prompt. It isn't drawn on the
 
 When the run's turn ends, the session goes, its transcript is hidden like a removed card's, and the summary shows as a notice. If you type into a run, or interrupt it with Esc or Ctrl+C, it becomes yours: it joins the board as an ordinary session, and loses its session tools. Answering a question it asked doesn't count. While a run is going, pressing its button opens it rather than starting another.
 
+## Updates
+
+Nodus updates itself from GitHub releases. A little after launch, and every few hours after that, it asks GitHub for the latest release. If that release is newer, Nodus downloads the DMG for your Mac in the background and checks it against the SHA-256 digest GitHub keeps for the file. It then copies the app out of the DMG and checks that the copy's signature is intact, that it's Nodus and that it's the expected version. The new version goes in when you quit, so the next launch opens it. **Restart to Update** in the title bar does that now.
+
+The swap happens after the app has exited: the old app moves aside, the new one takes its place, and the old one is deleted. If the new one can't go in, the old one goes back, and Nodus won't download that version again unless you ask. Sessions keep running in the session host the whole time.
+
+Settings shows the version you're on and how the update is going. **Check Now**, and **Nodus › Check for Updates…**, check right away. Turn off **Download updates automatically** to stop the checks. Nodus can only replace itself in a folder you can write to, so a copy run straight from the DMG doesn't update; move it to Applications first. The downloads live in `updates/` in the app's data folder until they're installed.
+
 ## Your data
 
 Transcripts stay where Claude Code keeps them. The app stores only the board layout (projects, card positions, sections, notes, archive, custom titles and lineage) and its settings (theme, and the xAI key for voice prompts if you save one, encrypted with the macOS Keychain) in `~/Library/Application Support/Nodus/state.json`. *Remove from board* hides a card and never deletes a transcript.
@@ -163,6 +171,7 @@ In the terminal, Esc goes to Claude (it interrupts a turn), so it never closes t
 - Status is tracked only for sessions started from the app. A session running in another terminal shows as done.
 - Running `/clear` inside a card starts a new session id, which shows up as a new archived card.
 - In a repo Claude Code hasn't opened before, the first session shows Claude's folder-trust prompt. "No, exit" is preselected, so move to "Yes" before pressing Enter.
+- Releases aren't notarized yet, so macOS treats each version as a new app. After an update it asks again for the microphone, and for Keychain access if you saved an xAI key.
 - If you update the app while sessions are running, and the update changed how the app talks to the session host, the new version asks to stop those sessions before it continues.
 - A session host started by a version without board tools keeps running sessions after an update, but sessions started on it don't get the tools. They do once every session has stopped and a new host starts.
 - Built and tested on macOS only.
@@ -188,6 +197,7 @@ src/
     boardTools.ts the board tools' MCP server, answering what the session host relays: notes for every session, and listing and archiving sessions for action runs
     notes.ts      notes sessions write: where they go on the board, and how big they are
     voice.ts      speech to text for the mic button through xAI, and the key it uses
+    updater.ts    updates the app from GitHub releases: download, checks, and the swap on quit
     store.ts      state.json in the app's userData directory
   renderer/src/
     views/        ProjectsView (folders) and BoardView (canvas)
@@ -226,6 +236,8 @@ git push --follow-tags
 ```
 
 The workflow fails if the tag doesn't match the version in `package.json`.
+
+Installed copies update themselves from `releases/latest`. They look for `Nodus-arm64.dmg` and `Nodus-x64.dmg` by name, so keep those names, and don't publish a release before its DMGs are ready to go out.
 
 ### Troubleshooting installs
 

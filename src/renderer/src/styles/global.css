@@ -102,6 +102,48 @@ textarea {
   justify-content: center;
 }
 
+/* A macOS-style switch drawn over the native checkbox, which keeps its keyboard handling. */
+.switch {
+  position: relative;
+  flex: none;
+  width: 32px;
+  height: 18px;
+  margin: 1px 0 0;
+  border-radius: 9px;
+  background: var(--bg-pressed);
+  box-shadow: inset 0 0 0 0.5px var(--border);
+  appearance: none;
+  cursor: pointer;
+  transition: background var(--dur-fast) ease;
+}
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform var(--dur-fast) ease;
+}
+.switch:checked {
+  background: var(--accent);
+  box-shadow: none;
+}
+.switch:checked::after {
+  transform: translateX(14px);
+}
+.switch:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.switch:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
 /* Status dot shared by cards, folders and the terminal modal header. */
 .status-dot {
   display: inline-block;

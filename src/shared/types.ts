@@ -345,7 +345,26 @@ export type ThemePreference = 'system' | 'light' | 'dark'
 /** App-wide preferences, persisted with the rest of the state. */
 export interface AppSettings {
   theme: ThemePreference
+  /** Download new versions in the background and install them when the app quits. */
+  autoUpdate: boolean
 }
+
+/**
+ * How updating the app is going. `version` is the newer release, once one is
+ * found. 'off' when this copy can't update itself: a development build, or one
+ * in a folder it can't write to.
+ */
+export type UpdateState =
+  | { state: 'off'; reason: string }
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'latest' }
+  | { state: 'downloading'; version: string; percent: number }
+  | { state: 'ready'; version: string }
+  | { state: 'error'; message: string }
+
+/** The update state, with the version running now. */
+export type UpdateStatus = UpdateState & { current: string }
 
 /**
  * Where the xAI API key for voice prompts comes from: saved in Settings, the

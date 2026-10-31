@@ -115,7 +115,7 @@ export function ActionDialog({
       <input
         type="checkbox"
         role="switch"
-        className="action-switch"
+        className="switch"
         checked={global}
         disabled={drafting || saving}
         onChange={(e) => setGlobal(e.target.checked)}

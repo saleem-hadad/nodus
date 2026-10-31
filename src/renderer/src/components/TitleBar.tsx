@@ -4,6 +4,7 @@ import { useApp } from '@renderer/store'
 import { FolderIcon } from './FolderIcon'
 import { GitControls } from './git/GitControls'
 import { TITLEBAR_ACTIONS_ID } from './TitleBarActions'
+import { UpdateButton } from './UpdateButton'
 import { addProject } from './projects/projectsUi'
 import './TitleBar.css'
 
@@ -61,7 +62,11 @@ export function TitleBar() {
         )}
       </nav>
 
-      <div id={TITLEBAR_ACTIONS_ID} className="titlebar-actions no-drag" />
+      <div className="titlebar-actions no-drag">
+        <UpdateButton />
+        {/* Each view's own buttons. */}
+        <div id={TITLEBAR_ACTIONS_ID} className="titlebar-actions" />
+      </div>
     </header>
   )
 }

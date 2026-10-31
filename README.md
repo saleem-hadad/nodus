@@ -84,6 +84,7 @@ Every Claude Code session in a repo, as a live card. See which ones need you, an
 
 - **Private by design.** Everything stays on your machine. The app reads transcripts where Claude Code keeps them and saves only the board layout.
 - **Spoken prompts** use xAI's speech to text with your own API key.
+- **Updates itself.** New versions download in the background and install when you quit. You can turn this off in Settings.
 - **[How it works](docs/how-it-works.md)** covers the architecture, every shortcut, known limitations and [building from source](docs/how-it-works.md#development).
 
 <sub>Nodus is an independent project, not affiliated with or endorsed by Anthropic. Claude is a trademark of Anthropic, PBC.</sub>

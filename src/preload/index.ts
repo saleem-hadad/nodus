@@ -91,6 +91,12 @@ const api: Api = {
       ipcRenderer.invoke(IPC.voiceTranscribe, projectId, audio, mimeType)
   },
 
+  updates: {
+    status: () => ipcRenderer.invoke(IPC.updatesStatus),
+    check: () => ipcRenderer.invoke(IPC.updatesCheck),
+    install: () => ipcRenderer.invoke(IPC.updatesInstall)
+  },
+
   on: {
     ptyData: (cb) => subscribe(IPC.evPtyData, cb),
     ptyExit: (cb) => subscribe(IPC.evPtyExit, cb),
@@ -100,7 +106,8 @@ const api: Api = {
     boardChanged: (cb) => subscribe(IPC.evBoardChanged, cb),
     summarizeProgress: (cb) => subscribe(IPC.evSummarizeProgress, cb),
     runFinished: (cb) => subscribe(IPC.evRunFinished, cb),
-    menu: (cb) => subscribe(IPC.evMenu, cb)
+    menu: (cb) => subscribe(IPC.evMenu, cb),
+    updateStatus: (cb) => subscribe(IPC.evUpdateStatus, cb)
   }
 }
 

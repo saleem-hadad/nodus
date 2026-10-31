@@ -30,6 +30,7 @@ import type {
   SummaryResult,
   TranscribeResult,
   TranscriptMessage,
+  UpdateStatus,
   Viewport,
   VoiceKeySource
 } from './types'
@@ -87,6 +88,10 @@ export const IPC = {
   voiceMicrophoneSettings: 'voice:microphone-settings',
   voiceTranscribe: 'voice:transcribe',
 
+  updatesStatus: 'updates:status',
+  updatesCheck: 'updates:check',
+  updatesInstall: 'updates:install',
+
   // main -> renderer events
   evPtyData: 'ev:pty-data',
   evPtyExit: 'ev:pty-exit',
@@ -96,7 +101,8 @@ export const IPC = {
   evBoardChanged: 'ev:board-changed',
   evSummarizeProgress: 'ev:summarize-progress',
   evRunFinished: 'ev:run-finished',
-  evMenu: 'ev:menu'
+  evMenu: 'ev:menu',
+  evUpdateStatus: 'ev:update-status'
 } as const
 
 /**
@@ -226,6 +232,15 @@ export interface Api {
     transcribe(projectId: string, audio: Uint8Array, mimeType: string): Promise<TranscribeResult>
   }
 
+  /** The app updating itself from GitHub releases. */
+  updates: {
+    status(): Promise<UpdateStatus>
+    /** Looks for a newer version now and starts downloading it. Resolves once the lookup is done. */
+    check(): Promise<void>
+    /** Quits, installs the downloaded version and opens it. */
+    install(): Promise<void>
+  }
+
   on: {
     ptyData(cb: (sessionId: string, data: string) => void): Unsubscribe
     ptyExit(cb: (sessionId: string, exitCode: number) => void): Unsubscribe
@@ -240,5 +255,6 @@ export interface Api {
     /** An action run finished, and its card and section left the board. */
     runFinished(cb: (result: ActionRunResult) => void): Unsubscribe
     menu(cb: (command: MenuCommand) => void): Unsubscribe
+    updateStatus(cb: (status: UpdateStatus) => void): Unsubscribe
   }
 }

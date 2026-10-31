@@ -62,6 +62,7 @@ import {
   save
 } from './store'
 import { summarizeSessions } from './summarize'
+import * as updater from './updater'
 import * as voice from './voice'
 
 /**
@@ -189,6 +190,7 @@ export async function registerIpc(getWindow: () => BrowserWindow | null) {
     hasPendingWork
   })
   installMenu((command) => send(IPC.evMenu, command))
+  updater.startUpdater((status) => send(IPC.evUpdateStatus, status))
   // Sessions still running from before the app last quit. A host is only started for a new session.
   await ptys.connectHost(false).catch((err) => console.error('[host] connect failed', err))
 
@@ -206,8 +208,15 @@ export async function registerIpc(getWindow: () => BrowserWindow | null) {
     state.settings = normalizeSettings({ ...state.settings, ...patch })
     applySettings(state.settings)
     save()
+    if (patch.autoUpdate) void updater.check()
     return state.settings
   })
+
+  ipcMain.handle(IPC.updatesStatus, () => updater.getStatus())
+
+  ipcMain.handle(IPC.updatesCheck, () => updater.check(true))
+
+  ipcMain.handle(IPC.updatesInstall, () => updater.restartToUpdate())
 
   // --- Projects ------------------------------------------------------------
 

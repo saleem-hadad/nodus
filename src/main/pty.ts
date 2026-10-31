@@ -22,6 +22,7 @@ import {
   ensurePrivateDir,
   hostPaths,
   messageReader,
+  writeHookConfig,
   type ClientMessage,
   type HostMessage,
   type HostPaths
@@ -187,9 +188,25 @@ function handle(msg: HostMessage) {
   }
 }
 
+/**
+ * Puts the host's token where hook commands read it. Undefined when it can't,
+ * and then they send it in the URL.
+ */
+function hookConfig(token: string): string | undefined {
+  const paths = hostPaths(app.getPath('userData'))
+  try {
+    writeHookConfig(paths, token)
+    return paths.hookConfig
+  } catch (err) {
+    console.error('[host] could not write the hook config', err)
+    return undefined
+  }
+}
+
 /** Takes on the sessions a host is already running, with what has happened in them. */
 function adopt(welcome: Extract<HostMessage, { type: 'welcome' }>) {
-  setHookEndpoint(welcome.hookPort, welcome.hookToken)
+  const config = welcome.hookAuthHeader ? hookConfig(welcome.hookToken) : undefined
+  setHookEndpoint(welcome.hookPort, welcome.hookToken, config)
   hostRelaysMcp = welcome.mcp === true
   for (const s of welcome.sessions) {
     track(s.sessionId, s.projectId, s.initial, s.buffer)

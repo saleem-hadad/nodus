@@ -76,6 +76,12 @@ export type HostMessage =
        * host doesn't, which needs no new protocol: its sessions go without.
        */
       mcp?: boolean
+      /**
+       * The hook server takes the token in an Authorization header, so hook
+       * commands can keep it out of their command line, which any user on
+       * the Mac can list. An older host only reads it from the URL.
+       */
+      hookAuthHeader?: boolean
     }
   | { type: 'spawned'; id: number; error?: string }
   | { type: 'data'; sessionId: string; data: string }
@@ -99,6 +105,8 @@ export interface HostPaths {
   dir: string
   socket: string
   log: string
+  /** The curl config that gives hook commands the token (writeHookConfig). */
+  hookConfig: string
 }
 
 export function hostPaths(userData: string): HostPaths {
@@ -109,12 +117,20 @@ export function hostPaths(userData: string): HostPaths {
     const hash = crypto.createHash('sha1').update(dir).digest('hex').slice(0, 12)
     socket = path.join(os.tmpdir(), `nodus-${hash}.sock`)
   }
-  return { dir, socket, log: path.join(dir, 'host.log') }
+  return { dir, socket, log: path.join(dir, 'host.log'), hookConfig: path.join(dir, 'hook.curlrc') }
 }
 
 export function ensurePrivateDir(dir: string) {
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 })
   fs.chmodSync(dir, 0o700)
+}
+
+/** Writes the curl config hook commands read the host's token from. Only the user can read it. */
+export function writeHookConfig(paths: HostPaths, token: string) {
+  ensurePrivateDir(paths.dir)
+  const tmp = `${paths.hookConfig}.${process.pid}.tmp`
+  fs.writeFileSync(tmp, `header = "Authorization: Bearer ${token}"\n`, { mode: 0o600 })
+  fs.renameSync(tmp, paths.hookConfig)
 }
 
 export const encode = (msg: ClientMessage | HostMessage) => JSON.stringify(msg) + '\n'

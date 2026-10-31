@@ -34,8 +34,11 @@ export type StatusListener = (sessionId: string, status: SessionStatus, live: bo
 export type AgentStatusListener = (sessionId: string, agentId: string, status: SessionStatus) => void
 export type UsageListener = (sessionId: string, usage: SessionUsage) => void
 
-/** The session host's hook server, which passes hooks on to receiveHook. */
-let endpoint = { port: 0, token: '' }
+/**
+ * The session host's hook server, which passes hooks on to receiveHook, and
+ * the curl config holding its token when the host can read it from there.
+ */
+let endpoint: { port: number; token: string; config?: string } = { port: 0, token: '' }
 
 /** Status of each session's main thread. */
 const statuses = new Map<string, SessionStatus>()
@@ -337,8 +340,8 @@ function pauseUsage(sessionId: string, live: boolean, at = Date.now()) {
 // The hook server runs in the session host (host.ts), so it outlives the app
 // along with the processes posting to it.
 
-export function setHookEndpoint(port: number, token: string) {
-  endpoint = { port, token }
+export function setHookEndpoint(port: number, token: string, config?: string) {
+  endpoint = { port, token, config }
 }
 
 /**
@@ -356,32 +359,43 @@ export function hookEnv(sessionId: string): Record<string, string> {
   return {
     NODUS_PORT: String(endpoint.port),
     NODUS_TOKEN: endpoint.token,
-    NODUS_SESSION: sessionId
+    NODUS_SESSION: sessionId,
+    ...(endpoint.config ? { NODUS_HOOK_CONFIG: endpoint.config } : {})
   }
 }
 
-let settingsJson: string | null = null
+/** Settings JSON for hooks that read the token from the config file (true) or send it in the URL. */
+const settingsJson = new Map<boolean, string>()
 
-/** A command posting its stdin to the host under `event`, and printing nothing. */
-const postCommand = (event: string) =>
+/**
+ * A command posting its stdin to the host under `event`, and printing nothing.
+ * curl reads the token from the config file, as anything on its command line
+ * shows up in process listings. An older host only takes it in the URL.
+ */
+const postCommand = (event: string, viaConfig: boolean) =>
   `curl -s -m 2 -X POST -H 'Content-Type: application/json' --data-binary @- ` +
-  `"http://127.0.0.1:$NODUS_PORT/hook?evt=${event}&sid=$NODUS_SESSION&token=$NODUS_TOKEN" ` +
+  (viaConfig
+    ? `-K "$NODUS_HOOK_CONFIG" "http://127.0.0.1:$NODUS_PORT/hook?evt=${event}&sid=$NODUS_SESSION" `
+    : `"http://127.0.0.1:$NODUS_PORT/hook?evt=${event}&sid=$NODUS_SESSION&token=$NODUS_TOKEN" `) +
   `>/dev/null 2>&1; exit 0`
 
 /**
  * The `--settings` JSON registering our hooks and status line. Identical for
- * every process. Flag settings outrank the user's, so their own status line
- * makes way for ours.
+ * every process on a host. Flag settings outrank the user's, so their own
+ * status line makes way for ours.
  */
 export function hookSettings(): string {
-  if (settingsJson) return settingsJson
+  const viaConfig = Boolean(endpoint.config)
+  const cached = settingsJson.get(viaConfig)
+  if (cached) return cached
   const hooks: Record<string, unknown> = {}
   for (const event of HOOK_EVENTS) {
     // Output must stay empty: UserPromptSubmit stdout is injected into Claude's context.
-    hooks[event] = [{ hooks: [{ type: 'command', command: postCommand(event), timeout: 5 }] }]
+    hooks[event] = [{ hooks: [{ type: 'command', command: postCommand(event, viaConfig), timeout: 5 }] }]
   }
   // With no output, the terminal shows no status line.
-  const statusLine = { type: 'command', command: postCommand(STATUS_LINE_EVENT), padding: 0 }
-  settingsJson = JSON.stringify({ hooks, statusLine })
-  return settingsJson
+  const statusLine = { type: 'command', command: postCommand(STATUS_LINE_EVENT, viaConfig), padding: 0 }
+  const json = JSON.stringify({ hooks, statusLine })
+  settingsJson.set(viaConfig, json)
+  return json
 }

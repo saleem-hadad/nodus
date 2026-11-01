@@ -1034,6 +1034,23 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
 
       <section class="feature-row is-flipped">
         <div class="feature-copy">
+          <p class="feature-label"><i style="background: #ffcc00" aria-hidden="true"></i>Search</p>
+          <h2 class="display">Which session touched that?</h2>
+          <p class="body">Search what every session said and did, live or archived: your prompts, Claude's replies, the files it edited and the commands it ran. Jump to the card, or pick a few results and start a new session from what they did about it.</p>
+          <ul class="feature-keys">
+            <li><kbd class="kbd">⌘K</kbd>search every session</li>
+            <li><kbd class="kbd">↩</kbd>go to the card</li>
+            <li><kbd class="kbd">⇥</kbd>pick results to start from</li>
+          </ul>
+        </div>
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="screenshots/search-dark.png">
+          <img class="shot" src="screenshots/search.png" width="1620" height="1058" loading="lazy" alt="Searching the storefront board for “subtotal”: the sessions that fixed the cart subtotal and used it at checkout, with the matching prompts and edits marked, and two picked to start a new session from">
+        </picture>
+      </section>
+
+      <section class="feature-row">
+        <div class="feature-copy">
           <p class="feature-label"><i style="background: #34c759" aria-hidden="true"></i>Views</p>
           <h2 class="display">Any view you need, just by asking.</h2>
           <p class="body">Describe what you want to keep an eye on, like your tests, your last deploys or your open tickets. Claude builds it as a live view on the board and keeps it fresh. Ask, and it adds buttons that start a session, like Fix beside a failing test.</p>

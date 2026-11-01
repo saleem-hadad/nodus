@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import './ContextMenu.css'
@@ -25,26 +25,33 @@ interface Props {
   y: number
   items: MenuItem[]
   onClose: () => void
+  /** 'right' makes `x` the menu's right edge, for a menu dropped from a button. */
+  align?: 'left' | 'right'
+  /** The button that opened the menu. Presses on it are left to it, so it can toggle the menu. */
+  anchor?: RefObject<HTMLElement | null>
 }
 
 /** A macOS-style context menu rendered in a portal and kept inside the window. */
-export function ContextMenu({ x, y, items, onClose }: Props) {
+export function ContextMenu({ x, y, items, onClose, align = 'left', anchor }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ x, y })
 
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
-    const { width, height } = el.getBoundingClientRect()
+    // Layout size: the open animation scales the menu, which would skew a measured rect.
+    const { offsetWidth: width, offsetHeight: height } = el
+    const left = align === 'right' ? x - width : x
     setPos({
-      x: Math.min(x, window.innerWidth - width - 8),
+      x: Math.max(8, Math.min(left, window.innerWidth - width - 8)),
       y: Math.min(y, window.innerHeight - height - 8)
     })
-  }, [x, y])
+  }, [x, y, align])
 
   useEffect(() => {
     const onPointer = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) onClose()
+      const target = e.target as Node
+      if (!ref.current?.contains(target) && !anchor?.current?.contains(target)) onClose()
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -62,7 +69,7 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
       window.removeEventListener('blur', onClose)
       window.removeEventListener('resize', onClose)
     }
-  }, [onClose])
+  }, [onClose, anchor])
 
   return createPortal(
     <div

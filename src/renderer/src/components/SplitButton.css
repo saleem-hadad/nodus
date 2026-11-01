@@ -1,0 +1,32 @@
+.split-btn {
+  display: inline-flex;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+}
+
+.split-btn .btn {
+  box-shadow: none;
+}
+
+.split-btn-main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+/* The main button's right border is the divider. */
+.split-btn-more {
+  width: 22px;
+  padding: 0;
+  justify-content: center;
+  border-left: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  color: var(--text-secondary);
+}
+.split-btn-more:hover,
+.split-btn.is-open .split-btn-more {
+  color: var(--text-primary);
+}
+.split-btn.is-open .split-btn-more {
+  background: var(--bg-pressed);
+}

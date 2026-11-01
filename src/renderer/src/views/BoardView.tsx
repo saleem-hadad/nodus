@@ -67,6 +67,7 @@ import { ContextMenu, type MenuItem } from '@renderer/components/ContextMenu'
 import { ColorSwatches } from '@renderer/components/ColorSwatches'
 import { FOLDER_COLORS, FOLDER_HUES } from '@renderer/components/FolderIcon'
 import { TitleBarActions } from '@renderer/components/TitleBarActions'
+import { SplitButton } from '@renderer/components/SplitButton'
 import {
   ArchiveHotContext,
   ArchiveStackContext,
@@ -2381,26 +2382,23 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
                 }}
                 >
                   <TitleBarActions>
-                    <button
-                      className="btn btn-ghost no-drag"
-                      onClick={() => setViewDialog({})}
-                      title="New view: a live page Claude builds and keeps up to date"
+                    <SplitButton
+                      onClick={() => createSession()}
+                      title="New session (⌘N)"
+                      menuLabel="More ways to start"
+                      items={[
+                        {
+                          label: 'New terminal',
+                          icon: <SquareTerminal />,
+                          hint: '⌘T',
+                          onSelect: () => createTerminal()
+                        },
+                        { label: 'New view…', icon: <LayoutDashboard />, onSelect: () => setViewDialog({}) }
+                      ]}
                     >
-                      <LayoutDashboard size={15} strokeWidth={2} />
-                      View
-                    </button>
-                    <button
-                      className="btn btn-ghost no-drag"
-                      onClick={() => createTerminal()}
-                      title="New terminal in the project folder (⌘T)"
-                    >
-                      <SquareTerminal size={15} strokeWidth={2} />
-                      Terminal
-                    </button>
-                    <button className="btn no-drag" onClick={() => createSession()} title="New session (⌘N)">
                       <Plus size={15} strokeWidth={2.2} />
                       New Session
-                    </button>
+                    </SplitButton>
                   </TitleBarActions>
 
                   <ReactFlow<FlowNode, Edge>

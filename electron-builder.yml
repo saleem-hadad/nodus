@@ -19,7 +19,7 @@ mac:
   # No version in the name, so releases/latest/download/<name> links stay stable.
   artifactName: Nodus-${arch}.${ext}
   category: public.app-category.developer-tools
-  # Signed with the Developer ID certificate (CSC_LINK in CI, the keychain locally) and
+  # Signed with the Developer ID certificate in the keychain (CI installs it first) and
   # notarized when APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID are set.
   hardenedRuntime: true
   entitlements: build/entitlements.mac.plist

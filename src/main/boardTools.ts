@@ -129,6 +129,11 @@ const VIEW_PROPERTIES = {
     },
     required: ['every', 'prompt']
   },
+  start_sessions: {
+    type: 'boolean',
+    description:
+      'Lets the page start Claude sessions on the board with nodus.startSession, from buttons the user clicks. Only turn it on when the user asks for the view to start sessions.'
+  },
   width: { type: 'number', description: 'Card width in board units. Defaults to 480.' },
   height: { type: 'number', description: 'Card height in board units. Defaults to 360.' }
 }

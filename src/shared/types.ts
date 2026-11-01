@@ -184,6 +184,11 @@ export interface BoardView {
   deniedRuns?: string[]
   /** How often its brain is asked to bring it up to date. */
   refresh?: ViewRefresh
+  /**
+   * The page may start Claude sessions on the board, from something the user
+   * clicks in it. Its brain turns this on when the user asks for it.
+   */
+  startsSessions?: boolean
   /** Bumped whenever its page changes, so its frame reloads. 0 until there's a page. */
   version: number
   createdAt: number
@@ -236,6 +241,8 @@ export interface ViewPatch {
   w?: number
   h?: number
   title?: string
+  /** The user can stop a view starting sessions; only its brain turns it on. */
+  startsSessions?: false
 }
 
 export interface CreateViewOptions {

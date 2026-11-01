@@ -3,7 +3,7 @@ import os from 'os'
 import path from 'path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CARD_W, GAP } from '@shared/geometry'
-import type { BoardView } from '@shared/types'
+import type { BoardView, ViewPatch } from '@shared/types'
 import { getBoard, getState } from './store'
 import {
   approveCommand,
@@ -17,6 +17,7 @@ import {
   removeView,
   reportView,
   runCommand,
+  saveView,
   servePage,
   updateViewFromTool
 } from './views'
@@ -157,6 +158,40 @@ describe('create_view and update_view', () => {
   it('needs a title and a page', async () => {
     await expect(createViewFromTool(project, 's1', { html })).rejects.toThrow('needs a title')
     await expect(createViewFromTool(project, 's1', { title: 'x', html: '  ' })).rejects.toThrow('html must be the page')
+  })
+})
+
+describe('starting sessions', () => {
+  it('stays off unless Claude turns it on', async () => {
+    const { view_id } = await createViewFromTool(project, 's1', { title: 'Tests', html })
+    expect(getBoard(project).views![view_id].startsSessions).toBeUndefined()
+    expect(getViewForTool(project, 's1', view_id).start_sessions).toBe(false)
+    expect(await (await servePage(`nodus-view://${view_id}/`)).text()).not.toContain('"startsSessions":true')
+  })
+
+  it('lets the page know when it may start sessions', async () => {
+    const { view_id } = await createViewFromTool(project, 's1', { title: 'Tests', html, start_sessions: true })
+    expect(getViewForTool(project, 's1', view_id).start_sessions).toBe(true)
+    expect(await servePage(`nodus-view://${view_id}/`).text()).toContain('"startsSessions":true')
+    await updateViewFromTool(project, 's1', { view_id, start_sessions: false })
+    expect(getBoard(project).views![view_id].startsSessions).toBeUndefined()
+  })
+
+  it('takes only "yes" for an answer, and keeps it across other changes', async () => {
+    const { view_id } = await createViewFromTool(project, 's1', { title: 'Tests', html, start_sessions: 'yes' })
+    expect(getBoard(project).views![view_id].startsSessions).toBeUndefined()
+    await updateViewFromTool(project, 's1', { view_id, start_sessions: true })
+    await updateViewFromTool(project, 's1', { view_id, title: 'Renamed' })
+    expect(getBoard(project).views![view_id].startsSessions).toBe(true)
+  })
+
+  it('lets the user stop it from the board, but not turn it on', async () => {
+    const { view_id } = await createViewFromTool(project, 's1', { title: 'Tests', html })
+    saveView(project, { id: view_id, startsSessions: true } as unknown as ViewPatch)
+    expect(getBoard(project).views![view_id].startsSessions).toBeUndefined()
+    await updateViewFromTool(project, 's1', { view_id, start_sessions: true })
+    saveView(project, { id: view_id, startsSessions: false })
+    expect(getBoard(project).views![view_id].startsSessions).toBeUndefined()
   })
 })
 

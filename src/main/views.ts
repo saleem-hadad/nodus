@@ -306,6 +306,7 @@ export function servePage(url: string): Response {
   const page = buildViewPage(readHtml(viewId) || EMPTY_PAGE, {
     viewId,
     title: view.title,
+    startsSessions: view.startsSessions,
     data: rt.data,
     state: rt.state,
     results: rt.results
@@ -387,6 +388,8 @@ export function saveView(projectId: string, patch: ViewPatch) {
   if (size.h) view.h = size.h
   const title = clip(patch.title, MAX_TITLE_CHARS)
   if (title) setTitle(projectId, view, title)
+  // Only its brain lets a view start sessions; the user can always stop it.
+  if (patch.startsSessions === false) delete view.startsSessions
   save()
 }
 
@@ -841,6 +844,7 @@ export interface ViewToolArgs {
   refresh?: unknown
   width?: unknown
   height?: unknown
+  start_sessions?: unknown
 }
 
 /** create_view: a session puts up a view of its own making, beside its card. Its brain starts when first needed. */
@@ -864,6 +868,7 @@ export async function createViewFromTool(projectId: string, self: string, args: 
     from: self,
     commands: commands?.length ? commands : undefined,
     refresh,
+    startsSessions: args.start_sessions === true || undefined,
     version: 1,
     createdAt: now,
     updatedAt: now
@@ -901,6 +906,10 @@ export async function updateViewFromTool(projectId: string, self: string, args: 
   const size = clampViewSize({ w: Number(args.width), h: Number(args.height) })
   if (size.w) view.w = size.w
   if (size.h) view.h = size.h
+  if (typeof args.start_sessions === 'boolean') {
+    if (args.start_sessions) view.startsSessions = true
+    else delete view.startsSessions
+  }
   if (html !== undefined) {
     writeHtml(view.id, html)
     view.version++
@@ -942,6 +951,7 @@ export function getViewForTool(projectId: string, self: string, viewId: unknown)
       }
     })),
     refresh: view.refresh,
+    start_sessions: Boolean(view.startsSessions),
     errors: rt.errors.slice(-10).map((e) => ({ message: e.message, at: new Date(e.at).toISOString() }))
   }
 }

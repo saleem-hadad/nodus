@@ -15,7 +15,8 @@ interface Frame {
 /** What the board does for a page itself. */
 export interface RelayHandlers {
   openSession(sessionId: string): void
-  startSession(viewId: string, prompt: string): Promise<void>
+  /** Starts a session for a view that may start them. Throws, saying why, when it may not. */
+  startSession(viewId: string, prompt: string, title?: string): Promise<void>
 }
 
 const frames = new Map<Window, Frame>()
@@ -56,7 +57,11 @@ interface PageMessage {
   loaded?: boolean
 }
 
-async function answer(frame: Frame, method: string, args: unknown): Promise<unknown> {
+/**
+ * `activated`: the user had just clicked or pressed something in this view
+ * when the request came in, rather than a script acting on its own.
+ */
+async function answer(frame: Frame, method: string, args: unknown, activated: boolean): Promise<unknown> {
   const a = (args && typeof args === 'object' ? args : {}) as Record<string, unknown>
   if (method === 'openSession') {
     if (typeof a.id !== 'string') throw new Error('nodus.openSession needs a session id')
@@ -66,11 +71,24 @@ async function answer(frame: Frame, method: string, args: unknown): Promise<unkn
   if (method === 'startSession') {
     const prompt = typeof a.prompt === 'string' ? a.prompt.trim() : ''
     if (!prompt) throw new Error('nodus.startSession needs a prompt')
+    if (!activated) throw new Error('A view can only start a session within a few seconds of the user clicking something in it')
     if (!handlers) throw new Error('The board isn’t open')
-    await handlers.startSession(frame.viewId, prompt)
+    await handlers.startSession(frame.viewId, prompt, typeof a.title === 'string' ? a.title.trim() : undefined)
     return null
   }
   return window.api.views.call(frame.projectId, frame.viewId, method, args)
+}
+
+/**
+ * Whether the user just clicked or pressed something in this frame. A click
+ * in a frame activates the board's window for a few seconds, and gives the
+ * frame the focus there; a click anywhere else on the board takes the focus
+ * away. A page can fake neither. Read when the request comes in.
+ */
+function clickedIn(win: Window): boolean {
+  const focused = document.activeElement
+  const inFrame = focused instanceof HTMLIFrameElement && focused.contentWindow === win
+  return inFrame && (navigator.userActivation?.isActive ?? false)
 }
 
 /** IPC errors arrive as "Error invoking remote method 'views:call': Error: …"; the page gets the last part. */
@@ -92,7 +110,7 @@ window.addEventListener('message', (e: MessageEvent) => {
   }
   if (typeof msg.id !== 'number' || typeof msg.method !== 'string') return
   const id = msg.id
-  answer(frame, msg.method, msg.args).then(
+  answer(frame, msg.method, msg.args, clickedIn(win)).then(
     (result) => win.postMessage({ nodus: 1, id, result }, '*'),
     (err) => win.postMessage({ nodus: 1, id, error: reason(err) }, '*')
   )

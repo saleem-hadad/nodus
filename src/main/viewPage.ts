@@ -41,13 +41,16 @@ export const VIEW_GUIDE = `How a view works:
   nodus.state and nodus.setState(obj): the page's own saved state, such as a filter or what the user ticked, kept across reloads.
   nodus.sessions(), nodus.notes(), nodus.views(), nodus.view(id), nodus.git(): resolve to the board's sessions (id, title, status, branch, last reply), its sticky notes, the other views with their data, and the repository's git status. nodus.on('board', fn) fires when sessions, notes or other views change, and nodus.on('git', fn) when the git status does.
   nodus.ask(prompt): asks the view's brain, a Claude session of its own, to do something, such as fetching fresh data. At most once every 15 seconds.
-  nodus.openSession(id), nodus.startSession(prompt), nodus.openUrl(url).
+  nodus.openSession(id), nodus.openUrl(url).
+  nodus.startSession(prompt, { title }): starts a Claude session on the board, beside the view, on prompt. It only works in a view that may start sessions (update_view's start_sessions, which nodus.canStartSessions reflects), and only within a few seconds of the user clicking or pressing something in the page, so call it from a button's handler. The session starts fresh, so put everything it needs in the prompt: what to do, and the details from the view, such as the failing test and its error.
+- Only let a view start sessions when the user asks for that, such as a button beside each failing test that starts a session to fix it. Otherwise leave start_sessions off and don't add such buttons.
 - After changing the html, check the errors update_view returns, and fix them.`
 
 /** What the page starts with, so it can draw before asking the board for anything. */
 export interface ViewBoot {
   viewId: string
   title: string
+  startsSessions?: boolean
   data?: unknown
   state?: unknown
   results?: Record<string, unknown>
@@ -151,6 +154,7 @@ const BRIDGE = `
   var nodus = {
     viewId: boot.viewId,
     title: boot.title,
+    canStartSessions: Boolean(boot.startsSessions),
     data: current.data,
     state: current.state,
     results: current.results,
@@ -180,7 +184,9 @@ const BRIDGE = `
     view: function (id) { return call('view', { id: id }); },
     git: function () { return call('git'); },
     openSession: function (id) { return call('openSession', { id: id }); },
-    startSession: function (prompt) { return call('startSession', { prompt: prompt }); },
+    startSession: function (prompt, options) {
+      return call('startSession', { prompt: prompt, title: options && options.title });
+    },
     openUrl: function (url) { return call('openUrl', { url: url }); }
   };
   window.nodus = nodus;

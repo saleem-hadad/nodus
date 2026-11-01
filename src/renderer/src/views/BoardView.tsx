@@ -27,6 +27,7 @@ import {
 import {
   Archive,
   AppWindowMac,
+  Ban,
   ArchiveRestore,
   Bot,
   Eye,
@@ -201,6 +202,8 @@ const sectionHue = (n: FlowNode) => FOLDER_HUES[(n as SectionFlowNode).data.sect
 const isDraft = (n: FlowNode) => n.type === 'note' && Boolean((n as NoteFlowNode).data.draft)
 /** A new card opens in its window, then stays expanded on the board once that closes. */
 const NEW_CARD_SIZE = cardSize({ archived: false, expanded: true })
+/** A view can start a session at most this often, so one click can't start a burst of them. */
+const VIEW_START_GAP_MS = 3000
 
 export function BoardView({ projectId }: { projectId: string }) {
   const snapshot = useApp((s) => s.board)
@@ -1330,12 +1333,25 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
         },
         { label: 'Open its session', icon: <SquareTerminal />, onSelect: () => openViewSession(view.id) },
         { label: 'Rename', icon: <PencilLine />, onSelect: () => setRenaming(view.id) },
+        // Its brain lets it start sessions when asked to; the user can stop it here.
+        ...(view.startsSessions
+          ? [
+              {
+                label: 'Stop it starting sessions',
+                icon: <Ban />,
+                onSelect: () => patchView({ id: view.id, startsSessions: false })
+              }
+            ]
+          : []),
         'separator',
         { label: 'Delete view', icon: <Trash2 />, hint: '⌫', danger: true, onSelect: () => void deleteViews([view.id]) }
       ]
     },
-    [projectId, openViewSession, deleteViews, showToast]
+    [projectId, openViewSession, deleteViews, showToast, patchView]
   )
+
+  /** When each view last started a session. */
+  const viewStarts = useRef(new Map<string, number>())
 
   // What a view's page can do on the board itself, rather than through the main process.
   useEffect(() => {
@@ -1343,19 +1359,48 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
       openSession: (sessionId) => {
         if (cardsRef.current.some((c) => c.sessionId === sessionId)) openCard(sessionId)
       },
-      startSession: async (viewId, prompt) => {
+      /**
+       * Starts a session a view's button asked for, beside the view, in auto
+       * mode, with what it was asked stuck on its card. Only for a view its
+       * brain let start sessions, which the user asked for.
+       */
+      startSession: async (viewId, prompt, title) => {
         const view = viewsRef.current.find((v) => v.id === viewId)
+        if (!view?.startsSessions) {
+          if (view) showToast(`“${view.title}” tried to start a session. Ask its brain if you want it to be able to.`)
+          throw new Error('This view isn’t allowed to start sessions. The user can ask its brain to let it.')
+        }
+        if (Date.now() - (viewStarts.current.get(viewId) ?? 0) < VIEW_START_GAP_MS) {
+          throw new Error('This view just started a session; wait a moment before starting another')
+        }
+        viewStarts.current.set(viewId, Date.now())
         const size = NEW_CARD_SIZE
-        const preferred = view ? { x: view.x + viewSize(view).w + GAP, y: view.y } : viewportCentre(size)
+        const preferred = { x: view.x + viewSize(view).w + GAP, y: view.y }
         const spot = findFreeSpot(preferred, [...cardObstacles(cardsRef.current), ...notesInTheWay()], dockRef.current, size)
         const pos = { x: Math.round(spot.x), y: Math.round(spot.y) }
-        const card = await window.api.sessions.create(projectId, { ...pos, initialPrompt: prompt, expanded: true, autoMode: true })
+        const joins = sectionAt(pos, groupsRef.current)
+        const card = await window.api.sessions.create(projectId, {
+          ...pos,
+          name: title?.slice(0, 80) || undefined,
+          initialPrompt: prompt,
+          expanded: true,
+          autoMode: true
+        })
         upsertCard(card)
+        if (joins) patchCards([{ sessionId: card.sessionId, sectionId: joins }])
+        saveNote({
+          id: crypto.randomUUID(),
+          text: prompt,
+          color: NOTE_COLOR,
+          ...pos,
+          sessionId: card.sessionId,
+          createdAt: Date.now()
+        })
         ensureVisible(pos, size)
       }
     })
     return () => setRelayHandlers(null)
-  }, [projectId, openCard, upsertCard, ensureVisible, viewportCentre])
+  }, [projectId, openCard, upsertCard, patchCards, saveNote, ensureVisible, showToast])
 
   // Pages hear when the board changes, so they can read it again.
   useEffect(() => {

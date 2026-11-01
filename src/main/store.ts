@@ -7,6 +7,7 @@ import type {
   BoardNode,
   BoardNote,
   BoardSection,
+  BoardView,
   Project,
   ProjectAction,
   ProjectGroup,
@@ -33,6 +34,7 @@ export interface BoardState {
   archive: Rect
   sections?: Record<string, BoardSection>
   notes?: Record<string, BoardNote>
+  views?: Record<string, BoardView>
   viewport?: Viewport
   /** Sessions removed from the board; never re-imported. */
   hidden?: string[]
@@ -153,7 +155,16 @@ export function getBoard(projectId: string): BoardState {
   if (!board.hidden) board.hidden = []
   if (!board.sections) board.sections = {}
   if (!board.notes) board.notes = {}
+  if (!board.views) board.views = {}
   return board
+}
+
+/** Finds the project whose board has a view. */
+export function projectIdForView(viewId: string): string | null {
+  for (const [projectId, board] of Object.entries(state.boards)) {
+    if (board.views && Object.hasOwn(board.views, viewId)) return projectId
+  }
+  return null
 }
 
 /** Finds the project that owns a session card. */

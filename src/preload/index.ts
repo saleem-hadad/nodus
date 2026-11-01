@@ -69,6 +69,18 @@ const api: Api = {
       ipcRenderer.invoke(IPC.sessionAgentTranscript, projectId, sessionId, agentId)
   },
 
+  views: {
+    create: (projectId, opts) => ipcRenderer.invoke(IPC.viewsCreate, projectId, opts),
+    save: (projectId, patch) => ipcRenderer.invoke(IPC.viewsSave, projectId, patch),
+    remove: (projectId, viewId) => ipcRenderer.invoke(IPC.viewsRemove, projectId, viewId),
+    call: (projectId, viewId, method, args) => ipcRenderer.invoke(IPC.viewsCall, projectId, viewId, method, args),
+    report: (projectId, viewId, report) => ipcRenderer.send(IPC.viewsReport, projectId, viewId, report),
+    approve: (projectId, viewId, name, allow) => ipcRenderer.invoke(IPC.viewsApprove, projectId, viewId, name, allow),
+    refresh: (projectId, viewId) => ipcRenderer.invoke(IPC.viewsRefresh, projectId, viewId),
+    ask: (projectId, viewId, prompt) => ipcRenderer.invoke(IPC.viewsAsk, projectId, viewId, prompt),
+    brain: (projectId, viewId) => ipcRenderer.invoke(IPC.viewsBrain, projectId, viewId)
+  },
+
   git: {
     status: (projectId) => ipcRenderer.invoke(IPC.gitStatus, projectId),
     diff: (projectId, file) => ipcRenderer.invoke(IPC.gitDiff, projectId, file)
@@ -107,7 +119,8 @@ const api: Api = {
     summarizeProgress: (cb) => subscribe(IPC.evSummarizeProgress, cb),
     runFinished: (cb) => subscribe(IPC.evRunFinished, cb),
     menu: (cb) => subscribe(IPC.evMenu, cb),
-    updateStatus: (cb) => subscribe(IPC.evUpdateStatus, cb)
+    updateStatus: (cb) => subscribe(IPC.evUpdateStatus, cb),
+    view: (cb) => subscribe(IPC.evView, cb)
   }
 }
 

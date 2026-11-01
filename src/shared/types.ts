@@ -145,9 +145,103 @@ export interface BoardNode {
    * go when their turn ends; one the user takes over joins the board.
    */
   runOf?: string
+  /**
+   * The view this session is the brain of: it builds the view and keeps it up
+   * to date. A brain isn't drawn on the board; its view shows what it's doing.
+   */
+  viewOf?: string
   /** Runs in auto mode, as sessions started on the board do, and resumes in it too. */
   autoMode?: boolean
   createdAt: number
+}
+
+/**
+ * A view: a small live web page on the board, which Claude builds from what
+ * the user describes. Its page runs in a sandboxed frame with no network, and
+ * reaches the board only through what `window.nodus` offers it. Its data
+ * comes from shell commands the user allowed, or from its brain, a Claude
+ * session of its own. The page and its data live in the app's data folder,
+ * never in the repository.
+ */
+export interface BoardView {
+  id: string
+  title: string
+  /** What the user asked for, which its brain builds from. */
+  description: string
+  x: number
+  y: number
+  /** Size, once resized or set by Claude. */
+  w?: number
+  h?: number
+  /** Its brain, once it has one: started with the view, or when first needed. */
+  sessionId?: string
+  /** The session that put it up with its board tools, when one did. */
+  from?: string
+  /** Shell commands the page may run. */
+  commands?: ViewCommand[]
+  /** Every command line the user allowed for this view, or turned down, so one Claude puts back isn't asked about again. */
+  allowedRuns?: string[]
+  deniedRuns?: string[]
+  /** How often its brain is asked to bring it up to date. */
+  refresh?: ViewRefresh
+  /** Bumped whenever its page changes, so its frame reloads. 0 until there's a page. */
+  version: number
+  createdAt: number
+  updatedAt: number
+}
+
+/** A shell command a view's page may run, in the project folder with the user's shell environment. */
+export interface ViewCommand {
+  /** What the page calls it by: nodus.run(name). */
+  name: string
+  /** The command line. */
+  run: string
+  /** Minutes between runs while the app is open; it only runs when asked otherwise. */
+  every?: number
+  /** The command line the user allowed. A changed command needs allowing again. */
+  approved?: string
+  /** The command line the user turned down. */
+  denied?: string
+}
+
+/** Asks a view's brain to bring the view up to date, every so often. Each one costs tokens. */
+export interface ViewRefresh {
+  /** Minutes between refreshes. */
+  every: number
+  /** What the brain is asked each time. */
+  prompt: string
+}
+
+/** How a view's command last went. */
+export interface CommandResult {
+  name: string
+  /** Exit code; null when it didn't exit by itself (timed out, or couldn't start). */
+  code: number | null
+  stdout: string
+  stderr: string
+  /** When it finished. */
+  at: number
+  durationMs: number
+  /** Why it didn't run to the end, when it didn't. */
+  error?: string
+}
+
+/** Events the main process sends a view's page through the board. */
+export type ViewEvent = 'data' | 'state' | 'result'
+
+export interface ViewPatch {
+  id: string
+  x?: number
+  y?: number
+  w?: number
+  h?: number
+  title?: string
+}
+
+export interface CreateViewOptions {
+  description: string
+  x: number
+  y: number
 }
 
 /**
@@ -259,6 +353,7 @@ export interface BoardSnapshot {
   archive: Rect
   sections: BoardSection[]
   notes: BoardNote[]
+  views: BoardView[]
   viewport?: Viewport
 }
 

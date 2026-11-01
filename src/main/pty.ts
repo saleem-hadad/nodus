@@ -176,14 +176,12 @@ function handle(msg: HostMessage) {
     case 'hook':
       return receiveHook(msg.event, msg.sessionId, msg.payload)
     case 'mcp': {
-      let reply: unknown
-      try {
-        reply = callbacks.onMcp(msg.sessionId, msg.message)
-      } catch (err) {
-        console.error('[board-tools]', err)
-      }
-      // No reply tells the host the app couldn't answer.
-      return send({ type: 'mcp-reply', id: msg.id, reply })
+      // Some tools answer once they're done. No reply tells the host the app couldn't answer.
+      Promise.resolve()
+        .then(() => callbacks.onMcp(msg.sessionId, msg.message))
+        .catch((err) => console.error('[board-tools]', err))
+        .then((reply) => send({ type: 'mcp-reply', id: msg.id, reply }))
+      return
     }
   }
 }

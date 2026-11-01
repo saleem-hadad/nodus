@@ -25,6 +25,7 @@ Every Claude Code session in a repo, as a live card. See which ones need you, an
 - **Agents as a deck.** See what each of Claude's agents is doing, right under its card.
 - **Nothing gets lost.** Finished sessions stack up in a searchable archive. Drag one out to pick it up again.
 - **Sessions keep running** when you quit the app. Open it again and they're right where you left them.
+- **Views you describe.** Ask for a table of your deployments or your tickets, and Claude builds it on the board and keeps it up to date.
 - **For the small stuff:** action buttons Claude writes for your chores, sticky notes, and spoken prompts.
 
 ## See it in action

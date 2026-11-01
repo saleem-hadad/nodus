@@ -6,6 +6,7 @@ import type {
   BoardNote,
   BoardSection,
   BoardSnapshot,
+  BoardView,
   NodePatch,
   Project,
   ProjectAction,
@@ -15,7 +16,8 @@ import type {
   GitStatus,
   SessionCard,
   SessionStatus,
-  SessionUsage
+  SessionUsage,
+  ViewPatch
 } from '@shared/types'
 import { dispose as disposeTerminal } from './terminal/registry'
 
@@ -64,6 +66,12 @@ interface AppState {
   /** Creates or updates a sticky note and persists it. */
   saveNote(note: BoardNote): void
   removeNotes(noteIds: string[]): void
+  /** Inserts or replaces a view (e.g. after creating one). */
+  upsertView(view: BoardView): void
+  /** Optimistically moves, resizes or renames a view, and persists it. */
+  patchView(patch: ViewPatch): void
+  /** Takes a view off the board, with its brain. */
+  removeView(viewId: string): Promise<void>
   setStatus(sessionId: string, status: SessionStatus, live: boolean): void
   setAgentStatus(sessionId: string, agentId: string, status: SessionStatus): void
   setUsage(sessionId: string, usage: SessionUsage): void
@@ -270,6 +278,47 @@ export const useApp = create<AppState>((set, get) => ({
     const gone = new Set(noteIds)
     set({ board: { ...board, notes: board.notes.filter((n) => !gone.has(n.id)) } })
     window.api.board.removeNotes(board.project.id, noteIds)
+  },
+
+  upsertView(view) {
+    const board = get().board
+    if (!board) return
+    const exists = board.views.some((v) => v.id === view.id)
+    set({
+      board: { ...board, views: exists ? board.views.map((v) => (v.id === view.id ? view : v)) : [...board.views, view] }
+    })
+  },
+
+  patchView(patch) {
+    const board = get().board
+    if (!board) return
+    set({
+      board: {
+        ...board,
+        views: board.views.map((v) => {
+          if (v.id !== patch.id) return v
+          const { id: _id, ...rest } = patch
+          return { ...v, ...Object.fromEntries(Object.entries(rest).filter(([, value]) => value !== undefined)) }
+        })
+      }
+    })
+    window.api.views.save(board.project.id, patch)
+  },
+
+  async removeView(viewId) {
+    const board = get().board
+    if (!board) return
+    const view = board.views.find((v) => v.id === viewId)
+    set({
+      board: {
+        ...board,
+        views: board.views.filter((v) => v.id !== viewId),
+        cards: view?.sessionId ? board.cards.filter((c) => c.sessionId !== view.sessionId) : board.cards
+      },
+      terminalSessionId: get().terminalSessionId === view?.sessionId ? null : get().terminalSessionId
+    })
+    if (view?.sessionId) disposeTerminal(view.sessionId)
+    await window.api.views.remove(board.project.id, viewId)
   },
 
   setStatus(sessionId, status, live) {

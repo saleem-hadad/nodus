@@ -9,6 +9,7 @@ import {
   dockRect,
   findFreeSpot,
   noteSize,
+  viewSize,
   type Point,
   type Size
 } from '@shared/geometry'
@@ -48,25 +49,32 @@ function fitNote(text: string): Size {
 
 /**
  * Where a session's next note goes: under the last one it wrote, or beside
- * its card, in the nearest free spot. A run isn't on the board, nor is an
- * archived card, so their notes go beside the rightmost card instead.
+ * its card, in the nearest free spot. A view's brain writes beside its view.
+ * A run isn't on the board, nor is an archived card, so their notes go
+ * beside the rightmost card instead.
  */
 function placeNote(board: BoardState, from: string, size: Size): Point {
-  const cards = Object.values(board.nodes).filter((n) => !n.archived && !n.runOf)
+  const cards = Object.values(board.nodes).filter((n) => !n.archived && !n.runOf && !n.viewOf)
   const free = Object.values(board.notes!).filter((n) => !n.sessionId)
+  const views = Object.values(board.views ?? {})
   const obstacles = [
     ...cards.map((n) => ({ x: n.x, y: n.y, ...cardSize(n) })),
-    ...free.map((n) => ({ x: n.x, y: n.y, ...noteSize(n) }))
+    ...free.map((n) => ({ x: n.x, y: n.y, ...noteSize(n) })),
+    ...views.map((v) => ({ x: v.x, y: v.y, ...viewSize(v) }))
   ]
   const dock = dockRect(board.archive)
 
   const last = free.filter((n) => n.from === from).sort((a, b) => b.createdAt - a.createdAt)[0]
+  const viewOf = board.nodes[from]?.viewOf
+  const view = viewOf ? board.views?.[viewOf] : undefined
   const card = cards.find((n) => n.sessionId === from) ?? cards.reduce<BoardNode | undefined>((a, b) => (a && a.x >= b.x ? a : b), undefined)
   const preferred = last
     ? { x: last.x, y: last.y + noteSize(last).h + GAP }
-    : card
-      ? { x: card.x + cardSize(card).w + GAP, y: card.y }
-      : { x: dock.x + dock.w + 80, y: dock.y }
+    : view
+      ? { x: view.x + viewSize(view).w + GAP, y: view.y }
+      : card
+        ? { x: card.x + cardSize(card).w + GAP, y: card.y }
+        : { x: dock.x + dock.w + 80, y: dock.y }
   return findFreeSpot(preferred, obstacles, dock, size)
 }
 

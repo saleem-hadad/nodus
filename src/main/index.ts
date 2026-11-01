@@ -1,7 +1,9 @@
-import { app, BrowserWindow, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, nativeTheme, protocol, shell } from 'electron'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { registerIpc, shutdown } from './ipc'
+import { VIEW_SCHEME } from './viewPage'
+import { servePage } from './views'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -19,6 +21,16 @@ function isRenderer(url: string) {
     return target.href === new URL(rendererUrl).href
   } catch {
     return false
+  }
+}
+
+const isViewPage = (url: string) => url.startsWith(`${VIEW_SCHEME}://`)
+
+function viewOf(url: string) {
+  try {
+    return new URL(url).hostname
+  } catch {
+    return ''
   }
 }
 
@@ -57,6 +69,15 @@ function createWindow() {
     if (/^https?:/.test(url)) shell.openExternal(url)
   })
 
+  // A view's frame only ever shows its own page: never the web, and never
+  // another view's, which would then speak to the board as this one.
+  mainWindow.webContents.on('will-frame-navigate', (event) => {
+    if (event.isMainFrame) return
+    if (!isViewPage(event.url) || (isViewPage(event.frame?.url ?? '') && viewOf(event.frame!.url) !== viewOf(event.url))) {
+      event.preventDefault()
+    }
+  })
+
   if (process.env.ELECTRON_RENDERER_URL) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
@@ -70,10 +91,15 @@ function createWindow() {
 
 app.setName('Nodus')
 
+// Views' pages: a secure scheme of their own, so each is its own origin and
+// its frame can be sandboxed apart from the board.
+protocol.registerSchemesAsPrivileged([{ scheme: VIEW_SCHEME, privileges: { standard: true, secure: true } }])
+
 // Keeps development or test state separate from the real app data.
 if (process.env.NODUS_USER_DATA) app.setPath('userData', process.env.NODUS_USER_DATA)
 
 app.whenReady().then(async () => {
+  protocol.handle(VIEW_SCHEME, (request) => servePage(request.url))
   await registerIpc(() => mainWindow)
   createWindow()
 

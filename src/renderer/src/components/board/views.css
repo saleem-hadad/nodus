@@ -1,0 +1,291 @@
+/* ------------------------------------------------------------------ views */
+
+/* A live page Claude built: a title bar (its drag handle) over the page,
+   which runs in a sandboxed frame. It fills its node, which the resize
+   handles size. */
+.board-canvas .react-flow__node-view {
+  cursor: default;
+}
+
+.view {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  isolation: isolate;
+  transition: box-shadow var(--dur-med) var(--ease-out);
+}
+.view:hover {
+  box-shadow: var(--shadow-md);
+}
+.view.is-waiting {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--status-waiting) 45%, transparent),
+    var(--shadow-md);
+}
+.view.is-selected {
+  box-shadow:
+    0 0 0 2px var(--accent),
+    var(--shadow-md);
+}
+.view.is-dragging {
+  box-shadow:
+    0 0 0 2px var(--accent),
+    var(--shadow-lg);
+}
+
+.view-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  height: 38px;
+  padding: 0 6px 0 13px;
+  border-bottom: 0.5px solid var(--separator);
+}
+.view-icon {
+  flex: none;
+  color: var(--text-tertiary);
+}
+.view-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.view-title-input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  border: 0.5px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-window);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+  font: 600 var(--text-md) var(--font-display);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.view-tools {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex: none;
+  margin-left: auto;
+  opacity: 0.55;
+  transition: opacity var(--dur-fast) ease;
+}
+.view:hover .view-tools,
+.view.is-selected .view-tools {
+  opacity: 1;
+}
+.view-tools .card-tool:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.view-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.view-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--bg-elevated);
+}
+/* A frame swallows the pointer, which would stall a drag or a resize passing over it. */
+.board-canvas:has(.react-flow__node.dragging) .view-frame,
+.board-canvas:has(.react-flow__nodesselection-rect) .view-frame,
+.view.is-resizing .view-frame {
+  pointer-events: none;
+}
+
+/* Over the page until the view is selected: clicks select it and scrolling pans the board. */
+.view-shield {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 8px;
+}
+.view-shield-hint {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-primary) 72%, transparent);
+  color: var(--bg-elevated);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  opacity: 0;
+  transform: translateY(2px);
+  transition:
+    opacity var(--dur-fast) ease,
+    transform var(--dur-fast) var(--ease-out);
+  pointer-events: none;
+}
+.react-flow__node-view:hover .view-shield-hint {
+  opacity: 1;
+  transform: none;
+}
+.board-canvas:has(.react-flow__node.dragging) .view-shield-hint {
+  opacity: 0;
+}
+
+/* Before there's a page. */
+.view-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px 28px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+.view-empty-title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.view-empty-description {
+  display: -webkit-box;
+  max-width: 44ch;
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--text-tertiary);
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Commands waiting for the user to allow them. The board draws this, outside the page, so the page can't. */
+.view-approvals {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: none;
+  max-height: 45%;
+  padding: 10px 12px;
+  border-bottom: 0.5px solid var(--separator);
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-elevated));
+  overflow: auto;
+}
+.view-approve {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.view-approve-text {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+.view-approve-cmd {
+  display: block;
+  max-height: 72px;
+  margin-top: 5px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow: auto;
+  user-select: text;
+}
+.view-approve-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.view-error {
+  flex: none;
+  margin: 0;
+  padding: 7px 12px;
+  border-top: 0.5px solid var(--separator);
+  font-size: var(--text-sm);
+  color: var(--status-waiting);
+}
+
+.view-ask {
+  display: flex;
+  gap: 6px;
+  flex: none;
+  padding: 8px;
+  border-top: 0.5px solid var(--separator);
+}
+.view-ask-input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 10px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-window);
+  font: var(--text-md) var(--font-ui);
+  color: var(--text-primary);
+  outline: none;
+  transition:
+    box-shadow var(--dur-fast) ease,
+    border-color var(--dur-fast) ease;
+}
+.view-ask-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+/* The view, large, over the board. */
+.view-modal {
+  width: min(1400px, 92vw);
+  height: 88vh;
+}
+.view-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: none;
+  height: 44px;
+  padding: 0 8px 0 16px;
+  border-bottom: 0.5px solid var(--separator);
+}
+.view-modal-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.view-modal-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}

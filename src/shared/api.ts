@@ -11,7 +11,10 @@ import type {
   BoardNote,
   BoardSection,
   BoardSnapshot,
+  BoardView,
+  CommandResult,
   CreateSessionOptions,
+  CreateViewOptions,
   FolderColor,
   GitFileChange,
   GitFileDiff,
@@ -31,6 +34,8 @@ import type {
   TranscribeResult,
   TranscriptMessage,
   UpdateStatus,
+  ViewEvent,
+  ViewPatch,
   Viewport,
   VoiceKeySource
 } from './types'
@@ -74,6 +79,16 @@ export const IPC = {
   sessionAgents: 'session:agents',
   sessionAgentTranscript: 'session:agent-transcript',
 
+  viewsCreate: 'views:create',
+  viewsSave: 'views:save',
+  viewsRemove: 'views:remove',
+  viewsCall: 'views:call',
+  viewsReport: 'views:report',
+  viewsApprove: 'views:approve',
+  viewsRefresh: 'views:refresh',
+  viewsAsk: 'views:ask',
+  viewsBrain: 'views:brain',
+
   gitStatus: 'git:status',
   gitDiff: 'git:diff',
 
@@ -102,7 +117,8 @@ export const IPC = {
   evSummarizeProgress: 'ev:summarize-progress',
   evRunFinished: 'ev:run-finished',
   evMenu: 'ev:menu',
-  evUpdateStatus: 'ev:update-status'
+  evUpdateStatus: 'ev:update-status',
+  evView: 'ev:view'
 } as const
 
 /**
@@ -197,6 +213,31 @@ export interface Api {
     agentTranscript(projectId: string, sessionId: string, agentId: string): Promise<TranscriptMessage[]>
   }
 
+  /**
+   * Views: small live pages on the board that Claude builds. Their pages talk
+   * to the board through `call`, which the main process checks.
+   */
+  views: {
+    /** Puts up a view for what the user described, and starts its brain on building it. */
+    create(projectId: string, opts: CreateViewOptions): Promise<BoardView>
+    /** Moves, resizes or renames a view. */
+    save(projectId: string, patch: ViewPatch): Promise<void>
+    /** Takes a view off the board, with its page, its data and its brain. */
+    remove(projectId: string, viewId: string): Promise<void>
+    /** A request from a view's page (window.nodus), answered for that view only. */
+    call(projectId: string, viewId: string, method: string, args: unknown): Promise<unknown>
+    /** What a view's page reported: a JavaScript error, or that the page at `version` loaded. */
+    report(projectId: string, viewId: string, report: { error?: string; loaded?: number }): void
+    /** The user allowing (or turning down) one of a view's commands. */
+    approve(projectId: string, viewId: string, name: string, allow: boolean): Promise<void>
+    /** Runs a view's commands now, and asks its brain to refresh it if it has a refresh prompt. */
+    refresh(projectId: string, viewId: string): Promise<CommandResult[]>
+    /** Passes what the user asked for on to the view's brain, starting one if it has none. */
+    ask(projectId: string, viewId: string, prompt: string): Promise<void>
+    /** The view's brain, started (idle) if it has none yet, so its session can be opened. */
+    brain(projectId: string, viewId: string): Promise<string>
+  }
+
   git: {
     /** Branch and uncommitted changes of the project folder; null if it isn't a git repository. */
     status(projectId: string): Promise<GitStatus | null>
@@ -256,5 +297,7 @@ export interface Api {
     runFinished(cb: (result: ActionRunResult) => void): Unsubscribe
     menu(cb: (command: MenuCommand) => void): Unsubscribe
     updateStatus(cb: (status: UpdateStatus) => void): Unsubscribe
+    /** Something for a view's page: new data, its saved state, or a command's result. */
+    view(cb: (projectId: string, viewId: string, event: ViewEvent, payload: unknown) => void): Unsubscribe
   }
 }

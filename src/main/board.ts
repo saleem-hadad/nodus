@@ -163,14 +163,39 @@ export function loadBoard(project: Project): BoardSnapshot {
   const sections = Object.values(board.sections!).sort((a, b) => a.createdAt - b.createdAt)
   // Oldest first, so newer notes draw on top.
   const notes = Object.values(board.notes!).sort((a, b) => a.createdAt - b.createdAt)
-  return { project, cards, archive: board.archive, sections, notes, viewport: board.viewport }
+  const views = Object.values(board.views!).sort((a, b) => a.createdAt - b.createdAt)
+  return { project, cards, archive: board.archive, sections, notes, views, viewport: board.viewport }
+}
+
+/**
+ * The project's sessions as the board tools and views see them, leaving out
+ * `self` and the views' brains, which aren't on the board.
+ */
+export function sessionList(project: Project, self: string | null, includeArchived: boolean) {
+  const { cards, sections } = loadBoard(project)
+  const sectionNames = new Map(sections.map((s) => [s.id, s.name || 'Untitled section']))
+  return cards
+    .filter((c) => c.sessionId !== self && !c.viewOf && (includeArchived || !c.archived))
+    .map((c) => ({
+      id: c.sessionId,
+      title: c.title || c.meta?.title || (c.kind === 'terminal' ? 'Terminal' : 'New session'),
+      kind: c.kind ?? 'claude',
+      status: c.archived ? 'archived' : c.status === 'waiting' ? 'waiting for the user' : c.status,
+      running: c.live,
+      section: c.sectionId ? sectionNames.get(c.sectionId) : undefined,
+      actionRun: c.runOf ? true : undefined,
+      branch: c.meta?.gitBranch,
+      lastReply: c.meta?.lastAssistantText,
+      lastActive: new Date(c.meta?.updatedAt ?? c.createdAt).toISOString()
+    }))
 }
 
 export function projectStats(project: Project): ProjectStats {
   const board = getBoard(project.id)
   const hidden = new Set(board.hidden)
-  const nodes = Object.values(board.nodes)
-  const onBoard = new Set(nodes.map((n) => n.sessionId))
+  // A view's brain isn't on the board.
+  const nodes = Object.values(board.nodes).filter((n) => !n.viewOf)
+  const onBoard = new Set(Object.keys(board.nodes))
   // Parsed metadata is cached, so this is cheap after the first call.
   let undiscovered = 0
   for (const [id, found] of scanRepo(project.repoPath)) {

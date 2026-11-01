@@ -13,6 +13,7 @@ import type {
   BoardNote,
   BoardSection,
   CreateSessionOptions,
+  CreateViewOptions,
   FolderColor,
   GitFileChange,
   NodePatch,
@@ -25,12 +26,23 @@ import type {
   SessionCard,
   SummarizeProgress,
   SummaryResult,
+  ViewPatch,
   Viewport
 } from '@shared/types'
 import { FOLDER_COLORS } from '@shared/types'
 import { draftAction, normalizeAction, runArgs } from './actions'
 import { hasPendingWork, readAgents } from './agents'
-import { archiveNode, dropNode, hasTranscript, isEmpty, loadBoard, projectStats, toCard, unstickNotes } from './board'
+import {
+  archiveNode,
+  dropNode,
+  hasTranscript,
+  isEmpty,
+  loadBoard,
+  projectStats,
+  sessionList,
+  toCard,
+  unstickNotes
+} from './board'
 import { answerMcp, configureBoardTools } from './boardTools'
 import {
   AGENT_ID,
@@ -63,6 +75,7 @@ import {
 } from './store'
 import { summarizeSessions } from './summarize'
 import * as updater from './updater'
+import * as views from './views'
 import * as voice from './voice'
 
 /**
@@ -176,6 +189,12 @@ export async function registerIpc(getWindow: () => BrowserWindow | null) {
     send(IPC.evBoardChanged, projectId)
   }
 
+  views.configureViews({
+    notify: (projectId, viewId, event, payload) => send(IPC.evView, projectId, viewId, event, payload),
+    boardChanged: (projectId) => send(IPC.evBoardChanged, projectId),
+    envReady
+  })
+
   configureStatus({
     onChange: (sessionId, status, live) => {
       send(IPC.evStatus, sessionId, status, live)
@@ -183,6 +202,7 @@ export async function registerIpc(getWindow: () => BrowserWindow | null) {
         finishRun(sessionId)
         archiveIfAsked(sessionId)
       }
+      views.brainStatus(sessionId, status, live)
     },
     onAgentChange: (sessionId, agentId, status) => send(IPC.evAgentStatus, sessionId, agentId, status),
     onUsage: (sessionId, usage) => send(IPC.evUsage, sessionId, usage),
@@ -292,6 +312,7 @@ export async function registerIpc(getWindow: () => BrowserWindow | null) {
     const state = getState()
     ptys.killProject(id)
     unwatchProject(id)
+    views.removeProjectViews(state.boards[id])
     state.projects = state.projects.filter((p) => p.id !== id)
     delete state.boards[id]
     save()
@@ -372,8 +393,9 @@ export async function registerIpc(getWindow: () => BrowserWindow | null) {
       if (typeof patch.x === 'number' && Number.isFinite(patch.x)) node.x = patch.x
       if (typeof patch.y === 'number' && Number.isFinite(patch.y)) node.y = patch.y
       if (typeof patch.title === 'string') node.title = patch.title.trim() || undefined
-      // Terminals have no transcript to keep, so they are removed instead of archived.
-      if (typeof patch.archived === 'boolean' && node.kind !== 'terminal') {
+      // Terminals have no transcript to keep, so they are removed instead of
+      // archived; a view's brain goes with its view.
+      if (typeof patch.archived === 'boolean' && node.kind !== 'terminal' && !node.viewOf) {
         // Archiving stops the session's process.
         if (patch.archived && !node.archived) {
           ptys.kill(node.sessionId)
@@ -575,24 +597,7 @@ export async function registerIpc(getWindow: () => BrowserWindow | null) {
       const projectId = projectIdForSession(sessionId)
       return Boolean(projectId && getBoard(projectId).nodes[sessionId]?.runOf)
     },
-    listSessions(projectId, self, includeArchived) {
-      const { cards, sections } = loadBoard(getProject(projectId))
-      const sectionNames = new Map(sections.map((s) => [s.id, s.name || 'Untitled section']))
-      return cards
-        .filter((c) => c.sessionId !== self && (includeArchived || !c.archived))
-        .map((c) => ({
-          id: c.sessionId,
-          title: c.title || c.meta?.title || (c.kind === 'terminal' ? 'Terminal' : 'New session'),
-          kind: c.kind ?? 'claude',
-          status: c.archived ? 'archived' : c.status === 'waiting' ? 'waiting for the user' : c.status,
-          running: c.live,
-          section: c.sectionId ? sectionNames.get(c.sectionId) : undefined,
-          actionRun: c.runOf ? true : undefined,
-          branch: c.meta?.gitBranch,
-          lastReply: c.meta?.lastAssistantText,
-          lastActive: new Date(c.meta?.updatedAt ?? c.createdAt).toISOString()
-        }))
-    },
+    listSessions: (projectId, self, includeArchived) => sessionList(getProject(projectId), self, includeArchived),
     archiveSessions(projectId, self, sessionIds, force) {
       const project = getProject(projectId)
       const board = getBoard(projectId)
@@ -607,15 +612,17 @@ export async function registerIpc(getWindow: () => BrowserWindow | null) {
           ? 'not on the board'
           : id === self
             ? 'it is the session running this action'
-            : node.kind === 'terminal'
-              ? 'terminals can’t be archived'
-              : node.archived
-                ? 'already archived'
-                : status !== 'done' && !force
-                  ? status === 'waiting'
-                    ? 'it is waiting for the user'
-                    : 'it is working'
-                  : null
+            : node.viewOf
+              ? 'it is a view’s brain, which goes with its view'
+              : node.kind === 'terminal'
+                ? 'terminals can’t be archived'
+                : node.archived
+                  ? 'already archived'
+                  : status !== 'done' && !force
+                    ? status === 'waiting'
+                      ? 'it is waiting for the user'
+                      : 'it is working'
+                    : null
         if (reason) {
           skipped.push({ id, reason })
           continue
@@ -640,6 +647,7 @@ export async function registerIpc(getWindow: () => BrowserWindow | null) {
       if (!node) throw new Error('This session is no longer on the board')
       if (node.kind === 'terminal') throw new Error('Terminals can’t be archived')
       if (node.archived) throw new Error('This session is already archived')
+      if (node.viewOf) throw new Error('A view’s brain stays with its view; deleting the view stops it')
       // A run leaves the board when it finishes (finishRun), with nothing to archive.
       if (node.runOf) throw new Error('An action run leaves the board by itself when its turn ends')
       archiveWhenDone.add(self)
@@ -655,7 +663,56 @@ export async function registerIpc(getWindow: () => BrowserWindow | null) {
       notes.updateNote(projectId, noteId, patch)
       send(IPC.evBoardChanged, projectId)
       return { noteId }
+    },
+    listViews: views.listViewsForTool,
+    getView: views.getViewForTool,
+    createView: views.createViewFromTool,
+    updateView: views.updateViewFromTool
+  })
+
+  // --- Views -----------------------------------------------------------------
+
+  ipcMain.handle(IPC.viewsCreate, async (_e, projectId: string, opts: CreateViewOptions) => {
+    await envReady
+    getProject(projectId)
+    const view = await views.createView(projectId, opts)
+    send(IPC.evBoardChanged, projectId)
+    return view
+  })
+
+  ipcMain.handle(IPC.viewsSave, (_e, projectId: string, patch: ViewPatch) => views.saveView(projectId, patch))
+
+  ipcMain.handle(IPC.viewsRemove, (_e, projectId: string, viewId: string) => views.removeView(projectId, viewId))
+
+  ipcMain.handle(IPC.viewsCall, (_e, projectId: string, viewId: string, method: string, args: unknown) =>
+    views.callView(projectId, viewId, String(method), args)
+  )
+
+  ipcMain.on(IPC.viewsReport, (_e, projectId: string, viewId: string, report: { error?: unknown; loaded?: unknown }) => {
+    try {
+      views.reportView(projectId, viewId, report)
+    } catch {
+      // A view that has gone.
     }
+  })
+
+  ipcMain.handle(IPC.viewsApprove, (_e, projectId: string, viewId: string, name: string, allow: boolean) =>
+    views.approveCommand(projectId, viewId, String(name), allow === true)
+  )
+
+  ipcMain.handle(IPC.viewsRefresh, async (_e, projectId: string, viewId: string) => {
+    await envReady
+    return views.refreshView(projectId, viewId)
+  })
+
+  ipcMain.handle(IPC.viewsAsk, async (_e, projectId: string, viewId: string, prompt: string) => {
+    await envReady
+    await views.askBrain(projectId, viewId, String(prompt ?? ''), 'user')
+  })
+
+  ipcMain.handle(IPC.viewsBrain, async (_e, projectId: string, viewId: string) => {
+    await envReady
+    return views.ensureBrain(projectId, viewId)
   })
 
   // --- Sessions ------------------------------------------------------------
@@ -726,6 +783,8 @@ export async function registerIpc(getWindow: () => BrowserWindow | null) {
         // A card created in the app but never used has no transcript to resume.
         resume: hasTranscript(project, sessionId),
         permissionMode: node?.autoMode ? 'auto' : undefined,
+        // A view's brain is told about its view every time it starts.
+        extraArgs: node?.viewOf ? views.brainArgs(projectId, node) : undefined,
         cols,
         rows
       })
@@ -737,6 +796,7 @@ export async function registerIpc(getWindow: () => BrowserWindow | null) {
     if (typeof data !== 'string') return
     // Before the write: an interrupt would otherwise end the run's turn and remove it.
     if (isTakeover(sessionId, data)) claimRun(sessionId)
+    views.brainInput(sessionId)
     ptys.write(sessionId, data)
   })
 
@@ -796,5 +856,6 @@ export async function registerIpc(getWindow: () => BrowserWindow | null) {
 export function shutdown() {
   ptys.disconnect()
   unwatchAll()
+  views.flushViews()
   flush()
 }

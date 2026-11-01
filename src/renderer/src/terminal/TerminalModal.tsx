@@ -220,7 +220,8 @@ function TerminalHeader({
             <Trash2 size={13} />
             Remove
           </button>
-        ) : (
+        ) : card?.viewOf ? null : (
+          // A view's brain goes with its view, never to the archive.
           <button className="btn" onClick={archive} title="Stop and move to the archive">
             <Archive size={13} />
             Archive

@@ -73,9 +73,26 @@ Point at a note with writing on it and press ▶ in its corner (or right-click i
 
 Claude writes notes too. Ask a session to do some research and put what it found on the board, and it writes notes with its board tools (below). They go up beside its card, one under another, sized to fit what they say, and signed with the session's name: click the name to open the session. Claude can also read the notes on the board and rewrite them, but not delete them.
 
+## Views
+
+A view is a small live page on the board, such as a table of your last deployments, a count from your database or your open tickets, that Claude builds from what you describe and keeps up to date. Click **View** in the title bar (or right-click the board › **New view here…**), say what it should show and where the data comes from, and press **Create view**. The view appears straight away and says it's being built. Behind it is its *brain*: a Claude session of its own, in auto mode, that isn't drawn on the board. The view's title bar shows what the brain is doing: 🟠 while it works, 🔴 when it needs you. Press ⌨ in the title bar (or **Watch it work** while it's building) to open the brain's session and talk to it directly.
+
+To change a view, press ✎ and say what to change: it goes to the same brain, which still knows how it built the view. Drag a view by its title bar, and drag a selected view's corners to resize it. ⤢ opens it large. Double-click its title to rename it. Delete it from its menu (or select it and press ⌫), which asks first: its page and data go, and its brain stops. The brain's transcript stays on disk.
+
+A view's page runs in a sandboxed frame of its own, with no network. It can't fetch anything, load anything from the web, reach the board's window or keep browser storage. Links open in your browser. Until you click a view, the page is a picture: clicking selects the view and scrolling over it pans the board. Once it's selected you can use the page. Everything a page gets from the board comes through `window.nodus`, which the app answers for that view alone:
+
+- **Data from Claude.** The page draws from the data its brain sends with `update_view`, which updates the page in place without reloading it.
+- **Commands you allow.** A view can declare shell commands, such as `vercel ls --json` or a `psql` count, that run in the project folder with your shell environment, so your CLIs and API tokens work. A new command shows on the card, in full, with **Allow** and **Don't allow**, and nothing runs until you allow it. Your answer goes with that exact command line: change a single character and it asks again, though one Claude puts back exactly as it was keeps your answer. Commands can run on a schedule, such as every hour, and cost no tokens. Each one stops after 2 minutes.
+- **Its brain on a schedule.** For data only Claude can fetch, such as tickets from a Linear MCP server, a view can ask its brain to refresh it every so often, at most every 10 minutes. Each refresh is a Claude turn, so it counts toward your usage. ⟳ runs the view's commands and asks its brain to refresh now.
+- **The board.** A page can read the board's sessions, notes, git status and the other views with their data, so one view can build on another. It can also open or start a session, and ask its brain something, at most every 15 seconds.
+
+Schedules run while the app is open, in the background as well. A brain stops after 5 minutes with nothing to do, and resumes when it's next needed.
+
+Any session can put up a view too: ask it for a dashboard or a table on the board, and it builds one beside its card with its board tools. A view put up that way gets a brain when it first needs one, such as the first time you ask it to change something.
+
 ## Board tools
 
-Every Claude session started from the app gets an MCP server named `nodus`, through `--mcp-config`, with tools for its board: `create_note`, `update_note` and `list_notes`. Action runs get `list_sessions` and `archive_sessions` as well. They're allowed with `--allowedTools`, so they never stop to ask.
+Every Claude session started from the app gets an MCP server named `nodus`, through `--mcp-config`, with tools for its board: `create_note`, `update_note` and `list_notes`, and `create_view`, `update_view`, `get_view` and `list_views` for views. `update_view` waits for the board to load a changed page and returns any JavaScript errors it hit, so Claude can fix them. A view's brain can leave out the view's id. Action runs get `list_sessions` and `archive_sessions` as well. They're allowed with `--allowedTools`, so they never stop to ask.
 
 The server lives in the session host, next to the hook server, and passes each request on to the app. So a session keeps its tools when you quit and reopen the app; while the app is closed, a tool call fails and says why. Every process gets the same config, and Claude Code fills in the host's port and token, and the session's id, from the process's environment, so the token never shows up in a process listing. Sessions started outside the app don't get the tools.
 
@@ -127,7 +144,7 @@ Settings shows the version you're on and how the update is going. **Check Now**,
 
 ## Your data
 
-Transcripts stay where Claude Code keeps them. The app stores only the board layout (projects, card positions, sections, notes, archive, custom titles and lineage) and its settings (theme, and the xAI key for voice prompts if you save one, encrypted with the macOS Keychain) in `~/Library/Application Support/Nodus/state.json`. *Remove from board* hides a card and never deletes a transcript.
+Transcripts stay where Claude Code keeps them. The app stores only the board layout (projects, card positions, sections, notes, views, archive, custom titles and lineage) and its settings (theme, and the xAI key for voice prompts if you save one, encrypted with the macOS Keychain) in `~/Library/Application Support/Nodus/state.json`. Each view's page, data, saved state and the last output of its commands are kept beside it in `views/<view id>/`, never in your repository. *Remove from board* hides a card and never deletes a transcript.
 The session host keeps its socket and log in the `host` folder next to it. Only your user can open the folder, which matters because anything that can connect to the socket can start processes as you.
 
 ## Shortcuts
@@ -158,6 +175,10 @@ The session host keeps its socket and log in the `host` folder next to it. Only 
 | | Start a session on what you said · discard it | Enter · Esc |
 | | Speak into a session, typed in but not sent | Select its card, then V · the mic in its title bar |
 | | Delete the selected notes | ⌫ |
+| | New view | **View** in the title bar · right-click › New view here… |
+| | Use a view's page | Click it, then use it · double-click it to open it large |
+| | Change a view | Its ✎ button · talk to its brain with ⌨ |
+| | Rename a view · delete it | Double-click its title · ⌫ (asks first) |
 | | Fan out a card's agents | Point at the deck under it · click to pin |
 | | Pan · zoom | Two-finger scroll, Space-drag or middle-drag · pinch |
 | Terminal | Newline in Claude's prompt | ⇧Enter |
@@ -170,7 +191,8 @@ In the terminal, Esc goes to Claude (it interrupts a turn), so it never closes t
 
 - Status is tracked only for sessions started from the app. A session running in another terminal shows as done.
 - Running `/clear` inside a card starts a new session id, which shows up as a new archived card.
-- In a repo Claude Code hasn't opened before, the first session shows Claude's folder-trust prompt. "No, exit" is preselected, so move to "Yes" before pressing Enter.
+- In a repo Claude Code hasn't opened before, the first session shows Claude's folder-trust prompt. "No, exit" is preselected, so move to "Yes" before pressing Enter. A view's brain waits at that prompt too, and its view says it's building until you answer it: press **Watch it work**.
+- A view's commands and refreshes only run while the app is open.
 - Releases aren't notarized yet, so macOS treats each version as a new app. After an update it asks again for the microphone, and for Keychain access if you saved an xAI key.
 - If you update the app while sessions are running, and the update changed how the app talks to the session host, the new version asks to stop those sessions before it continues.
 - A session host started by a version without board tools keeps running sessions after an update, but sessions started on it don't get the tools. They do once every session has stopped and a new host starts.
@@ -181,7 +203,7 @@ In the terminal, Esc goes to Claude (it interrupts a turn), so it never closes t
 ```
 src/
   shared/       types.ts + api.ts: the typed IPC contract (window.api)
-                geometry.ts: board sizes and the free-spot search, which the main process uses to place notes
+                geometry.ts: board sizes and the free-spot search, which the main process uses to place notes and views
   preload/      contextBridge implementation of the contract
   main/         Electron main process
     env.ts        login-shell environment and claude binary lookup
@@ -194,14 +216,16 @@ src/
     hooks.ts      the status machine, driven by hooks the session host passes on
     summarize.ts  forked, non-persisted handoff summaries
     actions.ts    the actions rail's buttons: drafting them with Claude, and each run's extra claude options
-    boardTools.ts the board tools' MCP server, answering what the session host relays: notes for every session, and listing and archiving sessions for action runs
+    boardTools.ts the board tools' MCP server, answering what the session host relays: notes and views for every session, and listing and archiving sessions for action runs
     notes.ts      notes sessions write: where they go on the board, and how big they are
+    views.ts      views: their files, commands and schedules, their brains, and what their pages ask the board for
+    viewPage.ts   the page a view's frame loads: its content security policy, theme and window.nodus
     voice.ts      speech to text for the mic button through xAI, and the key it uses
     updater.ts    updates the app from GitHub releases: download, checks, and the swap on quit
     store.ts      state.json in the app's userData directory
   renderer/src/
     views/        ProjectsView (folders) and BoardView (canvas)
-    components/   title bar, folder icon, board cards, agent decks, sections, archive stack, notes and their pad, merge dialog, lineage edges, the mic button
+    components/   title bar, folder icon, board cards, agent decks, sections, archive stack, notes and their pad, views and the relay to their frames, merge dialog, lineage edges, the mic button
     terminal/     xterm.js registry, TerminalModal, TranscriptPreview, AgentViewer
 ```
 

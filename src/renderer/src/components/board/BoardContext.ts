@@ -18,6 +18,12 @@ export interface BoardActions {
   startNote(noteId: string): void
   /** Opens a card's session, as clicking the card does. */
   openSession(sessionId: string): void
+  /** Opens a view's brain, starting one if it has none. */
+  openViewSession(viewId: string): void
+  /** Commits a new title for a view (empty keeps the old one). */
+  renameView(viewId: string, title: string): void
+  /** Shows a view's menu at a point on screen. */
+  viewMenu(viewId: string, x: number, y: number): void
 }
 
 export const BoardActionsContext = createContext<BoardActions | null>(null)

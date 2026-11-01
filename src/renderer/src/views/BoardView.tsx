@@ -31,6 +31,7 @@ import {
   Bot,
   Eye,
   Group,
+  LayoutDashboard,
   Loader2,
   Maximize,
   Maximize2,
@@ -38,6 +39,7 @@ import {
   PencilLine,
   Play,
   Plus,
+  RefreshCw,
   Sparkles,
   SquareDashed,
   SquareTerminal,
@@ -51,6 +53,7 @@ import type {
   BoardNote,
   BoardSection,
   BoardSnapshot,
+  BoardView as BoardViewItem,
   FolderColor,
   NodePatch,
   ProjectAction,
@@ -99,6 +102,10 @@ import {
 } from '@renderer/components/board/ArchiveZoneNode'
 import { NoteNode, type NoteFlowNode } from '@renderer/components/board/NoteNode'
 import { NotePadNode, type NotePadFlowNode } from '@renderer/components/board/NotePadNode'
+import { ViewNode, type ViewFlowNode } from '@renderer/components/board/ViewNode'
+import { ViewDialog } from '@renderer/components/board/ViewDialog'
+import { VIEW_SIZE, buildViewNodes, viewObstacles, viewSize } from '@renderer/components/board/views'
+import { broadcast as broadcastToViews, setRelayHandlers } from '@renderer/components/board/viewRelay'
 import {
   NOTE_COLOR,
   NOTE_H,
@@ -158,14 +165,15 @@ import { VoicePrompt, type VoiceHandle } from '@renderer/components/voice/VoiceP
 import { fuzzyMatch } from '@renderer/components/board/fuzzy'
 import '@renderer/components/board/board.css'
 
-type FlowNode = SessionFlowNode | ArchiveFlowNode | SectionFlowNode | NoteFlowNode | NotePadFlowNode
+type FlowNode = SessionFlowNode | ArchiveFlowNode | SectionFlowNode | NoteFlowNode | NotePadFlowNode | ViewFlowNode
 
 const nodeTypes = {
   session: SessionCardNode,
   archive: ArchiveZoneNode,
   section: SectionNode,
   note: NoteNode,
-  notepad: NotePadNode
+  notepad: NotePadNode,
+  view: ViewNode
 }
 const edgeTypes = { lineage: LineageEdge }
 
@@ -197,10 +205,13 @@ const NEW_CARD_SIZE = cardSize({ archived: false, expanded: true })
 export function BoardView({ projectId }: { projectId: string }) {
   const snapshot = useApp((s) => s.board)
   const loading = useApp((s) => s.boardLoading)
-  // Action runs show beside their button in the actions rail, not on the board.
+  // Action runs show beside their button in the actions rail, not on the board,
+  // and a view's brain shows on its view.
   const board = useMemo(
     () =>
-      snapshot?.cards.some((c) => c.runOf) ? { ...snapshot, cards: snapshot.cards.filter((c) => !c.runOf) } : snapshot,
+      snapshot?.cards.some((c) => c.runOf || c.viewOf)
+        ? { ...snapshot, cards: snapshot.cards.filter((c) => !c.runOf && !c.viewOf) }
+        : snapshot,
     [snapshot]
   )
 
@@ -435,7 +446,8 @@ function buildNodes(
   const sectionNodes = buildSectionNodes(sectionViews(board.sections, board.cards), prevById, busy)
   const [padNode, draftNode] = buildPadNodes(notePadRect(board.archive), draftId, prevById, busy)
   const noteNodes = buildNoteNodes(freeNotes, prevById, busy)
-  return [archiveNode, padNode, ...sectionNodes, ...sessionNodes, ...noteNodes, draftNode]
+  const viewNodes = buildViewNodes(board.views, prevById, busy)
+  return [archiveNode, padNode, ...sectionNodes, ...sessionNodes, ...viewNodes, ...noteNodes, draftNode]
 }
 
 interface MenuState {
@@ -460,11 +472,16 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
   const openAgents = useApp((s) => s.openAgents)
   const selection = useApp((s) => s.selection)
 
-  const { cards, archive, sections, notes } = board
+  const { cards, archive, sections, notes, views } = board
   const cardsRef = useRef(cards)
   cardsRef.current = cards
   const notesRef = useRef(notes)
   notesRef.current = notes
+  const viewsRef = useRef(views)
+  viewsRef.current = views
+  const upsertView = useApp((s) => s.upsertView)
+  const patchView = useApp((s) => s.patchView)
+  const removeView = useApp((s) => s.removeView)
   const archiveRef = useRef(archive)
   archiveRef.current = archive
   /** The note pad under the archive. */
@@ -501,11 +518,13 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
   const [confirmReq, setConfirmReq] = useState<ConfirmRequest | null>(null)
   const [merge, setMerge] = useState<MergeSource[] | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  /** The New view dialog is open, for a view near this point (or in view when unset). */
+  const [viewDialog, setViewDialog] = useState<{ at?: Point } | null>(null)
 
   const closeMenu = useCallback(() => setMenu(null), [])
   // The actions rail's dialogs and menus, which the board's shortcuts must not reach behind.
   const [dockOverlay, setDockOverlay] = useState(false)
-  const overlayOpen = Boolean(menu || confirmReq || merge || dockOverlay)
+  const overlayOpen = Boolean(menu || confirmReq || merge || dockOverlay || viewDialog)
   const overlayOpenRef = useRef(overlayOpen)
   overlayOpenRef.current = overlayOpen
 
@@ -774,9 +793,11 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
     nodesRef.current.filter((n) => n.type === 'session' && n.selected).map((n) => n.id)
   const selectedNoteIds = () =>
     nodesRef.current.filter((n) => n.type === 'note' && n.selected).map((n) => n.id)
+  const selectedViewIds = () =>
+    nodesRef.current.filter((n) => n.type === 'view' && n.selected).map((n) => n.id)
 
-  /** Notes sit on top of cards, so new cards (and notes) keep clear of them. */
-  const notesInTheWay = () => noteObstacles(notesRef.current)
+  /** Notes sit on top of cards, and views among them, so new cards (and notes) keep clear of both. */
+  const notesInTheWay = () => [...noteObstacles(notesRef.current), ...viewObstacles(viewsRef.current)]
 
   const clearSelection = useCallback(() => {
     setNodes((nds) => nds.map((n) => (n.selected ? { ...n, selected: false } : n)))
@@ -1152,7 +1173,7 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
       const others = notesRef.current.filter((n) => n.id !== noteId)
       const spot = findFreeSpot(
         note,
-        [...cardObstacles(cardsRef.current), ...noteObstacles(others)],
+        [...cardObstacles(cardsRef.current), ...noteObstacles(others), ...viewObstacles(viewsRef.current)],
         dockRef.current,
         NEW_CARD_SIZE
       )
@@ -1233,6 +1254,117 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
     [openCard]
   )
 
+  // ---- views -----------------------------------------------------------------
+
+  /** The middle of what's on screen, for something of `size`. */
+  const viewportCentre = useCallback(
+    (size: Size): Point => {
+      const el = wrapperRef.current
+      const { x, y, zoom } = rf.getViewport()
+      return el
+        ? { x: (el.clientWidth / 2 - x) / zoom - size.w / 2, y: (el.clientHeight / 2 - y) / zoom - size.h / 2 }
+        : { x: 0, y: 0 }
+    },
+    [rf]
+  )
+
+  /** Puts up a view for what the user described, near `at` or in view, and starts its brain on it. */
+  const createView = useCallback(
+    async (description: string, at?: Point) => {
+      const preferred = at ? { x: at.x - VIEW_SIZE.w / 2, y: at.y - VIEW_SIZE.h / 2 } : viewportCentre(VIEW_SIZE)
+      const spot = findFreeSpot(preferred, [...cardObstacles(cardsRef.current), ...notesInTheWay()], dockRef.current, VIEW_SIZE)
+      const view = await window.api.views.create(projectId, {
+        description,
+        x: Math.round(spot.x),
+        y: Math.round(spot.y)
+      })
+      upsertView(view)
+      ensureVisible(spot, VIEW_SIZE)
+    },
+    [projectId, upsertView, ensureVisible, viewportCentre]
+  )
+
+  /** Opens a view's brain in its window, starting one if it has none. */
+  const openViewSession = useCallback(
+    (viewId: string) => {
+      window.api.views.brain(projectId, viewId).then(openTerminal, (err) =>
+        showToast(`Couldn't open its session: ${err instanceof Error ? err.message : String(err)}`)
+      )
+    },
+    [projectId, openTerminal, showToast]
+  )
+
+  /** Deletes views, asking first: each takes its page, its data and its brain with it. */
+  const deleteViews = useCallback(
+    async (ids: string[]) => {
+      const targets = viewsRef.current.filter((v) => ids.includes(v.id))
+      if (targets.length === 0) return
+      const ok = await confirm({
+        title: targets.length === 1 ? 'Delete view?' : `Delete ${targets.length} views?`,
+        message:
+          targets.length === 1
+            ? `“${targets[0].title}” and its page go, and the Claude session that keeps it up to date stops. Its transcript stays on disk.`
+            : 'Their pages go, and the Claude sessions that keep them up to date stop. Their transcripts stay on disk.',
+        confirmLabel: 'Delete',
+        danger: true
+      })
+      if (!ok) return
+      for (const view of targets) await removeView(view.id)
+    },
+    [confirm, removeView]
+  )
+
+  const viewMenuItems = useCallback(
+    (view: BoardViewItem): MenuItem[] => {
+      const canRefresh = Boolean(view.refresh || view.commands?.some((c) => c.approved === c.run))
+      return [
+        {
+          label: 'Refresh',
+          icon: <RefreshCw />,
+          disabled: !canRefresh,
+          onSelect: () => {
+            window.api.views.refresh(projectId, view.id).catch((err) =>
+              showToast(`Couldn't refresh it: ${err instanceof Error ? err.message : String(err)}`)
+            )
+          }
+        },
+        { label: 'Open its session', icon: <SquareTerminal />, onSelect: () => openViewSession(view.id) },
+        { label: 'Rename', icon: <PencilLine />, onSelect: () => setRenaming(view.id) },
+        'separator',
+        { label: 'Delete view', icon: <Trash2 />, hint: '⌫', danger: true, onSelect: () => void deleteViews([view.id]) }
+      ]
+    },
+    [projectId, openViewSession, deleteViews, showToast]
+  )
+
+  // What a view's page can do on the board itself, rather than through the main process.
+  useEffect(() => {
+    setRelayHandlers({
+      openSession: (sessionId) => {
+        if (cardsRef.current.some((c) => c.sessionId === sessionId)) openCard(sessionId)
+      },
+      startSession: async (viewId, prompt) => {
+        const view = viewsRef.current.find((v) => v.id === viewId)
+        const size = NEW_CARD_SIZE
+        const preferred = view ? { x: view.x + viewSize(view).w + GAP, y: view.y } : viewportCentre(size)
+        const spot = findFreeSpot(preferred, [...cardObstacles(cardsRef.current), ...notesInTheWay()], dockRef.current, size)
+        const pos = { x: Math.round(spot.x), y: Math.round(spot.y) }
+        const card = await window.api.sessions.create(projectId, { ...pos, initialPrompt: prompt, expanded: true, autoMode: true })
+        upsertCard(card)
+        ensureVisible(pos, size)
+      }
+    })
+    return () => setRelayHandlers(null)
+  }, [projectId, openCard, upsertCard, ensureVisible, viewportCentre])
+
+  // Pages hear when the board changes, so they can read it again.
+  useEffect(() => {
+    const t = window.setTimeout(() => broadcastToViews('board'), 300)
+    return () => window.clearTimeout(t)
+  }, [cards, notes, views])
+  const git = useApp((s) => s.git)
+  useEffect(() => broadcastToViews('git', git), [git])
+
   const selectCards = useCallback((ids: Set<string>) => {
     setNodes((nds) => nds.map((n) => (n.type === 'session' ? { ...n, selected: ids.has(n.id) } : n)))
   }, [])
@@ -1303,9 +1435,27 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
         else window.api.board.saveNote(projectId, next)
       },
       startNote: (noteId) => void startNote(noteId),
-      openSession: openCard
+      openSession: openCard,
+      openViewSession,
+      renameView: (viewId, title) => patchView({ id: viewId, title }),
+      viewMenu: (viewId, x, y) => {
+        const view = viewsRef.current.find((v) => v.id === viewId)
+        if (view) setMenu({ x, y, items: viewMenuItems(view) })
+      }
     }),
-    [patchCards, saveSection, expandCards, archiveCards, saveNote, projectId, startNote, openCard]
+    [
+      patchCards,
+      saveSection,
+      expandCards,
+      archiveCards,
+      saveNote,
+      projectId,
+      startNote,
+      openCard,
+      openViewSession,
+      patchView,
+      viewMenuItems
+    ]
   )
 
   // ---- React Flow handlers -------------------------------------------------
@@ -1341,7 +1491,7 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
     }
     dragStart.current.clear()
     for (const n of dragged) {
-      if (n.type !== 'session' && n.type !== 'note') continue
+      if (n.type !== 'session' && n.type !== 'note' && n.type !== 'view') continue
       busy.current.add(n.id)
       dragStart.current.set(n.id, { ...n.position })
     }
@@ -1471,6 +1621,8 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
       const moved = dragged.filter((n) => n.type === 'session' && byId.has(n.id))
       const notesById = new Map(notesRef.current.map((n) => [n.id, n]))
       const movedNotes = dragged.filter((n) => n.type === 'note' && notesById.has(n.id))
+      const viewsById = new Map(viewsRef.current.map((v) => [v.id, v]))
+      const movedViews = dragged.filter((n) => n.type === 'view' && viewsById.has(n.id))
 
       // Terminals and notes can't be archived: one dropped on the archive goes
       // back to where it was, as does a note dropped on its pad.
@@ -1486,6 +1638,14 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
         const size = noteSize(note)
         if (isInArchive(n.position, zone, size) || isOnPad(n.position, pad, size)) {
           bounced.set(n.id, dragStart.current.get(n.id) ?? { x: note.x, y: note.y })
+        }
+      }
+      // Nor can views, which don't go on the note pad either.
+      for (const n of movedViews) {
+        const view = viewsById.get(n.id)!
+        const size = viewSize(view)
+        if (isInArchive(n.position, zone, size) || isOnPad(n.position, pad, size)) {
+          bounced.set(n.id, dragStart.current.get(n.id) ?? { x: view.x, y: view.y })
         }
       }
       if (bounced.size > 0) {
@@ -1515,7 +1675,7 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
         .map(({ card }) => card)
 
       const release = () => {
-        for (const n of [...moved, ...movedNotes]) busy.current.delete(n.id)
+        for (const n of [...moved, ...movedNotes, ...movedViews]) busy.current.delete(n.id)
         dragStart.current.clear()
       }
 
@@ -1533,9 +1693,13 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
         if (bounced.has(n.id)) continue
         saveNote({ ...notesById.get(n.id)!, x: Math.round(n.position.x), y: Math.round(n.position.y) })
       }
+      for (const n of movedViews) {
+        if (bounced.has(n.id)) continue
+        patchView({ id: n.id, x: Math.round(n.position.x), y: Math.round(n.position.y) })
+      }
       release()
     },
-    [confirmStopRunning, patchCards, setArchive, saveSection, saveNote, peelNote]
+    [confirmStopRunning, patchCards, setArchive, saveSection, saveNote, peelNote, patchView]
   )
 
   const onNodeClick = useCallback(
@@ -1614,10 +1778,11 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
       const active = cardsRef.current.filter((c) => !c.archived).map((c) => ({ id: c.sessionId }))
       // Stickers ride on their cards, which are fitted already.
       const notes = notesRef.current.filter((n) => !n.sessionId).map((n) => ({ id: n.id }))
-      if (active.length + notes.length > 0) {
+      const views = viewsRef.current.map((v) => ({ id: v.id }))
+      if (active.length + notes.length + views.length > 0) {
         // Section frames too, so their headers aren't cut off.
         const frames = groupsRef.current.filter((g) => g.members.length > 0).map((g) => ({ id: g.section.id }))
-        rf.fitView({ nodes: [...active, ...frames, ...notes], padding: 0.2, maxZoom: 1, duration })
+        rf.fitView({ nodes: [...active, ...frames, ...notes, ...views], padding: 0.2, maxZoom: 1, duration })
         return
       }
       // The archive and the note pad under it.
@@ -1672,6 +1837,12 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
             icon: <StickyNote />,
             disabled: inArchive,
             onSelect: () => createNoteAt(p)
+          },
+          {
+            label: 'New view here…',
+            icon: <LayoutDashboard />,
+            disabled: inArchive,
+            onSelect: () => setViewDialog({ at: p })
           },
           'separator',
           { label: 'Select all active', icon: <BoxSelect />, hint: '⌘A', onSelect: selectAllActive },
@@ -1857,6 +2028,10 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
         setMenu({ x: e.clientX, y: e.clientY, items: noteMenu((node as NoteFlowNode).data.note) })
         return
       }
+      if (node.type === 'view') {
+        setMenu({ x: e.clientX, y: e.clientY, items: viewMenuItems((node as ViewFlowNode).data.view) })
+        return
+      }
       if (node.type === 'section') {
         const group = groupsRef.current.find((g) => g.section.id === node.id)
         if (group) setMenu({ x: e.clientX, y: e.clientY, items: sectionMenu(group) })
@@ -1938,6 +2113,7 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
       sectionMenu,
       cardSectionItems,
       noteMenu,
+      viewMenuItems,
       noteBesidePad,
       removeNotes
     ]
@@ -1955,7 +2131,8 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
     openCard,
     expandCards,
     closeStack,
-    deleteNotes
+    deleteNotes,
+    deleteViews
   })
   latest.current = {
     createSession,
@@ -1967,7 +2144,8 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
     openCard,
     expandCards,
     closeStack,
-    deleteNotes
+    deleteNotes,
+    deleteViews
   }
 
   useEffect(() => {
@@ -1978,11 +2156,12 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
       if (target?.closest('input, textarea, select, [contenteditable="true"]')) return
       const sel = selectedIds()
       const noteSel = selectedNoteIds()
+      const viewSel = selectedViewIds()
       const fns = latest.current
 
       if (e.key === 'Escape') {
         if (stackViewRef.current.open) fns.closeStack()
-        if (sel.length || noteSel.length) fns.clearSelection()
+        if (sel.length || noteSel.length || viewSel.length) fns.clearSelection()
       } else if (e.key.toLowerCase() === 'a' && e.metaKey && !e.shiftKey && !e.altKey) {
         e.preventDefault()
         fns.selectAllActive()
@@ -1992,11 +2171,12 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
           fns.groupCards(sel)
         }
       } else if ((e.key === 'Backspace' || e.key === 'Delete') && !e.metaKey && !e.altKey) {
-        if (sel.length || noteSel.length) {
+        if (sel.length || noteSel.length || viewSel.length) {
           e.preventDefault()
-          // Selected notes are deleted and cards archived.
+          // Selected notes are deleted and cards archived; views ask first.
           fns.deleteNotes(noteSel)
           void fns.archiveCards(sel)
+          void fns.deleteViews(viewSel)
         }
       } else if (e.key === 'Enter' && !e.metaKey && !e.shiftKey && sel.length === 1) {
         e.preventDefault()
@@ -2071,6 +2251,14 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
                   <TitleBarActions>
                     <button
                       className="btn btn-ghost no-drag"
+                      onClick={() => setViewDialog({})}
+                      title="New view: a live page Claude builds and keeps up to date"
+                    >
+                      <LayoutDashboard size={15} strokeWidth={2} />
+                      View
+                    </button>
+                    <button
+                      className="btn btn-ghost no-drag"
                       onClick={() => createTerminal()}
                       title="New terminal in the project folder (⌘T)"
                     >
@@ -2140,6 +2328,7 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
                         // A faint wash of the section's colour (hex + alpha).
                         if (n.type === 'section') return `${sectionHue(n)}24`
                         if (n.type === 'note') return FOLDER_HUES[(n as NoteFlowNode).data.note.color].frontTop
+                        if (n.type === 'view') return FOLDER_HUES.purple.frontTop
                         const card = (n as SessionFlowNode).data.card
                         return isTerminal(card) ? 'var(--text-tertiary)' : STATUS_COLOR[card.status]
                       }}
@@ -2196,6 +2385,9 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
 
               {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={closeMenu} />}
               <ConfirmDialog request={confirmReq} />
+              {viewDialog && (
+                <ViewDialog onCreate={(description) => createView(description, viewDialog.at)} onClose={() => setViewDialog(null)} />
+              )}
               {merge && (
                 <MergeDialog
                   projectId={projectId}

@@ -1,8 +1,8 @@
 // Board geometry the main process needs as well as the renderer: the sizes of
-// cards, notes and the archive dock, and the search for a free spot. The
-// renderer draws the board; the main process places the notes that sessions
-// write with their board tools.
-import type { BoardNode, BoardNote, Rect } from './types'
+// cards, notes, views and the archive dock, and the search for a free spot.
+// The renderer draws the board; the main process places the notes and views
+// that sessions put up with their board tools.
+import type { BoardNode, BoardNote, BoardView, Rect } from './types'
 
 export interface Point {
   x: number
@@ -58,6 +58,23 @@ export function cardSize(card: Pick<BoardNode, 'expanded' | 'archived' | 'w' | '
 export function noteSize(note: Pick<BoardNote, 'w' | 'h'>): Size {
   return { w: note.w ?? NOTE_W, h: note.h ?? NOTE_H }
 }
+
+/** A view starts with room for a small table, and can be resized from 240×160 to 2400×1800. */
+export const VIEW_W = 480
+export const VIEW_H = 360
+export const VIEW_MIN_W = 240
+export const VIEW_MIN_H = 160
+export const VIEW_MAX_W = 2400
+export const VIEW_MAX_H = 1800
+
+export function viewSize(view: Pick<BoardView, 'w' | 'h'>): Size {
+  return { w: view.w ?? VIEW_W, h: view.h ?? VIEW_H }
+}
+
+export const clampViewSize = (size: Partial<Size>): Partial<Size> => ({
+  w: Number.isFinite(size.w) ? Math.round(Math.min(VIEW_MAX_W, Math.max(VIEW_MIN_W, size.w!))) : undefined,
+  h: Number.isFinite(size.h) ? Math.round(Math.min(VIEW_MAX_H, Math.max(VIEW_MIN_H, size.h!))) : undefined
+})
 
 /** The pad under the archive's stack. It goes by the folded stack, so the open panel floats over it. */
 export function notePadRect(archive: Rect): Rect {

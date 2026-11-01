@@ -145,6 +145,7 @@ import {
   cardRect,
   containsPoint,
   findFreeSpot,
+  findSpotBeside,
   intersects,
   isInArchive,
   spotForNewSession,
@@ -204,6 +205,8 @@ const isDraft = (n: FlowNode) => n.type === 'note' && Boolean((n as NoteFlowNode
 const NEW_CARD_SIZE = cardSize({ archived: false, expanded: true })
 /** A view can start a session at most this often, so one click can't start a burst of them. */
 const VIEW_START_GAP_MS = 3000
+/** How far from its view a session the view started goes: close, but far enough for the line between them to read. */
+const VIEW_SESSION_GAP = 3 * GAP
 
 export function BoardView({ projectId }: { projectId: string }) {
   const snapshot = useApp((s) => s.board)
@@ -738,7 +741,7 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
   const edges = useMemo<Edge[]>(() => {
     // Archived cards sit in a pile, so they draw no lineage.
     const ids = new Set(cards.filter((c) => !c.archived).map((c) => c.sessionId))
-    return cards.flatMap((child) =>
+    const merged = cards.flatMap((child) =>
       (ids.has(child.sessionId) ? (child.parents ?? []) : [])
         .filter((pid) => ids.has(pid))
         .map((pid) => ({
@@ -752,7 +755,22 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
           className: 'lineage-edge'
         }))
     )
-  }, [cards])
+    // A session a view's button started trails a dashed line back to the view.
+    const viewIds = new Set(views.map((v) => v.id))
+    const started = cards
+      .filter((c) => c.fromView && viewIds.has(c.fromView) && ids.has(c.sessionId))
+      .map((c) => ({
+        id: `${c.fromView}->${c.sessionId}`,
+        type: 'lineage',
+        source: c.fromView!,
+        target: c.sessionId,
+        animated: true,
+        selectable: false,
+        focusable: false,
+        className: 'lineage-edge view-edge'
+      }))
+    return [...merged, ...started]
+  }, [cards, views])
 
   // ---- helpers -------------------------------------------------------------
 
@@ -1375,8 +1393,14 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
         }
         viewStarts.current.set(viewId, Date.now())
         const size = NEW_CARD_SIZE
-        const preferred = { x: view.x + viewSize(view).w + GAP, y: view.y }
-        const spot = findFreeSpot(preferred, [...cardObstacles(cardsRef.current), ...notesInTheWay()], dockRef.current, size)
+        // Next to the view, with room for the line from it to show.
+        const spot = findSpotBeside(
+          { x: view.x, y: view.y, ...viewSize(view) },
+          size,
+          [...cardObstacles(cardsRef.current), ...notesInTheWay()],
+          dockRef.current,
+          VIEW_SESSION_GAP
+        )
         const pos = { x: Math.round(spot.x), y: Math.round(spot.y) }
         const joins = sectionAt(pos, groupsRef.current)
         const card = await window.api.sessions.create(projectId, {
@@ -1384,7 +1408,8 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
           name: title?.slice(0, 80) || undefined,
           initialPrompt: prompt,
           expanded: true,
-          autoMode: true
+          autoMode: true,
+          fromView: view.id
         })
         upsertCard(card)
         if (joins) patchCards([{ sessionId: card.sessionId, sectionId: joins }])

@@ -134,3 +134,50 @@ export function findFreeSpot(preferred: Point, obstacles: Rect[], avoid?: Rect, 
     return Math.hypot(dx, dy) * behind
   }
 }
+
+/**
+ * Finds a free spot for something of `size` right beside `anchor`, `gap`
+ * away: to its right if there's room, else below, left of or above it, and
+ * lined up with it where it can be; then further out. Unlike findFreeSpot,
+ * which steps a whole card at a time, it slides along the anchor's sides, so
+ * what's placed lands next to the anchor even when the board around it is
+ * busy. Further than twice its size away, it falls back to findFreeSpot.
+ */
+export function findSpotBeside(anchor: Rect, size: Size, obstacles: Rect[], avoid?: Rect, gap = GAP): Point {
+  const reach = 2 * Math.max(size.w, size.h)
+  const right = anchor.x + anchor.w + gap
+  const left = anchor.x - gap - size.w
+  const below = anchor.y + anchor.h + gap
+  const above = anchor.y - gap - size.h
+  // Positions on one axis: out from either side of the anchor, and along it in between.
+  const axis = (start: number, before: number, after: number) => {
+    const out: number[] = []
+    for (let d = 0; d <= reach; d += GAP) out.push(after + d, before - d)
+    for (let v = start - Math.floor((start - before) / GAP) * GAP; v < after; v += GAP) out.push(v)
+    return out
+  }
+  const xs = axis(anchor.x, left, right)
+  const ys = axis(anchor.y, above, below)
+
+  let best: Point | null = null
+  let bestScore = Infinity
+  for (const x of xs) {
+    for (const y of ys) {
+      const gx = Math.max(anchor.x - (x + size.w), x - (anchor.x + anchor.w))
+      const gy = Math.max(anchor.y - (y + size.h), y - (anchor.y + anchor.h))
+      if (Math.max(gx, gy) < gap - 1) continue
+      // Beside it rather than above or below it, and how far it is from lining up.
+      const sideways = gx >= gy
+      const weight = sideways ? (x > anchor.x ? 1 : 1.3) : y > anchor.y ? 1.15 : 1.45
+      const offset = sideways ? Math.abs(y - anchor.y) : Math.abs(x - anchor.x)
+      const score = Math.hypot(Math.max(gx, 0), Math.max(gy, 0)) * weight + offset / 2
+      if (score >= bestScore) continue
+      const r = { x, y, ...size }
+      if (avoid && intersects(r, avoid, GAP)) continue
+      if (obstacles.some((o) => intersects(r, o, GAP / 2))) continue
+      best = { x, y }
+      bestScore = score
+    }
+  }
+  return best ?? findFreeSpot({ x: right, y: anchor.y }, obstacles, avoid, size)
+}

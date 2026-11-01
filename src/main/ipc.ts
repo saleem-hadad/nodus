@@ -739,6 +739,10 @@ export async function registerIpc(getWindow: () => BrowserWindow | null) {
         runOf: action?.id,
         expanded: opts.expanded || undefined,
         autoMode: !terminal && opts.autoMode ? true : undefined,
+        fromView:
+          !terminal && typeof opts.fromView === 'string' && Object.hasOwn(board.views!, opts.fromView)
+            ? opts.fromView
+            : undefined,
         createdAt: Date.now()
       }
       if (action) node.title = action.name

@@ -150,6 +150,8 @@ export interface BoardNode {
    * to date. A brain isn't drawn on the board; its view shows what it's doing.
    */
   viewOf?: string
+  /** The view whose page started this session, drawn as a dashed line from it. */
+  fromView?: string
   /** Runs in auto mode, as sessions started on the board do, and resumes in it too. */
   autoMode?: boolean
   createdAt: number
@@ -393,6 +395,8 @@ export interface CreateSessionOptions {
   expanded?: boolean
   /** Runs in auto mode: Claude Code approves routine steps by itself and blocks risky ones. Claude sessions only. */
   autoMode?: boolean
+  /** The view on this board whose page started it. Claude sessions only. */
+  fromView?: string
 }
 
 export interface SummaryResult {

@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { CARD_H, CARD_SIZE, CARD_W, EXPANDED_H, EXPANDED_W, GAP, cardSize, findFreeSpot, intersects, type Point } from './geometry'
+import {
+  CARD_H,
+  CARD_SIZE,
+  CARD_W,
+  EXPANDED_H,
+  EXPANDED_W,
+  GAP,
+  cardSize,
+  findFreeSpot,
+  findSpotBeside,
+  intersects,
+  type Point
+} from './geometry'
 
 const rect = (x: number, y: number, w = CARD_W, h = CARD_H) => ({ x, y, w, h })
 
@@ -57,5 +69,51 @@ describe('findFreeSpot', () => {
     const size = { w: 600, h: 400 }
     const spot = findFreeSpot({ x: 0, y: 0 }, [rect(300, 0)], undefined, size)
     expect(intersects({ ...spot, ...size }, rect(300, 0), GAP / 2)).toBe(false)
+  })
+})
+
+describe('findSpotBeside', () => {
+  const view = rect(0, 0, 480, 360)
+  const size = { w: EXPANDED_W, h: EXPANDED_H }
+  const clear = (p: Point, obstacles: ReturnType<typeof rect>[]) =>
+    obstacles.every((o) => !intersects({ ...p, ...size }, o, GAP / 2))
+
+  it('goes right of the anchor, lined up with its top', () => {
+    expect(findSpotBeside(view, size, [view])).toEqual({ x: 480 + GAP, y: 0 })
+  })
+
+  it('goes below, then left, when the right is taken', () => {
+    const right = rect(480 + GAP, 0)
+    expect(findSpotBeside(view, size, [view, right])).toEqual({ x: 0, y: 360 + GAP })
+    const below = rect(0, 360 + GAP)
+    expect(findSpotBeside(view, size, [view, right, below])).toEqual({ x: -GAP - EXPANDED_W, y: 0 })
+  })
+
+  it('stays next to the anchor where findFreeSpot steps past what is in the way', () => {
+    // A column of cards down the view's right side, past its bottom.
+    const obstacles = [view, ...[-1, 0, 1, 2].map((i) => rect(480 + GAP, i * (CARD_H + GAP)))]
+    const gap = (p: Point) =>
+      Math.max(view.x - (p.x + size.w), p.x - (view.x + view.w), view.y - (p.y + size.h), p.y - (view.y + view.h))
+    const spot = findSpotBeside(view, size, obstacles)
+    expect(clear(spot, obstacles)).toBe(true)
+    expect(gap(spot)).toBe(GAP)
+    expect(gap(findFreeSpot({ x: 480 + GAP, y: 0 }, obstacles, undefined, size))).toBeGreaterThan(CARD_W)
+  })
+
+  it('keeps the gap it is given', () => {
+    expect(findSpotBeside(view, size, [view], undefined, 3 * GAP)).toEqual({ x: 480 + 3 * GAP, y: 0 })
+  })
+
+  it('keeps out of the area to avoid', () => {
+    const avoid = rect(480, -2000, 4000, 4000)
+    const spot = findSpotBeside(view, size, [view], avoid)
+    expect(intersects({ ...spot, ...size }, avoid, GAP)).toBe(false)
+    expect(spot.x).toBeLessThan(0)
+  })
+
+  it('falls back to findFreeSpot when there is no room nearby', () => {
+    const wall = rect(-5000, -5000, 10000, 10000)
+    const spot = findSpotBeside(view, size, [wall])
+    expect(clear(spot, [wall])).toBe(true)
   })
 })

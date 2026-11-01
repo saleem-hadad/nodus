@@ -1249,6 +1249,15 @@ kbd {
 .board-canvas .react-flow__edge.lineage-edge.animated .react-flow__edge-path {
   stroke: var(--status-working);
 }
+/* From a view to a session its page started: dashes marching out of the view.
+   One period of dashdraw (a 10px offset) is one dash and gap, so it loops seamlessly. */
+.board-canvas .react-flow__edge.lineage-edge.view-edge .react-flow__edge-path {
+  stroke: color-mix(in srgb, var(--accent) 70%, transparent);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  stroke-linecap: round;
+  animation-duration: 1s;
+}
 
 /* ------------------------------------------------------------------ notes */
 

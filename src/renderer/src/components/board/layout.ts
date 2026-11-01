@@ -30,6 +30,7 @@ export {
   STACK_W,
   cardSize,
   findFreeSpot,
+  findSpotBeside,
   intersects,
   isExpanded
 } from '@shared/geometry'

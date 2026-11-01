@@ -1,5 +1,5 @@
 import { memo, useCallback, useContext, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
-import { NodeResizer, type Node, type NodeProps, type OnResizeEnd } from '@xyflow/react'
+import { Handle, NodeResizer, Position, type Node, type NodeProps, type OnResizeEnd } from '@xyflow/react'
 import {
   LayoutDashboard,
   LoaderCircle,
@@ -274,6 +274,8 @@ function ViewNodeComponent({ id, data, selected, dragging }: NodeProps<ViewFlowN
           />
         )}
       </div>
+      {/* Where the line to a session its page started leaves from; LineageEdge picks the side. */}
+      <Handle type="source" position={Position.Right} isConnectable={false} className="card-handle" />
       <NodeResizer
         isVisible={selected && !renaming}
         minWidth={VIEW_MIN_W}

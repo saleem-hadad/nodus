@@ -75,6 +75,7 @@ export const IPC = {
   sessionCreate: 'session:create',
   sessionOpen: 'session:open',
   sessionWrite: 'session:write',
+  sessionSend: 'session:send',
   sessionResize: 'session:resize',
   sessionKill: 'session:kill',
   sessionTranscript: 'session:transcript',
@@ -209,6 +210,11 @@ export interface Api {
      */
     open(projectId: string, sessionId: string, cols: number, rows: number): Promise<OpenSessionResult>
     write(sessionId: string, data: string): void
+    /**
+     * Sends a prompt to a session as if typed and sent at its prompt, resuming
+     * it first if it isn't running. Rejects while it waits on a question.
+     */
+    send(projectId: string, sessionId: string, text: string): Promise<void>
     resize(sessionId: string, cols: number, rows: number): void
     kill(sessionId: string): Promise<void>
     transcript(projectId: string, sessionId: string): Promise<TranscriptMessage[]>

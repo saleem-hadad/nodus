@@ -12,6 +12,7 @@ import {
   STACK_W,
   cardSize,
   findFreeSpot,
+  intersects,
   type Point,
   type Size
 } from '@shared/geometry'
@@ -162,6 +163,22 @@ export function spotForNewSession(
     archive,
     size
   )
+}
+
+/**
+ * Where a session started from `sources` goes: centred below them, so the
+ * lines from them fan in. Never in the archive, where archived sources sit.
+ */
+export function spotBelow(sources: SessionCard[], archive: Rect, size: Size): Point {
+  const spot = {
+    x: sources.reduce((sum, c) => sum + c.x, 0) / sources.length,
+    y: Math.max(...sources.map((c) => c.y + cardSize(c).h)) + 96
+  }
+  if (!intersects(cardRect(spot, size), archive, GAP)) return spot
+  return {
+    x: archive.x + archive.w + 80,
+    y: Math.min(Math.max(spot.y, archive.y), archive.y + archive.h - size.h)
+  }
 }
 
 const MINUTE = 60_000

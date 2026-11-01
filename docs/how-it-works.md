@@ -97,17 +97,19 @@ Every Claude session started from the app gets an MCP server named `nodus`, thro
 
 The server lives in the session host, next to the hook server, and passes each request on to the app. So a session keeps its tools when you quit and reopen the app; while the app is closed, a tool call fails and says why. Every process gets the same config, and Claude Code fills in the host's port and token, and the session's id, from the process's environment, so the token never shows up in a process listing. Sessions started outside the app don't get the tools.
 
-## Voice prompts
+## The prompt bar
 
-The mic button sits above the minimap, in the board's bottom-right corner. Click it (or press **V**) and talk: it turns red and swells with your voice, beside a clock and a level meter. Click it again (or press **V**) to stop, or press Esc to throw the recording away. A click shorter than about half a second is ignored, and a recording stops by itself after five minutes.
+The prompt bar floats at the bottom of the board, with the mic beside it. Type what you want and press Return: a Claude session starts on it in auto mode, where Claude Code approves routine steps by itself and blocks risky ones, and it stays in auto mode when it resumes. Its card lands expanded in a free spot in view, so you can watch it work there, with your words stuck on it. If the session can't start, your words are left on the board as a note. Shift+Return starts a new line, and **/** on the board jumps into the bar.
 
-The recording goes to xAI's speech to text (`grok-voice-transcribe-2.0`), and what you said opens in a box for review. Edit it if you like, then press Enter (or **Start session**) to start a Claude session on it. Shift+Enter starts a new line, and Esc or **Discard** throws it away. **Keep talking** records more and adds it to the end. The session runs in auto mode, where Claude Code approves routine steps by itself and blocks risky ones, and it stays in auto mode when it resumes. Its card lands expanded in a free spot in view, so you can watch it work there, with your words stuck on it. It leaves the keyboard on the board, so **V** speaks the next prompt. If the session can't start, your words are left on the board as a note.
+Type **/** to make something else: `/view` puts up a view and `/note` a note. The command becomes a token at the start of the bar, and the bar then makes that. A note's token has a swatch for its colour. Backspace in an empty bar, or the token's ×, goes back to a session.
 
-You can also speak into a session that's already there. Select its card and press **V** (or click the mic): the mic says which session it's listening for, and what you said is typed at that session's prompt instead of opening the review box. Nothing is sent: finish it there and press Return yourself. An open session has its own mic in its title bar, in its window and on its expanded card, which does the same for that session. A session that isn't running resumes first, and your words go in once Claude is listening. Each one ends with a space, so you can keep talking into the same prompt.
+What's selected changes where it goes. With one session selected, the bar shows its name as a token, and Return sends what you typed into that session, as if typed at its prompt. A session that isn't running resumes with it, and while Claude is working it's queued. A session that's waiting on a question isn't sent anything, because Return would answer the question: its card opens for you to answer it first. The token's × starts a new session instead. With more than that selected (sessions, notes or views), the new session starts with them as context: each session's title, branch, last reply and the path of its transcript, each note's text and each view's description, ahead of your prompt. It's named for what you asked, and it starts below the sessions it read, with a line from each. The selection's own actions sit just above the bar.
+
+The mic beside the bar records a prompt (so does **V**): it turns red and swells with your voice, and the bar shows a clock and a level meter. Click it again (or press **V**) to stop, or press Esc to throw the recording away. A click shorter than about half a second is ignored, and a recording stops by itself after five minutes. The recording goes to xAI's speech to text (`grok-voice-transcribe-2.0`), and what you said lands in the bar for review, after anything already typed there. Speak again to add more, then press Return as for anything typed. An open session has its own mic in its title bar, in its window and on its expanded card. What you say there is typed at that session's prompt, not sent, ending with a space so you can keep talking.
 
 Each recording goes with up to 100 hint words, so code names come back spelled as in the repo: the project's name, its branch and the names of the files it has changed. If xAI can't transcribe a recording, it's kept, and **Retry** sends it again.
 
-The xAI API key comes from Settings or from `XAI_API_KEY` in your shell, and a saved one wins. Settings encrypts it with the macOS Keychain before it goes into `state.json`, and it never leaves the main process: the window only learns where the key comes from. With no key, the mic button opens Settings. The first recording asks macOS for the microphone. If you turned it down, the notice links to Privacy & Security › Microphone.
+The xAI API key comes from Settings or from `XAI_API_KEY` in your shell, and a saved one wins. Settings encrypts it with the macOS Keychain before it goes into `state.json`, and it never leaves the main process: the window only learns where the key comes from. With no key, the mic opens Settings. The first recording asks macOS for the microphone. If you turned it down, the notice links to Privacy & Security › Microphone.
 
 Audio leaves your machine only when you stop a recording, and goes to xAI alone. It counts toward your xAI usage.
 
@@ -172,9 +174,12 @@ The session host keeps its socket and log in the `host` folder next to it. Only 
 | | New note | Drag one off the pad under the archive · click the pad · right-click › New note here |
 | | Write in a note | Double-click it · Enter |
 | | Start a session from a note | Its ▶ button · right-click › Start session |
-| | Speak a prompt · stop | V · the mic button above the minimap |
-| | Start a session on what you said · discard it | Enter · Esc |
-| | Speak into a session, typed in but not sent | Select its card, then V · the mic in its title bar |
+| | Start a session on a prompt | Type in the bar at the bottom · / jumps into it · Return |
+| | Make a view or a note instead | /view · /note in the bar |
+| | Send a prompt into a session | Select its card, then type in the bar · Return |
+| | Start a session with the selection as context | Select several, then type in the bar · Return |
+| | Speak a prompt · stop | V · the mic beside the bar |
+| | Speak into an open session, typed in but not sent | The mic in its title bar |
 | | Delete the selected notes | ⌫ |
 | | New view | **View** in the title bar · right-click › New view here… |
 | | Use a view's page | Click it, then use it · double-click it to open it large |
@@ -221,12 +226,12 @@ src/
     notes.ts      notes sessions write: where they go on the board, and how big they are
     views.ts      views: their files, commands and schedules, their brains, and what their pages ask the board for
     viewPage.ts   the page a view's frame loads: its content security policy, theme and window.nodus
-    voice.ts      speech to text for the mic button through xAI, and the key it uses
+    voice.ts      speech to text for the mics through xAI, and the key it uses
     updater.ts    updates the app from GitHub releases: download, checks, and the swap on quit
     store.ts      state.json in the app's userData directory
   renderer/src/
     views/        ProjectsView (folders) and BoardView (canvas)
-    components/   title bar, folder icon, board cards, agent decks, sections, archive stack, notes and their pad, views and the relay to their frames, merge dialog, lineage edges, the mic button
+    components/   title bar, folder icon, board cards, agent decks, sections, archive stack, notes and their pad, views and the relay to their frames, merge dialog, lineage edges, the prompt bar and its mic
     terminal/     xterm.js registry, TerminalModal, TranscriptPreview, AgentViewer
 ```
 

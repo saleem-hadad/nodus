@@ -59,6 +59,7 @@ const api: Api = {
       ipcRenderer.invoke(IPC.sessionOpen, projectId, sessionId, cols, rows),
     // Keystrokes and resizes are fire-and-forget to keep typing latency low.
     write: (sessionId, data) => ipcRenderer.send(IPC.sessionWrite, sessionId, data),
+    send: (projectId, sessionId, text) => ipcRenderer.invoke(IPC.sessionSend, projectId, sessionId, text),
     resize: (sessionId, cols, rows) => ipcRenderer.send(IPC.sessionResize, sessionId, cols, rows),
     kill: (sessionId) => ipcRenderer.invoke(IPC.sessionKill, sessionId),
     transcript: (projectId, sessionId) =>

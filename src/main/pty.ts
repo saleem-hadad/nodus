@@ -423,6 +423,15 @@ export function write(sessionId: string, data: string) {
   send({ type: 'write', sessionId, data })
 }
 
+/**
+ * Sends a prompt to a running Claude session: typed in as a paste, so its
+ * lines don't send it early, then Return. While Claude works, it's queued.
+ */
+export function sendPrompt(sessionId: string, text: string) {
+  write(sessionId, `\x1b[200~${text}\x1b[201~`)
+  setTimeout(() => write(sessionId, '\r'), 200)
+}
+
 export function resize(sessionId: string, cols: number, rows: number) {
   if (!running.has(sessionId) || !Number.isFinite(cols) || !Number.isFinite(rows)) return
   send({ type: 'resize', sessionId, cols: Math.max(20, Math.floor(cols)), rows: Math.max(5, Math.floor(rows)) })

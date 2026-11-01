@@ -822,6 +822,32 @@ export async function registerIpc(getWindow: () => BrowserWindow | null, showWin
     ptys.write(sessionId, data)
   })
 
+  ipcMain.handle(IPC.sessionSend, async (_e, projectId: string, sessionId: string, text: string) => {
+    if (typeof text !== 'string' || !text.trim()) return
+    const node = getBoard(projectId).nodes[sessionId]
+    if (!node || node.archived || node.kind === 'terminal') throw new Error('That session is no longer on the board')
+    if (ptys.isLive(sessionId)) {
+      // Return would answer its question instead.
+      if (getStatus(sessionId) === 'waiting') throw new Error('It’s waiting for your answer. Open it to reply.')
+      claimRun(sessionId)
+      ptys.sendPrompt(sessionId, text.trim())
+      return
+    }
+    // Not running: it resumes with the prompt, the way it does when opened.
+    await envReady
+    const project = getProject(projectId)
+    await ptys.spawnSession({
+      sessionId,
+      projectId,
+      cwd: project.repoPath,
+      resume: hasTranscript(project, sessionId),
+      initialPrompt: text.trim(),
+      permissionMode: node.autoMode ? 'auto' : undefined,
+      extraArgs: node.viewOf ? views.brainArgs(projectId, node) : undefined
+    })
+    claimRun(sessionId)
+  })
+
   ipcMain.on(IPC.sessionResize, (_e, sessionId: string, cols: number, rows: number) => {
     ptys.resize(sessionId, cols, rows)
   })

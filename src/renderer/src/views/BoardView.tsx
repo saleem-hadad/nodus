@@ -144,12 +144,11 @@ import {
   STACK_DEPTH,
   STACK_ROWS,
   cardObstacles,
-  cardRect,
   containsPoint,
   findFreeSpot,
   findSpotBeside,
-  intersects,
   isInArchive,
+  spotBelow,
   spotForNewSession,
   spotRightOfArchive,
   stackRank,
@@ -163,9 +162,10 @@ import {
   type Size
 } from '@renderer/components/board/layout'
 import { wakeCardTerminal } from '@renderer/components/board/ExpandedCard'
-import { dispose as disposeTerminal, focus as focusTerminal, typeIn as typeInTerminal } from '@renderer/terminal/registry'
+import { dispose as disposeTerminal, focus as focusTerminal } from '@renderer/terminal/registry'
 import { ActionRail } from '@renderer/components/actions/ActionRail'
-import { VoicePrompt, type VoiceHandle } from '@renderer/components/voice/VoicePrompt'
+import { Sidekick, type SidekickHandle, type Submission } from '@renderer/components/sidekick/Sidekick'
+import { withContext, type ContextItem } from '@renderer/components/sidekick/compose'
 import { fuzzyMatch } from '@renderer/components/board/fuzzy'
 import '@renderer/components/board/board.css'
 
@@ -1239,64 +1239,6 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
     [projectId, upsertCard, patchCards, saveNote, ensureVisible, showToast]
   )
 
-  // ---- voice -----------------------------------------------------------------
-
-  const voiceRef = useRef<VoiceHandle>(null)
-
-  /**
-   * Starts a Claude session on a spoken prompt, in auto mode, in a free spot in
-   * view. The words stick to its card the way a started note's do; if the
-   * session can't start, they stay on the board as a note, so nothing said is lost.
-   */
-  const startSpokenPrompt = useCallback(
-    async (text: string) => {
-      const el = wrapperRef.current
-      const { x, y, zoom } = rf.getViewport()
-      // It gets on with it expanded on the board, never opening in its window.
-      // It doesn't take the keyboard, so V speaks the next one.
-      const size = NEW_CARD_SIZE
-      const centre = el
-        ? { x: (el.clientWidth / 2 - x) / zoom - size.w / 2, y: (el.clientHeight / 2 - y) / zoom - size.h / 2 }
-        : { x: 0, y: 0 }
-      const spot = findFreeSpot(centre, [...cardObstacles(cardsRef.current), ...notesInTheWay()], dockRef.current, size)
-      const pos = { x: Math.round(spot.x), y: Math.round(spot.y) }
-      const joins = sectionAt(pos, groupsRef.current)
-      const note: BoardNote = { id: crypto.randomUUID(), text, color: NOTE_COLOR, ...pos, createdAt: Date.now() }
-      try {
-        const card = await window.api.sessions.create(projectId, {
-          ...pos,
-          initialPrompt: text,
-          expanded: true,
-          autoMode: true
-        })
-        upsertCard(card)
-        if (joins) patchCards([{ sessionId: card.sessionId, sectionId: joins }])
-        saveNote({ ...note, sessionId: card.sessionId })
-        ensureVisible(pos, size)
-      } catch (err) {
-        saveNote(note)
-        ensureVisible(pos, NOTE_SIZE)
-        showToast(`Couldn't start a session, so your prompt is on a note: ${err instanceof Error ? err.message : String(err)}`)
-      }
-    },
-    [projectId, rf, upsertCard, patchCards, saveNote, ensureVisible, showToast]
-  )
-
-  /**
-   * Types spoken words at a session's prompt without sending them, and shows
-   * the session to finish them there. False if it's no longer on the board.
-   */
-  const typeSpokenPrompt = useCallback(
-    (sessionId: string, text: string) => {
-      const card = cardsRef.current.find((c) => c.sessionId === sessionId)
-      if (!card || card.archived) return false
-      typeInTerminal(sessionId, text, { starting: !card.live })
-      openCard(sessionId)
-      return true
-    },
-    [openCard]
-  )
-
   // ---- views -----------------------------------------------------------------
 
   /** The middle of what's on screen, for something of `size`. */
@@ -1515,21 +1457,8 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
       const zone = dockRef.current
       const sourceIds = new Set((merge ?? []).map((s) => s.sessionId))
       const sourceCards = all.filter((c) => sourceIds.has(c.sessionId))
-      // The merged card sits centered below its parents so lineage edges fan in.
-      let preferred: Point =
-        sourceCards.length > 0
-          ? {
-              x: sourceCards.reduce((sum, c) => sum + c.x, 0) / sourceCards.length,
-              y: Math.max(...sourceCards.map((c) => c.y + cardSize(c).h)) + 96
-            }
-          : spotForNewSession(zone, all, size, notesInTheWay())
-      // Merged sessions are active: never start them inside the archive (or on the note pad).
-      if (intersects(cardRect(preferred, size), zone, GAP)) {
-        preferred = {
-          x: zone.x + zone.w + 80,
-          y: Math.min(Math.max(preferred.y, zone.y), zone.y + zone.h - size.h)
-        }
-      }
+      const preferred =
+        sourceCards.length > 0 ? spotBelow(sourceCards, zone, size) : spotForNewSession(zone, all, size, notesInTheWay())
       const spot = findFreeSpot(preferred, [...cardObstacles(all), ...notesInTheWay()], zone, size)
       const pos = { x: Math.round(spot.x), y: Math.round(spot.y) }
 
@@ -1547,6 +1476,131 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
       openTerminal(card.sessionId)
     },
     [merge, projectId, upsertCard, clearSelection, ensureVisible, openTerminal]
+  )
+
+  // ---- the sidekick bar ------------------------------------------------------
+
+  const sidekickRef = useRef<SidekickHandle>(null)
+
+  /**
+   * Starts a Claude session on a prompt from the bar, in auto mode. What's
+   * selected goes to it as context, and it starts below those sessions with a
+   * line from each; otherwise in a free spot in view. The words stick to its
+   * card the way a started note's do; if it can't start, they stay on the
+   * board as a note, so nothing typed or said is lost.
+   */
+  const startBarSession = useCallback(
+    async (text: string) => {
+      const cardIds = selectedIds()
+      const noteIds = selectedNoteIds()
+      const viewIds = selectedViewIds()
+      const sources = cardsRef.current.filter((c) => cardIds.includes(c.sessionId) && !isTerminal(c))
+      const context: ContextItem[] = [
+        ...sources.map((c) => ({
+          kind: 'session' as const,
+          title: cardTitle(c),
+          branch: c.meta?.gitBranch,
+          lastReply: c.meta?.lastAssistantText,
+          transcript: c.meta?.transcriptPath
+        })),
+        ...notesRef.current
+          .filter((n) => noteIds.includes(n.id) && n.text.trim())
+          .map((n) => ({ kind: 'note' as const, text: n.text })),
+        ...viewsRef.current
+          .filter((v) => viewIds.includes(v.id))
+          .map((v) => ({ kind: 'view' as const, title: v.title, description: v.description }))
+      ]
+      // It gets on with it expanded on the board, never opening in its window,
+      // and doesn't take the keyboard.
+      const size = NEW_CARD_SIZE
+      const zone = dockRef.current
+      const preferred = sources.length > 0 ? spotBelow(sources, zone, size) : viewportCentre(size)
+      const spot = findFreeSpot(preferred, [...cardObstacles(cardsRef.current), ...notesInTheWay()], zone, size)
+      const pos = { x: Math.round(spot.x), y: Math.round(spot.y) }
+      const joins = sectionAt(pos, groupsRef.current)
+      const note: BoardNote = { id: crypto.randomUUID(), text, color: NOTE_COLOR, ...pos, createdAt: Date.now() }
+      try {
+        const card = await window.api.sessions.create(projectId, {
+          ...pos,
+          initialPrompt: withContext(context, text),
+          parents: sources.length > 0 ? sources.map((c) => c.sessionId) : undefined,
+          // Its prompt opens with the context, so it's named for what was asked.
+          name: context.length > 0 ? truncate(text.split('\n')[0], 64) : undefined,
+          expanded: true,
+          autoMode: true
+        })
+        upsertCard(card)
+        if (joins) patchCards([{ sessionId: card.sessionId, sectionId: joins }])
+        saveNote({ ...note, sessionId: card.sessionId })
+        if (context.length > 0) clearSelection()
+        ensureVisible(pos, size)
+      } catch (err) {
+        saveNote(note)
+        ensureVisible(pos, NOTE_SIZE)
+        showToast(`Couldn't start a session, so your prompt is on a note: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    },
+    [projectId, viewportCentre, upsertCard, patchCards, saveNote, clearSelection, ensureVisible, showToast]
+  )
+
+  /** Sends a prompt into a session on the board, which shows it getting on with it. */
+  const sendToSession = useCallback(
+    async (sessionId: string, text: string) => {
+      const card = cardsRef.current.find((c) => c.sessionId === sessionId)
+      if (!card || card.archived) {
+        showToast('That session is no longer on the board.')
+        return false
+      }
+      // Return would answer its question, so it's shown for that instead.
+      if (card.status === 'waiting') {
+        showToast(`“${cardTitle(card)}” is waiting for your answer. Answer it, then send this.`)
+        openCard(sessionId)
+        return false
+      }
+      try {
+        await window.api.sessions.send(projectId, sessionId, text)
+      } catch (err) {
+        showToast(`Couldn't send it: ${err instanceof Error ? err.message : String(err)}`)
+        return false
+      }
+      ensureVisible(card, cardSize(card))
+      return true
+    },
+    [projectId, openCard, ensureVisible, showToast]
+  )
+
+  const submitFromBar = useCallback(
+    async (submission: Submission): Promise<boolean> => {
+      switch (submission.kind) {
+        case 'session':
+          await startBarSession(submission.text)
+          return true
+        case 'into':
+          return sendToSession(submission.sessionId, submission.text)
+        case 'view':
+          try {
+            await createView(submission.text)
+            return true
+          } catch (err) {
+            showToast(`Couldn't create the view: ${err instanceof Error ? err.message : String(err)}`)
+            return false
+          }
+        case 'note':
+          break
+      }
+      const spot = freeNoteSpot(viewportCentre(NOTE_SIZE))
+      saveNote({
+        id: crypto.randomUUID(),
+        text: submission.text,
+        color: submission.color,
+        x: Math.round(spot.x),
+        y: Math.round(spot.y),
+        createdAt: Date.now()
+      })
+      ensureVisible(spot, NOTE_SIZE)
+      return true
+    },
+    [startBarSession, sendToSession, createView, freeNoteSpot, viewportCentre, saveNote, ensureVisible, showToast]
   )
 
   const actions = useMemo<BoardActions>(
@@ -2333,7 +2387,11 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
         fns.createTerminal()
       } else if (e.key.toLowerCase() === 'v' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.repeat) {
         e.preventDefault()
-        voiceRef.current?.toggle()
+        sidekickRef.current?.toggleVoice()
+      } else if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        // Straight into the bar, with its menu of what else it makes.
+        e.preventDefault()
+        sidekickRef.current?.focus('/')
       } else if (e.key.toLowerCase() === 'e' && !e.metaKey && !e.ctrlKey && !e.altKey) {
         // Expands the selected cards, or collapses them when they all are already.
         const active = cardsRef.current.filter((c) => sel.includes(c.sessionId) && !c.archived)
@@ -2368,9 +2426,21 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
   const activeCount = cards.filter((c) => !c.archived).length
   const searchable = useMemo(() => cards.filter((c) => !isTerminal(c)), [cards])
   const selectedCards = cards.filter((c) => selection.includes(c.sessionId))
-  // With one Claude session selected, the mic speaks into it rather than starting another.
-  const spokenInto =
-    selectedCards.length === 1 && !selectedCards[0].archived && !isTerminal(selectedCards[0]) ? selectedCards[0] : null
+  const selectedNotes = nodes.filter(
+    (n): n is NoteFlowNode => n.type === 'note' && Boolean(n.selected) && Boolean(n.data.note.text.trim())
+  ).length
+  const selectedViews = nodes.filter((n) => n.type === 'view' && n.selected).length
+  // With one Claude session selected, and nothing else, the bar sends into it.
+  const sendInto =
+    selectedCards.length === 1 &&
+    !selectedNotes &&
+    !selectedViews &&
+    !selectedCards[0].archived &&
+    !isTerminal(selectedCards[0])
+      ? selectedCards[0]
+      : null
+  // Otherwise, or when the bar is told not to, what's selected goes to a new session as context.
+  const contextCount = selectedCards.filter((c) => !isTerminal(c)).length + selectedNotes + selectedViews
 
   return (
     <BoardActionsContext.Provider value={actions}>
@@ -2491,40 +2561,43 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
                     <div className="board-hint" aria-hidden>
                       <p className="board-hint-title">No active sessions</p>
                       <p className="board-hint-body">
-                        Double-click anywhere or press <kbd>N</kbd> to start a Claude session, <kbd>V</kbd> to
-                        speak one, or <kbd>T</kbd> for a terminal. Drag cards out of the archive to reactivate them.
+                        Type in the bar below, double-click anywhere or press <kbd>N</kbd> to start a Claude
+                        session, <kbd>V</kbd> to speak one, or <kbd>T</kbd> for a terminal. Drag cards out of the
+                        archive to reactivate them.
                       </p>
                     </div>
                   )}
 
                   <ActionRail onRun={runAction} onOverlayChange={setDockOverlay} />
 
-                  <VoicePrompt
-                    ref={voiceRef}
+                  <Sidekick
+                    ref={sidekickRef}
                     projectId={projectId}
-                    target={spokenInto && { sessionId: spokenInto.sessionId, title: cardTitle(spokenInto) }}
-                    onStart={(text) => void startSpokenPrompt(text)}
-                    onTypeIn={typeSpokenPrompt}
+                    into={sendInto && { sessionId: sendInto.sessionId, title: cardTitle(sendInto) }}
+                    contextCount={contextCount}
+                    onSubmit={submitFromBar}
+                    above={
+                      <>
+                        {toast && (
+                          <div className="board-toast" role="status">
+                            {toast}
+                          </div>
+                        )}
+                        {selectedCards.length > 0 && !merge && (
+                          <SelectionBar
+                            count={selectedCards.length}
+                            sessionCount={selectedCards.filter((c) => !isTerminal(c)).length}
+                            activeCount={selectedCards.filter((c) => !c.archived && !isTerminal(c)).length}
+                            groupCount={selectedCards.filter((c) => !c.archived).length}
+                            onMerge={() => startMerge(selectedCards.map((c) => c.sessionId))}
+                            onGroup={() => groupCards(selectedCards.map((c) => c.sessionId))}
+                            onArchive={() => archiveCards(selectedCards.map((c) => c.sessionId))}
+                            onClear={clearSelection}
+                          />
+                        )}
+                      </>
+                    }
                   />
-
-                  {selectedCards.length > 0 && !merge && (
-                    <SelectionBar
-                      count={selectedCards.length}
-                      sessionCount={selectedCards.filter((c) => !isTerminal(c)).length}
-                      activeCount={selectedCards.filter((c) => !c.archived && !isTerminal(c)).length}
-                      groupCount={selectedCards.filter((c) => !c.archived).length}
-                      onMerge={() => startMerge(selectedCards.map((c) => c.sessionId))}
-                      onGroup={() => groupCards(selectedCards.map((c) => c.sessionId))}
-                      onArchive={() => archiveCards(selectedCards.map((c) => c.sessionId))}
-                      onClear={clearSelection}
-                    />
-                  )}
-
-                  {toast && (
-                    <div className="board-toast" role="status">
-                      {toast}
-                    </div>
-                  )}
                 </div>
               </ArchiveStackContext.Provider>
 

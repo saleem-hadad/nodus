@@ -1,75 +1,14 @@
-/* ───────────── Voice prompts: the mic button above the minimap, bottom right ───────────── */
+/* ───────────── Voice: what the sidekick's orb and a session's mic both show ───────────── */
 
-.voice {
-  position: absolute;
-  z-index: 6;
-  right: 16px;
-  /* Clears the minimap: 118px tall, 16px off the bottom. */
-  bottom: calc(16px + 118px + 12px);
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  pointer-events: none;
-}
-.voice > * {
-  pointer-events: auto;
-}
-
-.voice-dock {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.voice-button {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 53px;
-  height: 53px;
-  border: 0;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--bg-elevated) 86%, transparent);
-  backdrop-filter: blur(20px) saturate(1.6);
-  box-shadow: var(--shadow-md);
-  color: var(--text-secondary);
-  cursor: default;
-  transition:
-    background var(--dur-fast) ease,
-    color var(--dur-fast) ease,
-    transform var(--dur-fast) ease;
-}
-.voice-button:hover {
-  color: var(--text-primary);
-}
-.voice-button:active {
-  transform: scale(0.94);
-}
-.voice-button:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-}
-.voice-button.is-recording {
-  background: var(--status-waiting);
-  color: #fff;
-  /* A halo that swells with the voice (--level is set while recording). */
-  box-shadow:
-    0 0 0 calc(3.6px + var(--level, 0) * 14.4px) color-mix(in srgb, var(--status-waiting) 20%, transparent),
-    var(--shadow-md);
-  transition:
-    background var(--dur-fast) ease,
-    transform var(--dur-fast) ease,
-    box-shadow 80ms linear;
-}
-
-/* The pill beside the button: listening, transcribing, or something to tell. */
-.voice-pill,
-.voice-dock .voice-notice,
+/* Something to tell: what went wrong, and what can be done about it. */
+.sidekick .voice-notice,
 .session-mic .voice-notice {
   display: flex;
   align-items: center;
   gap: 8px;
+  max-width: 440px;
   min-height: 36px;
+  padding: 6px 6px 6px 12px;
   border-radius: 18px;
   background: color-mix(in srgb, var(--bg-elevated) 86%, transparent);
   backdrop-filter: blur(20px) saturate(1.6);
@@ -77,32 +16,6 @@
   font-size: var(--text-sm);
   transform-origin: right center;
   animation: voice-pill-in var(--dur-med) var(--ease-out);
-}
-.voice-pill {
-  padding: 0 6px 0 14px;
-}
-.voice-dock .voice-notice,
-.session-mic .voice-notice {
-  max-width: 440px;
-  padding: 6px 6px 6px 12px;
-}
-
-/* The session a recording is typed into, when one is selected. */
-.voice-into {
-  display: inline-flex;
-  min-width: 0;
-  gap: 4px;
-  padding-left: 8px;
-  border-left: 0.5px solid var(--separator);
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-.voice-into-title {
-  max-width: 200px;
-  overflow: hidden;
-  color: var(--text-primary);
-  font-weight: 500;
-  text-overflow: ellipsis;
 }
 @keyframes voice-pill-in {
   from {
@@ -188,105 +101,6 @@
   height: 24px;
   padding: 0 8px;
   font-size: var(--text-sm);
-}
-
-/* ───────────── Reviewing what was said ───────────── */
-
-.voice-review {
-  display: flex;
-  flex-direction: column;
-  width: 400px;
-  max-width: calc(100vw - 32px);
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
-  backdrop-filter: blur(24px) saturate(1.6);
-  box-shadow: var(--shadow-lg);
-  /* Grows out of the button it replaces. */
-  transform-origin: bottom right;
-  animation: voice-review-in var(--dur-med) var(--ease-out);
-}
-@keyframes voice-review-in {
-  from {
-    opacity: 0;
-    transform: scale(0.9);
-  }
-}
-
-.voice-text {
-  field-sizing: content;
-  min-height: calc(3lh + 20px);
-  max-height: 40vh;
-  padding: 14px 16px 6px;
-  border: 0;
-  outline: none;
-  resize: none;
-  background: transparent;
-  color: var(--text-primary);
-  font: inherit;
-  font-size: var(--text-md);
-  line-height: 1.5;
-}
-.voice-text::placeholder {
-  color: var(--text-tertiary);
-}
-.voice-text[readonly] {
-  color: var(--text-secondary);
-}
-
-.voice-review .voice-notice {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 4px 10px 0;
-  padding: 6px 4px 6px 10px;
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--status-waiting) 9%, transparent);
-  font-size: var(--text-sm);
-}
-
-.voice-review-foot {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 48px;
-  padding: 0 10px;
-}
-.voice-spacer {
-  flex: 1;
-}
-
-.voice-more.btn {
-  padding: 0 8px;
-  color: var(--text-secondary);
-}
-.voice-more.btn:hover {
-  color: var(--text-primary);
-}
-
-/* Stop, while saying more from the review box. */
-.voice-stop {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  margin-left: 2px;
-  border: 0;
-  border-radius: 50%;
-  background: var(--status-waiting);
-  color: #fff;
-  box-shadow: 0 0 0 calc(2px + var(--level, 0) * 6px) color-mix(in srgb, var(--status-waiting) 20%, transparent);
-  cursor: default;
-  transition: box-shadow 80ms linear;
-}
-/* The stop button already says it's listening. */
-.voice-review .voice-rec-dot {
-  display: none;
-}
-
-.voice-key {
-  opacity: 0.75;
-  font-size: var(--text-xs);
 }
 
 /* ───────────── The mic in an open session's title bar ───────────── */

@@ -24,6 +24,7 @@ import type {
   ProjectStats,
   Rect,
   SessionCard,
+  SessionSearchHit,
   SummarizeProgress,
   SummaryResult,
   ViewPatch,
@@ -74,6 +75,7 @@ import {
   save
 } from './store'
 import { summarizeSessions } from './summarize'
+import { searchSessions } from './search'
 import * as updater from './updater'
 import * as views from './views'
 import * as voice from './voice'
@@ -828,7 +830,7 @@ export async function registerIpc(getWindow: () => BrowserWindow | null) {
 
   ipcMain.handle(
     IPC.sessionSummarize,
-    async (_e, projectId: string, sessionIds: string[], requestId: string): Promise<SummaryResult[]> => {
+    async (_e, projectId: string, sessionIds: string[], requestId: string, focus?: string): Promise<SummaryResult[]> => {
       await envReady
       const project = getProject(projectId)
       const board = getBoard(projectId)
@@ -849,11 +851,24 @@ export async function registerIpc(getWindow: () => BrowserWindow | null) {
         }
       }
 
-      const summaries = await summarizeSessions(project.repoPath, withTranscript, requestId, progress)
+      const topic = typeof focus === 'string' ? focus : undefined
+      const summaries = await summarizeSessions(project.repoPath, withTranscript, requestId, progress, topic)
       for (const r of summaries) results.set(r.sessionId, r)
       return sessionIds.map((id) => results.get(id)!)
     }
   )
+
+  ipcMain.handle(IPC.sessionSearch, (_e, projectId: string, query: string): Promise<SessionSearchHit[]> => {
+    const project = getProject(projectId)
+    // The sessions drawn on the board, live and archived.
+    const targets = Object.values(getBoard(projectId).nodes)
+      .filter((n) => n.kind !== 'terminal' && !n.runOf && !n.viewOf)
+      .map((n) => ({
+        sessionId: n.sessionId,
+        title: n.title || readSession(n.sessionId, transcriptPath(project.repoPath, n.sessionId))?.meta.title || ''
+      }))
+    return searchSessions(project.repoPath, targets, String(query ?? ''))
+  })
 }
 
 /** Sessions keep running in the session host; the app just lets go of them. */

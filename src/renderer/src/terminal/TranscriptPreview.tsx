@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ArchiveRestore, X } from 'lucide-react'
+import { Highlight } from '@renderer/components/Highlight'
 import { Modal } from '@renderer/components/Modal'
-import { cardTitle, useApp, useCard } from '@renderer/store'
+import { cardTitle, useApp, useCard, type PreviewFind } from '@renderer/store'
 import { STACK_ROWS, stackZone } from '@renderer/components/board/layout'
-import type { BoardSnapshot, ToolCall, TranscriptMessage } from '@shared/types'
+import type { BoardSnapshot, SearchSnippet, ToolCall, TranscriptMessage } from '@shared/types'
+import { matchRanges, queryTerms } from '@shared/search'
 import './terminal.css'
 
 const CARD_W = 288
@@ -37,6 +39,8 @@ type Load =
 function PreviewPanel({ sessionId, projectId }: { sessionId: string; projectId: string }) {
   const card = useCard(sessionId)
   const closePreview = useApp((s) => s.closePreview)
+  const find = useApp((s) => s.previewFind)
+  const terms = useMemo(() => queryTerms(find?.query ?? ''), [find])
   const [load, setLoad] = useState<Load>({ state: 'loading' })
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -56,12 +60,16 @@ function PreviewPanel({ sessionId, projectId }: { sessionId: string; projectId: 
 
   useEffect(fetchTranscript, [fetchTranscript])
 
-  // Most recent messages first in view: start scrolled to the bottom.
+  const found = useMemo(() => (load.state === 'ready' && find ? foundIndex(load.messages, find, terms) : -1), [load, find, terms])
+
+  // Opened from a search, the match is in view; otherwise the latest messages are.
   useLayoutEffect(() => {
-    if (load.state === 'ready' && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [load])
+    if (load.state !== 'ready' || !scrollRef.current) return
+    const target = found >= 0 && scrollRef.current.querySelector<HTMLElement>(`[data-index="${found}"]`)
+    // A long turn is centred on its first marked word, not its middle.
+    if (target) (target.querySelector('mark') ?? target).scrollIntoView({ block: 'center' })
+    else scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+  }, [load, found])
 
   const restore = () => {
     const { board, patchCards, closePreview, openTerminal } = useApp.getState()
@@ -125,7 +133,14 @@ function PreviewPanel({ sessionId, projectId }: { sessionId: string; projectId: 
         {load.state === 'ready' && load.messages.length > 0 && (
           <ol className="tp-list">
             {load.messages.map((m, i) => (
-              <Message key={i} message={m} />
+              <Message
+                key={i}
+                index={i}
+                message={m}
+                highlight={terms}
+                found={i === found}
+                foundCall={i === found && find?.snippet?.kind === 'tool' ? find.snippet : undefined}
+              />
             ))}
           </ol>
         )}
@@ -137,15 +152,56 @@ function PreviewPanel({ sessionId, projectId }: { sessionId: string; projectId: 
 const COLLAPSE_LINES = 12
 const COLLAPSE_CHARS = 1200
 
-/** One message of a transcript. `author` names who said it, when that isn't you and Claude. */
-export function Message({ message, author }: { message: TranscriptMessage; author?: string }) {
+/**
+ * The message a search led to: the turn the best match happened in, or the
+ * first that says the words.
+ */
+function foundIndex(messages: TranscriptMessage[], find: PreviewFind, terms: string[]): number {
+  const at = find.snippet?.timestamp
+  if (at) {
+    let turn = -1
+    messages.forEach((m, i) => {
+      if (m.timestamp > 0 && m.timestamp <= at) turn = i
+    })
+    if (turn >= 0) return turn
+  }
+  return messages.findIndex((m) => matchRanges(m.text, terms).length > 0)
+}
+
+/**
+ * One message of a transcript. `author` names who said it, when that isn't
+ * you and Claude. `highlight` marks a search's words, and `found` is the
+ * message the search led to; `foundCall` is the tool call in it that matched,
+ * which the transcript otherwise shows only by name.
+ */
+export function Message({
+  message,
+  author,
+  index,
+  highlight,
+  found,
+  foundCall
+}: {
+  message: TranscriptMessage
+  author?: string
+  index?: number
+  highlight?: string[]
+  found?: boolean
+  foundCall?: SearchSnippet
+}) {
   const text = message.text.trim()
   const long = text.split('\n').length > COLLAPSE_LINES || text.length > COLLAPSE_CHARS
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(Boolean(found))
   const isUser = message.role === 'user'
+  const ranges = useMemo(() => (highlight?.length ? matchRanges(text, highlight) : []), [text, highlight])
 
   return (
-    <li className="tp-msg" data-role={message.role} data-notice={message.notice || undefined}>
+    <li
+      className={found ? 'tp-msg is-found' : 'tp-msg'}
+      data-index={index}
+      data-role={message.role}
+      data-notice={message.notice || undefined}
+    >
       <div className="tp-msg-meta">
         <span className="tp-msg-author">{author ?? (isUser ? 'You' : 'Claude')}</span>
         {message.timestamp > 0 && <time>{formatTime(message.timestamp)}</time>}
@@ -153,13 +209,26 @@ export function Message({ message, author }: { message: TranscriptMessage; autho
       {text && (
         <div className="tp-msg-content">
           <div className={long && !expanded ? 'tp-text is-collapsed' : 'tp-text'}>
-            <div className="selectable">{text}</div>
+            <div className="selectable">
+              <Highlight text={text} ranges={ranges} />
+            </div>
           </div>
           {long && (
             <button className="tp-more" onClick={() => setExpanded((v) => !v)}>
               {expanded ? 'Show less' : 'Show more'}
             </button>
           )}
+        </div>
+      )}
+      {foundCall && (
+        <div className="tp-found-call">
+          <span className="tp-call-name">
+            {foundCall.agent ? `Agent · ${foundCall.tool}` : foundCall.tool}
+            {foundCall.file && <span className="tp-found-file">{foundCall.file}</span>}
+          </span>
+          <span className="tp-call-detail selectable">
+            <Highlight text={foundCall.text} ranges={foundCall.ranges} />
+          </span>
         </div>
       )}
       {message.calls ? (

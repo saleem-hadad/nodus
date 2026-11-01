@@ -147,7 +147,7 @@ function promptSummary(text: string) {
 }
 
 /** Prompt text for the transcript preview: pasted content is kept, its tags dropped. */
-function promptFull(text: string) {
+export function promptFull(text: string) {
   return text.replace(PASTED_TAG, '').trim()
 }
 
@@ -161,7 +161,7 @@ export function truncate(text: string, max: number) {
  * In an agent's transcript the prompts come from the session rather than a
  * person, so `anyOrigin` keeps them.
  */
-function userText(line: Json, anyOrigin = false): UserText | null {
+export function userText(line: Json, anyOrigin = false): UserText | null {
   if (line.isMeta || line.isCompactSummary || line.isVisibleInTranscriptOnly) return null
   const origin = line.origin?.kind
   if (origin && origin !== 'human' && !anyOrigin) return null
@@ -222,7 +222,7 @@ export function assistantParts(line: Json): AssistantParts {
 }
 
 /** MCP tools are named mcp__<server>__<tool>; the tool's own name reads best. */
-function toolName(name: string) {
+export function toolName(name: string) {
   return name.startsWith('mcp__') ? name.slice(name.lastIndexOf('__') + 2) || name : name
 }
 
@@ -260,7 +260,9 @@ export function readLines(
   start: number,
   end: number,
   skipFirstPartial: boolean,
-  onLine: (line: Json) => void
+  onLine: (line: Json) => void,
+  /** Skips lines before parsing them, for a reader that wants only some. */
+  keep?: (raw: string) => boolean
 ): number {
   const length = end - start
   if (length <= 0) return start
@@ -281,7 +283,7 @@ export function readLines(
   if (lastNl < from) return start + from
   const text = buf.toString('utf8', from, lastNl)
   for (const raw of text.split('\n')) {
-    if (!raw) continue
+    if (!raw || (keep && !keep(raw))) continue
     try {
       onLine(JSON.parse(raw))
     } catch {

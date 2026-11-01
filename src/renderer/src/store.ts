@@ -14,6 +14,7 @@ import type {
   ProjectStats,
   Rect,
   GitStatus,
+  SearchSnippet,
   SessionCard,
   SessionStatus,
   SessionUsage,
@@ -22,6 +23,12 @@ import type {
 import { dispose as disposeTerminal } from './terminal/registry'
 
 export type Route = { view: 'projects' } | { view: 'board'; projectId: string }
+
+export interface PreviewFind {
+  query: string
+  /** The best match, whose time picks the turn to scroll to. */
+  snippet?: SearchSnippet
+}
 
 interface AppState {
   route: Route
@@ -43,6 +50,8 @@ interface AppState {
   terminalSessionId: string | null
   /** Archived session whose read-only transcript preview is open. */
   previewSessionId: string | null
+  /** What the preview was opened from a search for: it scrolls to the match and marks the words. */
+  previewFind: PreviewFind | null
   /** Session whose agents viewer is open, and the agent it shows (its latest, when unset). */
   agentView: { sessionId: string; agentId?: string } | null
   /** Session ids currently selected on the board. */
@@ -86,7 +95,7 @@ interface AppState {
 
   openTerminal(sessionId: string): void
   closeTerminal(): void
-  openPreview(sessionId: string): void
+  openPreview(sessionId: string, find?: PreviewFind): void
   closePreview(): void
   openAgents(sessionId: string, agentId?: string): void
   closeAgents(): void
@@ -112,6 +121,7 @@ export const useApp = create<AppState>((set, get) => ({
   diffOpen: false,
   terminalSessionId: null,
   previewSessionId: null,
+  previewFind: null,
   agentView: null,
   selection: [],
   settingsOpen: false,
@@ -382,7 +392,7 @@ export const useApp = create<AppState>((set, get) => ({
 
   openTerminal: (sessionId) => set({ terminalSessionId: sessionId, previewSessionId: null }),
   closeTerminal: () => set({ terminalSessionId: null }),
-  openPreview: (sessionId) => set({ previewSessionId: sessionId, terminalSessionId: null }),
+  openPreview: (sessionId, find) => set({ previewSessionId: sessionId, previewFind: find ?? null, terminalSessionId: null }),
   closePreview: () => set({ previewSessionId: null }),
   openAgents: (sessionId, agentId) => set({ agentView: { sessionId, agentId } }),
   closeAgents: () => set({ agentView: null }),

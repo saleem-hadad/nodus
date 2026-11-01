@@ -29,6 +29,7 @@ import type {
   SessionCard,
   SessionStatus,
   SessionUsage,
+  SessionSearchHit,
   SummarizeProgress,
   SummaryResult,
   TranscribeResult,
@@ -76,6 +77,7 @@ export const IPC = {
   sessionKill: 'session:kill',
   sessionTranscript: 'session:transcript',
   sessionSummarize: 'session:summarize',
+  sessionSearch: 'session:search',
   sessionAgents: 'session:agents',
   sessionAgentTranscript: 'session:agent-transcript',
 
@@ -130,7 +132,7 @@ export const IPC = {
  * - new-project:  Cmd+Shift+N — add a project folder
  * - settings:     Cmd+, — open the Settings window
  */
-export type MenuCommand = 'close' | 'new-session' | 'new-terminal' | 'new-project' | 'settings'
+export type MenuCommand = 'close' | 'new-session' | 'new-terminal' | 'new-project' | 'settings' | 'search'
 
 export type Unsubscribe = () => void
 
@@ -205,8 +207,13 @@ export interface Api {
     resize(sessionId: string, cols: number, rows: number): void
     kill(sessionId: string): Promise<void>
     transcript(projectId: string, sessionId: string): Promise<TranscriptMessage[]>
-    /** Asks a forked, non-persisted copy of each session to summarize itself. */
-    summarize(projectId: string, sessionIds: string[], requestId: string): Promise<SummaryResult[]>
+    /**
+     * Asks a forked, non-persisted copy of each session to summarize itself:
+     * all its work, or just what it did about `focus`.
+     */
+    summarize(projectId: string, sessionIds: string[], requestId: string, focus?: string): Promise<SummaryResult[]>
+    /** The board's sessions whose transcripts match the query, best first. */
+    search(projectId: string, query: string): Promise<SessionSearchHit[]>
     /** Every subagent the session has started, oldest first. */
     agents(projectId: string, sessionId: string): Promise<AgentInfo[]>
     /** A subagent's transcript, with what each of its tool calls acted on. */

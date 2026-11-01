@@ -81,7 +81,15 @@ export function installMenu(send: (command: MenuCommand) => void) {
         { role: 'paste' },
         { role: 'pasteAndMatchStyle' },
         { role: 'delete' },
-        { role: 'selectAll' }
+        { role: 'selectAll' },
+        { type: 'separator' },
+        // The board takes ⌘K itself, so a focused terminal can keep it for clearing.
+        {
+          label: 'Search Sessions…',
+          accelerator: 'CmdOrCtrl+K',
+          registerAccelerator: false,
+          click: () => send('search')
+        }
       ]
     },
     {

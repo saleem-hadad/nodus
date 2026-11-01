@@ -21,12 +21,30 @@ Cover, under short markdown headings:
 
 Answer from the conversation alone: do not call tools, run commands, or change files. Leave out environment notices that are not part of the work (for example connector or MCP authorization messages). Be concise but complete, and prefer specifics (paths, names, commands) over generalities. Output only the summary, with no preamble.`
 
+/**
+ * A handoff of just the part of a session about `focus`, for a session
+ * started from search results.
+ */
+export function focusedSummaryPrompt(focus: string) {
+  const topic = JSON.stringify(focus.trim().replace(/\s+/g, ' '))
+  return `Write a handoff summary of what this session did about ${topic}, so that a NEW Claude Code session, with no access to this conversation, can pick up that work.
+
+Cover only what relates to ${topic}, under short markdown headings:
+- What was asked: what the user wanted done about it.
+- Key decisions: what was decided and why, including approaches that were rejected.
+- Current state: files created or changed (with paths), what works, and what was verified.
+- Open issues and next steps: unfinished work and known bugs.
+- Gotchas: commands, conventions, or pitfalls discovered along the way.
+
+If the session only touched on it in passing, say so in a sentence or two instead. Answer from the conversation alone: do not call tools, run commands, or change files. Be concise, and prefer specifics (paths, names, commands) over generalities. Output only the summary, with no preamble.`
+}
+
 export interface SummarizeTarget {
   sessionId: string
   title: string
 }
 
-function summarizeOne(claude: string, cwd: string, sessionId: string): Promise<string> {
+function summarizeOne(claude: string, cwd: string, sessionId: string, prompt: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const args = [
       '-p',
@@ -36,7 +54,7 @@ function summarizeOne(claude: string, cwd: string, sessionId: string): Promise<s
       '--no-session-persistence',
       '--output-format',
       'json',
-      SUMMARY_PROMPT
+      prompt
     ]
     // stdin is ignored, otherwise claude -p waits for piped input.
     const child = spawn(claude, args, { cwd, env: spawnEnv(), stdio: ['ignore', 'pipe', 'pipe'] })
@@ -79,9 +97,11 @@ export async function summarizeSessions(
   cwd: string,
   targets: SummarizeTarget[],
   requestId: string,
-  onProgress: (p: SummarizeProgress) => void
+  onProgress: (p: SummarizeProgress) => void,
+  focus?: string
 ): Promise<SummaryResult[]> {
   const claude = requireClaude()
+  const prompt = focus?.trim() ? focusedSummaryPrompt(focus) : SUMMARY_PROMPT
   const results: SummaryResult[] = targets.map((t) => ({ sessionId: t.sessionId, title: t.title, summary: '' }))
   for (const t of targets) onProgress({ requestId, sessionId: t.sessionId, phase: 'queued' })
 
@@ -92,7 +112,7 @@ export async function summarizeSessions(
       const { sessionId } = targets[i]
       onProgress({ requestId, sessionId, phase: 'running' })
       try {
-        results[i].summary = await summarizeOne(claude, cwd, sessionId)
+        results[i].summary = await summarizeOne(claude, cwd, sessionId, prompt)
         onProgress({ requestId, sessionId, phase: 'done' })
       } catch (err) {
         const error = err instanceof Error ? err.message : String(err)

@@ -415,6 +415,32 @@ export interface SummarizeProgress {
   error?: string
 }
 
+/** Where in a session a search match is: something the user asked, Claude said, or a tool call. */
+export type SearchSnippetKind = 'prompt' | 'reply' | 'tool'
+
+export interface SearchSnippet {
+  kind: SearchSnippetKind
+  /** The tool's name, for a tool call. */
+  tool?: string
+  /** The file the tool call acted on, when the match is in what it wrote rather than the path. */
+  file?: string
+  /** One of the session's subagents said or did this. */
+  agent?: boolean
+  /** The text around the match, on one line. */
+  text: string
+  /** [start, end) ranges of `text` that match the query. */
+  ranges: [number, number][]
+  timestamp: number
+}
+
+export interface SessionSearchHit {
+  sessionId: string
+  /** Messages and tool calls that match the whole query (or, if none does, any of its words). */
+  matches: number
+  /** The best few matches, best first. None when only the title matched. */
+  snippets: SearchSnippet[]
+}
+
 export interface ToolCall {
   name: string
   /** What the call acted on, in one line: a command, a file name, a pattern. */

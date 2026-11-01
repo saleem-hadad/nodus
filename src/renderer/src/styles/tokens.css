@@ -49,6 +49,10 @@
   --status-done: #007aff;
   --status-waiting: #ff3b30;
 
+  /* Search matches */
+  --mark: rgba(255, 196, 0, 0.32);
+  --mark-strong: rgba(255, 170, 0, 0.75);
+
   /* Diffs (added / removed lines) */
   --diff-add: #2da44e;
   --diff-del: #cf222e;
@@ -129,6 +133,9 @@
     --status-working: #ff9f0a;
     --status-done: #0a84ff;
     --status-waiting: #ff453a;
+
+    --mark: rgba(255, 214, 10, 0.26);
+    --mark-strong: rgba(255, 214, 10, 0.7);
 
     --diff-add: #3fb950;
     --diff-del: #f85149;

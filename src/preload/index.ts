@@ -62,8 +62,9 @@ const api: Api = {
     kill: (sessionId) => ipcRenderer.invoke(IPC.sessionKill, sessionId),
     transcript: (projectId, sessionId) =>
       ipcRenderer.invoke(IPC.sessionTranscript, projectId, sessionId),
-    summarize: (projectId, sessionIds, requestId) =>
-      ipcRenderer.invoke(IPC.sessionSummarize, projectId, sessionIds, requestId),
+    summarize: (projectId, sessionIds, requestId, focus) =>
+      ipcRenderer.invoke(IPC.sessionSummarize, projectId, sessionIds, requestId, focus),
+    search: (projectId, query) => ipcRenderer.invoke(IPC.sessionSearch, projectId, query),
     agents: (projectId, sessionId) => ipcRenderer.invoke(IPC.sessionAgents, projectId, sessionId),
     agentTranscript: (projectId, sessionId, agentId) =>
       ipcRenderer.invoke(IPC.sessionAgentTranscript, projectId, sessionId, agentId)

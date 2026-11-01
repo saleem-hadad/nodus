@@ -62,7 +62,7 @@ import type {
   SessionCard,
   SessionKind
 } from '@shared/types'
-import { cardTitle, isTerminal, useApp } from '@renderer/store'
+import { cardTitle, isTerminal, useApp, type PreviewFind } from '@renderer/store'
 import { ContextMenu, type MenuItem } from '@renderer/components/ContextMenu'
 import { ColorSwatches } from '@renderer/components/ColorSwatches'
 import { FOLDER_COLORS, FOLDER_HUES } from '@renderer/components/FolderIcon'
@@ -130,6 +130,7 @@ import {
   type MergeSource,
   type MergeStartOptions
 } from '@renderer/components/board/MergeDialog'
+import { SessionSearch } from '@renderer/components/board/SessionSearch'
 import {
   ARCHIVE_ID,
   CARD_H,
@@ -523,14 +524,19 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [confirmReq, setConfirmReq] = useState<ConfirmRequest | null>(null)
   const [merge, setMerge] = useState<MergeSource[] | null>(null)
+  /** The search the merged sessions came from, which their summaries keep to. */
+  const [mergeFocus, setMergeFocus] = useState<string | undefined>()
   const [toast, setToast] = useState<string | null>(null)
   /** The New view dialog is open, for a view near this point (or in view when unset). */
   const [viewDialog, setViewDialog] = useState<{ at?: Point } | null>(null)
+  // ⌘K. The query stays for the next time it opens.
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
 
   const closeMenu = useCallback(() => setMenu(null), [])
   // The actions rail's dialogs and menus, which the board's shortcuts must not reach behind.
   const [dockOverlay, setDockOverlay] = useState(false)
-  const overlayOpen = Boolean(menu || confirmReq || merge || dockOverlay || viewDialog)
+  const overlayOpen = Boolean(menu || confirmReq || merge || dockOverlay || viewDialog || searchOpen)
   const overlayOpenRef = useRef(overlayOpen)
   overlayOpenRef.current = overlayOpen
 
@@ -1439,14 +1445,52 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
     setNodes((nds) => nds.map((n) => (n.type === 'session' ? { ...n, selected: ids.has(n.id) } : n)))
   }, [])
 
-  const startMerge = useCallback((ids: string[]) => {
+  const startMerge = useCallback((ids: string[], focus?: string) => {
     const byId = new Map(cardsRef.current.map((c) => [c.sessionId, c]))
     const sources = ids
       .map((id) => byId.get(id))
       .filter((c): c is SessionCard => Boolean(c) && !isTerminal(c))
       .map((c) => ({ sessionId: c.sessionId, title: cardTitle(c) }))
-    if (sources.length > 0) setMerge(sources)
+    if (sources.length === 0) return
+    setMergeFocus(focus?.trim() || undefined)
+    setMerge(sources)
   }, [])
+
+  /**
+   * Takes a search result to its session: an active card is centred, selected
+   * and flashed; an archived one's transcript opens at the match.
+   */
+  const jumpToCard = useCallback(
+    (sessionId: string, find?: PreviewFind) => {
+      const card = cardsRef.current.find((c) => c.sessionId === sessionId)
+      if (!card) return
+      setSearchOpen(false)
+      if (card.archived) {
+        openPreview(sessionId, find)
+        return
+      }
+      selectCards(new Set([sessionId]))
+      const size = cardSize(card)
+      // Close enough to read it.
+      const zoom = Math.max(rf.getViewport().zoom, 0.8)
+      void rf.setCenter(card.x + size.w / 2, card.y + size.h / 2, { zoom, duration: 320 }).then(() => {
+        // Animated rather than classed: the node's classes are the board's to set.
+        const el = wrapperRef.current?.querySelector<HTMLElement>(
+          `.react-flow__node[data-id="${CSS.escape(sessionId)}"] .session-card`
+        )
+        if (!el) return
+        const accent = getComputedStyle(el).getPropertyValue('--accent').trim()
+        el.animate(
+          [
+            { boxShadow: `0 0 0 2px ${accent}, 0 0 0 2px color-mix(in srgb, ${accent} 55%, transparent)` },
+            { boxShadow: `0 0 0 2px ${accent}, 0 0 0 18px color-mix(in srgb, ${accent} 0%, transparent)` }
+          ],
+          { duration: 800, iterations: 2, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' }
+        )
+      })
+    },
+    [rf, selectCards, openPreview]
+  )
 
   const onMergeStart = useCallback(
     async ({ name, initialPrompt, parents }: MergeStartOptions) => {
@@ -1481,6 +1525,7 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
       })
       upsertCard(card)
       setMerge(null)
+      setMergeFocus(undefined)
       clearSelection()
       ensureVisible(pos, size)
       openTerminal(card.sessionId)
@@ -2221,8 +2266,18 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const s = useApp.getState()
-      if (s.terminalSessionId || s.previewSessionId || s.agentView || s.diffOpen || overlayOpenRef.current) return
       const target = e.target as HTMLElement | null
+      if (e.key.toLowerCase() === 'k' && e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey) {
+        // A focused terminal keeps ⌘K for clearing itself.
+        if (e.defaultPrevented || target?.closest('.xterm')) return
+        if (s.terminalSessionId || s.agentView || s.diffOpen || overlayOpenRef.current) return
+        e.preventDefault()
+        // From a transcript a search opened, back to the results.
+        if (s.previewSessionId) s.closePreview()
+        setSearchOpen(true)
+        return
+      }
+      if (s.terminalSessionId || s.previewSessionId || s.agentView || s.diffOpen || overlayOpenRef.current) return
       if (target?.closest('input, textarea, select, [contenteditable="true"]')) return
       const sel = selectedIds()
       const noteSel = selectedNoteIds()
@@ -2278,6 +2333,12 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
       if (overlayOpenRef.current || s.diffOpen || s.agentView) return
       if (command === 'new-session') latest.current.createSession()
       else if (command === 'new-terminal') latest.current.createTerminal()
+      else if (command === 'search') {
+        // Chosen from the menu, it opens over whatever session is open.
+        s.closeTerminal()
+        s.closePreview()
+        setSearchOpen(true)
+      }
     })
     return () => {
       window.removeEventListener('keydown', onKey)
@@ -2289,6 +2350,7 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
   // ---- render --------------------------------------------------------------
 
   const activeCount = cards.filter((c) => !c.archived).length
+  const searchable = useMemo(() => cards.filter((c) => !isTerminal(c)), [cards])
   const selectedCards = cards.filter((c) => selection.includes(c.sessionId))
   // With one Claude session selected, the mic speaks into it rather than starting another.
   const spokenInto =
@@ -2462,8 +2524,23 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
                 <MergeDialog
                   projectId={projectId}
                   sources={merge}
+                  focus={mergeFocus}
                   onClose={() => setMerge(null)}
                   onStart={onMergeStart}
+                />
+              )}
+              {searchOpen && (
+                <SessionSearch
+                  projectId={projectId}
+                  cards={searchable}
+                  query={searchQuery}
+                  onQueryChange={setSearchQuery}
+                  onClose={() => setSearchOpen(false)}
+                  onJump={(sessionId, snippet) => jumpToCard(sessionId, { query: searchQuery.trim(), snippet })}
+                  onStart={(ids) => {
+                    setSearchOpen(false)
+                    startMerge(ids, searchQuery)
+                  }}
                 />
               )}
             </SectionNamingContext.Provider>

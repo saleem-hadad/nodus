@@ -19,6 +19,8 @@ export interface MergeStartOptions {
 interface Props {
   projectId: string
   sources: MergeSource[]
+  /** What the sessions were found by: each then sums up only its work on that. */
+  focus?: string
   onClose: () => void
   /** Creates the session. Rejects with an error to keep the dialog open. */
   onStart: (opts: MergeStartOptions) => Promise<void>
@@ -35,7 +37,8 @@ interface ItemState {
 const DEFAULT_INSTRUCTION =
   'Read the context above, confirm briefly what you understand, then wait for my instructions.'
 
-function defaultName(sources: MergeSource[]): string {
+function defaultName(sources: MergeSource[], focus?: string): string {
+  if (focus) return truncate(`From search: ${focus}`, 64)
   const titles = sources.map((s) => truncate(s.title, 28))
   const joined =
     titles.length <= 2
@@ -48,7 +51,7 @@ function section(index: number, title: string, summary: string) {
   return `## Session ${index} — ${title}\n${summary.trim()}`
 }
 
-function compose(sources: MergeSource[], items: Record<string, ItemState>): string {
+function compose(sources: MergeSource[], items: Record<string, ItemState>, focus?: string): string {
   const ok = sources
     .map((s) => items[s.sessionId])
     .filter((it) => it.phase === 'done' && it.summary && !it.skipped)
@@ -56,11 +59,15 @@ function compose(sources: MergeSource[], items: Record<string, ItemState>): stri
   const n = ok.length
   const head =
     `I'm continuing work from ${n} earlier Claude Code session${n === 1 ? '' : 's'} ` +
-    `in this repository. Here is a handoff summary of ${n === 1 ? 'it' : 'each'}:`
+    `in this repository. Here is ` +
+    (focus
+      ? `what ${n === 1 ? 'it' : 'each'} did about "${focus}":`
+      : `a handoff summary of ${n === 1 ? 'it' : 'each'}:`)
   return [head, ...ok.map((it, i) => section(i + 1, it.title, it.summary!))].join('\n\n')
 }
 
-export function MergeDialog({ projectId, sources, onClose, onStart }: Props) {
+export function MergeDialog({ projectId, sources, focus: rawFocus, onClose, onStart }: Props) {
+  const focus = rawFocus?.trim().replace(/\s+/g, ' ') || undefined
   const [items, setItems] = useState<Record<string, ItemState>>(() =>
     Object.fromEntries(sources.map((s) => [s.sessionId, { phase: 'queued', title: s.title }]))
   )
@@ -68,7 +75,7 @@ export function MergeDialog({ projectId, sources, onClose, onStart }: Props) {
   const [context, setContext] = useState('')
   const [contextDirty, setContextDirty] = useState(false)
   const [instruction, setInstruction] = useState('')
-  const [name, setName] = useState(() => defaultName(sources))
+  const [name, setName] = useState(() => defaultName(sources, focus))
   const [starting, setStarting] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
   const [elapsed, setElapsed] = useState(0)
@@ -109,7 +116,7 @@ export function MergeDialog({ projectId, sources, onClose, onStart }: Props) {
 
     let results: SummaryResult[]
     try {
-      results = await window.api.sessions.summarize(projectId, ids, requestId)
+      results = await window.api.sessions.summarize(projectId, ids, requestId, focus)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       results = ids.map((sessionId) => ({ sessionId, title: '', summary: '', error: message }))
@@ -163,7 +170,7 @@ export function MergeDialog({ projectId, sources, onClose, onStart }: Props) {
   }, [step, pending.length])
 
   // Keep the generated context in sync until the user edits it.
-  const generated = useMemo(() => compose(sources, items), [sources, items])
+  const generated = useMemo(() => compose(sources, items, focus), [sources, items, focus])
   useEffect(() => {
     if (!contextDirty) setContext(generated)
   }, [generated, contextDirty])
@@ -190,7 +197,7 @@ export function MergeDialog({ projectId, sources, onClose, onStart }: Props) {
     const initialPrompt = context.trim() ? `${context.trim()}\n\n---\n\n${body}` : body
     try {
       await onStart({
-        name: name.trim() || defaultName(sources),
+        name: name.trim() || defaultName(sources, focus),
         initialPrompt,
         parents: succeeded.map((it) => it.sessionId)
       })
@@ -228,7 +235,9 @@ export function MergeDialog({ projectId, sources, onClose, onStart }: Props) {
             </h2>
             <p className="merge-subtitle">
               {step === 'gathering'
-                ? 'Each session summarizes itself in a forked copy. The originals stay untouched.'
+                ? focus
+                  ? `Each session sums up what it did about “${focus}” in a forked copy. The originals stay untouched.`
+                  : 'Each session summarizes itself in a forked copy. The originals stay untouched.'
                 : 'Review and edit the handoff, then tell the new session what to do.'}
             </p>
           </div>

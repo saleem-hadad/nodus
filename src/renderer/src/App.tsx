@@ -51,6 +51,10 @@ export function App() {
       else if (s.route.view === 'board') s.navigate({ view: 'projects' })
     })
 
+    // A notification the user clicked opens its card, also one clicked while the window was closed.
+    const offOpenCard = window.api.on.openCard((request) => useApp.getState().showCard(request))
+    window.api.takeOpenRequest().then((request) => request && useApp.getState().showCard(request))
+
     // Files dropped outside a drop target must not navigate the window to file://.
     const blockDrop = (e: DragEvent) => e.preventDefault()
     window.addEventListener('dragover', blockDrop)
@@ -65,6 +69,7 @@ export function App() {
       offStatsRefresh()
       offBoard()
       offMenu()
+      offOpenCard()
       window.clearTimeout(statsTimer)
     }
   }, [])

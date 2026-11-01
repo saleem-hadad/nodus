@@ -94,6 +94,37 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
           <p className="settings-hint">System follows the appearance set in macOS.</p>
         </fieldset>
 
+        <fieldset className="settings-group">
+          <legend className="settings-label">Notifications</legend>
+          <label className="settings-row">
+            <span className="settings-row-text">
+              <span className="settings-row-title">Notify me when a session needs me or finishes</span>
+              <span className="settings-row-hint">Only while Nodus is in the background. Click one to open its card.</span>
+            </span>
+            <input
+              type="checkbox"
+              role="switch"
+              className="switch"
+              checked={settings?.notify ?? false}
+              disabled={!settings}
+              onChange={(e) => update({ notify: e.target.checked })}
+            />
+          </label>
+          <label className="settings-row">
+            <span className="settings-row-text">
+              <span className="settings-row-title">Count sessions that need me on the Dock icon</span>
+            </span>
+            <input
+              type="checkbox"
+              role="switch"
+              className="switch"
+              checked={settings?.dockBadge ?? false}
+              disabled={!settings}
+              onChange={(e) => update({ dockBadge: e.target.checked })}
+            />
+          </label>
+        </fieldset>
+
         <VoiceSettings />
 
         <UpdateSettings settings={settings} update={update} />

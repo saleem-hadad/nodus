@@ -479,6 +479,16 @@ export interface AppSettings {
   theme: ThemePreference
   /** Download new versions in the background and install them when the app quits. */
   autoUpdate: boolean
+  /** While the app is in the background, notify when a session needs the user or finishes. */
+  notify: boolean
+  /** Count the sessions waiting on the user on the Dock icon. */
+  dockBadge: boolean
+}
+
+/** A card to open, from a notification the user clicked. Without a session, just its project's board. */
+export interface OpenCardRequest {
+  projectId: string
+  sessionId?: string
 }
 
 /**

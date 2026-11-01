@@ -8,6 +8,7 @@ import type {
   BoardSnapshot,
   BoardView,
   NodePatch,
+  OpenCardRequest,
   Project,
   ProjectAction,
   ProjectGroup,
@@ -58,6 +59,8 @@ interface AppState {
   selection: string[]
   /** The Settings dialog is open. It survives navigation. */
   settingsOpen: boolean
+  /** A card a notification asked to open, until its board has it on screen. */
+  openRequest: OpenCardRequest | null
 
   navigate(route: Route): void
   refreshProjects(): Promise<void>
@@ -102,6 +105,9 @@ interface AppState {
   setSelection(ids: string[]): void
   openSettings(): void
   closeSettings(): void
+  /** Goes to a card's board and opens the card there, for a notification the user clicked. */
+  showCard(request: OpenCardRequest): void
+  clearOpenRequest(): void
 }
 
 const projectIdOf = (route: Route) => (route.view === 'board' ? route.projectId : null)
@@ -125,6 +131,7 @@ export const useApp = create<AppState>((set, get) => ({
   agentView: null,
   selection: [],
   settingsOpen: false,
+  openRequest: null,
 
   navigate(route) {
     set({
@@ -408,7 +415,20 @@ export const useApp = create<AppState>((set, get) => ({
   },
   setSelection: (ids) => set({ selection: ids }),
   openSettings: () => set({ settingsOpen: true }),
-  closeSettings: () => set({ settingsOpen: false })
+  closeSettings: () => set({ settingsOpen: false }),
+
+  showCard(request) {
+    const { route, navigate } = get()
+    if (route.view !== 'board' || route.projectId !== request.projectId) {
+      navigate({ view: 'board', projectId: request.projectId })
+    } else {
+      // Nothing may cover the card.
+      set({ terminalSessionId: null, previewSessionId: null, agentView: null, diffOpen: false })
+    }
+    set({ settingsOpen: false, openRequest: request.sessionId ? request : null })
+  },
+
+  clearOpenRequest: () => set({ openRequest: null })
 }))
 
 /** Puts the action lists the main process changed into the store: the project's own, and the global ones. */

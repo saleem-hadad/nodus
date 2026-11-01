@@ -62,6 +62,7 @@ import { configureStatus, forgetStatus, getStatus } from './hooks'
 import { installMenu } from './menu'
 import { nameSection, type NamingSource } from './naming'
 import * as notes from './notes'
+import * as notify from './notify'
 import * as ptys from './pty'
 import {
   flush,
@@ -119,9 +120,14 @@ const clampSize = (n: number) => Math.round(Math.min(4000, Math.max(200, n)))
  */
 function applySettings(settings: AppSettings) {
   nativeTheme.themeSource = settings.theme
+  notify.updateBadge()
 }
 
-export async function registerIpc(getWindow: () => BrowserWindow | null) {
+/**
+ * `showWindow` brings the window to the front, opening it again if it was
+ * closed, for a notification the user clicked.
+ */
+export async function registerIpc(getWindow: () => BrowserWindow | null, showWindow: () => BrowserWindow) {
   loadState()
   // Before the window exists, so it opens in the chosen theme.
   applySettings(getState().settings)
@@ -197,9 +203,16 @@ export async function registerIpc(getWindow: () => BrowserWindow | null) {
     envReady
   })
 
+  notify.configureNotify({
+    window: getWindow,
+    showWindow,
+    open: (request) => send(IPC.evOpenCard, request)
+  })
   configureStatus({
     onChange: (sessionId, status, live) => {
       send(IPC.evStatus, sessionId, status, live)
+      // Before a finished run leaves the board, while it can still be named.
+      notify.statusChanged(sessionId, status, live)
       if (status === 'done') {
         finishRun(sessionId)
         archiveIfAsked(sessionId)
@@ -215,6 +228,7 @@ export async function registerIpc(getWindow: () => BrowserWindow | null) {
   updater.startUpdater((status) => send(IPC.evUpdateStatus, status))
   // Sessions still running from before the app last quit. A host is only started for a new session.
   await ptys.connectHost(false).catch((err) => console.error('[host] connect failed', err))
+  notify.armNotifications()
 
   // --- App -----------------------------------------------------------------
 
@@ -222,6 +236,8 @@ export async function registerIpc(getWindow: () => BrowserWindow | null) {
     await envReady
     return { claudePath: getClaudePath(), claudeVersion: getClaudeVersion(), platform: process.platform }
   })
+
+  ipcMain.handle(IPC.appTakeOpenRequest, () => notify.takeOpenRequest())
 
   ipcMain.handle(IPC.settingsGet, (): AppSettings => getState().settings)
 

@@ -20,6 +20,7 @@ import type {
   GitFileDiff,
   GitStatus,
   NodePatch,
+  OpenCardRequest,
   OpenSessionResult,
   Project,
   ProjectAction,
@@ -43,6 +44,7 @@ import type {
 
 export const IPC = {
   appInfo: 'app:info',
+  appTakeOpenRequest: 'app:take-open-request',
 
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update',
@@ -120,7 +122,8 @@ export const IPC = {
   evRunFinished: 'ev:run-finished',
   evMenu: 'ev:menu',
   evUpdateStatus: 'ev:update-status',
-  evView: 'ev:view'
+  evView: 'ev:view',
+  evOpenCard: 'ev:open-card'
 } as const
 
 /**
@@ -138,6 +141,8 @@ export type Unsubscribe = () => void
 
 export interface Api {
   appInfo(): Promise<AppInfo>
+  /** The card a notification asked to open while the window was closed, once. */
+  takeOpenRequest(): Promise<OpenCardRequest | null>
   /** Absolute path of a File from a drag-and-drop event ('' if it has none). */
   pathForFile(file: File): string
 
@@ -306,5 +311,7 @@ export interface Api {
     updateStatus(cb: (status: UpdateStatus) => void): Unsubscribe
     /** Something for a view's page: new data, its saved state, or a command's result. */
     view(cb: (projectId: string, viewId: string, event: ViewEvent, payload: unknown) => void): Unsubscribe
+    /** The user clicked a notification about a card. */
+    openCard(cb: (request: OpenCardRequest) => void): Unsubscribe
   }
 }

@@ -11,6 +11,7 @@ function subscribe<A extends unknown[]>(channel: string, cb: (...args: A) => voi
 
 const api: Api = {
   appInfo: () => ipcRenderer.invoke(IPC.appInfo),
+  takeOpenRequest: () => ipcRenderer.invoke(IPC.appTakeOpenRequest),
   pathForFile: (file) => webUtils.getPathForFile(file),
 
   settings: {
@@ -121,7 +122,8 @@ const api: Api = {
     runFinished: (cb) => subscribe(IPC.evRunFinished, cb),
     menu: (cb) => subscribe(IPC.evMenu, cb),
     updateStatus: (cb) => subscribe(IPC.evUpdateStatus, cb),
-    view: (cb) => subscribe(IPC.evView, cb)
+    view: (cb) => subscribe(IPC.evView, cb),
+    openCard: (cb) => subscribe(IPC.evOpenCard, cb)
   }
 }
 

@@ -1120,6 +1120,21 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
     [projectId, showToast]
   )
 
+  // A card a notification asked to open, brought on screen. A run opens in a window, as from its button.
+  const openRequest = useApp((s) => s.openRequest)
+  useEffect(() => {
+    if (openRequest?.projectId !== projectId || !openRequest.sessionId) return
+    const { sessionId } = openRequest
+    useApp.getState().clearOpenRequest()
+    const card = cardsRef.current.find((c) => c.sessionId === sessionId)
+    if (card) {
+      ensureVisible(card, cardSize(card))
+      openCard(sessionId)
+    } else if (useApp.getState().board?.cards.some((c) => c.sessionId === sessionId && c.runOf)) {
+      openTerminal(sessionId)
+    }
+  }, [openRequest, projectId, ensureVisible, openCard, openTerminal])
+
   // ---- notes -----------------------------------------------------------------
 
   /** Saves a new, empty note at `p` and starts writing in it. */

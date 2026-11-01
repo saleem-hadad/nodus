@@ -34,7 +34,7 @@ function viewOf(url: string) {
   }
 }
 
-function createWindow() {
+function createWindow(): BrowserWindow {
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 920,
@@ -87,6 +87,15 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+  return mainWindow
+}
+
+/** Brings the window to the front, opening it again if it was closed. */
+function showWindow(): BrowserWindow {
+  if (!mainWindow) return createWindow()
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  return mainWindow
 }
 
 app.setName('Nodus')
@@ -100,7 +109,7 @@ if (process.env.NODUS_USER_DATA) app.setPath('userData', process.env.NODUS_USER_
 
 app.whenReady().then(async () => {
   protocol.handle(VIEW_SCHEME, (request) => servePage(request.url))
-  await registerIpc(() => mainWindow)
+  await registerIpc(() => mainWindow, showWindow)
   createWindow()
 
   // Fires for the Settings theme and for macOS appearance changes alike.

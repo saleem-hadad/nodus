@@ -1,6 +1,6 @@
 // Keeps the app up to date from GitHub releases.
 //
-// Releases are ad-hoc signed, and Squirrel.Mac (what electron-updater uses)
+// Early releases were ad-hoc signed, and Squirrel.Mac (what electron-updater uses)
 // only installs updates signed with a Developer ID. So this does the same job
 // by hand: it finds the latest release, downloads the DMG for this Mac, checks
 // it against the digest GitHub keeps for the file, copies the app out of it

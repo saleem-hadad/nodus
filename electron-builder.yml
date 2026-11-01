@@ -19,10 +19,11 @@ mac:
   # No version in the name, so releases/latest/download/<name> links stay stable.
   artifactName: Nodus-${arch}.${ext}
   category: public.app-category.developer-tools
-  # Ad-hoc signed, not notarized: users approve the first launch in Privacy & Security.
-  # Hardened runtime only matters for notarization.
-  identity: '-'
-  hardenedRuntime: false
+  # Signed with the Developer ID certificate (CSC_LINK in CI, the keychain locally) and
+  # notarized when APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID are set.
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
   # Shown when the mic button first asks for the microphone.
   extendInfo:
     NSMicrophoneUsageDescription: Nodus listens only while you record with the mic button, to turn what you say into a prompt.

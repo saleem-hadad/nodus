@@ -199,7 +199,6 @@ In the terminal, Esc goes to Claude (it interrupts a turn), so it never closes t
 - Running `/clear` inside a card starts a new session id, which shows up as a new archived card.
 - In a repo Claude Code hasn't opened before, the first session shows Claude's folder-trust prompt. "No, exit" is preselected, so move to "Yes" before pressing Enter. A view's brain waits at that prompt too, and its view says it's building until you answer it: press **Watch it work**.
 - A view's commands and refreshes only run while the app is open.
-- Releases aren't notarized yet, so macOS treats each version as a new app. After an update it asks again for the microphone, and for Keychain access if you saved an xAI key.
 - If you update the app while sessions are running, and the update changed how the app talks to the session host, the new version asks to stop those sessions before it continues.
 - A session host started by a version without board tools keeps running sessions after an update, but sessions started on it don't get the tools. They do once every session has stopped and a new host starts.
 - Built and tested on macOS only.
@@ -254,11 +253,11 @@ pnpm dist         # build the arm64 and x64 DMGs into dist/
 
 A running session host keeps the code it started with. After changing `host.ts`, use **Quit and Stop Sessions** so the next session starts a fresh host. Bump `PROTOCOL` in `hostProtocol.ts` whenever a message changes shape.
 
-`pnpm dist` writes `dist/Nodus-arm64.dmg` and `dist/Nodus-x64.dmg`, with the unpacked apps in `dist/mac-arm64/` and `dist/mac/`. The apps are ad-hoc signed and not notarized, so a downloaded copy needs **Open Anyway** in Privacy & Security on first launch. The packaged app shares its board with `pnpm dev`, so don't run both at once.
+`pnpm dist` writes `dist/Nodus-arm64.dmg` and `dist/Nodus-x64.dmg`, with the unpacked apps in `dist/mac-arm64/` and `dist/mac/`. They're signed with the Developer ID certificate in your keychain, under the hardened runtime with the entitlements in `build/entitlements.mac.plist`. Local builds aren't notarized unless `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID` are set. The packaged app shares its board with `pnpm dev`, so don't run both at once.
 
 ### Releasing
 
-Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds both DMGs and attaches them to the GitHub release for that tag. The README's download links point at `releases/latest/download/`, so they pick up each new release.
+Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds both DMGs, signs and notarizes them with the certificate and Apple ID in the repo's secrets, and attaches them to the GitHub release for that tag. The README's download links point at `releases/latest/download/`, so they pick up each new release.
 
 ```sh
 npm version 0.2.0       # bumps package.json, commits, tags v0.2.0

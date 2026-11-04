@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, CheckCircle2, Circle, Loader2, RotateCcw, Sparkles } from 'lucide-react'
 import clsx from 'clsx'
 import type { SummarizePhase, SummaryResult } from '@shared/types'
+import { keys, modKey } from '@renderer/platform'
 import { Modal } from '../Modal'
 import { truncate } from './layout'
 
@@ -219,7 +220,7 @@ export function MergeDialog({ projectId, sources, focus: rawFocus, onClose, onSt
       <div
         className="merge-inner"
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && e.metaKey) {
+          if (e.key === 'Enter' && modKey(e)) {
             e.preventDefault()
             start()
           }
@@ -362,8 +363,8 @@ export function MergeDialog({ projectId, sources, focus: rawFocus, onClose, onSt
               'Retry or skip the failed sessions to continue.'
             ) : step === 'review' ? (
               <>
-                <kbd>⌘</kbd>
-                <kbd>↩</kbd> to start
+                <kbd>{keys('⌘')}</kbd>
+                <kbd>{keys('↩')}</kbd> to start
               </>
             ) : null}
           </span>

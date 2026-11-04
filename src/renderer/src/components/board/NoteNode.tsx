@@ -4,6 +4,7 @@ import { Play, X } from 'lucide-react'
 import clsx from 'clsx'
 import type { BoardNote } from '@shared/types'
 import { cardTitle, useApp } from '@renderer/store'
+import { modKey } from '@renderer/platform'
 import { FOLDER_HUES } from '../FolderIcon'
 import { RenamingContext, useBoardActions } from './BoardContext'
 import { NOTE_MIN } from './notes'
@@ -174,7 +175,7 @@ function NoteEditor({ note }: { note: BoardNote }) {
       onDoubleClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => {
         e.stopPropagation()
-        if (e.key === 'Escape' || (e.key === 'Enter' && e.metaKey)) {
+        if (e.key === 'Escape' || (e.key === 'Enter' && modKey(e))) {
           e.preventDefault()
           e.currentTarget.blur()
         }

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import type { FolderColor, Project, ProjectGroup } from '@shared/types'
 import { useApp } from '@renderer/store'
+import { isMac, keys, modKey } from '@renderer/platform'
 import { ContextMenu, type MenuItem } from '@renderer/components/ContextMenu'
 import { Modal } from '@renderer/components/Modal'
 import { TitleBarActions } from '@renderer/components/TitleBarActions'
@@ -189,14 +190,14 @@ export function ProjectsView() {
       const index = ordered.findIndex((p) => p.id === current)
       const project = index >= 0 ? ordered[index] : undefined
 
-      if (e.metaKey && (e.key === 'o' || e.key === 'ArrowDown')) {
+      if (modKey(e) && (e.key === 'o' || e.key === 'ArrowDown')) {
         if (project) {
           e.preventDefault()
           openProject(project.id)
         }
         return
       }
-      if (e.metaKey && e.key === 'Backspace') {
+      if (modKey(e) && e.key === 'Backspace') {
         if (project) {
           e.preventDefault()
           setRemoveTarget(project)
@@ -306,13 +307,13 @@ export function ProjectsView() {
         {
           label: 'Open',
           icon: <FolderOpen />,
-          hint: '⌘O',
+          hint: keys('⌘O'),
           onSelect: () => openProject(menuProject.id)
         },
         {
           label: 'Rename',
           icon: <Pencil />,
-          hint: '↩',
+          hint: keys('↩'),
           onSelect: () => setRenamingId(menuProject.id)
         },
         ...(menuProject.archived || !focusFeature
@@ -348,7 +349,7 @@ export function ProjectsView() {
               }
             ]),
         {
-          label: 'Reveal in Finder',
+          label: isMac ? 'Reveal in Finder' : 'Show in File Explorer',
           icon: <Search />,
           onSelect: () => window.api.projects.revealInFinder(menuProject.id)
         },
@@ -396,7 +397,7 @@ export function ProjectsView() {
       onDrop={onDrop}
     >
       <TitleBarActions>
-        <button className="btn" onClick={() => addProject()} title="New Project (⇧⌘N)">
+        <button className="btn" onClick={() => addProject()} title={`New Project (${keys('⇧⌘N')})`}>
           <Plus size={15} strokeWidth={2.2} />
           New Project
         </button>

@@ -13,7 +13,7 @@ import path from 'path'
 import { app, dialog } from 'electron'
 import type { SessionKind, SessionStatus } from '@shared/types'
 import { BOARD_MCP_CONFIG, BOARD_TOOL_RULES } from './boardTools'
-import { requireClaude, spawnEnv, userShell } from './env'
+import { envVar, gitBash, requireClaude, spawnEnv, terminalShell } from './env'
 import { hookEnv, hookSettings, markProcess, noteUserInput, receiveHook, setHookEndpoint } from './hooks'
 import {
   PROTOCOL,
@@ -273,7 +273,8 @@ function startHost(paths: HostPaths) {
     detached: true,
     stdio: ['ignore', out, out],
     cwd: paths.dir,
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+    windowsHide: true
   })
   child.unref()
   fs.closeSync(out)
@@ -356,7 +357,7 @@ export async function stopAll(): Promise<void> {
 
 /** Command line for a card's process. Terminals get a login shell, like Terminal.app. */
 function commandFor(opts: SpawnOptions): { file: string; args: string[]; env: Record<string, string> } {
-  if (opts.kind === 'terminal') return { file: userShell(), args: ['-l'], env: spawnEnv() }
+  if (opts.kind === 'terminal') return { ...terminalShell(), env: spawnEnv() }
 
   const args = opts.resume ? ['--resume', opts.sessionId] : ['--session-id', opts.sessionId]
   if (opts.name) args.push('--name', opts.name)
@@ -368,7 +369,11 @@ function commandFor(opts: SpawnOptions): { file: string; args: string[]; env: Re
   args.push('--settings', hookSettings())
   // After `--`, so a prompt that starts with a dash isn't read as an option.
   if (opts.initialPrompt) args.push('--', opts.initialPrompt)
-  return { file: requireClaude(), args, env: spawnEnv(hookEnv(opts.sessionId)) }
+  // On Windows, the Git Bash its hooks were written for (hookSettings), should claude look elsewhere.
+  const bash = gitBash()
+  const extra: Record<string, string> =
+    bash && !envVar('CLAUDE_CODE_GIT_BASH_PATH') ? { CLAUDE_CODE_GIT_BASH_PATH: bash } : {}
+  return { file: requireClaude(), args, env: spawnEnv({ ...extra, ...hookEnv(opts.sessionId) }) }
 }
 
 async function startSession(opts: SpawnOptions) {

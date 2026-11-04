@@ -57,7 +57,7 @@ function summarizeOne(claude: string, cwd: string, sessionId: string, prompt: st
       prompt
     ]
     // stdin is ignored, otherwise claude -p waits for piped input.
-    const child = spawn(claude, args, { cwd, env: spawnEnv(), stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(claude, args, { cwd, env: spawnEnv(), stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
     let stdout = ''
     let stderr = ''
     child.stdout.on('data', (d: Buffer) => (stdout += d.toString('utf8')))

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { RotateCw } from 'lucide-react'
 import type { UpdateStatus } from '@shared/types'
+import { isMac } from '@renderer/platform'
 
 /** How updating the app is going, kept current by the main process; null until it answers. */
 export function useUpdateStatus(): UpdateStatus | null {
@@ -19,7 +20,7 @@ export function useUpdateStatus(): UpdateStatus | null {
   return status
 }
 
-/** Shows in the title bar once a new version has downloaded. Otherwise it installs on quit. */
+/** Shows in the title bar once a new version has downloaded. Otherwise it installs on quit, on a Mac. */
 export function UpdateButton() {
   const status = useUpdateStatus()
   if (status?.state !== 'ready') return null
@@ -28,7 +29,11 @@ export function UpdateButton() {
     <button
       className="btn btn-primary"
       onClick={() => window.api.updates.install()}
-      title={`Nodus ${status.version} is ready. Sessions keep running while Nodus restarts.`}
+      title={
+        isMac
+          ? `Nodus ${status.version} is ready. Sessions keep running while Nodus restarts.`
+          : `Nodus ${status.version} is ready. Restarting stops the sessions; you can resume them after.`
+      }
     >
       <RotateCw size={14} strokeWidth={2.2} />
       Restart to Update

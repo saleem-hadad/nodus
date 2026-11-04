@@ -1,8 +1,8 @@
 // Speech to text for the board's mic button, through xAI's API.
 //
 // The key stays in the main process. It is either saved from Settings
-// (encrypted with safeStorage, so the macOS Keychain holds the secret) or the
-// XAI_API_KEY in the user's shell; a saved one wins.
+// (encrypted with safeStorage, so the macOS Keychain, or Windows' DPAPI, holds
+// the secret) or the XAI_API_KEY in the user's shell; a saved one wins.
 import { safeStorage, shell, systemPreferences } from 'electron'
 import path from 'path'
 import type { Project, TranscribeResult, VoiceKeySource } from '@shared/types'
@@ -40,7 +40,8 @@ export function setKey(key: string | null): VoiceKeySource {
   const trimmed = key?.trim()
   if (trimmed) {
     if (!safeStorage.isEncryptionAvailable()) {
-      throw new Error('The Keychain isn’t available, so the key can’t be saved. Set XAI_API_KEY in your shell instead.')
+      const store = process.platform === 'darwin' ? 'The Keychain isn’t' : 'Encrypted storage isn’t'
+      throw new Error(`${store} available, so the key can’t be saved. Set XAI_API_KEY in your shell instead.`)
     }
     state.voiceKey = safeStorage.encryptString(trimmed).toString('base64')
   } else {
@@ -60,6 +61,7 @@ export async function microphone(): Promise<boolean> {
 }
 
 export function openMicrophoneSettings() {
+  if (process.platform === 'win32') return shell.openExternal('ms-settings:privacy-microphone')
   return shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone')
 }
 

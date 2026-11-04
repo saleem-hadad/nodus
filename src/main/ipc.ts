@@ -1,5 +1,5 @@
 // IPC handlers implementing the contract in src/shared/api.ts.
-import { dialog, ipcMain, nativeTheme, shell, type BrowserWindow } from 'electron'
+import { dialog, ipcMain, Menu, nativeTheme, shell, type BrowserWindow } from 'electron'
 import crypto from 'crypto'
 import fs from 'fs'
 import os from 'os'
@@ -62,7 +62,7 @@ import { getClaudePath, getClaudeVersion, initEnv } from './env'
 import { gitDiff, gitStatus } from './git'
 import { configureStatus, forgetStatus, getStatus } from './hooks'
 import { cleanInk } from './ink'
-import { installMenu, syncFocusMenu } from './menu'
+import { installMenu, isMenuCommand, syncFocusMenu } from './menu'
 import { nameSection, type NamingSource } from './naming'
 import * as notes from './notes'
 import * as notify from './notify'
@@ -292,6 +292,16 @@ export async function registerIpc(getWindow: () => BrowserWindow | null, showWin
   })
 
   ipcMain.handle(IPC.appTakeOpenRequest, () => notify.takeOpenRequest())
+
+  ipcMain.handle(IPC.appShowMenu, (_e, x: number, y: number) => {
+    const window = getWindow()
+    if (!window || !Number.isFinite(x) || !Number.isFinite(y)) return
+    Menu.getApplicationMenu()?.popup({ window, x: Math.round(x), y: Math.round(y) })
+  })
+
+  ipcMain.handle(IPC.appMenuCommand, (_e, command: unknown) => {
+    if (isMenuCommand(command)) send(IPC.evMenu, command)
+  })
 
   ipcMain.handle(IPC.settingsGet, (): AppSettings => getState().settings)
 
@@ -663,7 +673,7 @@ export async function registerIpc(getWindow: () => BrowserWindow | null, showWin
       })),
     createProject(folder, name) {
       if (typeof folder !== 'string' || !folder.trim()) throw new Error('path is required')
-      const target = folder.trim().replace(/^~(?=$|\/)/, os.homedir())
+      const target = folder.trim().replace(/^~(?=$|[\\/])/, os.homedir())
       if (!path.isAbsolute(target)) throw new Error('path must be absolute')
       const madeFolder = !fs.existsSync(target)
       if (madeFolder) fs.mkdirSync(target, { recursive: true })

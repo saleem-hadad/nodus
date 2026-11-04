@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { X } from 'lucide-react'
 import clsx from 'clsx'
 import type { AppSettings, ThemePreference, UpdateStatus, VoiceKeySource } from '@shared/types'
+import { isMac } from '@renderer/platform'
 import { useApp } from '@renderer/store'
 import { Modal } from './Modal'
 import { useUpdateStatus } from './UpdateButton'
@@ -83,7 +84,7 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
               </label>
             ))}
           </div>
-          <p className="settings-hint">System follows the appearance set in macOS.</p>
+          <p className="settings-hint">System follows the appearance set in {isMac ? 'macOS' : 'Windows'}.</p>
           <label className="settings-row">
             <span className="settings-row-text">
               <span className="settings-row-title">Always show the project sidebar</span>
@@ -137,19 +138,22 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
               onChange={(e) => update({ notify: e.target.checked })}
             />
           </label>
-          <label className="settings-row">
-            <span className="settings-row-text">
-              <span className="settings-row-title">Count sessions that need me on the Dock icon</span>
-            </span>
-            <input
-              type="checkbox"
-              role="switch"
-              className="switch"
-              checked={settings?.dockBadge ?? false}
-              disabled={!settings}
-              onChange={(e) => update({ dockBadge: e.target.checked })}
-            />
-          </label>
+          {/* Only a Mac has a Dock. */}
+          {isMac && (
+            <label className="settings-row">
+              <span className="settings-row-text">
+                <span className="settings-row-title">Count sessions that need me on the Dock icon</span>
+              </span>
+              <input
+                type="checkbox"
+                role="switch"
+                className="switch"
+                checked={settings?.dockBadge ?? false}
+                disabled={!settings}
+                onChange={(e) => update({ dockBadge: e.target.checked })}
+              />
+            </label>
+          )}
         </fieldset>
 
         <VoiceSettings />
@@ -220,7 +224,7 @@ function VoiceSettings() {
       <p className="settings-hint">
         {source === 'settings' ? (
           <>
-            Saved in your Keychain.{' '}
+            {isMac ? 'Saved in your Keychain.' : 'Saved encrypted for your Windows account.'}{' '}
             <button type="button" className="settings-link" onClick={() => void save(null)}>
               Remove
             </button>
@@ -281,7 +285,11 @@ function UpdateSettings({
         <label className="settings-row">
           <span className="settings-row-text">
             <span className="settings-row-title">Download updates automatically</span>
-            <span className="settings-row-hint">They install when you quit Nodus. Sessions keep running.</span>
+            <span className="settings-row-hint">
+              {isMac
+                ? 'They install when you quit Nodus. Sessions keep running.'
+                : 'They install when you choose Restart to Update, which stops the sessions.'}
+            </span>
           </span>
           <input
             type="checkbox"

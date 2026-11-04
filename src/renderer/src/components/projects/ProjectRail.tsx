@@ -7,6 +7,7 @@ import { ContextMenu, type MenuItem } from '../ContextMenu'
 import { FolderIcon } from '../FolderIcon'
 import { focusModeOn, isFocusing, showsInFocus } from './focus'
 import { addProject, groupProjects, projectGlyph, setFocused } from './projectsUi'
+import { keys } from '@renderer/platform'
 import './ProjectRail.css'
 
 interface Hint {
@@ -55,7 +56,7 @@ export function ProjectRail({ activeId, pinned }: { activeId: string; pinned: bo
     hint &&
     (hint.projectId
       ? [hintGroup, activity(stats[hint.projectId]), hintFocus].filter(Boolean).join(' · ')
-      : '⇧⌘N')
+      : keys('⇧⌘N'))
   const showHint = (projectId: string | null) => (e: PointerEvent<HTMLElement>) => {
     const r = e.currentTarget.getBoundingClientRect()
     setHint({ projectId, top: r.top + r.height / 2 })

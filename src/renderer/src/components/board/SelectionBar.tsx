@@ -1,4 +1,5 @@
 import { Archive, Group, Sparkles, X } from 'lucide-react'
+import { keys } from '@renderer/platform'
 
 interface Props {
   count: number
@@ -43,7 +44,7 @@ export function SelectionBar({
         className="btn btn-ghost"
         onClick={onGroup}
         disabled={groupCount === 0}
-        title="Group into a section (⌘G)"
+        title={`Group into a section (${keys('⌘G')})`}
       >
         <Group size={14} strokeWidth={2} />
         Group
@@ -52,7 +53,7 @@ export function SelectionBar({
         className="btn btn-ghost"
         onClick={onArchive}
         disabled={activeCount === 0}
-        title="Archive selected (⌫)"
+        title={`Archive selected (${keys('⌫')})`}
       >
         <Archive size={14} strokeWidth={2} />
         Archive

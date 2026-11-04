@@ -13,12 +13,14 @@ See which ones need you, and start new sessions from the context of old ones.
 <a href="https://github.com/saleem-hadad/nodus/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/saleem-hadad/nodus/ci.yml?branch=main&label=build" alt="Build"></a>
 <a href="https://github.com/saleem-hadad/nodus/releases"><img src="https://img.shields.io/github/v/release/saleem-hadad/nodus?label=release" alt="Latest release"></a>
 <img src="https://img.shields.io/badge/macOS-Apple%20Silicon%20%7C%20Intel-blue" alt="macOS, Apple Silicon and Intel">
+<img src="https://img.shields.io/badge/Windows-x64%20%7C%20Arm-blue" alt="Windows, x64 and Arm">
 <a href="LICENSE"><img src="https://img.shields.io/github/license/saleem-hadad/nodus" alt="MIT license"></a>
 </p>
 
 <p align="center">
 <a href="https://github.com/saleem-hadad/nodus/releases/latest/download/Nodus-arm64.dmg"><strong>Download for Mac</strong></a> ·
 <a href="https://github.com/saleem-hadad/nodus/releases/latest/download/Nodus-x64.dmg">Intel</a> ·
+<a href="https://github.com/saleem-hadad/nodus/releases/latest/download/Nodus-Setup-x64.exe"><strong>Windows</strong></a> ·
 <a href="https://saleem-hadad.github.io/nodus/">Website</a>
 </p>
 
@@ -26,7 +28,7 @@ See which ones need you, and start new sessions from the context of old ones.
 
 ## 🚀 Get started
 
-1. Download Nodus for [Apple Silicon](https://github.com/saleem-hadad/nodus/releases/latest/download/Nodus-arm64.dmg) or [Intel](https://github.com/saleem-hadad/nodus/releases/latest/download/Nodus-x64.dmg) and drag it into Applications.
+1. Download Nodus for [Apple Silicon](https://github.com/saleem-hadad/nodus/releases/latest/download/Nodus-arm64.dmg) or [Intel](https://github.com/saleem-hadad/nodus/releases/latest/download/Nodus-x64.dmg) and drag it into Applications. On Windows, run the installer for [x64](https://github.com/saleem-hadad/nodus/releases/latest/download/Nodus-Setup-x64.exe) or [Arm](https://github.com/saleem-hadad/nodus/releases/latest/download/Nodus-Setup-arm64.exe).
 2. Click **New Project** and pick a repo.
 3. Press **N** to start your first session.
 
@@ -37,7 +39,7 @@ You need [Claude Code](https://code.claude.com/docs/en/overview) installed, with
 - 🟠 working · 🔴 needs you · 🔵 done, on every session's card
 - The real `claude` terminal, in a window or right on the board
 - Start a session from what other sessions already did
-- ⌘K searches everything every session said and did
+- ⌘K (Ctrl+K on Windows) searches everything every session said and did
 - An archive of finished sessions. Drag one out to pick it back up
 - Sessions keep running when you quit the app
 - Focus mode hides every project but this week's
@@ -55,14 +57,14 @@ Everything stays on your machine. Nodus reads transcripts where Claude Code keep
 <details>
 <summary>Build from source</summary>
 
-You need macOS, Node.js 22+ and pnpm.
+You need macOS or Windows, Node.js 22+ and pnpm.
 
 ```sh
 pnpm install
 pnpm dev          # run with hot reload
 pnpm typecheck
 pnpm test
-pnpm dist         # build the DMGs into dist/
+pnpm dist         # build the DMGs (or on Windows, the installers) into dist/
 ```
 
 More in [Development](docs/how-it-works.md#development).

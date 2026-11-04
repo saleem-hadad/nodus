@@ -1,0 +1,207 @@
+// Starts a packaged Nodus and drives it over the DevTools protocol, the way
+// the Windows CI job checks a build no one has clicked through yet: the window
+// opens, a terminal card's shell runs in the session host, the host answers on
+// its pipe or socket, and each step is screenshotted in light and dark.
+//
+//   node scripts/smoke.mjs <path to Nodus.exe or …/Nodus.app/Contents/MacOS/Nodus> <folder for screenshots>
+//
+// It uses its own userData folder, so real boards are never touched.
+import { spawn } from 'child_process'
+import crypto from 'crypto'
+import fs from 'fs'
+import net from 'net'
+import os from 'os'
+import path from 'path'
+
+const [exe, outDir = 'smoke'] = process.argv.slice(2)
+if (!exe) throw new Error('usage: node scripts/smoke.mjs <app executable> [screenshot folder]')
+
+const PORT = 9333
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'nodus-smoke-'))
+const userData = path.join(root, 'userData')
+const repo = path.join(root, 'demo')
+fs.mkdirSync(repo, { recursive: true })
+fs.mkdirSync(outDir, { recursive: true })
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+const step = (text) => console.log(`\n▸ ${text}`)
+
+async function until(what, fn, timeoutMs = 60_000) {
+  const end = Date.now() + timeoutMs
+  for (;;) {
+    try {
+      const value = await fn()
+      if (value) return value
+    } catch {
+      // not yet
+    }
+    if (Date.now() > end) throw new Error(`Timed out waiting for ${what}`)
+    await sleep(250)
+  }
+}
+
+step(`Starting ${exe}`)
+const app = spawn(exe, [`--remote-debugging-port=${PORT}`], {
+  env: { ...process.env, NODUS_USER_DATA: userData },
+  stdio: ['ignore', 'pipe', 'pipe']
+})
+const appLog = fs.createWriteStream(path.join(outDir, 'app.log'))
+app.stdout.pipe(appLog)
+app.stderr.pipe(appLog)
+let exited = null
+app.on('exit', (code) => (exited = code))
+
+let ws
+let nextId = 1
+const pending = new Map()
+
+function send(method, params = {}) {
+  const id = nextId++
+  ws.send(JSON.stringify({ id, method, params }))
+  return new Promise((resolve, reject) => pending.set(id, { resolve, reject }))
+}
+
+/** Evaluates an expression in the window, awaiting a promise, and returns its value. */
+async function evaluate(expression) {
+  const { result, exceptionDetails } = await send('Runtime.evaluate', {
+    expression,
+    awaitPromise: true,
+    returnByValue: true
+  })
+  if (exceptionDetails) throw new Error(`${expression}\n${exceptionDetails.exception?.description ?? exceptionDetails.text}`)
+  return result.value
+}
+
+async function screenshot(name) {
+  await sleep(800)
+  const { data } = await send('Page.captureScreenshot', { format: 'png' })
+  fs.writeFileSync(path.join(outDir, `${name}.png`), Buffer.from(data, 'base64'))
+  console.log(`  saved ${name}.png`)
+}
+
+/** Double-clicks the middle of the first element matching `selector`. */
+async function doubleClick(selector) {
+  const box = await evaluate(`(() => {
+    const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect()
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+  })()`)
+  for (const clickCount of [1, 2]) {
+    await send('Input.dispatchMouseEvent', { type: 'mousePressed', ...box, button: 'left', clickCount })
+    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...box, button: 'left', clickCount })
+  }
+}
+
+/** Connects to the session host the way the app does, and returns its welcome. */
+function hostWelcome() {
+  const dir = path.join(userData, 'host')
+  const hash = crypto.createHash('sha1').update(dir).digest('hex').slice(0, 12)
+  let socket = path.join(dir, 'host.sock')
+  if (process.platform === 'win32') socket = `\\\\.\\pipe\\nodus-${hash}`
+  else if (Buffer.byteLength(socket) > 100) socket = path.join(os.tmpdir(), `nodus-${hash}.sock`)
+  return new Promise((resolve, reject) => {
+    const conn = net.createConnection(socket)
+    let text = ''
+    conn.on('error', reject)
+    conn.on('data', (chunk) => {
+      text += chunk
+      const nl = text.indexOf('\n')
+      if (nl < 0) return
+      conn.destroy()
+      resolve({ socket, welcome: JSON.parse(text.slice(0, nl)) })
+    })
+    // Protocol 0 is never the app's, so the host doesn't count this as an app.
+    conn.write(JSON.stringify({ type: 'hello', protocol: 0 }) + '\n')
+  })
+}
+
+let failed = false
+try {
+  step('Waiting for the window')
+  const target = await until('the window', async () => {
+    if (exited !== null) throw new Error(`Nodus exited with ${exited}`)
+    const list = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json()
+    return list.find((t) => t.type === 'page' && t.url.includes('index.html'))
+  })
+  ws = new WebSocket(target.webSocketDebuggerUrl)
+  await new Promise((resolve, reject) => {
+    ws.onopen = resolve
+    ws.onerror = reject
+  })
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data)
+    const waiter = pending.get(msg.id)
+    if (!waiter) return
+    pending.delete(msg.id)
+    if (msg.error) waiter.reject(new Error(msg.error.message))
+    else waiter.resolve(msg.result)
+  }
+  await until('the page', () => evaluate(`document.readyState === 'complete' && !!window.api`))
+
+  const info = await evaluate('window.api.appInfo()')
+  console.log('  app info', info)
+  const platform = await evaluate('document.documentElement.dataset.platform')
+  const menuButton = await evaluate(`!!document.querySelector('.titlebar-menu')`)
+  console.log(`  data-platform ${platform}, menu button ${menuButton ? 'shown' : 'not shown'}`)
+  await screenshot('1-projects-light')
+
+  step('Adding a project and opening its board')
+  const project = await evaluate(`window.api.projects.add(${JSON.stringify(repo)})`)
+  await evaluate('location.reload()').catch(() => {})
+  await until('the project on the grid', () => evaluate(`!!document.querySelector('[data-project-id]')`))
+  await doubleClick('[data-project-id]')
+  await until('the board', () => evaluate(`!!document.querySelector('.react-flow')`))
+
+  step('Starting a terminal card')
+  await evaluate(`(() => {
+    window.__out = ''
+    window.api.on.ptyData((_id, data) => { window.__out += data })
+  })()`)
+  const card = await evaluate(
+    `window.api.sessions.create(${JSON.stringify(project.id)}, { x: 80, y: 80, kind: 'terminal', expanded: true })`
+  )
+  await evaluate(`window.api.sessions.open(${JSON.stringify(project.id)}, ${JSON.stringify(card.sessionId)}, 120, 36)`)
+  // Only the shell's output has the sum; the typed line shows the sum's parts.
+  const sum = process.platform === 'win32' ? 'echo ("nodus-" + (6 * 7))' : 'echo nodus-$((6 * 7))'
+  await until('the shell prompt', () => evaluate(`window.__out.length > 0`), 30_000)
+  await evaluate(`window.api.sessions.write(${JSON.stringify(card.sessionId)}, ${JSON.stringify(sum + '\r')})`)
+  await until('the shell to answer', () => evaluate(`window.__out.includes('nodus-42')`), 30_000)
+  console.log('  the shell answered')
+
+  // The board shows a card made outside it once it opens again.
+  await evaluate('location.reload()').catch(() => {})
+  await until('the project on the grid', () => evaluate(`!!document.querySelector('[data-project-id]')`))
+  await doubleClick('[data-project-id]')
+  await until('the terminal card', () => evaluate(`!!document.querySelector('.xterm')`), 30_000)
+  await screenshot('2-board-light')
+
+  step('Asking the session host for its sessions')
+  const { socket, welcome } = await hostWelcome()
+  console.log(`  ${socket}: protocol ${welcome.protocol}, ${welcome.sessions.length} session(s)`)
+  if (!welcome.sessions.some((s) => s.sessionId === card.sessionId)) throw new Error('The host doesn’t have the terminal')
+
+  step('Dark mode')
+  await evaluate(`window.api.settings.update({ theme: 'dark' })`)
+  await screenshot('3-board-dark')
+
+  console.log('\n✓ Smoke test passed')
+} catch (err) {
+  failed = true
+  console.error('\n✗ Smoke test failed:', err)
+  await screenshot('failure').catch(() => {})
+} finally {
+  // Stops the host and its sessions, then the app.
+  try {
+    const { socket } = await hostWelcome()
+    const conn = net.createConnection(socket)
+    conn.write(JSON.stringify({ type: 'hello', protocol: 0 }) + '\n' + JSON.stringify({ type: 'shutdown' }) + '\n')
+    await sleep(1000)
+    conn.destroy()
+  } catch {
+    // no host
+  }
+  app.kill()
+  await sleep(1000)
+  const hostLog = path.join(userData, 'host', 'host.log')
+  if (fs.existsSync(hostLog)) fs.copyFileSync(hostLog, path.join(outDir, 'host.log'))
+  process.exit(failed ? 1 : 0)
+}

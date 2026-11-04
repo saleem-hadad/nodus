@@ -46,6 +46,8 @@ import type {
 export const IPC = {
   appInfo: 'app:info',
   appTakeOpenRequest: 'app:take-open-request',
+  appShowMenu: 'app:show-menu',
+  appMenuCommand: 'app:menu-command',
 
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update',
@@ -157,6 +159,10 @@ export interface Api {
   takeOpenRequest(): Promise<OpenCardRequest | null>
   /** Absolute path of a File from a drag-and-drop event ('' if it has none). */
   pathForFile(file: File): string
+  /** Opens the application menu at a point in the window, for the title bar's menu button off a Mac. */
+  showMenu(x: number, y: number): Promise<void>
+  /** Runs a menu command as if its shortcut was pressed, for the ones a terminal takes off a Mac. */
+  menuCommand(command: MenuCommand): Promise<void>
 
   settings: {
     get(): Promise<AppSettings>

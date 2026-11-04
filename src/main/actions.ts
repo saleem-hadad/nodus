@@ -100,7 +100,12 @@ export function draftAction(repoPath: string, description: string, global: boole
   ]
   return new Promise((resolve, reject) => {
     // stdin is ignored, otherwise claude -p waits for piped input.
-    const child = spawn(claude, args, { cwd: repoPath, env: spawnEnv(), stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(claude, args, {
+      cwd: repoPath,
+      env: spawnEnv(),
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true
+    })
     let stdout = ''
     let stderr = ''
     child.stdout.on('data', (d: Buffer) => (stdout += d.toString('utf8')))

@@ -1,5 +1,5 @@
 // Messages between the app (pty.ts) and the session host (host.ts): one JSON
-// object per line over a Unix socket.
+// object per line over a Unix socket, or a named pipe on Windows.
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
@@ -109,15 +109,32 @@ export interface HostPaths {
   hookConfig: string
 }
 
-export function hostPaths(userData: string): HostPaths {
+export function hostPaths(userData: string, platform: NodeJS.Platform = process.platform): HostPaths {
   const dir = path.join(userData, 'host')
+  const hash = () => crypto.createHash('sha1').update(dir).digest('hex').slice(0, 12)
   let socket = path.join(dir, 'host.sock')
+  // Windows has no sockets in folders. A pipe's default security lets only
+  // its owner (and admins) write to it, so other users can't say hello.
+  if (platform === 'win32') socket = `\\\\.\\pipe\\nodus-${hash()}`
   // macOS caps socket paths at 104 bytes; the per-user temp folder is private too.
-  if (Buffer.byteLength(socket) > 100) {
-    const hash = crypto.createHash('sha1').update(dir).digest('hex').slice(0, 12)
-    socket = path.join(os.tmpdir(), `nodus-${hash}.sock`)
-  }
+  else if (Buffer.byteLength(socket) > 100) socket = path.join(os.tmpdir(), `nodus-${hash()}.sock`)
   return { dir, socket, log: path.join(dir, 'host.log'), hookConfig: path.join(dir, 'hook.curlrc') }
+}
+
+/**
+ * Joins a program's arguments into a Windows command line, quoted the way
+ * programs built with the Microsoft C runtime split it back up; node-pty puts
+ * the program in front. Its own joiner leaves an argument that starts and
+ * ends with a quote unquoted, so a prompt such as "fix the tests" would
+ * arrive in pieces.
+ */
+export function windowsCommandLine(args: string[]): string {
+  const quote = (arg: string) => {
+    if (arg && !/[\s"]/.test(arg)) return arg
+    // Backslashes only need doubling before a quote, including the closing one.
+    return '"' + arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, '$1$1') + '"'
+  }
+  return args.map(quote).join(' ')
 }
 
 export function ensurePrivateDir(dir: string) {

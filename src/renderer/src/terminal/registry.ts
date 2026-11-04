@@ -14,6 +14,7 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import type { SessionKind } from '@shared/types'
+import { isMac } from '@renderer/platform'
 
 /**
  * - opening: sessions.open() is in flight; live data is covered by its replay
@@ -142,7 +143,7 @@ function createEntry(sessionId: string, kind: SessionKind, container: HTMLElemen
   container.appendChild(host)
 
   const term = new Terminal({
-    fontFamily: "'SF Mono', ui-monospace, Menlo, Monaco, monospace",
+    fontFamily: "'SF Mono', ui-monospace, Menlo, Monaco, 'Cascadia Mono', Consolas, monospace",
     fontSize: 13,
     lineHeight: 1.2,
     cursorBlink: true,
@@ -203,7 +204,7 @@ function createEntry(sessionId: string, kind: SessionKind, container: HTMLElemen
       return false
     }
 
-    if (ev.metaKey && !ev.ctrlKey && !ev.altKey) {
+    if (isMac && ev.metaKey && !ev.ctrlKey && !ev.altKey) {
       if (ev.type !== 'keydown') return false
       const key = ev.key.toLowerCase()
       if (key === 'k') {
@@ -218,6 +219,37 @@ function createEntry(sessionId: string, kind: SessionKind, container: HTMLElemen
       }
       // Everything else (⌘V, ⌘W, ⌘N…) falls through to the app menu.
       return false
+    }
+
+    // Off a Mac, Ctrl is the terminal's own key (Ctrl+C, Ctrl+W, Ctrl+K…), so
+    // it keeps it, as Windows Terminal does: Ctrl+C copies only a selection,
+    // Ctrl+V pastes, and the app's shortcuts take Shift as well.
+    if (!isMac && ev.ctrlKey && !ev.altKey && !ev.metaKey) {
+      const key = ev.key.toLowerCase()
+      if (key === 'c' && (ev.shiftKey || term.hasSelection())) {
+        if (ev.type === 'keydown') {
+          ev.preventDefault()
+          if (term.hasSelection()) navigator.clipboard.writeText(term.getSelection()).catch(() => {})
+          // So the next Ctrl+C stops what's running.
+          term.clearSelection()
+        }
+        return false
+      }
+      // The browser pastes into the terminal (bracketed, as Claude expects).
+      if (key === 'v') return false
+      if (ev.shiftKey && /^[a-z]$/.test(key)) {
+        if (ev.type === 'keydown') {
+          if (key === 'a') {
+            ev.preventDefault()
+            term.selectAll()
+          } else if (key === 'w' || key === 't') {
+            ev.preventDefault()
+            void window.api.menuCommand(key === 'w' ? 'close' : 'new-terminal')
+          }
+        }
+        // Ctrl+Shift+N and Ctrl+Shift+F go on to the app menu.
+        return false
+      }
     }
 
     return true

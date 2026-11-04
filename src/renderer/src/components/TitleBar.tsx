@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Menu } from 'lucide-react'
 import { useApp } from '@renderer/store'
 import { FolderIcon } from './FolderIcon'
 import { GitControls } from './git/GitControls'
@@ -7,6 +7,7 @@ import { TITLEBAR_ACTIONS_ID } from './TitleBarActions'
 import { UpdateButton } from './UpdateButton'
 import { RunningCount } from './RunningCount'
 import { addProject, toggleFocusMode } from './projects/projectsUi'
+import { isMac, keys } from '@renderer/platform'
 import './TitleBar.css'
 
 export function TitleBar() {
@@ -33,6 +34,20 @@ export function TitleBar() {
 
   return (
     <header className="titlebar drag">
+      {/* Off a Mac there's no menu bar, so the app menu opens from here, where a Mac has its traffic lights. */}
+      {!isMac && (
+        <button
+          className="btn btn-ghost btn-icon titlebar-menu no-drag"
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect()
+            void window.api.showMenu(r.left, r.bottom + 4)
+          }}
+          title="Menu"
+          aria-label="Menu"
+        >
+          <Menu size={16} strokeWidth={2} />
+        </button>
+      )}
       <nav className="titlebar-crumbs" aria-label="Location">
         {route.view === 'board' ? (
           <>
@@ -51,7 +66,7 @@ export function TitleBar() {
             {/* no-drag: a drag region swallows double-clicks to zoom the window. */}
             <span
               className="titlebar-current no-drag"
-              title={project && `${project.repoPath}\nDouble-click to reveal in Finder`}
+              title={project && `${project.repoPath}\nDouble-click to ${isMac ? 'reveal in Finder' : 'show in File Explorer'}`}
               onDoubleClick={() => project && window.api.projects.revealInFinder(project.id)}
             >
               <FolderIcon size={18} color={project?.color} />
@@ -70,7 +85,7 @@ export function TitleBar() {
         <RunningCount />
         {/* Only while focus mode is turned on in Settings. */}
         {focusFeature && (
-          <label className="titlebar-focus" title="Show only the projects in focus (⇧⌘F)">
+          <label className="titlebar-focus" title={`Show only the projects in focus (${keys('⇧⌘F')})`}>
             Focus
             <input
               type="checkbox"

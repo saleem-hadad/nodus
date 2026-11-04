@@ -5,6 +5,7 @@ import { ACTION_ICONS, DEFAULT_ACTION_ICON } from '@shared/actions'
 import type { ActionDraft, ProjectAction } from '@shared/types'
 import { Modal } from '@renderer/components/Modal'
 import { useApp } from '@renderer/store'
+import { modKey } from '@renderer/platform'
 import { ACTION_ICON_COMPONENTS } from './ActionIcon'
 
 /** Descriptions to start from. Clicking one fills the box, ready to adjust. */
@@ -124,7 +125,7 @@ export function ActionDialog({
   )
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key !== 'Enter' || !e.metaKey) return
+    if (e.key !== 'Enter' || !modKey(e)) return
     e.preventDefault()
     if (step === 'describe') draft()
     else save()

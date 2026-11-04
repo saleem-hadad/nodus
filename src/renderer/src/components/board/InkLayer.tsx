@@ -15,6 +15,7 @@ import { Eraser, MousePointer2, MoveUpRight, Pencil, Trash2, Type, type LucideIc
 import clsx from 'clsx'
 import { INK_COLORS, type InkColor, type InkStroke } from '@shared/types'
 import { useApp } from '@renderer/store'
+import { keys } from '@renderer/platform'
 import {
   ARROW_HEAD,
   LABEL_FONT,
@@ -227,7 +228,7 @@ export const InkLayer = memo(
       if (strokesRef.current.length === 0) return
       select(null)
       commit([])
-      onToast('Cleared the ink. Press ⌘Z to bring it back.')
+      onToast(`Cleared the ink. Press ${keys('⌘Z')} to bring it back.`)
     }, [commit, finishLabel, onToast, select])
 
     useImperativeHandle(

@@ -7,8 +7,20 @@ import { servePage } from './views'
 
 let mainWindow: BrowserWindow | null = null
 
+const isMac = process.platform === 'darwin'
+
 /** Matches --bg-window, so resizing or reloading never flashes the other theme. */
 const windowBackground = () => (nativeTheme.shouldUseDarkColors ? '#1e1e20' : '#f5f5f4')
+
+/**
+ * Windows' minimise, maximise and close buttons, drawn over the right end of
+ * the title bar in its colours (--bg-toolbar over --bg-window) and at its
+ * height (--titlebar-h). The title bar leaves them room (TitleBar.css).
+ */
+const titleBarOverlay = () =>
+  nativeTheme.shouldUseDarkColors
+    ? { color: '#252527', symbolColor: '#e6e6e6', height: 52 }
+    : { color: '#f6f6f5', symbolColor: '#1f1f1f', height: 52 }
 
 const rendererUrl =
   process.env.ELECTRON_RENDERER_URL ?? pathToFileURL(join(__dirname, '../renderer/index.html')).href
@@ -42,8 +54,11 @@ function createWindow(): BrowserWindow {
     minHeight: 620,
     show: false,
     title: 'Nodus',
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 18, y: 18 },
+    // The app draws its own title bar: under the traffic lights on a Mac,
+    // beside the window buttons elsewhere.
+    ...(isMac
+      ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 18, y: 18 } }
+      : { titleBarStyle: 'hidden' as const, titleBarOverlay: titleBarOverlay() }),
     backgroundColor: windowBackground(),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -99,6 +114,8 @@ function showWindow(): BrowserWindow {
 }
 
 app.setName('Nodus')
+// Windows matches notifications to the Start menu shortcut by this id, which the installer gives it.
+if (process.platform === 'win32') app.setAppUserModelId('dev.saleem.nodus')
 
 // Views' pages: a secure scheme of their own, so each is its own origin and
 // its frame can be sandboxed apart from the board.
@@ -107,13 +124,24 @@ protocol.registerSchemesAsPrivileged([{ scheme: VIEW_SCHEME, privileges: { stand
 // Keeps development or test state separate from the real app data.
 if (process.env.NODUS_USER_DATA) app.setPath('userData', process.env.NODUS_USER_DATA)
 
+// A Mac brings the open copy to the front itself; elsewhere a second launch
+// would open a second window on the same boards, so it hands over instead.
+// After the line above, as the lock goes with the userData folder.
+if (!isMac && !app.requestSingleInstanceLock()) app.exit(0)
+app.on('second-instance', () => {
+  if (app.isReady()) showWindow()
+})
+
 app.whenReady().then(async () => {
   protocol.handle(VIEW_SCHEME, (request) => servePage(request.url))
   await registerIpc(() => mainWindow, showWindow)
   createWindow()
 
-  // Fires for the Settings theme and for macOS appearance changes alike.
-  nativeTheme.on('updated', () => mainWindow?.setBackgroundColor(windowBackground()))
+  // Fires for the Settings theme and for system appearance changes alike.
+  nativeTheme.on('updated', () => {
+    mainWindow?.setBackgroundColor(windowBackground())
+    if (!isMac) mainWindow?.setTitleBarOverlay(titleBarOverlay())
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -122,7 +150,7 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   // The app stays open on macOS. Either way sessions keep running in the session host.
-  if (process.platform !== 'darwin') app.quit()
+  if (!isMac) app.quit()
 })
 
 app.on('before-quit', () => {

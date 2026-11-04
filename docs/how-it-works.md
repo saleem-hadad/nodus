@@ -164,6 +164,19 @@ Settings shows the version you're on and how the update is going. **Check Now**,
 Transcripts stay where Claude Code keeps them. The app stores only the board layout (projects, card positions, sections, notes, views, archive, custom titles and lineage) and its settings (theme, and the xAI key for voice prompts if you save one, encrypted with the macOS Keychain) in `~/Library/Application Support/Nodus/state.json`. Each view's page, data, saved state and the last output of its commands are kept beside it in `views/<view id>/`, never in your repository. *Remove from board* hides a card and never deletes a transcript.
 The session host keeps its socket and log in the `host` folder next to it. Only your user can open the folder, which matters because anything that can connect to the socket can start processes as you.
 
+## Windows
+
+Nodus runs on Windows 10 and 11, on x64 and Arm. The installer puts it in your user folder with a Start menu shortcut, and needs no admin rights. Most of it works as on a Mac. What differs:
+
+- Claude Code is found as `claude.exe` on your `PATH`, from its native installer, WinGet or npm. Terminal cards run PowerShell (PowerShell 7 when it's installed), and so do views' commands, so their brains write them for PowerShell.
+- The session host listens on a named pipe rather than a socket. A pipe's default security lets only you, and administrators, send it anything.
+- Claude Code runs hooks in Git Bash when Git for Windows is installed, and in PowerShell otherwise, so Nodus writes its hooks for whichever will run them. PowerShell is slower to start, so without Git a card's status moves a moment later.
+- Shortcuts use Ctrl where a Mac uses ⌘. In a terminal, Ctrl keeps its terminal meaning, as in Windows Terminal: Ctrl+C copies only when text is selected and otherwise stops what's running, Ctrl+V pastes, Ctrl+Shift+A selects all, and Ctrl+Shift+W and Ctrl+Shift+T close the terminal and open a new one.
+- There's no menu bar. The ☰ button at the left of the title bar opens the menu, whose File menu has Settings, Check for Updates… and Quit and Stop Sessions. Closing the window quits Nodus, and sessions keep running in the session host, as they do on a Mac.
+- Updates download the new installer and check it against GitHub's SHA-256 digest. The installer can't replace Nodus while the session host runs from it, so **Restart to Update** asks to stop the running sessions first, and resume them from their cards afterwards. Updates never install on quit.
+- The app's data is in `%APPDATA%\Nodus`, and a saved xAI key is encrypted for your Windows account.
+- The installer isn't code signed yet, so SmartScreen asks before it runs: **More info › Run anyway**.
+
 ## Shortcuts
 
 | Where | Action | Shortcut |
@@ -207,7 +220,7 @@ The session host keeps its socket and log in the `host` folder next to it. Only 
 | | Clear · copy · select all | ⌘K · ⌘C · ⌘A |
 | New session from context | Start | ⌘Enter |
 
-In the terminal, Esc goes to Claude (it interrupts a turn), so it never closes the modal. ⌘W never closes the window.
+In the terminal, Esc goes to Claude (it interrupts a turn), so it never closes the modal. ⌘W never closes the window. On Windows, Ctrl stands in for ⌘, except in a terminal (see [Windows](#windows)).
 
 ## Known limitations
 
@@ -217,7 +230,7 @@ In the terminal, Esc goes to Claude (it interrupts a turn), so it never closes t
 - A view's commands and refreshes only run while the app is open.
 - If you update the app while sessions are running, and the update changed how the app talks to the session host, the new version asks to stop those sessions before it continues.
 - A session host started by a version without board tools keeps running sessions after an update, but sessions started on it don't get the tools. They do once every session has stopped and a new host starts.
-- Built and tested on macOS only.
+- The Windows build is newer than the Mac one. CI installs it and checks that its window, session host and terminals work, but Claude sessions on Windows have seen much less use.
 
 ## Project layout
 
@@ -233,7 +246,7 @@ src/
     board.ts      merges sessions on disk with the saved board; archive layout
     pty.ts        the app's side of the session host: output buffers replayed into terminals, input, status replay
     host.ts       the session host, a separate process: node-pty processes, the hook server and the board tools' endpoint
-    hostProtocol.ts  messages between the two over a Unix socket
+    hostProtocol.ts  messages between the two over a Unix socket (a named pipe on Windows)
     hooks.ts      the status machine, driven by hooks the session host passes on
     summarize.ts  forked, non-persisted handoff summaries
     actions.ts    the actions rail's buttons: drafting them with Claude, and each run's extra claude options
@@ -254,7 +267,7 @@ Built with Electron, electron-vite, React, TypeScript, [React Flow](https://reac
 
 ## Development
 
-You need macOS, [Node.js](https://nodejs.org) 22+ and [pnpm](https://pnpm.io).
+You need macOS or Windows, [Node.js](https://nodejs.org) 22+ and [pnpm](https://pnpm.io).
 
 ```sh
 pnpm install
@@ -262,7 +275,7 @@ pnpm dev          # run with hot reload
 pnpm build        # production build into out/
 pnpm start        # run the production build
 pnpm typecheck    # type-check main, preload and renderer
-pnpm dist         # build the arm64 and x64 DMGs into dist/
+pnpm dist         # build the arm64 and x64 DMGs into dist/ (on Windows, the installers)
 ```
 
 `NODUS_USER_DATA=/some/dir pnpm dev` keeps app state separate from your real board, which is useful for testing. It gets its own session host too.
@@ -271,9 +284,11 @@ A running session host keeps the code it started with. After changing `host.ts`,
 
 `pnpm dist` writes `dist/Nodus-arm64.dmg` and `dist/Nodus-x64.dmg`, with the unpacked apps in `dist/mac-arm64/` and `dist/mac/`. They're signed with the Developer ID certificate in your keychain, under the hardened runtime with the entitlements in `build/entitlements.mac.plist`. Local builds aren't notarized unless `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID` are set. The packaged app shares its board with `pnpm dev`, so don't run both at once.
 
+On Windows, `pnpm dist` writes the unsigned installers `dist/Nodus-Setup-x64.exe` and `dist/Nodus-Setup-arm64.exe`, with the unpacked x64 app in `dist/win-unpacked/`. A Mac can't build them, as electron-builder's NSIS doesn't run there. CI's Windows job installs the x64 one and runs `scripts/smoke.mjs` on it, which drives the app over the DevTools protocol and saves screenshots: `node scripts/smoke.mjs <Nodus.exe> <folder>`.
+
 ### Releasing
 
-Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds both DMGs, signs and notarizes them with the certificate and Apple ID in the repo's secrets, and attaches them to the GitHub release for that tag. The README's download links point at `releases/latest/download/`, so they pick up each new release.
+Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds both DMGs, signs and notarizes them with the certificate and Apple ID in the repo's secrets, and attaches them to the GitHub release for that tag. A Windows job builds both installers alongside and attaches them too. The README's download links point at `releases/latest/download/`, so they pick up each new release.
 
 ```sh
 npm version 0.2.0       # bumps package.json, commits, tags v0.2.0
@@ -282,7 +297,7 @@ git push --follow-tags
 
 The workflow fails if the tag doesn't match the version in `package.json`.
 
-Installed copies update themselves from `releases/latest`. They look for `Nodus-arm64.dmg` and `Nodus-x64.dmg` by name, so keep those names, and don't publish a release before its DMGs are ready to go out.
+Installed copies update themselves from `releases/latest`. They look for `Nodus-arm64.dmg`, `Nodus-x64.dmg`, `Nodus-Setup-x64.exe` and `Nodus-Setup-arm64.exe` by name, so keep those names, and don't publish a release before its files are ready to go out.
 
 ### Troubleshooting installs
 

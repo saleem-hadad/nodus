@@ -95,7 +95,13 @@ async function doubleClick(selector) {
 const powershell = (script) =>
   spawnSync(
     'powershell.exe',
-    ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
+    [
+      '-NoProfile',
+      '-NonInteractive',
+      '-EncodedCommand',
+      // Without progress records, which PowerShell otherwise writes to stderr as CLIXML.
+      Buffer.from(`$ProgressPreference = 'SilentlyContinue'; ${script}`, 'utf16le').toString('base64')
+    ],
     { stdio: 'inherit' }
   ).status
 

@@ -23,6 +23,15 @@ const MENU_COMMANDS: readonly MenuCommand[] = [
 export const isMenuCommand = (value: unknown): value is MenuCommand => MENU_COMMANDS.includes(value as MenuCommand)
 
 /**
+ * Off a Mac, Ctrl and a letter is a terminal's own key (Ctrl+C, Ctrl+W,
+ * Ctrl+R…), and a registered accelerator would take it from a focused
+ * terminal. Items with one show it but don't register it; the window takes
+ * Ctrl+N, Ctrl+T and Ctrl+W itself outside terminals (App.tsx), and inputs
+ * do their own editing.
+ */
+const shown = isMac ? {} : { registerAccelerator: false }
+
+/**
  * Matches View › Focus Mode to the settings: there only while focus is offered
  * in Settings (disabled too, so its shortcut can't fire), ticked while it's on.
  */
@@ -86,11 +95,11 @@ export function installMenu(send: (command: MenuCommand) => void) {
     click: () => void stopAll().finally(() => app.quit())
   }
   const fileItems: MenuItemConstructorOptions[] = [
-    { label: 'New Session', accelerator: 'CmdOrCtrl+N', click: () => send('new-session') },
-    { label: 'New Terminal', accelerator: 'CmdOrCtrl+T', click: () => send('new-terminal') },
+    { label: 'New Session', accelerator: 'CmdOrCtrl+N', ...shown, click: () => send('new-session') },
+    { label: 'New Terminal', accelerator: 'CmdOrCtrl+T', ...shown, click: () => send('new-terminal') },
     { label: 'New Project…', accelerator: 'CmdOrCtrl+Shift+N', click: () => send('new-project') },
     { type: 'separator' },
-    { label: 'Close', accelerator: 'CmdOrCtrl+W', click: () => send('close') }
+    { label: 'Close', accelerator: 'CmdOrCtrl+W', ...shown, click: () => send('close') }
   ]
   const template: MenuItemConstructorOptions[] = [
     ...(isMac
@@ -124,7 +133,7 @@ export function installMenu(send: (command: MenuCommand) => void) {
               settings,
               checkForUpdates,
               { type: 'separator' },
-              { role: 'quit', label: 'Exit' },
+              { role: 'quit', label: 'Exit', ...shown },
               quitAndStop
             ] satisfies MenuItemConstructorOptions[]
           }
@@ -132,16 +141,16 @@ export function installMenu(send: (command: MenuCommand) => void) {
     {
       label: 'Edit',
       submenu: [
-        { role: 'undo' },
-        { role: 'redo' },
+        { role: 'undo', ...shown },
+        { role: 'redo', ...shown },
         { type: 'separator' },
-        { role: 'cut' },
-        { role: 'copy' },
-        { role: 'paste' },
+        { role: 'cut', ...shown },
+        { role: 'copy', ...shown },
+        { role: 'paste', ...shown },
         // Off a Mac its Ctrl+Shift+V is a terminal's paste.
         ...(isMac ? [{ role: 'pasteAndMatchStyle' } as const] : []),
         { role: 'delete' },
-        { role: 'selectAll' },
+        { role: 'selectAll', ...shown },
         { type: 'separator' },
         // The board takes ⌘K itself, so a focused terminal can keep it for clearing.
         {
@@ -170,19 +179,19 @@ export function installMenu(send: (command: MenuCommand) => void) {
           }
         },
         { id: FOCUS_SEP_ID, type: 'separator', visible: getState().settings.focusFeature },
-        { role: 'reload' },
+        { role: 'reload', ...shown },
         { role: 'forceReload' },
         { role: 'toggleDevTools' },
         { type: 'separator' },
-        { role: 'resetZoom' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
+        { role: 'resetZoom', ...shown },
+        { role: 'zoomIn', ...shown },
+        { role: 'zoomOut', ...shown },
         { type: 'separator' },
         { role: 'togglefullscreen' }
       ]
     },
     // Off a Mac the window menu's Close takes Ctrl+W, which would close the window.
-    isMac ? { role: 'windowMenu' } : { label: 'Window', submenu: [{ role: 'minimize' }] },
+    isMac ? { role: 'windowMenu' } : { label: 'Window', submenu: [{ role: 'minimize', ...shown }] },
     {
       role: 'help',
       submenu: [

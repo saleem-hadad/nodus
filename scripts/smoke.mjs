@@ -6,7 +6,7 @@
 //   node scripts/smoke.mjs <path to Nodus.exe or …/Nodus.app/Contents/MacOS/Nodus> <folder for screenshots>
 //
 // It uses its own userData folder, so real boards are never touched.
-import { spawn } from 'child_process'
+import { spawn, spawnSync } from 'child_process'
 import crypto from 'crypto'
 import fs from 'fs'
 import net from 'net'
@@ -89,6 +89,36 @@ async function doubleClick(selector) {
     await send('Input.dispatchMouseEvent', { type: 'mousePressed', ...box, button: 'left', clickCount })
     await send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...box, button: 'left', clickCount })
   }
+}
+
+/** Runs a Windows PowerShell script, and returns its exit code. */
+const powershell = (script) =>
+  spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { stdio: 'inherit' }).status
+
+/**
+ * Presses keys through Windows (SendKeys: ^ is Ctrl, + is Shift), so they
+ * reach the app as a user's would, menu accelerators included, which keys
+ * sent over DevTools skip. False if the window couldn't come to the front.
+ */
+function pressKeys(keys) {
+  const status = powershell(
+    `$s = New-Object -ComObject WScript.Shell; if (-not $s.AppActivate(${app.pid})) { exit 3 }; ` +
+      `Start-Sleep -Milliseconds 400; $s.SendKeys('${keys}')`
+  )
+  return status === 0
+}
+
+/** The whole screen, with the window's own buttons, which the page's screenshots leave out. */
+function screenCapture(name) {
+  const file = path.resolve(outDir, `${name}.png`).replace(/'/g, "''")
+  powershell(
+    'Add-Type -AssemblyName System.Windows.Forms, System.Drawing; ' +
+      '$b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; ' +
+      '$bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height; ' +
+      '[System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size); ' +
+      `$bmp.Save('${file}')`
+  )
+  console.log(`  saved ${name}.png`)
 }
 
 /** Connects to the session host the way the app does, and returns its welcome. */
@@ -182,6 +212,26 @@ try {
   step('Dark mode')
   await evaluate(`window.api.settings.update({ theme: 'dark' })`)
   await screenshot('3-board-dark')
+
+  if (process.platform === 'win32') {
+    step('The window, and keys pressed through Windows')
+    await evaluate(`window.api.settings.update({ theme: 'light' })`)
+    // In a terminal, Ctrl+W is the terminal's own key, so the board stays.
+    await evaluate(`document.querySelector('.xterm-helper-textarea').focus()`)
+    if (!pressKeys('^w')) {
+      console.log('  skipped: the window couldn’t come to the front')
+    } else {
+      await sleep(1000)
+      screenCapture('4-screen')
+      if (!(await evaluate(`!!document.querySelector('.react-flow')`))) throw new Error('Ctrl+W in a terminal closed the board')
+      console.log('  Ctrl+W in the terminal stayed with the terminal')
+      // Anywhere else it closes the board, as ⌘W does on a Mac.
+      await evaluate(`document.activeElement?.blur()`)
+      pressKeys('^w')
+      await until('Ctrl+W to close the board', () => evaluate(`!document.querySelector('.react-flow')`), 10_000)
+      console.log('  Ctrl+W on the board went back to the projects')
+    }
+  }
 
   console.log('\n✓ Smoke test passed')
 } catch (err) {

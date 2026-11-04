@@ -91,19 +91,29 @@ async function doubleClick(selector) {
   }
 }
 
-/** Runs a Windows PowerShell script, and returns its exit code. */
+/** Runs a Windows PowerShell script, and returns its exit code. Encoded, so no quote in it needs escaping. */
 const powershell = (script) =>
-  spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { stdio: 'inherit' }).status
+  spawnSync(
+    'powershell.exe',
+    ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
+    { stdio: 'inherit' }
+  ).status
 
 /**
- * Presses keys through Windows (SendKeys: ^ is Ctrl, + is Shift), so they
- * reach the app as a user's would, menu accelerators included, which keys
- * sent over DevTools skip. False if the window couldn't come to the front.
+ * Presses Ctrl (and Shift) and a letter through Windows, so it reaches the
+ * app as a user's would, menu accelerators included, which keys sent over
+ * DevTools skip. SendKeys' ^ doesn't reach Chromium as Ctrl, so this holds
+ * the keys down itself. False if the window couldn't come to the front.
  */
-function pressKeys(keys) {
+function pressCtrl(letter, { shift = false } = {}) {
+  const vk = letter.toUpperCase().charCodeAt(0)
+  const keys = [0x11, ...(shift ? [0x10] : []), vk]
+  const down = keys.map((k) => `[Keys]::keybd_event(${k}, 0, 0, [UIntPtr]::Zero); Start-Sleep -Milliseconds 40`)
+  const up = keys.reverse().map((k) => `[Keys]::keybd_event(${k}, 0, 2, [UIntPtr]::Zero); Start-Sleep -Milliseconds 40`)
   const status = powershell(
-    `$s = New-Object -ComObject WScript.Shell; if (-not $s.AppActivate(${app.pid})) { exit 3 }; ` +
-      `Start-Sleep -Milliseconds 400; $s.SendKeys('${keys}')`
+    `Add-Type -Namespace Smoke -Name Keys -MemberDefinition '[DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);'; ` +
+      `$s = New-Object -ComObject WScript.Shell; if (-not $s.AppActivate(${app.pid})) { exit 3 }; Start-Sleep -Milliseconds 400; ` +
+      [...down, ...up].join('; ').replaceAll('[Keys]', '[Smoke.Keys]')
   )
   return status === 0
 }
@@ -216,20 +226,35 @@ try {
   if (process.platform === 'win32') {
     step('The window, and keys pressed through Windows')
     await evaluate(`window.api.settings.update({ theme: 'light' })`)
-    // In a terminal, Ctrl+W is the terminal's own key, so the board stays.
-    await evaluate(`document.querySelector('.xterm-helper-textarea').focus()`)
-    if (!pressKeys('^w')) {
+    const onBoard = () => evaluate(`!!document.querySelector('.react-flow')`)
+    const reopen = async () => {
+      await doubleClick('[data-project-id]')
+      await until('the terminal card', () => evaluate(`!!document.querySelector('.xterm')`), 30_000)
+    }
+    const focusTerminal = () => evaluate(`document.querySelector('.xterm-helper-textarea').focus()`)
+    await focusTerminal()
+    // Ctrl+W on the board closes it, as ⌘W does on a Mac. First, as that shows the keys get through.
+    await evaluate(`document.activeElement?.blur()`)
+    if (!pressCtrl('w')) {
       console.log('  skipped: the window couldn’t come to the front')
     } else {
-      await sleep(1000)
-      screenCapture('4-screen')
-      if (!(await evaluate(`!!document.querySelector('.react-flow')`))) throw new Error('Ctrl+W in a terminal closed the board')
-      console.log('  Ctrl+W in the terminal stayed with the terminal')
-      // Anywhere else it closes the board, as ⌘W does on a Mac.
-      await evaluate(`document.activeElement?.blur()`)
-      pressKeys('^w')
-      await until('Ctrl+W to close the board', () => evaluate(`!document.querySelector('.react-flow')`), 10_000)
+      await until('Ctrl+W on the board to close it', async () => !(await onBoard()), 10_000)
       console.log('  Ctrl+W on the board went back to the projects')
+      await reopen()
+
+      // In a terminal, Ctrl+W is the terminal's own key, so the board stays.
+      await focusTerminal()
+      pressCtrl('w')
+      await sleep(1500)
+      screenCapture('4-screen')
+      if (!(await onBoard())) throw new Error('Ctrl+W in a terminal closed the board')
+      console.log('  Ctrl+W in the terminal stayed with the terminal')
+
+      // Ctrl+Shift+W is the app's.
+      await focusTerminal()
+      pressCtrl('w', { shift: true })
+      await until('Ctrl+Shift+W in the terminal to close the board', async () => !(await onBoard()), 10_000)
+      console.log('  Ctrl+Shift+W in the terminal went back to the projects')
     }
   }
 

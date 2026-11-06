@@ -3,7 +3,16 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { encode, ensurePrivateDir, hostPaths, messageReader, windowsCommandLine, writeHookConfig } from './hostProtocol'
+import {
+  encode,
+  ensurePrivateDir,
+  hostPaths,
+  messageReader,
+  trustsHost,
+  windowsCommandLine,
+  writeHookConfig,
+  writePrivateFile
+} from './hostProtocol'
 
 const isWindows = process.platform === 'win32'
 
@@ -68,7 +77,8 @@ describe('host files', () => {
       dir: path.join(dir, 'host'),
       socket: path.join(dir, 'host', 'host.sock'),
       log: path.join(dir, 'host', 'host.log'),
-      hookConfig: path.join(dir, 'host', 'hook.curlrc')
+      hookConfig: path.join(dir, 'host', 'hook.curlrc'),
+      key: path.join(dir, 'host', 'host.key')
     })
   })
 
@@ -107,6 +117,48 @@ describe('host files', () => {
     }
     // Written beside it and renamed into place.
     expect(fs.readdirSync(paths.dir)).toEqual(['hook.curlrc'])
+  })
+
+  it('won’t put a token in the hook config that would add curl options', () => {
+    const paths = hostPaths(dir)
+    writeHookConfig(paths, 'abc123')
+    expect(() => writeHookConfig(paths, 'x"\noutput = "C:\\evil.cmd')).toThrow()
+    expect(() => writeHookConfig(paths, '')).toThrow()
+    expect(fs.readFileSync(paths.hookConfig, 'utf8')).toBe('header = "Authorization: Bearer abc123"\n')
+  })
+})
+
+describe('trustsHost', () => {
+  let dir: string
+  let paths: ReturnType<typeof hostPaths>
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nodus-host-'))
+    paths = hostPaths(dir, 'win32')
+  })
+
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('trusts a pipe whose welcome carries the key in the host folder', () => {
+    writePrivateFile(paths.key, 'k'.repeat(64))
+    expect(trustsHost('k'.repeat(64), paths, 'win32')).toBe(true)
+  })
+
+  it('doesn’t trust one that made the pipe first and can’t read the folder', () => {
+    writePrivateFile(paths.key, 'k'.repeat(64))
+    expect(trustsHost('j'.repeat(64), paths, 'win32')).toBe(false)
+    expect(trustsHost(undefined, paths, 'win32')).toBe(false)
+    expect(trustsHost('', paths, 'win32')).toBe(false)
+  })
+
+  it('doesn’t trust a pipe while there’s no key file', () => {
+    expect(trustsHost('k'.repeat(64), paths, 'win32')).toBe(false)
+  })
+
+  it('needs no key on a Mac, where the socket’s folder keeps others out', () => {
+    expect(trustsHost(undefined, hostPaths(dir, 'darwin'), 'darwin')).toBe(true)
   })
 })
 

@@ -30,7 +30,8 @@ import {
   type HistoryEntry,
   type HostMessage,
   type SpawnRequest,
-  windowsCommandLine
+  windowsCommandLine,
+  writePrivateFile
 } from './hostProtocol'
 
 const isWindows = process.platform === 'win32'
@@ -68,10 +69,18 @@ interface Session {
 }
 
 const socketPath = process.argv[2]
+/** Where the host keeps its key, on Windows (hostPaths). */
+const keyPath = process.argv[3]
 const sessions = new Map<string, Session>()
 /** Connected apps that speak our protocol. */
 const clients = new Set<net.Socket>()
 const hookToken = crypto.randomBytes(16).toString('hex')
+/**
+ * Shows the app this pipe is ours. Anyone on the PC can make a pipe with our
+ * name, so the app only trusts a welcome carrying what's in the key file,
+ * which only the user can read (trustsHost).
+ */
+const hostKey = isWindows ? crypto.randomBytes(32).toString('hex') : undefined
 const hookTokenBytes = Buffer.from(hookToken)
 let hookPort = 0
 let stopping = false
@@ -243,7 +252,8 @@ const server = net.createServer((socket) => {
               hookToken,
               sessions: sessionList,
               mcp: true,
-              hookAuthHeader: true
+              hookAuthHeader: true,
+              key: hostKey
             })
           )
           // An app on another protocol may only ask us to stop.
@@ -415,7 +425,7 @@ function alreadyServed(): Promise<boolean> {
 }
 
 async function main() {
-  if (!socketPath) throw new Error('usage: host <socket path>')
+  if (!socketPath || (isWindows && !keyPath)) throw new Error('usage: host <socket path> <key path>')
 
   // Two apps starting at once could each start a host; the second one leaves.
   if (await alreadyServed()) {
@@ -441,6 +451,9 @@ async function main() {
   })
   // A pipe has no mode bits; its default security already keeps other users out.
   if (!isWindows) fs.chmodSync(socketPath, 0o600)
+  // Before any welcome goes out, and only once the pipe is ours: a second
+  // host that lost the race to it never gets here.
+  if (hostKey) writePrivateFile(keyPath, hostKey)
   log('listening', socketPath, 'hooks on', hookPort)
 
   setTimeout(() => {

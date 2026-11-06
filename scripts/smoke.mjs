@@ -224,6 +224,11 @@ try {
   const { socket, welcome } = await hostWelcome()
   console.log(`  ${socket}: protocol ${welcome.protocol}, ${welcome.sessions.length} session(s)`)
   if (!welcome.sessions.some((s) => s.sessionId === card.sessionId)) throw new Error('The host doesn’t have the terminal')
+  // On Windows the app only trusts a host whose welcome has the key in its private folder.
+  const keyFile = path.join(userData, 'host', 'host.key')
+  if (process.platform === 'win32' && welcome.key !== fs.readFileSync(keyFile, 'utf8')) {
+    throw new Error('The host’s welcome doesn’t carry the key in host.key')
+  }
 
   step('Dark mode')
   await evaluate(`window.api.settings.update({ theme: 'dark' })`)

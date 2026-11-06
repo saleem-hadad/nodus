@@ -22,6 +22,7 @@ import {
   ensurePrivateDir,
   hostPaths,
   messageReader,
+  trustsHost,
   writeHookConfig,
   type ClientMessage,
   type HostMessage,
@@ -238,8 +239,11 @@ function tryConnect(socketPath: string): Promise<net.Socket | null> {
   })
 }
 
-/** Says hello. Resolves false if the host speaks another protocol. */
-function greet(socket: net.Socket): Promise<boolean> {
+/**
+ * Says hello. Resolves false if the host speaks another protocol, and fails
+ * if what answered isn't this user's host, before it's told anything more.
+ */
+function greet(socket: net.Socket, paths: HostPaths): Promise<boolean> {
   return new Promise((resolve, reject) => {
     let welcomed = false
     const timeout = setTimeout(() => socket.destroy(), WELCOME_MS)
@@ -249,6 +253,11 @@ function greet(socket: net.Socket): Promise<boolean> {
         if (welcomed) return handle(msg)
         welcomed = true
         clearTimeout(timeout)
+        if (!trustsHost(msg.type === 'welcome' ? msg.key : undefined, paths)) {
+          socket.destroy()
+          const why = 'Another program answered as the session host, so Nodus didn’t trust it with your sessions.'
+          return reject(new Error(why))
+        }
         if (msg.type !== 'welcome' || msg.protocol !== PROTOCOL) return resolve(false)
         // In the same read as the welcome, before any message that follows it.
         host = socket
@@ -269,7 +278,7 @@ function greet(socket: net.Socket): Promise<boolean> {
 function startHost(paths: HostPaths) {
   ensurePrivateDir(paths.dir)
   const out = fs.openSync(paths.log, 'w')
-  const child = spawn(process.execPath, [path.join(__dirname, 'host.js'), paths.socket], {
+  const child = spawn(process.execPath, [path.join(__dirname, 'host.js'), paths.socket, paths.key], {
     detached: true,
     stdio: ['ignore', out, out],
     cwd: paths.dir,
@@ -314,12 +323,12 @@ async function replaceHost(socket: net.Socket) {
 async function connect(start: boolean) {
   const paths = hostPaths(app.getPath('userData'))
   let socket = await tryConnect(paths.socket)
-  if (socket && !(await greet(socket))) {
+  if (socket && !(await greet(socket, paths))) {
     await replaceHost(socket)
     socket = null
   }
   if (socket || !start) return
-  if (!(await greet(await startAndConnect(paths)))) throw new Error('The session host speaks another protocol')
+  if (!(await greet(await startAndConnect(paths), paths))) throw new Error('The session host speaks another protocol')
 }
 
 /**

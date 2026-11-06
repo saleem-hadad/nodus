@@ -8,11 +8,13 @@ directories:
 files:
   - out/**
   - package.json
-# node-pty ships N-API prebuilds, so there's nothing to rebuild for Electron.
+# node-pty and uiohook-napi ship N-API prebuilds, so there's nothing to rebuild for Electron.
 npmRebuild: false
-# spawn-helper has to be a real file on disk for node-pty to exec it.
+# spawn-helper has to be a real file on disk for node-pty to exec it, and the
+# key hook behind floating capture loads its native addon from disk too.
 asarUnpack:
   - node_modules/node-pty/**
+  - node_modules/uiohook-napi/**
 mac:
   target:
     - target: dmg
@@ -25,9 +27,11 @@ mac:
   hardenedRuntime: true
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
-  # Shown when the mic button first asks for the microphone.
+  # Shown when the mic button first asks for the microphone, and when floating
+  # capture first reads the browser tab in front.
   extendInfo:
     NSMicrophoneUsageDescription: Nodus listens only while you record with the mic button, to turn what you say into a prompt.
+    NSAppleEventsUsageDescription: Floating capture reads the link and title of the browser tab in front, to send along with what you write.
 dmg:
   # No auto-updater, so skip the .blockmap files.
   writeUpdateInfo: false

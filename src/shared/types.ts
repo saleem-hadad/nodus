@@ -530,6 +530,8 @@ export interface AppSettings {
   focusFeature: boolean
   /** The title bar's Focus switch: show only the projects in focus, in the grid and the rail. */
   focusMode: boolean
+  /** Double-tapping Shift in any app opens the floating capture panel. */
+  capture: boolean
 }
 
 /** A card to open, from a notification the user clicked. Without a session, just its project's board. */
@@ -596,4 +598,107 @@ export interface GitFileDiff {
   patch: string
   binary?: boolean
   tooLarge?: boolean
+}
+
+/**
+ * What floating capture makes of what the user typed:
+ * - session: a new Claude session on it, in auto mode
+ * - into:    the next prompt of a session already on the board
+ * - note:    a sticky note on the board
+ * - view:    a live view, built by its own Claude session
+ */
+export type CaptureKind = 'session' | 'into' | 'note' | 'view'
+
+/** Something from the user's screen that goes along with a capture. */
+export type CaptureAttachment =
+  /** The browser tab in front when the panel opened. */
+  | { kind: 'tab'; url: string; title: string; app: string }
+  /** A screenshot, or an image that was copied, saved in the app's data folder. `thumb` is a small data URL. */
+  | { kind: 'image'; path: string; thumb: string; copied?: boolean }
+  /** A file dropped on the panel or picked. */
+  | { kind: 'file'; path: string; name: string; size: number }
+  /** Text that was copied. */
+  | { kind: 'text'; text: string }
+
+/** A session the panel can send into, or show on a recent capture. */
+export interface CaptureSession {
+  projectId: string
+  sessionId: string
+  title: string
+  status: SessionStatus
+  /** Whether its process is running. */
+  live: boolean
+  updatedAt: number
+}
+
+/** Something captured earlier, with how it's doing now. */
+export interface CaptureRecent {
+  id: string
+  kind: CaptureKind
+  projectId: string
+  title: string
+  createdAt: number
+  sessionId?: string
+  noteId?: string
+  viewId?: string
+  /** A session's status now. Notes and views have none. */
+  status?: SessionStatus
+}
+
+/** What the panel can send to: every project, their sessions and the recent captures. */
+export interface CaptureTargets {
+  projects: { id: string; name: string; color: FolderColor }[]
+  /** Claude sessions on the projects' boards, most recently active first. */
+  sessions: CaptureSession[]
+  recents: CaptureRecent[]
+  /** Where a capture goes before Claude has guessed: the board used last. */
+  defaultProjectId: string | null
+}
+
+/**
+ * Whether the double-tap can be heard: on a Mac it needs Accessibility
+ * permission. 'off' while the setting is off, 'unavailable' if the key hook
+ * couldn't load.
+ */
+export type CaptureShortcut = 'ready' | 'needs-permission' | 'off' | 'unavailable'
+
+/** What the panel opened onto. */
+export interface CaptureContext {
+  /** The app in front when it opened, unless that was Nodus. */
+  app?: string
+  /** That app's browser tab, which arrives a moment after the panel opens. */
+  tab?: Extract<CaptureAttachment, { kind: 'tab' }>
+  /** What's on the clipboard, offered rather than attached. */
+  clipboard?: { kind: 'text'; text: string } | { kind: 'image'; thumb: string }
+  shortcut: CaptureShortcut
+}
+
+/** Claude's guess at what a capture is and where it goes. */
+export interface CaptureGuess {
+  kind: CaptureKind
+  projectId: string
+  /** For 'into'. */
+  sessionId?: string
+  /** One short line saying why, for the user. */
+  reason: string
+}
+
+export interface CaptureSubmission {
+  text: string
+  kind: CaptureKind
+  projectId: string
+  /** For 'into'. */
+  sessionId?: string
+  attachments: CaptureAttachment[]
+}
+
+/** What a capture became, for the receipt. */
+export interface CaptureReceipt {
+  kind: CaptureKind
+  projectId: string
+  projectName: string
+  title: string
+  sessionId?: string
+  noteId?: string
+  viewId?: string
 }

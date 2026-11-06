@@ -28,6 +28,7 @@
     "node-pty": "^1.1.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "uiohook-napi": "^1.5.5",
     "zustand": "^5.0.15"
   },
   "devDependencies": {

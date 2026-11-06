@@ -73,7 +73,7 @@ function bugReportUrl(): string {
  * the window. Off a Mac the title bar has no menu bar, so its menu button
  * opens this, and what a Mac keeps in the app menu goes in File and Help.
  */
-export function installMenu(send: (command: MenuCommand) => void) {
+export function installMenu(send: (command: MenuCommand) => void, capture: () => void) {
   // Settings shows how the check goes, and the download after it.
   const checkForUpdates: MenuItemConstructorOptions = {
     label: 'Check for Updates…',
@@ -95,6 +95,9 @@ export function installMenu(send: (command: MenuCommand) => void) {
     click: () => void stopAll().finally(() => app.quit())
   }
   const fileItems: MenuItemConstructorOptions[] = [
+    // Floating capture's double tap of Shift isn't a shortcut a menu can show.
+    { label: 'Capture…', click: capture },
+    { type: 'separator' },
     { label: 'New Session', accelerator: 'CmdOrCtrl+N', ...shown, click: () => send('new-session') },
     { label: 'New Terminal', accelerator: 'CmdOrCtrl+T', ...shown, click: () => send('new-terminal') },
     { label: 'New Project…', accelerator: 'CmdOrCtrl+Shift+N', click: () => send('new-project') },

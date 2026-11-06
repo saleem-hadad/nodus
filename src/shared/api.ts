@@ -9,6 +9,13 @@ import type {
   AppInfo,
   AppSettings,
   BoardNote,
+  CaptureAttachment,
+  CaptureContext,
+  CaptureGuess,
+  CaptureReceipt,
+  CaptureShortcut,
+  CaptureSubmission,
+  CaptureTargets,
   BoardSection,
   BoardSnapshot,
   BoardView,
@@ -116,6 +123,21 @@ export const IPC = {
   updatesCheck: 'updates:check',
   updatesInstall: 'updates:install',
 
+  captureReady: 'capture:ready',
+  captureTargets: 'capture:targets',
+  captureGuess: 'capture:guess',
+  captureSubmit: 'capture:submit',
+  captureScreenshot: 'capture:screenshot',
+  captureFiles: 'capture:files',
+  captureClipboard: 'capture:clipboard',
+  captureHide: 'capture:hide',
+  capturePassThrough: 'capture:pass-through',
+  captureOpen: 'capture:open',
+  captureSettings: 'capture:settings',
+  captureShortcut: 'capture:shortcut',
+  captureAllow: 'capture:allow',
+  captureShow: 'capture:show',
+
   // main -> renderer events
   evPtyData: 'ev:pty-data',
   evPtyExit: 'ev:pty-exit',
@@ -129,7 +151,9 @@ export const IPC = {
   evMenu: 'ev:menu',
   evUpdateStatus: 'ev:update-status',
   evView: 'ev:view',
-  evOpenCard: 'ev:open-card'
+  evOpenCard: 'ev:open-card',
+  evCaptureShown: 'ev:capture-shown',
+  evCaptureContext: 'ev:capture-context'
 } as const
 
 /**
@@ -325,6 +349,40 @@ export interface Api {
     install(): Promise<void>
   }
 
+  /**
+   * Floating capture: the panel that double-tapping Shift brings up over any
+   * app. Most of this is the panel's own; Settings uses shortcut, allow and show.
+   */
+  capture: {
+    /** The panel's page has loaded: what the panel is up over now, if it is. */
+    ready(): Promise<CaptureContext | null>
+    /** The projects, their sessions and the recent captures, with their status now. */
+    targets(): Promise<CaptureTargets>
+    /** Claude's guess at what the text is and where it goes; null if it can't say, or a newer guess replaced it. */
+    guess(text: string, attachments: CaptureAttachment[]): Promise<CaptureGuess | null>
+    /** Makes it on the board. Rejects with why it couldn't. */
+    submit(submission: CaptureSubmission): Promise<CaptureReceipt>
+    /** Hides the panel for the user to take a screenshot; null if they cancel. */
+    screenshot(): Promise<Extract<CaptureAttachment, { kind: 'image' }> | null>
+    /** Files by path (dropped ones), or picked in a dialog when no paths are given. */
+    files(paths?: string[]): Promise<CaptureAttachment[]>
+    /** What's on the clipboard, attached. */
+    clipboard(): Promise<CaptureAttachment | null>
+    hide(): void
+    /** Whether clicks go through the panel's window: true over its see-through margin. */
+    setPassThrough(through: boolean): void
+    /** Puts the panel away and opens a card, or a board, in the window. */
+    open(request: OpenCardRequest): Promise<void>
+    /** Puts the panel away and opens Settings in the window. */
+    openSettings(): Promise<void>
+    /** Whether the double tap can be heard. */
+    shortcut(): Promise<CaptureShortcut>
+    /** Asks macOS for the Accessibility permission the double tap needs. */
+    allow(): Promise<CaptureShortcut>
+    /** Brings the panel up, as the double tap does. */
+    show(): Promise<void>
+  }
+
   on: {
     ptyData(cb: (sessionId: string, data: string) => void): Unsubscribe
     ptyExit(cb: (sessionId: string, exitCode: number) => void): Unsubscribe
@@ -346,5 +404,9 @@ export interface Api {
     view(cb: (projectId: string, viewId: string, event: ViewEvent, payload: unknown) => void): Unsubscribe
     /** The user clicked a notification about a card. */
     openCard(cb: (request: OpenCardRequest) => void): Unsubscribe
+    /** The capture panel came up, over this. */
+    captureShown(cb: (context: CaptureContext) => void): Unsubscribe
+    /** More of what the panel came up over, such as the browser tab, arriving after it. */
+    captureContext(cb: (context: Partial<CaptureContext>) => void): Unsubscribe
   }
 }

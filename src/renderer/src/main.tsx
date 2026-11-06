@@ -10,8 +10,21 @@ import { platform } from './platform'
 // Off a Mac the title bar leaves room for Windows' buttons rather than the traffic lights.
 document.documentElement.dataset.platform = platform
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>
-)
+const root = createRoot(document.getElementById('root')!)
+
+// The floating capture panel is a window of its own on the same page (src/main/capture.ts).
+if (location.hash === '#capture') {
+  void import('./capture/CaptureApp').then(({ CaptureApp }) =>
+    root.render(
+      <StrictMode>
+        <CaptureApp />
+      </StrictMode>
+    )
+  )
+} else {
+  root.render(
+    <StrictMode>
+      <App />
+    </StrictMode>
+  )
+}

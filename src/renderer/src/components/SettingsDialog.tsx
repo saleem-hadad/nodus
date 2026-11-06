@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { X } from 'lucide-react'
 import clsx from 'clsx'
-import type { AppSettings, ThemePreference, UpdateStatus, VoiceKeySource } from '@shared/types'
+import type { AppSettings, CaptureShortcut, ThemePreference, UpdateStatus, VoiceKeySource } from '@shared/types'
 import { isMac } from '@renderer/platform'
 import { useApp } from '@renderer/store'
 import { Modal } from './Modal'
@@ -122,6 +122,8 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
           </label>
         </fieldset>
 
+        <CaptureSettings settings={settings} update={update} />
+
         <fieldset className="settings-group">
           <legend className="settings-label">Notifications</legend>
           <label className="settings-row">
@@ -161,6 +163,88 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
         <UpdateSettings settings={settings} update={update} />
       </div>
     </div>
+  )
+}
+
+/**
+ * Floating capture: the double tap of Shift, and on a Mac, the Accessibility
+ * permission it needs. The permission is checked again while the dialog is
+ * open, since it's given in System Settings.
+ */
+function CaptureSettings({
+  settings,
+  update
+}: {
+  settings: AppSettings | null
+  update: (patch: Partial<AppSettings>) => void
+}) {
+  const [shortcut, setShortcut] = useState<CaptureShortcut | null>(null)
+
+  useEffect(() => {
+    let live = true
+    const read = () => void window.api.capture.shortcut().then((s) => live && setShortcut(s))
+    read()
+    const timer = window.setInterval(read, 2000)
+    return () => {
+      live = false
+      window.clearInterval(timer)
+    }
+  }, [settings?.capture])
+
+  return (
+    <fieldset className="settings-group">
+      <legend className="settings-label">Floating capture</legend>
+      <label className="settings-row">
+        <span className="settings-row-text">
+          <span className="settings-row-title">Double-tap ⇧ in any app to capture</span>
+          <span className="settings-row-hint">
+            A panel floats up over what you’re doing. Type or say what you want, and Claude works out whether it’s a
+            new session, a note, a view or a reply to a session.
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          role="switch"
+          className="switch"
+          checked={settings?.capture ?? false}
+          disabled={!settings}
+          onChange={(e) => update({ capture: e.target.checked })}
+        />
+      </label>
+      {shortcut === 'needs-permission' && (
+        <div className="settings-row">
+          <span className="settings-row-text">
+            <span className="settings-row-title">Allow Nodus in Accessibility</span>
+            <span className="settings-row-hint">
+              macOS lets an app hear a key pressed in other apps only with this permission. Turn Nodus on in Privacy
+              &amp; Security › Accessibility.
+            </span>
+          </span>
+          <button type="button" className="btn btn-primary" onClick={() => void window.api.capture.allow().then(setShortcut)}>
+            Allow…
+          </button>
+        </div>
+      )}
+      {shortcut === 'unavailable' && (
+        <div className="settings-row">
+          <span className="settings-row-text">
+            <span className="settings-row-hint">The double tap couldn’t start on this computer. File › Capture… still opens the panel.</span>
+          </span>
+        </div>
+      )}
+      {settings?.capture && (
+        <div className="settings-row">
+          <span className="settings-row-text">
+            <span className="settings-row-hint">
+              {shortcut === 'ready' ? 'Ready. ' : ''}File › Capture… opens it too.
+            </span>
+          </span>
+          <button type="button" className="btn" onClick={() => void window.api.capture.show()}>
+            Try It
+          </button>
+        </div>
+      )}
+    </fieldset>
   )
 }
 

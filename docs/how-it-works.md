@@ -119,6 +119,27 @@ The xAI API key comes from Settings or from `XAI_API_KEY` in your shell, and a s
 
 Audio leaves your machine only when you stop a recording, and goes to xAI alone. It counts toward your xAI usage.
 
+## Floating capture
+
+Double-tap ⇧ in any app and a panel floats up over it, on the screen the pointer is on, over full-screen apps too. Type what you want, or say it with the mic, and press Return. It becomes a new session, a note, a view or the next prompt of a session that's already running, on the board of the project it belongs to. **File › Capture…** opens the panel too, and **Settings › Floating capture** turns the double tap off.
+
+Each time you pause, Claude guesses what you typed is and where it goes, and the panel's header says so. The guess goes on what you typed, your projects and their recent sessions, and the app in front. It's a short `claude -p` call to Haiku, with no tools. Tab (⇧Tab to go back) moves to the next kind. A click on the header opens a menu with Claude's reason, where you can pick the kind and the project, or for Into, the session. What you pick sticks until you clear the text. If you press Return before Claude has answered, the panel waits for its answer. Each guess is a small Claude request, so it counts toward your usage, and what you type goes to Anthropic before you send it.
+
+What you send lands the way the prompt bar's does. A session starts in auto mode, as an expanded card in a free spot near where you last left the board, with your words stuck on it. A note or a view takes a free spot there. A session that's waiting on you isn't sent anything, since that would answer its question. Once sent, the panel shows what it made for a moment and goes; click it to open it on the board. The next time it opens, your last captures sit under it with their live status.
+
+What comes along:
+
+- **The browser tab in front** (Safari, Chrome, Arc, Dia, Brave, Edge, Vivaldi or Opera): its link and title. macOS asks once for each browser whether Nodus may read it. Firefox has no way to share its tab.
+- **A screenshot.** The scan button hides the panel and brings up macOS's crosshair; press Space to pick a window. macOS asks for Screen Recording the first time.
+- **What you copied**, offered as a dashed tile. Click it to add it.
+- **Files**, dropped on the panel or picked with the paperclip.
+
+Screenshots and copied images are saved in `captures/` in the app's data folder, and Claude gets their paths. Files go by path too, and the tab and copied text go into the prompt itself. Captures older than 30 days are cleared away.
+
+↑ in an empty field brings back earlier captures. Esc or a click anywhere else puts the panel away, and what you typed is still there the next time.
+
+The double tap is heard through a global key hook ([uiohook-napi](https://github.com/SnosMe/uiohook-napi)). Only ⇧ pressed on its own counts: ⇧ held to type a capital or to click doesn't. On a Mac the hook needs Accessibility permission. **Allow…** in Settings asks for it and opens Privacy & Security › Accessibility. Until it's allowed, **File › Capture…** still opens the panel. On Windows it needs no permission. There, the screenshot is the whole screen the pointer is on, and the browser tab isn't read.
+
 ## Cards
 
 Cards are read from Claude Code's transcripts in `~/.claude/projects/<encoded-repo-path>/`. Titles use your custom title first, then Claude's generated title, then the first prompt. Parsing is incremental and cached, so large histories load quickly.
@@ -161,7 +182,7 @@ Settings shows the version you're on and how the update is going. **Check Now**,
 
 ## Your data
 
-Transcripts stay where Claude Code keeps them. The app stores only the board layout (projects, card positions, sections, notes, views, archive, custom titles and lineage) and its settings (theme, and the xAI key for voice prompts if you save one, encrypted with the macOS Keychain) in `~/Library/Application Support/Nodus/state.json`. Each view's page, data, saved state and the last output of its commands are kept beside it in `views/<view id>/`, never in your repository. *Remove from board* hides a card and never deletes a transcript.
+Transcripts stay where Claude Code keeps them. The app stores only the board layout (projects, card positions, sections, notes, views, archive, custom titles and lineage) and its settings (theme, and the xAI key for voice prompts if you save one, encrypted with the macOS Keychain) in `~/Library/Application Support/Nodus/state.json`. Each view's page, data, saved state and the last output of its commands are kept beside it in `views/<view id>/`, never in your repository. Floating capture keeps its screenshots and copied images in `captures/`, and the list of recent captures in `state.json`. *Remove from board* hides a card and never deletes a transcript.
 The session host keeps its socket and log in the `host` folder next to it. Only your user can open the folder, which matters because anything that can connect to the socket can start processes as you.
 
 ## Windows
@@ -186,6 +207,12 @@ Nodus runs on Windows 10 and 11, on x64 and Arm. The installer puts it in your u
 | | Settings (theme: System, Light or Dark) | ⌘, |
 | | Quit and stop every session | ⌥⌘Q |
 | | Close the modal, or go back to projects | ⌘W |
+| | Floating capture, from any app | Double-tap ⇧ · File › Capture… |
+| Capture panel | Send | Return |
+| | New line | ⇧Return |
+| | Next kind · previous | Tab · ⇧Tab |
+| | Earlier captures | ↑ · ↓ |
+| | Put it away | Esc · click elsewhere |
 | Projects | Open the selected project | Double-click · ⌘O · ⌘↓ |
 | | Rename · remove | Enter · ⌘⌫ |
 | | Color, Reveal in Finder, Add to Focus (once focus is on in Settings) | Right-click |
@@ -230,6 +257,8 @@ In the terminal, Esc goes to Claude (it interrupts a turn), so it never closes t
 - A view's commands and refreshes only run while the app is open.
 - If you update the app while sessions are running, and the update changed how the app talks to the session host, the new version asks to stop those sessions before it continues.
 - A session host started by a version without board tools keeps running sessions after an update, but sessions started on it don't get the tools. They do once every session has stopped and a new host starts.
+- On a Mac, the double tap of ⇧ needs Accessibility permission, and a browser tab needs Automation permission for that browser.
+- On Windows, floating capture hasn't been tried by hand yet.
 - The Windows build is newer than the Mac one. CI installs it and checks that its window, session host and terminals work, but Claude sessions on Windows have seen much less use.
 
 ## Project layout
@@ -255,15 +284,20 @@ src/
     views.ts      views: their files, commands and schedules, their brains, and what their pages ask the board for
     viewPage.ts   the page a view's frame loads: its content security policy, theme and window.nodus
     voice.ts      speech to text for the mics through xAI, and the key it uses
+    capture.ts    floating capture: the panel's window, the double tap, and making what's captured on the board
+    captureGuess.ts  Claude's guess at what a capture is and where it goes
+    doubleTap.ts  hears ⇧ tapped twice from the key hook's events
+    screenContext.ts  what a capture brings from the screen: the app in front, its browser tab, a screenshot, the clipboard
     updater.ts    updates the app from GitHub releases: download, checks, and the swap on quit
     store.ts      state.json in the app's userData directory
   renderer/src/
     views/        ProjectsView (folders) and BoardView (canvas)
     components/   title bar, folder icon, board cards, agent decks, sections, archive stack, notes and their pad, views and the relay to their frames, merge dialog, lineage edges, the prompt bar and its mic
     terminal/     xterm.js registry, TerminalModal, TranscriptPreview, AgentViewer
+    capture/      the floating capture panel, the page its window shows (#capture)
 ```
 
-Built with Electron, electron-vite, React, TypeScript, [React Flow](https://reactflow.dev), [xterm.js](https://xtermjs.org), [node-pty](https://github.com/microsoft/node-pty) and zustand.
+Built with Electron, electron-vite, React, TypeScript, [React Flow](https://reactflow.dev), [xterm.js](https://xtermjs.org), [node-pty](https://github.com/microsoft/node-pty), [uiohook-napi](https://github.com/SnosMe/uiohook-napi) and zustand.
 
 ## Development
 

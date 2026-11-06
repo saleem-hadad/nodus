@@ -326,7 +326,7 @@ export function servePage(url: string): Response {
 // ---------------------------------------------------------------------------
 // Placing views
 
-function obstacles(board: BoardState, except?: string): Rect[] {
+export function obstacles(board: BoardState, except?: string): Rect[] {
   const cards = Object.values(board.nodes).filter((n) => !n.archived && !n.runOf && !n.viewOf)
   return [
     ...cards.map((n) => ({ x: n.x, y: n.y, ...cardSize(n) })),

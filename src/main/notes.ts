@@ -39,7 +39,7 @@ const FROM_H = 22
 const clamp = (n: number, min: number, max: number) => Math.round(Math.min(max, Math.max(min, n)))
 
 /** A size that shows `text` whole, as far as a note grows by itself. A short note stays square. */
-function fitNote(text: string): Size {
+export function fitNote(text: string): Size {
   const lines = text.split('\n')
   const longest = Math.max(...lines.map((line) => line.length))
   const w = clamp(longest * CHAR_W + PAD_X, NOTE_W, FIT_MAX_W)

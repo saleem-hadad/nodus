@@ -5,6 +5,7 @@ import path from 'path'
 import type {
   AppSettings,
   BoardNode,
+  CaptureKind,
   BoardNote,
   BoardSection,
   BoardView,
@@ -31,7 +32,8 @@ export function normalizeSettings(raw: unknown): AppSettings {
     dockBadge: s.dockBadge !== false,
     pinProjectRail: s.pinProjectRail === true,
     focusFeature: s.focusFeature === true,
-    focusMode: s.focusMode === true
+    focusMode: s.focusMode === true,
+    capture: s.capture !== false
   }
 }
 
@@ -57,6 +59,21 @@ export interface State {
   actions?: ProjectAction[]
   /** The xAI API key for voice prompts, encrypted with safeStorage (base64). Never sent to the renderer. */
   voiceKey?: string
+  /** What floating capture made lately, newest first. */
+  captures?: CaptureRecord[]
+}
+
+/** Something made from the floating capture panel, and where it went. */
+export interface CaptureRecord {
+  id: string
+  kind: CaptureKind
+  projectId: string
+  /** What it was called when it was made. A session's own title wins once it has one. */
+  title: string
+  createdAt: number
+  sessionId?: string
+  noteId?: string
+  viewId?: string
 }
 
 let state: State = { projects: [], groups: [], boards: {}, settings: normalizeSettings(null) }
@@ -98,7 +115,8 @@ export function loadState() {
       boards: raw.boards && typeof raw.boards === 'object' ? raw.boards : {},
       settings: normalizeSettings(raw.settings),
       actions: Array.isArray(raw.actions) ? raw.actions : undefined,
-      voiceKey: typeof raw.voiceKey === 'string' && raw.voiceKey ? raw.voiceKey : undefined
+      voiceKey: typeof raw.voiceKey === 'string' && raw.voiceKey ? raw.voiceKey : undefined,
+      captures: Array.isArray(raw.captures) ? raw.captures : undefined
     }
   } catch {
     state = { projects: [], groups: [], boards: {}, settings: normalizeSettings(null) }

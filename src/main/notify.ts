@@ -107,7 +107,7 @@ function show(sessionId: string, notice: Notice) {
     shown.delete(sessionId)
     // An action run leaves the board when it finishes, so its notification opens the board.
     const onBoard = projectIdForSession(sessionId) === about.projectId
-    open({ projectId: about.projectId, sessionId: onBoard ? sessionId : undefined })
+    openCard({ projectId: about.projectId, sessionId: onBoard ? sessionId : undefined })
   })
   shown.set(sessionId, { notification, notice })
   notification.show()
@@ -121,7 +121,8 @@ function withdraw(sessionId: string, notice: Notice) {
   shown.delete(sessionId)
 }
 
-function open(request: OpenCardRequest) {
+/** Brings the window up on a card, or on a project's board. */
+export function openCard(request: OpenCardRequest) {
   if (!getState().projects.some((p) => p.id === request.projectId)) return void showWindow()
   const win = getWindow()
   const reopened = !win || win.isDestroyed() || win.webContents.isLoading()

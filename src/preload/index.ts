@@ -115,6 +115,23 @@ const api: Api = {
     install: () => ipcRenderer.invoke(IPC.updatesInstall)
   },
 
+  capture: {
+    ready: () => ipcRenderer.invoke(IPC.captureReady),
+    targets: () => ipcRenderer.invoke(IPC.captureTargets),
+    guess: (text, attachments) => ipcRenderer.invoke(IPC.captureGuess, text, attachments),
+    submit: (submission) => ipcRenderer.invoke(IPC.captureSubmit, submission),
+    screenshot: () => ipcRenderer.invoke(IPC.captureScreenshot),
+    files: (paths) => ipcRenderer.invoke(IPC.captureFiles, paths),
+    clipboard: () => ipcRenderer.invoke(IPC.captureClipboard),
+    hide: () => ipcRenderer.send(IPC.captureHide),
+    setPassThrough: (through) => ipcRenderer.send(IPC.capturePassThrough, through),
+    open: (request) => ipcRenderer.invoke(IPC.captureOpen, request),
+    openSettings: () => ipcRenderer.invoke(IPC.captureSettings),
+    shortcut: () => ipcRenderer.invoke(IPC.captureShortcut),
+    allow: () => ipcRenderer.invoke(IPC.captureAllow),
+    show: () => ipcRenderer.invoke(IPC.captureShow)
+  },
+
   on: {
     ptyData: (cb) => subscribe(IPC.evPtyData, cb),
     ptyExit: (cb) => subscribe(IPC.evPtyExit, cb),
@@ -128,7 +145,9 @@ const api: Api = {
     menu: (cb) => subscribe(IPC.evMenu, cb),
     updateStatus: (cb) => subscribe(IPC.evUpdateStatus, cb),
     view: (cb) => subscribe(IPC.evView, cb),
-    openCard: (cb) => subscribe(IPC.evOpenCard, cb)
+    openCard: (cb) => subscribe(IPC.evOpenCard, cb),
+    captureShown: (cb) => subscribe(IPC.evCaptureShown, cb),
+    captureContext: (cb) => subscribe(IPC.evCaptureContext, cb)
   }
 }
 

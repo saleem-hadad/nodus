@@ -47,6 +47,7 @@ import {
   unstickNotes
 } from './board'
 import { answerMcp, configureBoardTools } from './boardTools'
+import { boardOpened, openPanel, registerCapture, stopCapture, syncShortcut } from './capture'
 import {
   AGENT_ID,
   readSession,
@@ -175,6 +176,7 @@ function applySettings(settings: AppSettings) {
   nativeTheme.themeSource = settings.theme
   notify.updateBadge()
   syncFocusMenu(settings)
+  syncShortcut()
 }
 
 /**
@@ -278,7 +280,7 @@ export async function registerIpc(getWindow: () => BrowserWindow | null, showWin
     isLive: ptys.isLive,
     hasPendingWork
   })
-  installMenu((command) => send(IPC.evMenu, command))
+  installMenu((command) => send(IPC.evMenu, command), () => void openPanel())
   updater.startUpdater((status) => send(IPC.evUpdateStatus, status))
   // Sessions still running from before the app last quit. A host is only started for a new session.
   await ptys.connectHost(false).catch((err) => console.error('[host] connect failed', err))
@@ -427,6 +429,7 @@ export async function registerIpc(getWindow: () => BrowserWindow | null, showWin
   // --- Board ---------------------------------------------------------------
 
   ipcMain.handle(IPC.boardLoad, (_e, projectId: string) => {
+    boardOpened(projectId)
     const project = getProject(projectId)
     // A run whose process ended while the app was closed never reported back.
     for (const node of Object.values(getBoard(projectId).nodes)) {
@@ -824,56 +827,56 @@ export async function registerIpc(getWindow: () => BrowserWindow | null, showWin
 
   // --- Sessions ------------------------------------------------------------
 
-  ipcMain.handle(
-    IPC.sessionCreate,
-    async (_e, projectId: string, opts: CreateSessionOptions): Promise<SessionCard> => {
-      await envReady
-      const project = getProject(projectId)
-      const board = getBoard(projectId)
-      const sessionId = crypto.randomUUID()
-      const terminal = opts.kind === 'terminal'
-      const action = terminal || !opts.actionId ? undefined : findAction(project, opts.actionId)
-      if (opts.actionId && !action) throw new Error('That action no longer exists')
-      const node: BoardNode = {
-        sessionId,
-        kind: terminal ? 'terminal' : undefined,
-        x: opts.x,
-        y: opts.y,
-        archived: false,
-        title: opts.name?.trim() || undefined,
-        parents: !terminal && opts.parents?.length ? opts.parents : undefined,
-        createdByApp: true,
-        runOf: action?.id,
-        expanded: opts.expanded || undefined,
-        autoMode: !terminal && opts.autoMode ? true : undefined,
-        fromView:
-          !terminal && typeof opts.fromView === 'string' && Object.hasOwn(board.views!, opts.fromView)
-            ? opts.fromView
-            : undefined,
-        createdAt: Date.now()
-      }
-      if (action) node.title = action.name
-      board.nodes[sessionId] = node
-      try {
-        await ptys.spawnSession({
-          sessionId,
-          projectId,
-          cwd: project.repoPath,
-          kind: node.kind,
-          resume: false,
-          name: terminal ? undefined : node.title,
-          initialPrompt: terminal ? undefined : action?.prompt ?? (opts.initialPrompt?.trim() || undefined),
-          permissionMode: action || node.autoMode ? 'auto' : undefined,
-          extraArgs: action ? runArgs(action) : undefined
-        })
-      } catch (err) {
-        delete board.nodes[sessionId]
-        throw err
-      }
-      save()
-      return toCard(node)
+  /** Creates a card and starts its process: for the board, and for floating capture. */
+  const createSession = async (projectId: string, opts: CreateSessionOptions): Promise<SessionCard> => {
+    await envReady
+    const project = getProject(projectId)
+    const board = getBoard(projectId)
+    const sessionId = crypto.randomUUID()
+    const terminal = opts.kind === 'terminal'
+    const action = terminal || !opts.actionId ? undefined : findAction(project, opts.actionId)
+    if (opts.actionId && !action) throw new Error('That action no longer exists')
+    const node: BoardNode = {
+      sessionId,
+      kind: terminal ? 'terminal' : undefined,
+      x: opts.x,
+      y: opts.y,
+      archived: false,
+      title: opts.name?.trim() || undefined,
+      parents: !terminal && opts.parents?.length ? opts.parents : undefined,
+      createdByApp: true,
+      runOf: action?.id,
+      expanded: opts.expanded || undefined,
+      autoMode: !terminal && opts.autoMode ? true : undefined,
+      fromView:
+        !terminal && typeof opts.fromView === 'string' && Object.hasOwn(board.views!, opts.fromView)
+          ? opts.fromView
+          : undefined,
+      createdAt: Date.now()
     }
-  )
+    if (action) node.title = action.name
+    board.nodes[sessionId] = node
+    try {
+      await ptys.spawnSession({
+        sessionId,
+        projectId,
+        cwd: project.repoPath,
+        kind: node.kind,
+        resume: false,
+        name: terminal ? undefined : node.title,
+        initialPrompt: terminal ? undefined : action?.prompt ?? (opts.initialPrompt?.trim() || undefined),
+        permissionMode: action || node.autoMode ? 'auto' : undefined,
+        extraArgs: action ? runArgs(action) : undefined
+      })
+    } catch (err) {
+      delete board.nodes[sessionId]
+      throw err
+    }
+    save()
+    return toCard(node)
+  }
+
+  ipcMain.handle(IPC.sessionCreate, (_e, projectId: string, opts: CreateSessionOptions) => createSession(projectId, opts))
 
   ipcMain.handle(
     IPC.sessionOpen,
@@ -911,7 +914,8 @@ export async function registerIpc(getWindow: () => BrowserWindow | null, showWin
     ptys.write(sessionId, data)
   })
 
-  ipcMain.handle(IPC.sessionSend, async (_e, projectId: string, sessionId: string, text: string) => {
+  /** Sends a prompt into a session as if typed at its prompt: for the board, and for floating capture. */
+  const sendToSession = async (projectId: string, sessionId: string, text: string) => {
     if (typeof text !== 'string' || !text.trim()) return
     const node = getBoard(projectId).nodes[sessionId]
     if (!node || node.archived || node.kind === 'terminal') throw new Error('That session is no longer on the board')
@@ -935,7 +939,11 @@ export async function registerIpc(getWindow: () => BrowserWindow | null, showWin
       extraArgs: node.viewOf ? views.brainArgs(projectId, node) : undefined
     })
     claimRun(sessionId)
-  })
+  }
+
+  ipcMain.handle(IPC.sessionSend, (_e, projectId: string, sessionId: string, text: string) =>
+    sendToSession(projectId, sessionId, text)
+  )
 
   ipcMain.on(IPC.sessionResize, (_e, sessionId: string, cols: number, rows: number) => {
     ptys.resize(sessionId, cols, rows)
@@ -1000,10 +1008,28 @@ export async function registerIpc(getWindow: () => BrowserWindow | null, showWin
       }))
     return searchSessions(project.repoPath, targets, String(query ?? ''))
   })
+
+  registerCapture({
+    mainWindow: getWindow,
+    createSession,
+    sendToSession,
+    sessionTitle,
+    boardChanged: (projectId) => send(IPC.evBoardChanged, projectId),
+    openCard: notify.openCard,
+    openSettings: () => {
+      const win = getWindow()
+      const reopened = !win || win.isDestroyed() || win.webContents.isLoading()
+      const shown = showWindow()
+      // A window still loading hasn't subscribed to menu commands yet.
+      if (reopened) shown.webContents.once('did-finish-load', () => send(IPC.evMenu, 'settings'))
+      else send(IPC.evMenu, 'settings')
+    }
+  })
 }
 
 /** Sessions keep running in the session host; the app just lets go of them. */
 export function shutdown() {
+  stopCapture()
   ptys.disconnect()
   unwatchAll()
   views.flushViews()

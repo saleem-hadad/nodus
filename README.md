@@ -45,10 +45,11 @@ You need [Claude Code](https://code.claude.com/docs/en/overview) installed, with
 - Focus mode hides every project but this week's
 - Views: ask Claude for a live table of your deploys or tickets
 - Sticky notes, action buttons and spoken prompts
+- Double-tap ⇧ in any app to start a session, jot a note or reply to one
 
 ## 🔒 Private by design
 
-Everything stays on your machine. Nodus reads transcripts where Claude Code keeps them and saves only the board layout. Spoken prompts use xAI's speech to text with your own key.
+Everything stays on your machine. Nodus reads transcripts where Claude Code keeps them and saves only the board layout. Spoken prompts use xAI's speech to text with your own key. Floating capture asks Claude where each capture goes, so what you type there reaches Anthropic as you type it.
 
 ## 📖 Learn more
 

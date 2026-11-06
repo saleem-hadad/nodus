@@ -173,7 +173,7 @@ Nodus runs on Windows 10 and 11, on x64 and Arm. The installer puts it in your u
 - Claude Code runs hooks in Git Bash when Git for Windows is installed, and in PowerShell otherwise, so Nodus writes its hooks for whichever will run them. PowerShell is slower to start, so without Git a card's status moves a moment later.
 - Shortcuts use Ctrl where a Mac uses ⌘. In a terminal, Ctrl keeps its terminal meaning, as in Windows Terminal: Ctrl+C copies only when text is selected and otherwise stops what's running, Ctrl+V pastes, Ctrl+Shift+A selects all, and Ctrl+Shift+W and Ctrl+Shift+T close the terminal and open a new one.
 - There's no menu bar. The ☰ button at the left of the title bar opens the menu, whose File menu has Settings, Check for Updates… and Quit and Stop Sessions. Closing the window quits Nodus, and sessions keep running in the session host, as they do on a Mac.
-- Updates download the new installer and check it against GitHub's SHA-256 digest. The installer can't replace Nodus while the session host runs from it, so **Restart to Update** asks to stop the running sessions first, and resume them from their cards afterwards. Updates never install on quit.
+- Updates download the new installer and check it against GitHub's SHA-256 digest. The installer can't replace Nodus while the session host runs from it, so **Restart to Update** asks to stop the running sessions first, and resume them from their cards afterwards. Updates never install on quit, and the installer is kept for the next launch, so it isn't downloaded again.
 - The app's data is in `%APPDATA%\Nodus`, and a saved xAI key is encrypted for your Windows account.
 - The installer isn't code signed yet, so SmartScreen asks before it runs: **More info › Run anyway**.
 

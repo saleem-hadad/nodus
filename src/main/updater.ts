@@ -48,6 +48,8 @@ let failedVersion: string | null = null
 /** Open the new version once it's swapped in (Restart to Update), rather than only installing on quit. */
 let relaunch = false
 let swapping = false
+/** Restart to Update is under way on Windows, so a second click doesn't start a second installer. */
+let installing = false
 
 function setState(next: UpdateState) {
   status = { ...next, current: app.getVersion() }
@@ -242,9 +244,22 @@ async function verify(appPath: string, version: string) {
   if (team && (await teamId(appPath)) !== team) throw new UpdateError('The update isn’t signed by the same developer.')
 }
 
+/** Whether `file` is the release's installer already, as an earlier run downloaded it. */
+async function downloaded(file: string, release: Release): Promise<boolean> {
+  try {
+    if ((await fs.promises.stat(file)).size !== release.size) return false
+    const hash = crypto.createHash('sha256')
+    for await (const chunk of fs.createReadStream(file)) hash.update(chunk)
+    return hash.digest('hex') === release.sha256
+  } catch {
+    return false
+  }
+}
+
 /**
  * Downloads a release's installer and keeps it for Restart to Update. It isn't
- * code signed, so the digest GitHub keeps for it is what vouches for it.
+ * code signed, so the digest GitHub keeps for it is what vouches for it. One
+ * an earlier run downloaded is checked against that digest instead.
  */
 async function prepareInstaller(release: Release) {
   const installer = path.join(updatesDir(), `Nodus-Setup-${release.version}.exe`)
@@ -252,9 +267,11 @@ async function prepareInstaller(release: Release) {
   try {
     if (!release.sha256) throw new UpdateError('GitHub had no checksum for the update, so it wasn’t downloaded.')
     await fs.promises.mkdir(updatesDir(), { recursive: true })
-    await download(release, installer, (percent) =>
-      setState({ state: 'downloading', version: release.version, percent })
-    )
+    if (!(await downloaded(installer, release))) {
+      await download(release, installer, (percent) =>
+        setState({ state: 'downloading', version: release.version, percent })
+      )
+    }
     staged = { version: release.version, app: installer }
     setState({ state: 'ready', version: release.version })
   } catch (err) {
@@ -331,25 +348,53 @@ export async function restartToUpdate() {
 /**
  * Stops the sessions, once the user agrees to, and quits into the installer,
  * which puts the new version in and opens it. A session can be resumed from
- * its card afterwards.
+ * its card afterwards. If the installer doesn't start, Nodus stays open and
+ * says so.
  */
 async function installOnWindows(installer: string) {
-  const running = liveSessionIds().length
-  if (running) {
-    const { response } = await dialog.showMessageBox({
-      type: 'question',
-      message: `Stop ${running === 1 ? 'the running session' : `${running} running sessions`} to update?`,
-      detail: 'Windows can’t update Nodus while its sessions run. You can resume them from their cards afterwards.',
-      buttons: ['Stop and Update', 'Not Now'],
-      defaultId: 0,
-      cancelId: 1
-    })
-    if (response === 1) return
+  if (installing) return
+  installing = true
+  try {
+    // Before the sessions stop, so a missing installer stops nothing.
+    await fs.promises.access(installer)
+    const running = liveSessionIds().length
+    if (running) {
+      const { response } = await dialog.showMessageBox({
+        type: 'question',
+        message: `Stop ${running === 1 ? 'the running session' : `${running} running sessions`} to update?`,
+        detail: 'Windows can’t update Nodus while its sessions run. You can resume them from their cards afterwards.',
+        buttons: ['Stop and Update', 'Not Now'],
+        defaultId: 0,
+        cancelId: 1
+      })
+      if (response === 1) return
+    }
+    await stopAll()
+    await startInstaller(installer)
+    app.quit()
+  } catch (err) {
+    console.error('[updater] the installer didn’t start', err)
+    // Check for Updates downloads it again.
+    staged = null
+    await remove(installer).catch(() => {})
+    const message = 'The installer didn’t start, so Nodus wasn’t updated. Try Check for Updates again.'
+    setState({ state: 'error', message })
+  } finally {
+    installing = false
   }
-  await stopAll()
-  // /S installs without asking, --updated keeps the shortcuts as they are and --force-run opens Nodus after.
-  spawn(installer, ['--updated', '/S', '--force-run'], { detached: true, stdio: 'ignore' }).unref()
-  app.quit()
+}
+
+/** Starts the installer on its own, resolving once Windows has started it. */
+function startInstaller(installer: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // /S installs without asking, --updated keeps the shortcuts as they are and --force-run opens Nodus after.
+    const child = spawn(installer, ['--updated', '/S', '--force-run'], { detached: true, stdio: 'ignore' })
+    child.once('error', reject)
+    child.once('spawn', () => {
+      child.unref()
+      resolve()
+    })
+  })
 }
 
 /**
@@ -396,7 +441,22 @@ function swapOnExit() {
   spawn('/bin/sh', ['-c', SWAP_SCRIPT, 'nodus-update', ...args], { detached: true, stdio: 'ignore' }).unref()
 }
 
-/** Clears what earlier runs left behind: downloads, a staged app that never went in, the previous version. */
+/** The installer for the newest version newer than this one, among the files in `names`. */
+function newestInstaller(names: string[]): string | null {
+  let newest: { name: string; version: string } | null = null
+  for (const name of names) {
+    const version = /^Nodus-Setup-(\d+\.\d+\.\d+)\.exe$/.exec(name)?.[1]
+    if (version && isNewer(version, newest?.version ?? app.getVersion())) newest = { name, version }
+  }
+  return newest?.name ?? null
+}
+
+/**
+ * Clears what earlier runs left behind: downloads, a staged app that never
+ * went in, the previous version. On Windows an update goes in only when the
+ * user restarts into it, so the newest installer stays for the next run
+ * rather than being downloaded again.
+ */
 async function cleanUp() {
   const dir = updatesDir()
   try {
@@ -406,8 +466,11 @@ async function cleanUp() {
   } catch {
     // Nothing failed.
   }
-  for (const name of await fs.promises.readdir(dir).catch(() => [])) {
+  const names = await fs.promises.readdir(dir).catch(() => [])
+  const kept = isWindows ? newestInstaller(names) : null
+  for (const name of names) {
     if (name === 'failed' && failedVersion) continue
+    if (name === kept) continue
     // A DMG still mounted from a quit mid-copy.
     if (!isWindows && name.startsWith('mount-')) {
       await run('/usr/bin/hdiutil', ['detach', path.join(dir, name), '-force']).catch(() => {})

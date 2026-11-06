@@ -349,16 +349,23 @@ export function disconnect() {
   host?.end()
 }
 
-/** Stops every session and the host. */
+/**
+ * Stops every session and the host. The app can carry on after, as when an
+ * update's installer doesn't start: a new session starts a new host.
+ */
 export async function stopAll(): Promise<void> {
   const socket = host
   if (!socket) return
+  // The host reports each session it stops; losing it after isn't a crash.
   quitting = true
   await new Promise<void>((resolve) => {
     socket.once('close', () => resolve())
     send({ type: 'shutdown' })
     setTimeout(resolve, KILL_WAIT_MS + 1000)
   })
+  quitting = false
+  // Any it didn't report before it went are over too.
+  if (host !== socket) for (const sessionId of [...running.keys()]) exited(sessionId, -1)
 }
 
 // ---------------------------------------------------------------------------

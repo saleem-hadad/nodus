@@ -13,7 +13,7 @@ import path from 'path'
 import { app, dialog } from 'electron'
 import type { SessionKind, SessionStatus } from '@shared/types'
 import { BOARD_MCP_CONFIG, BOARD_TOOL_RULES } from './boardTools'
-import { requireClaude, spawnEnv, userShell } from './env'
+import { envVar, gitBash, requireClaude, spawnEnv, terminalShell } from './env'
 import { hookEnv, hookSettings, markProcess, noteUserInput, receiveHook, setHookEndpoint } from './hooks'
 import {
   PROTOCOL,
@@ -22,6 +22,7 @@ import {
   ensurePrivateDir,
   hostPaths,
   messageReader,
+  trustsHost,
   writeHookConfig,
   type ClientMessage,
   type HostMessage,
@@ -238,8 +239,11 @@ function tryConnect(socketPath: string): Promise<net.Socket | null> {
   })
 }
 
-/** Says hello. Resolves false if the host speaks another protocol. */
-function greet(socket: net.Socket): Promise<boolean> {
+/**
+ * Says hello. Resolves false if the host speaks another protocol, and fails
+ * if what answered isn't this user's host, before it's told anything more.
+ */
+function greet(socket: net.Socket, paths: HostPaths): Promise<boolean> {
   return new Promise((resolve, reject) => {
     let welcomed = false
     const timeout = setTimeout(() => socket.destroy(), WELCOME_MS)
@@ -249,6 +253,11 @@ function greet(socket: net.Socket): Promise<boolean> {
         if (welcomed) return handle(msg)
         welcomed = true
         clearTimeout(timeout)
+        if (!trustsHost(msg.type === 'welcome' ? msg.key : undefined, paths)) {
+          socket.destroy()
+          const why = 'Another program answered as the session host, so Nodus didn’t trust it with your sessions.'
+          return reject(new Error(why))
+        }
         if (msg.type !== 'welcome' || msg.protocol !== PROTOCOL) return resolve(false)
         // In the same read as the welcome, before any message that follows it.
         host = socket
@@ -269,11 +278,12 @@ function greet(socket: net.Socket): Promise<boolean> {
 function startHost(paths: HostPaths) {
   ensurePrivateDir(paths.dir)
   const out = fs.openSync(paths.log, 'w')
-  const child = spawn(process.execPath, [path.join(__dirname, 'host.js'), paths.socket], {
+  const child = spawn(process.execPath, [path.join(__dirname, 'host.js'), paths.socket, paths.key], {
     detached: true,
     stdio: ['ignore', out, out],
     cwd: paths.dir,
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+    windowsHide: true
   })
   child.unref()
   fs.closeSync(out)
@@ -313,12 +323,12 @@ async function replaceHost(socket: net.Socket) {
 async function connect(start: boolean) {
   const paths = hostPaths(app.getPath('userData'))
   let socket = await tryConnect(paths.socket)
-  if (socket && !(await greet(socket))) {
+  if (socket && !(await greet(socket, paths))) {
     await replaceHost(socket)
     socket = null
   }
   if (socket || !start) return
-  if (!(await greet(await startAndConnect(paths)))) throw new Error('The session host speaks another protocol')
+  if (!(await greet(await startAndConnect(paths), paths))) throw new Error('The session host speaks another protocol')
 }
 
 /**
@@ -339,16 +349,23 @@ export function disconnect() {
   host?.end()
 }
 
-/** Stops every session and the host. */
+/**
+ * Stops every session and the host. The app can carry on after, as when an
+ * update's installer doesn't start: a new session starts a new host.
+ */
 export async function stopAll(): Promise<void> {
   const socket = host
   if (!socket) return
+  // The host reports each session it stops; losing it after isn't a crash.
   quitting = true
   await new Promise<void>((resolve) => {
     socket.once('close', () => resolve())
     send({ type: 'shutdown' })
     setTimeout(resolve, KILL_WAIT_MS + 1000)
   })
+  quitting = false
+  // Any it didn't report before it went are over too.
+  if (host !== socket) for (const sessionId of [...running.keys()]) exited(sessionId, -1)
 }
 
 // ---------------------------------------------------------------------------
@@ -356,7 +373,7 @@ export async function stopAll(): Promise<void> {
 
 /** Command line for a card's process. Terminals get a login shell, like Terminal.app. */
 function commandFor(opts: SpawnOptions): { file: string; args: string[]; env: Record<string, string> } {
-  if (opts.kind === 'terminal') return { file: userShell(), args: ['-l'], env: spawnEnv() }
+  if (opts.kind === 'terminal') return { ...terminalShell(), env: spawnEnv() }
 
   const args = opts.resume ? ['--resume', opts.sessionId] : ['--session-id', opts.sessionId]
   if (opts.name) args.push('--name', opts.name)
@@ -368,7 +385,11 @@ function commandFor(opts: SpawnOptions): { file: string; args: string[]; env: Re
   args.push('--settings', hookSettings())
   // After `--`, so a prompt that starts with a dash isn't read as an option.
   if (opts.initialPrompt) args.push('--', opts.initialPrompt)
-  return { file: requireClaude(), args, env: spawnEnv(hookEnv(opts.sessionId)) }
+  // On Windows, the Git Bash its hooks were written for (hookSettings), should claude look elsewhere.
+  const bash = gitBash()
+  const extra: Record<string, string> =
+    bash && !envVar('CLAUDE_CODE_GIT_BASH_PATH') ? { CLAUDE_CODE_GIT_BASH_PATH: bash } : {}
+  return { file: requireClaude(), args, env: spawnEnv({ ...extra, ...hookEnv(opts.sessionId) }) }
 }
 
 async function startSession(opts: SpawnOptions) {

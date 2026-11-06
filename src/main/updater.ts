@@ -5,7 +5,11 @@
 // by hand: it finds the latest release, downloads the DMG for this Mac, checks
 // it against the digest GitHub keeps for the file, copies the app out of it
 // and, once the app quits, swaps it in for the running one.
-import { app } from 'electron'
+//
+// On Windows it downloads the installer the same way and runs it silently
+// once the user restarts. The session host runs from Nodus.exe, which the
+// installer can't replace while it runs, so that stops the sessions too.
+import { app, dialog } from 'electron'
 import { execFile, spawn } from 'child_process'
 import crypto from 'crypto'
 import fs from 'fs'
@@ -14,7 +18,10 @@ import { Readable, Transform } from 'stream'
 import { pipeline } from 'stream/promises'
 import type { ReadableStream as WebReadableStream } from 'stream/web'
 import type { UpdateState, UpdateStatus } from '@shared/types'
+import { liveSessionIds, stopAll } from './pty'
 import { getState } from './store'
+
+const isWindows = process.platform === 'win32'
 
 /** The newest release that isn't a draft or a prerelease. */
 const LATEST_URL = 'https://api.github.com/repos/saleem-hadad/nodus/releases/latest'
@@ -34,13 +41,15 @@ let onChange: (status: UpdateStatus) => void = () => {}
 let cleaned: Promise<void> = Promise.resolve()
 /** A lookup or download is under way. */
 let busy = false
-/** The new version's app, copied out of its DMG and waiting to be swapped in. */
+/** The new version's app, copied out of its DMG and waiting to be swapped in; on Windows, its installer. */
 let staged: { version: string; app: string } | null = null
 /** A version that failed to install on an earlier quit. It isn't downloaded again unless the user asks. */
 let failedVersion: string | null = null
 /** Open the new version once it's swapped in (Restart to Update), rather than only installing on quit. */
 let relaunch = false
 let swapping = false
+/** Restart to Update is under way on Windows, so a second click doesn't start a second installer. */
+let installing = false
 
 function setState(next: UpdateState) {
   status = { ...next, current: app.getVersion() }
@@ -53,13 +62,21 @@ const updatesDir = () => path.join(app.getPath('userData'), 'updates')
 const failedFile = () => path.join(updatesDir(), 'failed')
 /** …/Nodus.app/Contents/MacOS/Nodus → …/Nodus.app */
 const bundlePath = () => path.resolve(process.execPath, '../../..')
-/** Apple silicon gets the arm64 DMG, even when this copy is the Intel one. Names match electron-builder.yml. */
-const dmgName = () => `Nodus-${process.arch === 'arm64' || app.runningUnderARM64Translation ? 'arm64' : 'x64'}.dmg`
+/**
+ * An Arm machine gets the arm64 DMG or installer, even when this copy is the
+ * Intel one. Names match electron-builder.yml.
+ */
+const assetName = () => {
+  const arch = process.arch === 'arm64' || app.runningUnderARM64Translation ? 'arm64' : 'x64'
+  return isWindows ? `Nodus-Setup-${arch}.exe` : `Nodus-${arch}.dmg`
+}
 
 /** Why this copy of the app can't replace itself, or null when it can. */
 function whyOff(): string | null {
-  if (process.platform !== 'darwin') return 'Updates are only built for macOS.'
+  if (process.platform !== 'darwin' && !isWindows) return 'Updates are only built for macOS and Windows.'
   if (!app.isPackaged) return 'Development builds don’t update themselves.'
+  // The installer puts the new version where this one is, in the user's own folder.
+  if (isWindows) return null
   const bundle = bundlePath()
   try {
     // The swap renames the app, so it needs write access to the app and to its folder.
@@ -92,14 +109,18 @@ function run(command: string, args: string[]): Promise<{ stdout: string; stderr:
   })
 }
 
-/** Electron's fs reads .asar files as folders, so it can't delete an app's app.asar; rm can. */
-const remove = (target: string) => run('/bin/rm', ['-rf', target])
+/**
+ * Electron's fs reads .asar files as folders, so it can't delete an app's
+ * app.asar; rm can. On Windows there are only installers to delete.
+ */
+const remove = (target: string) =>
+  isWindows ? fs.promises.rm(target, { recursive: true, force: true }) : run('/bin/rm', ['-rf', target])
 
 interface Release {
   version: string
   url: string
   size: number
-  /** Hex SHA-256 that GitHub computed for the DMG. */
+  /** Hex SHA-256 that GitHub computed for the DMG or installer. */
   sha256: string | null
 }
 
@@ -111,7 +132,7 @@ interface GitHubAsset {
   browser_download_url: string
 }
 
-/** The latest release, or null while it has no finished DMG for this Mac (it may still be uploading). */
+/** The latest release, or null while it has nothing finished for this machine (it may still be uploading). */
 async function latestRelease(): Promise<Release | null> {
   let res: Response
   try {
@@ -128,7 +149,7 @@ async function latestRelease(): Promise<Release | null> {
   }
   if (!res.ok) throw new UpdateError(`GitHub answered the update check with an error (${res.status}).`)
   const body = (await res.json()) as { tag_name?: string; assets?: GitHubAsset[] }
-  const asset = body.assets?.find((a) => a.name === dmgName() && a.state === 'uploaded')
+  const asset = body.assets?.find((a) => a.name === assetName() && a.state === 'uploaded')
   // The version names a folder that gets deleted, so it has to be a plain one.
   const version = /^v?(\d+\.\d+\.\d+)$/.exec(body.tag_name ?? '')?.[1]
   if (!version || !asset) return null
@@ -223,8 +244,47 @@ async function verify(appPath: string, version: string) {
   if (team && (await teamId(appPath)) !== team) throw new UpdateError('The update isn’t signed by the same developer.')
 }
 
+/** Whether `file` is the release's installer already, as an earlier run downloaded it. */
+async function downloaded(file: string, release: Release): Promise<boolean> {
+  try {
+    if ((await fs.promises.stat(file)).size !== release.size) return false
+    const hash = crypto.createHash('sha256')
+    for await (const chunk of fs.createReadStream(file)) hash.update(chunk)
+    return hash.digest('hex') === release.sha256
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Downloads a release's installer and keeps it for Restart to Update. It isn't
+ * code signed, so the digest GitHub keeps for it is what vouches for it. One
+ * an earlier run downloaded is checked against that digest instead.
+ */
+async function prepareInstaller(release: Release) {
+  const installer = path.join(updatesDir(), `Nodus-Setup-${release.version}.exe`)
+  setState({ state: 'downloading', version: release.version, percent: 0 })
+  try {
+    if (!release.sha256) throw new UpdateError('GitHub had no checksum for the update, so it wasn’t downloaded.')
+    await fs.promises.mkdir(updatesDir(), { recursive: true })
+    if (!(await downloaded(installer, release))) {
+      await download(release, installer, (percent) =>
+        setState({ state: 'downloading', version: release.version, percent })
+      )
+    }
+    staged = { version: release.version, app: installer }
+    setState({ state: 'ready', version: release.version })
+  } catch (err) {
+    console.error('[updater] update failed', err)
+    await remove(installer).catch(() => {})
+    const message = err instanceof UpdateError ? err.message : 'The update couldn’t be prepared. Try again later.'
+    setState({ state: 'error', message })
+  }
+}
+
 /** Downloads a release and stages its app for the swap. */
 async function prepare(release: Release) {
+  if (isWindows) return prepareInstaller(release)
   const dir = path.join(updatesDir(), release.version)
   const dmg = path.join(updatesDir(), `Nodus-${release.version}.dmg`)
   const target = path.join(dir, 'Nodus.app')
@@ -278,10 +338,63 @@ export async function check(asked = false): Promise<void> {
 }
 
 /** Quits, swaps the new version in and opens it. Sessions keep running in the session host. */
-export function restartToUpdate() {
+export async function restartToUpdate() {
   if (!staged) return
+  if (isWindows) return installOnWindows(staged.app)
   relaunch = true
   app.quit()
+}
+
+/**
+ * Stops the sessions, once the user agrees to, and quits into the installer,
+ * which puts the new version in and opens it. A session can be resumed from
+ * its card afterwards. If the installer doesn't start, Nodus stays open and
+ * says so.
+ */
+async function installOnWindows(installer: string) {
+  if (installing) return
+  installing = true
+  try {
+    // Before the sessions stop, so a missing installer stops nothing.
+    await fs.promises.access(installer)
+    const running = liveSessionIds().length
+    if (running) {
+      const { response } = await dialog.showMessageBox({
+        type: 'question',
+        message: `Stop ${running === 1 ? 'the running session' : `${running} running sessions`} to update?`,
+        detail: 'Windows can’t update Nodus while its sessions run. You can resume them from their cards afterwards.',
+        buttons: ['Stop and Update', 'Not Now'],
+        defaultId: 0,
+        cancelId: 1
+      })
+      if (response === 1) return
+    }
+    await stopAll()
+    await startInstaller(installer)
+    app.quit()
+  } catch (err) {
+    console.error('[updater] the installer didn’t start', err)
+    // Check for Updates downloads it again.
+    staged = null
+    await remove(installer).catch(() => {})
+    const message = 'The installer didn’t start, so Nodus wasn’t updated. Try Check for Updates again.'
+    setState({ state: 'error', message })
+  } finally {
+    installing = false
+  }
+}
+
+/** Starts the installer on its own, resolving once Windows has started it. */
+function startInstaller(installer: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // /S installs without asking, --updated keeps the shortcuts as they are and --force-run opens Nodus after.
+    const child = spawn(installer, ['--updated', '/S', '--force-run'], { detached: true, stdio: 'ignore' })
+    child.once('error', reject)
+    child.once('spawn', () => {
+      child.unref()
+      resolve()
+    })
+  })
 }
 
 /**
@@ -328,7 +441,22 @@ function swapOnExit() {
   spawn('/bin/sh', ['-c', SWAP_SCRIPT, 'nodus-update', ...args], { detached: true, stdio: 'ignore' }).unref()
 }
 
-/** Clears what earlier runs left behind: downloads, a staged app that never went in, the previous version. */
+/** The installer for the newest version newer than this one, among the files in `names`. */
+function newestInstaller(names: string[]): string | null {
+  let newest: { name: string; version: string } | null = null
+  for (const name of names) {
+    const version = /^Nodus-Setup-(\d+\.\d+\.\d+)\.exe$/.exec(name)?.[1]
+    if (version && isNewer(version, newest?.version ?? app.getVersion())) newest = { name, version }
+  }
+  return newest?.name ?? null
+}
+
+/**
+ * Clears what earlier runs left behind: downloads, a staged app that never
+ * went in, the previous version. On Windows an update goes in only when the
+ * user restarts into it, so the newest installer stays for the next run
+ * rather than being downloaded again.
+ */
 async function cleanUp() {
   const dir = updatesDir()
   try {
@@ -338,10 +466,15 @@ async function cleanUp() {
   } catch {
     // Nothing failed.
   }
-  for (const name of await fs.promises.readdir(dir).catch(() => [])) {
+  const names = await fs.promises.readdir(dir).catch(() => [])
+  const kept = isWindows ? newestInstaller(names) : null
+  for (const name of names) {
     if (name === 'failed' && failedVersion) continue
+    if (name === kept) continue
     // A DMG still mounted from a quit mid-copy.
-    if (name.startsWith('mount-')) await run('/usr/bin/hdiutil', ['detach', path.join(dir, name), '-force']).catch(() => {})
+    if (!isWindows && name.startsWith('mount-')) {
+      await run('/usr/bin/hdiutil', ['detach', path.join(dir, name), '-force']).catch(() => {})
+    }
     await remove(path.join(dir, name)).catch((err) => console.error('[updater] cleanup failed', err))
   }
 }
@@ -352,7 +485,8 @@ export function startUpdater(notify: (status: UpdateStatus) => void) {
   const reason = whyOff()
   if (reason) return setState({ state: 'off', reason })
   cleaned = cleanUp()
-  app.on('will-quit', swapOnExit)
+  // On Windows an update would stop the sessions, so it only installs when the user asks.
+  if (!isWindows) app.on('will-quit', swapOnExit)
   const autoCheck = () => {
     if (getState().settings.autoUpdate) void check()
   }

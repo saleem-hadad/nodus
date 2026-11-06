@@ -151,7 +151,7 @@ function Glyph({ glyph, color }: { glyph: string | LucideIcon; color: string }) 
       dominantBaseline: 'central' as const,
       fontSize: 34,
       fontWeight: 600,
-      fontFamily: "'SF Pro Rounded', -apple-system, BlinkMacSystemFont, sans-serif"
+      fontFamily: "'SF Pro Rounded', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
     }
     const letter = glyph.slice(0, 1).toUpperCase()
     return (

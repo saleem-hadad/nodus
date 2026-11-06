@@ -6,6 +6,7 @@ import os from 'os'
 import path from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionUsage } from '@shared/types'
+import { gitBash } from './env'
 import {
   configureStatus,
   getStatus,
@@ -17,6 +18,9 @@ import {
   setHookEndpoint
 } from './hooks'
 import { hostPaths, writeHookConfig } from './hostProtocol'
+
+// On Windows, as if Git Bash were there, so hooks are written for a POSIX shell unless a test says otherwise.
+vi.mock('./env', () => ({ gitBash: vi.fn(() => (process.platform === 'win32' ? 'bash.exe' : null)) }))
 
 // The status machine keeps state per session id, so every test starts a new one.
 let next = 0
@@ -311,3 +315,79 @@ describe('hook commands, run by a shell', () => {
     expect(await received).toMatchObject({ url: '/hook?evt=Stop&sid=s1&token=abc123', authorization: undefined })
   })
 })
+
+describe('hook commands on Windows without Git Bash', () => {
+  const platform = process.platform
+  let server: http.Server
+  let received: Promise<{ url: string; authorization?: string; body: string }>
+
+  beforeEach(async () => {
+    Object.defineProperty(process, 'platform', { value: 'win32' })
+    vi.mocked(gitBash).mockReturnValue(null)
+    received = new Promise((resolve) => {
+      server = http.createServer((req, res) => {
+        const chunks: Buffer[] = []
+        req.on('data', (c: Buffer) => chunks.push(c))
+        req.on('end', () => {
+          res.writeHead(204).end()
+          const body = Buffer.concat(chunks).toString('utf8')
+          resolve({ url: req.url ?? '', authorization: req.headers.authorization, body })
+        })
+      })
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  })
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: platform })
+    vi.mocked(gitBash).mockReset()
+    server.close()
+  })
+
+  it('run in PowerShell, with the token from the environment', () => {
+    setHookEndpoint(4000, 'secret-token', 'C:\\Users\\me\\hook.curlrc')
+    const settings = JSON.parse(hookSettings())
+    const hooks = [
+      ...Object.values(settings.hooks as Record<string, { hooks: { command: string; shell?: string }[] }[]>).map(
+        (h) => h[0].hooks[0]
+      ),
+      settings.statusLine as { command: string; shell?: string }
+    ]
+    expect(hooks).toHaveLength(11)
+    for (const hook of hooks) {
+      expect(hook.shell).toBe('powershell')
+      expect(hook.command).toContain('"Bearer $env:NODUS_TOKEN"')
+      expect(hook.command).toMatch(/exit 0$/)
+    }
+    expect(JSON.stringify(settings)).not.toContain('secret-token')
+  })
+
+  // Needs PowerShell: Windows has it, and a Mac may have PowerShell 7.
+  const powershell = platform === 'win32' ? 'powershell.exe' : which('pwsh')
+  it.skipIf(!powershell)('post what Claude sends on stdin, byte for byte', async () => {
+    const port = (server.address() as AddressInfo).port
+    setHookEndpoint(port, 'abc123', 'unused.curlrc')
+    const command = JSON.parse(hookSettings()).hooks.Stop[0].hooks[0].command
+    const child = spawn(powershell!, ['-NoProfile', '-NonInteractive', '-Command', command], {
+      env: { ...process.env, ...hookEnv('s1') },
+      windowsHide: true
+    })
+    let output = ''
+    child.stdout.on('data', (d) => (output += d))
+    const payload = '{"prompt":"héllo 🎉","last_assistant_message":"done"}'
+    child.stdin.end(payload)
+    const code = await new Promise((resolve) => child.on('exit', resolve))
+    expect(await received).toEqual({ url: '/hook?evt=Stop&sid=s1', authorization: 'Bearer abc123', body: payload })
+    expect(code).toBe(0)
+    // UserPromptSubmit's output would go into Claude's context.
+    expect(output).toBe('')
+  }, 30_000)
+})
+
+function which(bin: string): string | null {
+  for (const dir of (process.env.PATH ?? '').split(path.delimiter)) {
+    const candidate = path.join(dir, bin)
+    if (dir && fs.existsSync(candidate)) return candidate
+  }
+  return null
+}

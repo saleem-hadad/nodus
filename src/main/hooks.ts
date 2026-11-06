@@ -12,6 +12,7 @@
 // show (model, context, cost) and prints nothing, so the card shows it instead
 // and the terminal keeps the row.
 import type { SessionStatus, SessionUsage } from '@shared/types'
+import { gitBash } from './env'
 import { STATUS_LINE_EVENT } from './hostProtocol'
 
 const HOOK_EVENTS = [
@@ -364,8 +365,11 @@ export function hookEnv(sessionId: string): Record<string, string> {
   }
 }
 
-/** Settings JSON for hooks that read the token from the config file (true) or send it in the URL. */
-const settingsJson = new Map<boolean, string>()
+/**
+ * Settings JSON by how hooks reach the host: reading the token from the
+ * config file or sending it in the URL, and in which shell.
+ */
+const settingsJson = new Map<string, string>()
 
 /**
  * A command posting its stdin to the host under `event`, and printing nothing.
@@ -380,22 +384,44 @@ const postCommand = (event: string, viaConfig: boolean) =>
   `>/dev/null 2>&1; exit 0`
 
 /**
+ * The same in PowerShell, which Claude Code runs hooks in on Windows when Git
+ * Bash isn't there. The token comes from the environment, which no process
+ * listing shows, and stdin is sent as it came, so nothing re-encodes it. Only
+ * hosts that take the token in a header run on Windows.
+ */
+const powershellPostCommand = (event: string) =>
+  `$ProgressPreference = 'SilentlyContinue'; $body = [IO.MemoryStream]::new(); ` +
+  `[Console]::OpenStandardInput().CopyTo($body); ` +
+  `try { $null = Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 -Method Post -ContentType 'application/json' ` +
+  `-Headers @{ Authorization = "Bearer $env:NODUS_TOKEN" } -Body $body.ToArray() ` +
+  `-Uri "http://127.0.0.1:$env:NODUS_PORT/hook?evt=${event}&sid=$env:NODUS_SESSION" } catch {}; exit 0`
+
+/** PowerShell on Windows without Git Bash; a POSIX shell everywhere else (pty.ts points claude at that bash). */
+const usePowershell = () => process.platform === 'win32' && !gitBash()
+
+/**
  * The `--settings` JSON registering our hooks and status line. Identical for
  * every process on a host. Flag settings outrank the user's, so their own
  * status line makes way for ours.
  */
 export function hookSettings(): string {
   const viaConfig = Boolean(endpoint.config)
-  const cached = settingsJson.get(viaConfig)
+  const powershell = usePowershell()
+  const key = `${viaConfig}:${powershell}`
+  const cached = settingsJson.get(key)
   if (cached) return cached
+  const command = (event: string) =>
+    powershell
+      ? { command: powershellPostCommand(event), shell: 'powershell' }
+      : { command: postCommand(event, viaConfig) }
   const hooks: Record<string, unknown> = {}
   for (const event of HOOK_EVENTS) {
     // Output must stay empty: UserPromptSubmit stdout is injected into Claude's context.
-    hooks[event] = [{ hooks: [{ type: 'command', command: postCommand(event, viaConfig), timeout: 5 }] }]
+    hooks[event] = [{ hooks: [{ type: 'command', ...command(event), timeout: 5 }] }]
   }
   // With no output, the terminal shows no status line.
-  const statusLine = { type: 'command', command: postCommand(STATUS_LINE_EVENT, viaConfig), padding: 0 }
+  const statusLine = { type: 'command', ...command(STATUS_LINE_EVENT), padding: 0 }
   const json = JSON.stringify({ hooks, statusLine })
-  settingsJson.set(viaConfig, json)
+  settingsJson.set(key, json)
   return json
 }

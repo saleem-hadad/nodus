@@ -1,4 +1,5 @@
 import { AlertCircle, Loader2, RotateCcw, Settings, X } from 'lucide-react'
+import { isMac } from '@renderer/platform'
 import { useApp } from '@renderer/store'
 import { BAR_BANDS, clock, type Voice } from './useVoice'
 
@@ -51,7 +52,7 @@ export function VoiceNotice({ voice }: { voice: Voice }) {
       )}
       {notice.microphone && (
         <button className="btn voice-notice-action" onClick={() => void window.api.voice.openMicrophoneSettings()}>
-          Open System Settings
+          {isMac ? 'Open System Settings' : 'Open Settings'}
         </button>
       )}
       {notice.retry && (

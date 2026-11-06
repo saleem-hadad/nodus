@@ -9,6 +9,7 @@ import { RenamingContext, useBoardActions } from './BoardContext'
 import { ExpandedCard } from './ExpandedCard'
 import { EXPANDED_MIN_H, EXPANDED_MIN_W, isExpanded, timeAgo } from './layout'
 import { NoteSticker } from './NoteNode'
+import { keys } from '@renderer/platform'
 
 export type SessionNodeData = {
   card: SessionCard
@@ -179,7 +180,7 @@ function SessionCardNodeComponent({ data, selected, dragging }: NodeProps<Sessio
             <button
               className="card-expand"
               onClick={() => archive([id])}
-              title="Archive (⌫)"
+              title={`Archive (${keys('⌫')})`}
               aria-label="Archive"
             >
               <Archive size={13} strokeWidth={2} />

@@ -170,6 +170,7 @@ import { ActionRail } from '@renderer/components/actions/ActionRail'
 import { Sidekick, type SidekickHandle, type Submission } from '@renderer/components/sidekick/Sidekick'
 import { withContext, type ContextItem } from '@renderer/components/sidekick/compose'
 import { fuzzyMatch } from '@renderer/components/board/fuzzy'
+import { keys, modKey, otherModKey } from '@renderer/platform'
 import '@renderer/components/board/board.css'
 
 type FlowNode = SessionFlowNode | ArchiveFlowNode | SectionFlowNode | NoteFlowNode | NotePadFlowNode | ViewFlowNode
@@ -1340,7 +1341,7 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
             ]
           : []),
         'separator',
-        { label: 'Delete view', icon: <Trash2 />, hint: '⌫', danger: true, onSelect: () => void deleteViews([view.id]) }
+        { label: 'Delete view', icon: <Trash2 />, hint: keys('⌫'), danger: true, onSelect: () => void deleteViews([view.id]) }
       ]
     },
     [projectId, openViewSession, deleteViews, showToast, patchView]
@@ -2047,7 +2048,7 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
             onSelect: () => setViewDialog({ at: p })
           },
           'separator',
-          { label: 'Select all active', icon: <BoxSelect />, hint: '⌘A', onSelect: selectAllActive },
+          { label: 'Select all active', icon: <BoxSelect />, hint: keys('⌘A'), onSelect: selectAllActive },
           { label: 'Zoom to fit', icon: <Maximize />, onSelect: fitActive },
           {
             label: 'Show everything',
@@ -2121,7 +2122,7 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
         {
           label: count > 1 ? `Group ${count} into section` : 'Group into section',
           icon: <Group />,
-          hint: '⌘G',
+          hint: keys('⌘G'),
           onSelect: () => groupCards(ids)
         }
       ]
@@ -2143,7 +2144,7 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
             { label: 'Collapse', icon: <Minimize2 />, hint: 'E', onSelect: () => expandCards([id], false) }
           ]
         : [
-            { label: 'Open', icon: <SquareTerminal />, hint: '↩', onSelect: () => openTerminal(id) },
+            { label: 'Open', icon: <SquareTerminal />, hint: keys('↩'), onSelect: () => openTerminal(id) },
             { label: 'Expand on board', icon: <Maximize2 />, hint: 'E', onSelect: () => expandCards([id], true) }
           ]
     },
@@ -2186,7 +2187,7 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
       const sel = selectedNoteIds()
       const ids = sel.includes(note.id) && sel.length > 1 ? sel : [note.id]
       return [
-        { label: 'Edit', icon: <PencilLine />, hint: '↩', onSelect: () => setRenaming(note.id) },
+        { label: 'Edit', icon: <PencilLine />, hint: keys('↩'), onSelect: () => setRenaming(note.id) },
         {
           label: 'Start session',
           icon: <Play />,
@@ -2209,7 +2210,7 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
         {
           label: ids.length > 1 ? `Delete ${ids.length} notes` : 'Delete note',
           icon: <Trash2 />,
-          hint: '⌫',
+          hint: keys('⌫'),
           danger: true,
           onSelect: () => deleteNotes(ids)
         }
@@ -2265,7 +2266,7 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
         : []
       const items: MenuItem[] = [
         ...(card.archived
-          ? [{ label: 'Preview', icon: <Eye />, hint: '↩', onSelect: () => openPreview(card.sessionId) }]
+          ? [{ label: 'Preview', icon: <Eye />, hint: keys('↩'), onSelect: () => openPreview(card.sessionId) }]
           : cardOpenItems(card)),
         ...(card.agentCount
           ? [{ label: `Agents (${card.agentCount})`, icon: <Bot />, onSelect: () => openAgents(card.sessionId) }]
@@ -2276,7 +2277,7 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
           : {
               label: group.length > 1 ? `Archive ${group.length} sessions` : 'Archive',
               icon: <Archive />,
-              hint: '⌫',
+              hint: keys('⌫'),
               onSelect: () => archiveCards(group)
             },
         ...stopItems,
@@ -2367,7 +2368,7 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
     const onKey = (e: KeyboardEvent) => {
       const s = useApp.getState()
       const target = e.target as HTMLElement | null
-      if (e.key.toLowerCase() === 'k' && e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey) {
+      if (e.key.toLowerCase() === 'k' && modKey(e) && !e.shiftKey && !e.altKey && !otherModKey(e)) {
         // A focused terminal keeps ⌘K for clearing itself.
         if (e.defaultPrevented || target?.closest('.xterm')) return
         if (s.terminalSessionId || s.agentView || s.diffOpen || overlayOpenRef.current) return
@@ -2380,7 +2381,7 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
       if (s.terminalSessionId || s.previewSessionId || s.agentView || s.diffOpen || overlayOpenRef.current) return
       if (target?.closest('input, textarea, select, [contenteditable="true"]')) return
       const ink = inkRef.current
-      if (e.key.toLowerCase() === 'z' && e.metaKey && !e.altKey && !e.ctrlKey) {
+      if (e.key.toLowerCase() === 'z' && modKey(e) && !e.altKey && !otherModKey(e)) {
         // Only ink has an undo on the board.
         if (e.shiftKey ? ink?.redo() : ink?.undo()) e.preventDefault()
         return
@@ -2395,15 +2396,15 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
         if (ink?.escape()) return
         if (stackViewRef.current.open) fns.closeStack()
         if (sel.length || noteSel.length || viewSel.length) fns.clearSelection()
-      } else if (e.key.toLowerCase() === 'a' && e.metaKey && !e.shiftKey && !e.altKey) {
+      } else if (e.key.toLowerCase() === 'a' && modKey(e) && !e.shiftKey && !e.altKey) {
         e.preventDefault()
         fns.selectAllActive()
-      } else if (e.key.toLowerCase() === 'g' && e.metaKey && !e.shiftKey && !e.altKey) {
+      } else if (e.key.toLowerCase() === 'g' && modKey(e) && !e.shiftKey && !e.altKey) {
         if (sel.length) {
           e.preventDefault()
           fns.groupCards(sel)
         }
-      } else if ((e.key === 'Backspace' || e.key === 'Delete') && !e.metaKey && !e.altKey) {
+      } else if ((e.key === 'Backspace' || e.key === 'Delete') && !modKey(e) && !e.altKey) {
         if (ink?.deleteSelected()) {
           e.preventDefault()
         } else if (sel.length || noteSel.length || viewSel.length) {
@@ -2413,10 +2414,10 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
           void fns.archiveCards(sel)
           void fns.deleteViews(viewSel)
         }
-      } else if (e.key === 'Enter' && !e.metaKey && !e.shiftKey && sel.length === 1) {
+      } else if (e.key === 'Enter' && !modKey(e) && !e.shiftKey && sel.length === 1) {
         e.preventDefault()
         fns.openCard(sel[0])
-      } else if (e.key === 'Enter' && !e.metaKey && !e.shiftKey && sel.length === 0 && noteSel.length === 1) {
+      } else if (e.key === 'Enter' && !modKey(e) && !e.shiftKey && sel.length === 0 && noteSel.length === 1) {
         e.preventDefault()
         setRenaming(noteSel[0])
       } else if (e.key.toLowerCase() === 'n' && !e.metaKey && !e.ctrlKey && !e.altKey) {
@@ -2512,13 +2513,13 @@ function BoardCanvas({ projectId, board }: { projectId: string; board: BoardSnap
                   <TitleBarActions>
                     <SplitButton
                       onClick={() => createSession()}
-                      title="New session (⌘N)"
+                      title={`New session (${keys('⌘N')})`}
                       menuLabel="More ways to start"
                       items={[
                         {
                           label: 'New terminal',
                           icon: <SquareTerminal />,
-                          hint: '⌘T',
+                          hint: keys('⌘T'),
                           onSelect: () => createTerminal()
                         },
                         { label: 'New view…', icon: <LayoutDashboard />, onSelect: () => setViewDialog({}) }

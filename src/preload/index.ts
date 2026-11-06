@@ -13,6 +13,8 @@ const api: Api = {
   appInfo: () => ipcRenderer.invoke(IPC.appInfo),
   takeOpenRequest: () => ipcRenderer.invoke(IPC.appTakeOpenRequest),
   pathForFile: (file) => webUtils.getPathForFile(file),
+  showMenu: (x, y) => ipcRenderer.invoke(IPC.appShowMenu, x, y),
+  menuCommand: (command) => ipcRenderer.invoke(IPC.appMenuCommand, command),
 
   settings: {
     get: () => ipcRenderer.invoke(IPC.settingsGet),

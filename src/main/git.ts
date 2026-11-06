@@ -20,7 +20,7 @@ function git(cwd: string, args: string[], maxBuffer = 32 * 1024 * 1024): Promise
     execFile(
       'git',
       argv,
-      { cwd, env: spawnEnv({ GIT_TERMINAL_PROMPT: '0' }), maxBuffer, encoding: 'utf8' },
+      { cwd, env: spawnEnv({ GIT_TERMINAL_PROMPT: '0' }), maxBuffer, encoding: 'utf8', windowsHide: true },
       (err, stdout) => {
         if (!err) return resolve({ stdout, code: 0 })
         // A non-zero exit is an answer (e.g. "not a repository"); anything else is a failure.

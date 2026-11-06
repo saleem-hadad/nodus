@@ -2,11 +2,12 @@
 // pseudo-terminals, so they keep running after the app quits.
 //
 // The app starts it detached, running Electron's binary as plain Node, and
-// talks to it over a Unix socket (hostProtocol.ts). A relaunched app
-// reconnects and gets back every live session with its recent output and
-// everything that has moved its status. Hooks come here too: a process's hook
-// endpoint is fixed when it starts, so it has to outlive the app as well. So
-// do the board tools' requests, which the host passes on to the app.
+// talks to it over a Unix socket, or a named pipe on Windows (hostProtocol.ts).
+// A relaunched app reconnects and gets back every live session with its
+// recent output and everything that has moved its status. Hooks come here
+// too: a process's hook endpoint is fixed when it starts, so it has to
+// outlive the app as well. So do the board tools' requests, which the host
+// passes on to the app.
 //
 // The host exits once it has no sessions and no app connected.
 import crypto from 'crypto'
@@ -14,7 +15,8 @@ import fs from 'fs'
 import http from 'http'
 import net from 'net'
 import type { AddressInfo } from 'net'
-import * as pty from 'node-pty'
+import path from 'path'
+import type * as NodePty from 'node-pty'
 import type { SessionStatus } from '@shared/types'
 import {
   MCP_PATH,
@@ -27,8 +29,26 @@ import {
   type ClientMessage,
   type HistoryEntry,
   type HostMessage,
-  type SpawnRequest
+  type SpawnRequest,
+  windowsCommandLine,
+  writePrivateFile
 } from './hostProtocol'
+
+const isWindows = process.platform === 'win32'
+
+/**
+ * node-pty, from its real folder on Windows: there it reads the terminal's
+ * output in a worker thread started from its own folder, which can't be
+ * inside app.asar. On a Mac it has to come through app.asar, as it finds its
+ * spawn helper by adding .unpacked to its path.
+ */
+function loadPty(): typeof NodePty {
+  const unpacked = __dirname.replace(/([\\/])app\.asar([\\/])/, '$1app.asar.unpacked$2')
+  if (isWindows && unpacked !== __dirname) return require(path.join(unpacked, '..', '..', 'node_modules', 'node-pty'))
+  return require('node-pty')
+}
+
+const pty = loadPty()
 
 const BUFFER_LIMIT = 2 * 1024 * 1024
 const HISTORY_LIMIT = 1000
@@ -40,7 +60,7 @@ interface Session {
   sessionId: string
   projectId: string
   initial: SessionStatus
-  proc: pty.IPty
+  proc: NodePty.IPty
   chunks: string[]
   size: number
   history: HistoryEntry[]
@@ -49,10 +69,18 @@ interface Session {
 }
 
 const socketPath = process.argv[2]
+/** Where the host keeps its key, on Windows (hostPaths). */
+const keyPath = process.argv[3]
 const sessions = new Map<string, Session>()
 /** Connected apps that speak our protocol. */
 const clients = new Set<net.Socket>()
 const hookToken = crypto.randomBytes(16).toString('hex')
+/**
+ * Shows the app this pipe is ours. Anyone on the PC can make a pipe with our
+ * name, so the app only trusts a welcome carrying what's in the key file,
+ * which only the user can read (trustsHost).
+ */
+const hostKey = isWindows ? crypto.randomBytes(32).toString('hex') : undefined
 const hookTokenBytes = Buffer.from(hookToken)
 let hookPort = 0
 let stopping = false
@@ -91,9 +119,9 @@ function slim(payload: Record<string, unknown>): Record<string, unknown> {
 
 function spawnSession(req: SpawnRequest): string | undefined {
   if (sessions.has(req.sessionId)) return
-  let proc: pty.IPty
+  let proc: NodePty.IPty
   try {
-    proc = pty.spawn(req.file, req.args, {
+    proc = pty.spawn(req.file, isWindows ? windowsCommandLine(req.args) : req.args, {
       name: 'xterm-256color',
       cols: req.cols,
       rows: req.rows,
@@ -133,13 +161,15 @@ function spawnSession(req: SpawnRequest): string | undefined {
 }
 
 function kill(s: Session, signals: string[] = ['SIGTERM']) {
-  for (const signal of signals) {
+  // Windows has no signals: closing the pseudo-terminal ends what runs in it.
+  for (const signal of isWindows ? [undefined] : signals) {
     try {
       s.proc.kill(signal)
     } catch {
       // already gone
     }
   }
+  if (isWindows) return
   s.killTimer ??= setTimeout(() => {
     try {
       s.proc.kill('SIGKILL')
@@ -222,7 +252,8 @@ const server = net.createServer((socket) => {
               hookToken,
               sessions: sessionList,
               mcp: true,
-              hookAuthHeader: true
+              hookAuthHeader: true,
+              key: hostKey
             })
           )
           // An app on another protocol may only ask us to stop.
@@ -394,7 +425,7 @@ function alreadyServed(): Promise<boolean> {
 }
 
 async function main() {
-  if (!socketPath) throw new Error('usage: host <socket path>')
+  if (!socketPath || (isWindows && !keyPath)) throw new Error('usage: host <socket path> <key path>')
 
   // Two apps starting at once could each start a host; the second one leaves.
   if (await alreadyServed()) {
@@ -418,7 +449,11 @@ async function main() {
     server.once('error', reject)
     server.listen(socketPath, resolve)
   })
-  fs.chmodSync(socketPath, 0o600)
+  // A pipe has no mode bits; its default security already keeps other users out.
+  if (!isWindows) fs.chmodSync(socketPath, 0o600)
+  // Before any welcome goes out, and only once the pipe is ours: a second
+  // host that lost the race to it never gets here.
+  if (hostKey) writePrivateFile(keyPath, hostKey)
   log('listening', socketPath, 'hooks on', hookPort)
 
   setTimeout(() => {

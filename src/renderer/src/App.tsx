@@ -1,5 +1,7 @@
 import { useEffect } from 'react'
 import clsx from 'clsx'
+import type { MenuCommand } from '@shared/api'
+import { isMac, shortcutKey } from './platform'
 import { useApp } from './store'
 import { TitleBar } from './components/TitleBar'
 import { ProjectsView } from './views/ProjectsView'
@@ -60,6 +62,18 @@ export function App() {
       else if (s.route.view === 'board') s.navigate({ view: 'projects' })
     })
 
+    // Off a Mac the menu leaves Ctrl+N, Ctrl+T and Ctrl+W to a focused terminal
+    // (menu.ts), so the window takes them everywhere else.
+    const CTRL_COMMANDS: Record<string, MenuCommand | undefined> = { n: 'new-session', t: 'new-terminal', w: 'close' }
+    const onCtrlKey = (e: KeyboardEvent) => {
+      if (isMac || !e.ctrlKey || e.shiftKey || e.altKey || e.metaKey || e.repeat || e.defaultPrevented) return
+      const command = CTRL_COMMANDS[shortcutKey(e)]
+      if (!command || (e.target as HTMLElement | null)?.closest?.('.xterm')) return
+      e.preventDefault()
+      void window.api.menuCommand(command)
+    }
+    window.addEventListener('keydown', onCtrlKey)
+
     // A notification the user clicked opens its card, also one clicked while the window was closed.
     const offOpenCard = window.api.on.openCard((request) => useApp.getState().showCard(request))
     window.api.takeOpenRequest().then((request) => request && useApp.getState().showCard(request))
@@ -70,6 +84,7 @@ export function App() {
     window.addEventListener('drop', blockDrop)
 
     return () => {
+      window.removeEventListener('keydown', onCtrlKey)
       window.removeEventListener('dragover', blockDrop)
       window.removeEventListener('drop', blockDrop)
       offStatus()

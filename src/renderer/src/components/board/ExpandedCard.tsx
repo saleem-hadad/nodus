@@ -7,6 +7,7 @@ import { SessionMic } from '@renderer/components/voice/SessionMic'
 import * as registry from '@renderer/terminal/registry'
 import { useAttachedTerminal } from '@renderer/terminal/useAttachedTerminal'
 import '@renderer/terminal/terminal.css'
+import { keys } from '@renderer/platform'
 import { useBoardActions } from './BoardContext'
 
 /** Sessions asked to start before their card has rendered expanded. */
@@ -136,7 +137,7 @@ export function ExpandedCard({ card, heading, tools }: { card: SessionCard; head
             </button>
           )}
           {!shell && (
-            <button className="card-tool" onClick={() => archive([id])} title="Archive (⌫)" aria-label="Archive">
+            <button className="card-tool" onClick={() => archive([id])} title={`Archive (${keys('⌫')})`} aria-label="Archive">
               <Archive size={14} strokeWidth={2} />
             </button>
           )}

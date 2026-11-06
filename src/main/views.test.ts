@@ -39,7 +39,7 @@ vi.mock('./board', () => ({ hasTranscript: () => false, sessionList: () => [{ id
 vi.mock('./git', () => ({ gitStatus: async () => null }))
 vi.mock('./env', () => ({
   spawnEnv: (extra: Record<string, string> = {}) => ({ PATH: process.env.PATH ?? '', ...extra }),
-  userShell: () => '/bin/sh'
+  shellCommand: (run: string) => ({ file: '/bin/sh', args: ['-c', run] })
 }))
 
 const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'nodus-views-'))

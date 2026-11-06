@@ -13,7 +13,7 @@
 // updates it when asked or on a schedule. A brain stops after a few idle
 // minutes and is resumed when it's next needed.
 import { app, shell } from 'electron'
-import { spawn, type ChildProcess } from 'child_process'
+import { execFile, spawn, type ChildProcess } from 'child_process'
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
@@ -41,12 +41,14 @@ import type {
   ViewRefresh
 } from '@shared/types'
 import { hasTranscript, sessionList } from './board'
-import { spawnEnv, userShell } from './env'
+import { shellCommand, spawnEnv } from './env'
 import { gitStatus } from './git'
 import { forgetStatus, getStatus } from './hooks'
 import * as ptys from './pty'
 import { getBoard, getProject, getState, projectIdForSession, projectIdForView, save, type BoardState } from './store'
 import { EMPTY_PAGE, VIEW_CSP, VIEW_GUIDE, buildViewPage } from './viewPage'
+
+const isWindows = process.platform === 'win32'
 
 const MAX_HTML_BYTES = 2 * 1024 * 1024
 const MAX_DATA_CHARS = 1024 * 1024
@@ -592,13 +594,17 @@ async function execute(cwd: string, cmd: ViewCommand): Promise<CommandResult> {
         error
       })
     let child: ChildProcess
+    const { file, args } = shellCommand(cmd.run)
     try {
-      // Its own process group, so a timeout stops everything it started.
-      child = spawn(userShell(), ['-c', cmd.run], {
+      // Its own process group, so a timeout stops everything it started. Not
+      // on Windows, where that would leave it without a console, so each
+      // program it ran would open a window of its own.
+      child = spawn(file, args, {
         cwd,
         env: spawnEnv({ NO_COLOR: '1' }),
         stdio: ['ignore', 'pipe', 'pipe'],
-        detached: true
+        detached: !isWindows,
+        windowsHide: true
       })
     } catch (err) {
       done(null, err instanceof Error ? err.message : String(err))
@@ -606,6 +612,11 @@ async function execute(cwd: string, cmd: ViewCommand): Promise<CommandResult> {
     }
     const timer = setTimeout(() => {
       timedOut = true
+      if (isWindows) {
+        // taskkill /t takes down everything the command started too.
+        if (child.pid) execFile('taskkill', ['/pid', String(child.pid), '/t', '/f'], { windowsHide: true }, () => {})
+        return
+      }
       try {
         process.kill(-child.pid!, 'SIGKILL')
       } catch {

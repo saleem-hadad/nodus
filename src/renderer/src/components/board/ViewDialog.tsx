@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { LayoutDashboard, LoaderCircle } from 'lucide-react'
 import clsx from 'clsx'
 import { Modal } from '@renderer/components/Modal'
+import { modKey } from '@renderer/platform'
 import '@renderer/components/actions/actions.css'
 
 /** Descriptions to start from. Clicking one fills the box, ready to adjust. */
@@ -64,7 +65,7 @@ export function ViewDialog({
       <div
         className="action-inner"
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && e.metaKey) {
+          if (e.key === 'Enter' && modKey(e)) {
             e.preventDefault()
             void create()
           }

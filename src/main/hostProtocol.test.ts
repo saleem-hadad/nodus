@@ -3,7 +3,18 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { encode, ensurePrivateDir, hostPaths, messageReader, writeHookConfig } from './hostProtocol'
+import {
+  encode,
+  ensurePrivateDir,
+  hostPaths,
+  messageReader,
+  trustsHost,
+  windowsCommandLine,
+  writeHookConfig,
+  writePrivateFile
+} from './hostProtocol'
+
+const isWindows = process.platform === 'win32'
 
 const read = (chunks: Buffer[]) => {
   const messages: unknown[] = []
@@ -61,12 +72,13 @@ describe('host files', () => {
   })
 
   it('keeps the socket in the host folder when the path is short enough', () => {
-    const paths = hostPaths(dir)
+    const paths = hostPaths(dir, 'darwin')
     expect(paths).toEqual({
       dir: path.join(dir, 'host'),
       socket: path.join(dir, 'host', 'host.sock'),
       log: path.join(dir, 'host', 'host.log'),
-      hookConfig: path.join(dir, 'host', 'hook.curlrc')
+      hookConfig: path.join(dir, 'host', 'hook.curlrc'),
+      key: path.join(dir, 'host', 'host.key')
     })
   })
 
@@ -74,11 +86,18 @@ describe('host files', () => {
     const userData = path.join(dir, 'x'.repeat(120))
     const hostDir = path.join(userData, 'host')
     const hash = crypto.createHash('sha1').update(hostDir).digest('hex').slice(0, 12)
-    expect(hostPaths(userData).socket).toBe(path.join(os.tmpdir(), `nodus-${hash}.sock`))
-    expect(hostPaths(userData).hookConfig).toBe(path.join(hostDir, 'hook.curlrc'))
+    expect(hostPaths(userData, 'darwin').socket).toBe(path.join(os.tmpdir(), `nodus-${hash}.sock`))
+    expect(hostPaths(userData, 'darwin').hookConfig).toBe(path.join(hostDir, 'hook.curlrc'))
   })
 
-  it('makes the host folder private, even one that exists already', () => {
+  it('names a pipe on Windows, from the folder too', () => {
+    const userData = path.join(dir, 'Nodus')
+    const hash = crypto.createHash('sha1').update(path.join(userData, 'host')).digest('hex').slice(0, 12)
+    expect(hostPaths(userData, 'win32').socket).toBe(`\\\\.\\pipe\\nodus-${hash}`)
+    expect(hostPaths(userData, 'win32').hookConfig).toBe(path.join(userData, 'host', 'hook.curlrc'))
+  })
+
+  it.skipIf(isWindows)('makes the host folder private, even one that exists already', () => {
     const hostDir = path.join(dir, 'host')
     fs.mkdirSync(hostDir, { mode: 0o755 })
     fs.chmodSync(hostDir, 0o755)
@@ -91,9 +110,114 @@ describe('host files', () => {
     writeHookConfig(paths, 'first')
     writeHookConfig(paths, 'second')
     expect(fs.readFileSync(paths.hookConfig, 'utf8')).toBe('header = "Authorization: Bearer second"\n')
-    expect(fs.statSync(paths.hookConfig).mode & 0o777).toBe(0o600)
-    expect(fs.statSync(paths.dir).mode & 0o777).toBe(0o700)
+    // Windows has no mode bits; the folder's ACL is the user's.
+    if (!isWindows) {
+      expect(fs.statSync(paths.hookConfig).mode & 0o777).toBe(0o600)
+      expect(fs.statSync(paths.dir).mode & 0o777).toBe(0o700)
+    }
     // Written beside it and renamed into place.
     expect(fs.readdirSync(paths.dir)).toEqual(['hook.curlrc'])
+  })
+
+  it('won’t put a token in the hook config that would add curl options', () => {
+    const paths = hostPaths(dir)
+    writeHookConfig(paths, 'abc123')
+    expect(() => writeHookConfig(paths, 'x"\noutput = "C:\\evil.cmd')).toThrow()
+    expect(() => writeHookConfig(paths, '')).toThrow()
+    expect(fs.readFileSync(paths.hookConfig, 'utf8')).toBe('header = "Authorization: Bearer abc123"\n')
+  })
+})
+
+describe('trustsHost', () => {
+  let dir: string
+  let paths: ReturnType<typeof hostPaths>
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nodus-host-'))
+    paths = hostPaths(dir, 'win32')
+  })
+
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('trusts a pipe whose welcome carries the key in the host folder', () => {
+    writePrivateFile(paths.key, 'k'.repeat(64))
+    expect(trustsHost('k'.repeat(64), paths, 'win32')).toBe(true)
+  })
+
+  it('doesn’t trust one that made the pipe first and can’t read the folder', () => {
+    writePrivateFile(paths.key, 'k'.repeat(64))
+    expect(trustsHost('j'.repeat(64), paths, 'win32')).toBe(false)
+    expect(trustsHost(undefined, paths, 'win32')).toBe(false)
+    expect(trustsHost('', paths, 'win32')).toBe(false)
+  })
+
+  it('doesn’t trust a pipe while there’s no key file', () => {
+    expect(trustsHost('k'.repeat(64), paths, 'win32')).toBe(false)
+  })
+
+  it('needs no key on a Mac, where the socket’s folder keeps others out', () => {
+    expect(trustsHost(undefined, hostPaths(dir, 'darwin'), 'darwin')).toBe(true)
+  })
+})
+
+/** Splits a command line back up the way the Microsoft C runtime does. */
+function splitCommandLine(line: string): string[] {
+  const args: string[] = []
+  let arg: string | null = null
+  let quoted = false
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i]
+    if (c === '\\') {
+      let n = 0
+      while (line[i] === '\\') {
+        n++
+        i++
+      }
+      arg ??= ''
+      if (line[i] === '"') {
+        // 2n backslashes and a quote: n backslashes, and the quote opens or closes; 2n+1: a literal quote.
+        arg += '\\'.repeat(n >> 1)
+        if (n % 2) arg += '"'
+        else quoted = !quoted
+      } else {
+        arg += '\\'.repeat(n)
+        i--
+      }
+    } else if (c === '"') {
+      arg ??= ''
+      quoted = !quoted
+    } else if ((c === ' ' || c === '\t') && !quoted) {
+      if (arg !== null) args.push(arg)
+      arg = null
+    } else {
+      arg = (arg ?? '') + c
+    }
+  }
+  if (arg !== null) args.push(arg)
+  return args
+}
+
+describe('windowsCommandLine', () => {
+  it('quotes only what needs it', () => {
+    expect(windowsCommandLine(['--resume', 'abc', 'two words', ''])).toBe('--resume abc "two words" ""')
+  })
+
+  it('comes back as the same arguments, whatever they hold', () => {
+    const args = [
+      '--settings',
+      JSON.stringify({ hooks: { Stop: [{ command: 'curl -K "$NODUS_HOOK_CONFIG" >/dev/null 2>&1; exit 0' }] } }),
+      '--',
+      '"fix the tests"',
+      'C:\\Program Files\\Nodus\\',
+      'ends in two \\\\',
+      'a\\"b',
+      'tab\there',
+      'line one\nline two',
+      '',
+      'plain'
+    ]
+    expect(splitCommandLine(windowsCommandLine(args))).toEqual(args)
   })
 })

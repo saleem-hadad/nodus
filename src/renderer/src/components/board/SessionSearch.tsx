@@ -6,6 +6,7 @@ import { matchRanges, queryTerms } from '@shared/search'
 import { Highlight } from '@renderer/components/Highlight'
 import { Modal } from '@renderer/components/Modal'
 import { cardTitle } from '@renderer/store'
+import { keys, modKey } from '@renderer/platform'
 import { timeAgo } from './layout'
 import './search.css'
 
@@ -107,7 +108,7 @@ export function SessionSearch({ projectId, cards, query, onQueryChange, onClose,
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
       setActive((i) => Math.max(0, i - 1))
-    } else if (e.key === 'Enter' && e.metaKey) {
+    } else if (e.key === 'Enter' && modKey(e)) {
       e.preventDefault()
       start()
     } else if (e.key === 'Enter') {
@@ -119,7 +120,7 @@ export function SessionSearch({ projectId, cards, query, onQueryChange, onClose,
       if (!rows[current]) return
       toggle(rows[current].card.sessionId)
       setActive((i) => (e.shiftKey ? Math.max(0, i - 1) : Math.min(last, i + 1)))
-    } else if (e.key.toLowerCase() === 'k' && e.metaKey) {
+    } else if (e.key.toLowerCase() === 'k' && modKey(e)) {
       e.preventDefault()
       onClose()
     }
@@ -183,7 +184,7 @@ export function SessionSearch({ projectId, cards, query, onQueryChange, onClose,
             <kbd>↓</kbd> move
           </span>
           <span>
-            <kbd>↩</kbd> {rows[current]?.card.archived ? 'read it' : 'go to card'}
+            <kbd>{keys('↩')}</kbd> {rows[current]?.card.archived ? 'read it' : 'go to card'}
           </span>
           <span>
             <kbd>⇥</kbd> select
@@ -199,8 +200,8 @@ export function SessionSearch({ projectId, cards, query, onQueryChange, onClose,
               : marked.length === 1
                 ? 'New session from 1'
                 : 'New session from this'}
-            <kbd>⌘</kbd>
-            <kbd>↩</kbd>
+            <kbd>{keys('⌘')}</kbd>
+            <kbd>{keys('↩')}</kbd>
           </button>
         </footer>
       </div>
@@ -242,7 +243,7 @@ function ResultRow({
       aria-selected={marked}
       className={clsx('search-row', active && 'is-active', marked && 'is-marked')}
       onMouseMove={onHover}
-      onClick={(e) => (e.metaKey ? onToggle() : onOpen())}
+      onClick={(e) => (modKey(e) ? onToggle() : onOpen())}
     >
       <button
         className="search-check"

@@ -22,6 +22,10 @@ import type { SessionCard } from '@shared/types'
 import * as registry from './registry'
 import { useAttachedTerminal } from './useAttachedTerminal'
 import './terminal.css'
+import { isMac } from '@renderer/platform'
+
+/** The terminal has the keys, and off a Mac it keeps Ctrl+W for itself (registry.ts). */
+const closeKeys = isMac ? '⌘W' : 'Ctrl+Shift+W'
 
 export function TerminalModal() {
   const sessionId = useApp((s) => s.terminalSessionId)
@@ -256,7 +260,7 @@ function TerminalHeader({
         <button
           className="btn btn-ghost btn-icon"
           onClick={closeTerminal}
-          title={shell ? 'Close (⌘W). The shell keeps running.' : 'Close (⌘W). The session keeps running.'}
+          title={`Close (${closeKeys}). The ${shell ? 'shell' : 'session'} keeps running.`}
           aria-label="Close"
         >
           <X size={16} />

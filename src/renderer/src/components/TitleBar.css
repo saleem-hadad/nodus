@@ -14,6 +14,24 @@
   border-bottom: 0.5px solid var(--border);
 }
 
+/* Off a Mac the window's own buttons sit over the right end (titleBarOverlay), and the menu button takes the left. */
+:root:not([data-platform='mac']) .titlebar {
+  padding: 0 calc(14px + 100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 138px))) 0 8px;
+}
+
+.titlebar-menu {
+  flex: none;
+  margin-right: -8px;
+  color: var(--text-secondary);
+}
+.titlebar-menu:hover {
+  color: var(--text-primary);
+}
+/* Keeps the crumbs beside the button rather than centred between it and the actions. */
+.titlebar-menu + .titlebar-crumbs {
+  margin-right: auto;
+}
+
 .titlebar-crumbs {
   display: flex;
   align-items: center;

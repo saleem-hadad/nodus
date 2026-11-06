@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import clsx from 'clsx'
 import type { MenuCommand } from '@shared/api'
-import { isMac } from './platform'
+import { isMac, shortcutKey } from './platform'
 import { useApp } from './store'
 import { TitleBar } from './components/TitleBar'
 import { ProjectsView } from './views/ProjectsView'
@@ -67,7 +67,7 @@ export function App() {
     const CTRL_COMMANDS: Record<string, MenuCommand | undefined> = { n: 'new-session', t: 'new-terminal', w: 'close' }
     const onCtrlKey = (e: KeyboardEvent) => {
       if (isMac || !e.ctrlKey || e.shiftKey || e.altKey || e.metaKey || e.repeat || e.defaultPrevented) return
-      const command = CTRL_COMMANDS[e.key.toLowerCase()]
+      const command = CTRL_COMMANDS[shortcutKey(e)]
       if (!command || (e.target as HTMLElement | null)?.closest?.('.xterm')) return
       e.preventDefault()
       void window.api.menuCommand(command)

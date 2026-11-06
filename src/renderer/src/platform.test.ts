@@ -40,3 +40,26 @@ describe('modKey', () => {
     expect(windows.otherModKey(press)).toBe(true)
   })
 })
+
+describe('shortcutKey', () => {
+  it('reads a Latin layout’s letter as it is', async () => {
+    const { shortcutKey } = await onPlatform('Win32')
+    expect(shortcutKey({ key: 'c', keyCode: 67 })).toBe('c')
+    expect(shortcutKey({ key: 'W', keyCode: 87 })).toBe('w')
+    // AZERTY's A sits where QWERTY has Q, and is still A.
+    expect(shortcutKey({ key: 'a', keyCode: 65 })).toBe('a')
+  })
+
+  it('reads the letter from the key code on another alphabet’s layout', async () => {
+    const { shortcutKey } = await onPlatform('Win32')
+    // Arabic and Russian: Ctrl+V and Ctrl+C.
+    expect(shortcutKey({ key: 'ر', keyCode: 86 })).toBe('v')
+    expect(shortcutKey({ key: 'с', keyCode: 67 })).toBe('c')
+  })
+
+  it('leaves keys that aren’t letters be', async () => {
+    const { shortcutKey } = await onPlatform('Win32')
+    expect(shortcutKey({ key: 'Enter', keyCode: 13 })).toBe('enter')
+    expect(shortcutKey({ key: 'é', keyCode: 50 })).toBe('é')
+  })
+})

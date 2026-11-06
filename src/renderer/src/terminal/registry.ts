@@ -14,7 +14,7 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import type { SessionKind } from '@shared/types'
-import { isMac } from '@renderer/platform'
+import { isMac, shortcutKey } from '@renderer/platform'
 
 /**
  * - opening: sessions.open() is in flight; live data is covered by its replay
@@ -225,7 +225,7 @@ function createEntry(sessionId: string, kind: SessionKind, container: HTMLElemen
     // it keeps it, as Windows Terminal does: Ctrl+C copies only a selection,
     // Ctrl+V pastes, and the app's shortcuts take Shift as well.
     if (!isMac && ev.ctrlKey && !ev.altKey && !ev.metaKey) {
-      const key = ev.key.toLowerCase()
+      const key = shortcutKey(ev)
       if (key === 'c' && (ev.shiftKey || term.hasSelection())) {
         if (ev.type === 'keydown') {
           ev.preventDefault()

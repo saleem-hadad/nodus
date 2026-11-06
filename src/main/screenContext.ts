@@ -2,7 +2,7 @@
 // its browser tab, a screenshot, and what's on the clipboard.
 import { execFile } from 'child_process'
 import crypto from 'crypto'
-import { app, clipboard, desktopCapturer, nativeImage, screen } from 'electron'
+import { app, clipboard, desktopCapturer, nativeImage, screen, shell, systemPreferences } from 'electron'
 import fs from 'fs'
 import path from 'path'
 import { MAX_COPIED_CHARS } from '@shared/capture'
@@ -107,12 +107,21 @@ const thumbOf = (image: Electron.NativeImage) => {
  * A screenshot the user takes: on a Mac, macOS's own crosshair (Space for a
  * window), and off a Mac the whole screen the pointer is on. Null if they
  * cancel. The panel is hidden first, so it isn't in the shot.
+ *
+ * On a Mac, screencapture runs on Nodus's Screen Recording permission. macOS
+ * doesn't ask for it: without it the crosshair still comes up, and the shot
+ * fails once the user has picked. That comes back as 'needs-permission'.
  */
-export async function takeScreenshot(): Promise<Extract<CaptureAttachment, { kind: 'image' }> | null> {
+export async function takeScreenshot(): Promise<
+  Extract<CaptureAttachment, { kind: 'image' }> | 'needs-permission' | null
+> {
   const file = newShotPath()
   if (isMac) {
     // -i lets the user choose, -x keeps it quiet, -o leaves out a window's shadow.
     await run('screencapture', ['-i', '-x', '-o', file], 5 * 60_000).catch(() => '')
+    // Read only after a shot that didn't come, as Nodus's own reading can lag behind a permission just given.
+    if (!fs.existsSync(file) && systemPreferences.getMediaAccessStatus('screen') !== 'granted')
+      return 'needs-permission'
   } else {
     const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
     const size = {
@@ -127,6 +136,11 @@ export async function takeScreenshot(): Promise<Extract<CaptureAttachment, { kin
   const image = nativeImage.createFromPath(file)
   if (image.isEmpty()) return null
   return { kind: 'image', path: file, thumb: thumbOf(image) }
+}
+
+/** Opens the pane where Nodus is given Screen Recording permission, for screenshots. */
+export function openScreenSettings() {
+  if (isMac) void shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture')
 }
 
 /** A copied image, such as a screenshot taken to the clipboard. */

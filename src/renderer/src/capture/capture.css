@@ -374,6 +374,23 @@ html.capture-window body {
   font-size: var(--text-sm);
   color: var(--waiting-ink);
 }
+.cap-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 16px 12px;
+  font-size: var(--text-sm);
+  line-height: 17px;
+  color: var(--text-secondary);
+}
+.cap-notice-icon {
+  flex: none;
+  color: var(--status-waiting);
+}
+.cap-notice-text {
+  flex: 1;
+  min-width: 0;
+}
 .cap-card .voice-notice {
   position: static;
   transform: none;

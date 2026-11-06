@@ -10,6 +10,7 @@ import {
 } from 'react'
 import clsx from 'clsx'
 import {
+  AlertCircle,
   Check,
   ChevronDown,
   CornerDownRight,
@@ -180,6 +181,8 @@ export function CaptureApp() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** The last screenshot was kept from Nodus: it has no Screen Recording permission. */
+  const [shotBlocked, setShotBlocked] = useState(false)
   const [receipt, setReceipt] = useState<Shown | null>(null)
   const [dragging, setDragging] = useState(false)
   const [offerDone, setOfferDone] = useState<string | null>(() => store.get('capture.clipboardDone', null))
@@ -234,6 +237,7 @@ export function CaptureApp() {
       setReceipt(null)
       setMenuOpen(false)
       setError(null)
+      setShotBlocked(false)
       setContext(ctx)
       overPanel.current = null
       refresh()
@@ -416,7 +420,8 @@ export function CaptureApp() {
 
   const screenshot = async () => {
     const shot = await window.api.capture.screenshot()
-    if (shot) attach([shot])
+    setShotBlocked(shot === 'needs-permission')
+    if (shot && shot !== 'needs-permission') attach([shot])
     else fieldRef.current?.focus()
   }
 
@@ -652,6 +657,18 @@ export function CaptureApp() {
           <p className="cap-error" role="alert">
             {error}
           </p>
+        )}
+        {shotBlocked && (
+          <div className="cap-notice" role="alert">
+            <AlertCircle size={14} className="cap-notice-icon" aria-hidden />
+            <span className="cap-notice-text">
+              macOS kept the screenshot from Nodus. Turn Nodus on in Screen &amp; System Audio Recording, then take it
+              again.
+            </span>
+            <button type="button" className="cap-banner-btn" onClick={() => void window.api.capture.allowScreen()}>
+              Open System Settings
+            </button>
+          </div>
         )}
         <VoiceNotice voice={voice} />
 

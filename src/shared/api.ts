@@ -136,6 +136,7 @@ export const IPC = {
   captureSettings: 'capture:settings',
   captureShortcut: 'capture:shortcut',
   captureAllow: 'capture:allow',
+  captureAllowScreen: 'capture:allow-screen',
   captureShow: 'capture:show',
 
   // main -> renderer events
@@ -362,8 +363,13 @@ export interface Api {
     guess(text: string, attachments: CaptureAttachment[]): Promise<CaptureGuess | null>
     /** Makes it on the board. Rejects with why it couldn't. */
     submit(submission: CaptureSubmission): Promise<CaptureReceipt>
-    /** Hides the panel for the user to take a screenshot; null if they cancel. */
-    screenshot(): Promise<Extract<CaptureAttachment, { kind: 'image' }> | null>
+    /**
+     * Hides the panel for the user to take a screenshot; null if they cancel,
+     * 'needs-permission' if macOS kept it from Nodus (no Screen Recording).
+     */
+    screenshot(): Promise<Extract<CaptureAttachment, { kind: 'image' }> | 'needs-permission' | null>
+    /** Opens the System Settings pane where Nodus is given Screen Recording permission. */
+    allowScreen(): Promise<void>
     /** Files by path (dropped ones), or picked in a dialog when no paths are given. */
     files(paths?: string[]): Promise<CaptureAttachment[]>
     /** What's on the clipboard, attached. */

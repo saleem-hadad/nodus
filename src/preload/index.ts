@@ -129,6 +129,7 @@ const api: Api = {
     openSettings: () => ipcRenderer.invoke(IPC.captureSettings),
     shortcut: () => ipcRenderer.invoke(IPC.captureShortcut),
     allow: () => ipcRenderer.invoke(IPC.captureAllow),
+    allowScreen: () => ipcRenderer.invoke(IPC.captureAllowScreen),
     show: () => ipcRenderer.invoke(IPC.captureShow)
   },
 

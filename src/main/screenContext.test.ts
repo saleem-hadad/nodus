@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('electron', () => ({ app: {}, clipboard: {}, desktopCapturer: {}, nativeImage: {}, screen: {} }))
+vi.mock('electron', () => ({
+  app: {},
+  clipboard: {},
+  desktopCapturer: {},
+  nativeImage: {},
+  screen: {},
+  shell: {},
+  systemPreferences: {}
+}))
 
 import { isBrowser, parseAppInfo, tabScript } from './screenContext'
 

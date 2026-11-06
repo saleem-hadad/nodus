@@ -40,6 +40,7 @@ import {
   browserTab,
   frontApp,
   isBrowser,
+  openScreenSettings,
   pruneShots,
   readClipboard,
   takeClipboard,
@@ -622,6 +623,8 @@ export function registerCapture(handlers: CaptureHandlers) {
   ipcMain.handle(IPC.captureShortcut, () => shortcutState())
 
   ipcMain.handle(IPC.captureAllow, () => askPermission())
+
+  ipcMain.handle(IPC.captureAllowScreen, () => openScreenSettings())
 
   ipcMain.handle(IPC.captureShow, () => openPanel())
 

@@ -130,7 +130,7 @@ What you send lands the way the prompt bar's does. A session starts in auto mode
 What comes along:
 
 - **The browser tab in front** (Safari, Chrome, Arc, Dia, Brave, Edge, Vivaldi or Opera): its link and title. macOS asks once for each browser whether Nodus may read it. Firefox has no way to share its tab.
-- **A screenshot.** The scan button hides the panel and brings up macOS's crosshair; press Space to pick a window. macOS asks for Screen Recording the first time.
+- **A screenshot.** The scan button hides the panel and brings up macOS's crosshair; press Space to pick a window. It needs Screen Recording permission, which macOS doesn't ask for: without it the shot fails once you've picked, and the panel says so, with **Open System Settings** for Privacy & Security › Screen & System Audio Recording.
 - **What you copied**, offered as a dashed tile. Click it to add it.
 - **Files**, dropped on the panel or picked with the paperclip.
 
@@ -257,7 +257,7 @@ In the terminal, Esc goes to Claude (it interrupts a turn), so it never closes t
 - A view's commands and refreshes only run while the app is open.
 - If you update the app while sessions are running, and the update changed how the app talks to the session host, the new version asks to stop those sessions before it continues.
 - A session host started by a version without board tools keeps running sessions after an update, but sessions started on it don't get the tools. They do once every session has stopped and a new host starts.
-- On a Mac, the double tap of ⇧ needs Accessibility permission, and a browser tab needs Automation permission for that browser.
+- On a Mac, the double tap of ⇧ needs Accessibility permission, a screenshot needs Screen Recording permission, and a browser tab needs Automation permission for that browser.
 - On Windows, floating capture hasn't been tried by hand yet.
 - The Windows build is newer than the Mac one. CI installs it and checks that its window, session host and terminals work, but Claude sessions on Windows have seen much less use.
 

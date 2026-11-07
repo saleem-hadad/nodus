@@ -7,7 +7,7 @@ import { ContextMenu, type MenuItem } from '../ContextMenu'
 import { FolderIcon } from '../FolderIcon'
 import { focusModeOn, isFocusing, showsInFocus } from './focus'
 import { addProject, groupProjects, projectGlyph, setFocused } from './projectsUi'
-import { keys } from '@renderer/platform'
+import { isMac, keys, modKey, otherModKey } from '@renderer/platform'
 import './ProjectRail.css'
 
 interface Hint {
@@ -20,6 +20,8 @@ interface Hint {
 const REVEAL_DELAY = 100
 /** Grace period after the pointer leaves, to cross the gap between the edge and the rail. */
 const HIDE_DELAY = 300
+/** Holding ⌘ on its own this long numbers the projects, so a quick ⌘C doesn't flash the rail. */
+const NUMBERS_DELAY = 300
 
 function activity(stats?: ProjectStats): string | undefined {
   if (!stats) return undefined
@@ -42,21 +44,14 @@ export function ProjectRail({ activeId, pinned }: { activeId: string; pinned: bo
   const focusFeature = useApp((s) => s.settings?.focusFeature ?? false)
   const focusMode = useApp((s) => focusModeOn(s.settings))
   const [open, setOpen] = useState(false)
+  // While ⌘ is held, each project shows the number that opens it.
+  const [numbered, setNumbered] = useState(false)
   const [hint, setHint] = useState<Hint | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; projectId: string } | null>(null)
   const timer = useRef<number | undefined>(undefined)
   const railRef = useRef<HTMLElement>(null)
-  const shown = pinned || open
+  const shown = pinned || open || numbered
   const focusing = isFocusing(projects, focusMode)
-  const hinted = hint?.projectId ? projects.find((p) => p.id === hint.projectId) : undefined
-  const hintName = hint && (hint.projectId ? hinted?.name : 'New Project')
-  const hintGroup = hinted?.groupId ? groups.find((g) => g.id === hinted.groupId)?.name : undefined
-  const hintFocus = focusing && hinted && !hinted.focused ? 'Not in focus' : undefined
-  const hintDetail =
-    hint &&
-    (hint.projectId
-      ? [hintGroup, activity(stats[hint.projectId]), hintFocus].filter(Boolean).join(' · ')
-      : keys('⇧⌘N'))
   const showHint = (projectId: string | null) => (e: PointerEvent<HTMLElement>) => {
     const r = e.currentTarget.getBoundingClientRect()
     setHint({ projectId, top: r.top + r.height / 2 })
@@ -72,6 +67,90 @@ export function ProjectRail({ activeId, pinned }: { activeId: string; pinned: bo
     const { ungrouped, byGroup } = groupProjects(active, groups)
     return [ungrouped, ...byGroup.map((b) => b.projects)].filter((block) => block.length > 0)
   }, [projects, groups, focusing, stats, activeId])
+  // ⌘1 to ⌘9 open the first nine, top to bottom.
+  const order = useMemo(() => blocks.flat(), [blocks])
+  const orderRef = useRef(order)
+  orderRef.current = order
+  const numberOf = (projectId: string) => {
+    const n = order.findIndex((p) => p.id === projectId) + 1
+    return n >= 1 && n <= 9 ? n : undefined
+  }
+
+  const hinted = hint?.projectId ? projects.find((p) => p.id === hint.projectId) : undefined
+  const hintName = hint && (hint.projectId ? hinted?.name : 'New Project')
+  const hintGroup = hinted?.groupId ? groups.find((g) => g.id === hinted.groupId)?.name : undefined
+  const hintFocus = focusing && hinted && !hinted.focused ? 'Not in focus' : undefined
+  const hintNumber = hint?.projectId ? numberOf(hint.projectId) : undefined
+  const hintDetail =
+    hint &&
+    (hint.projectId
+      ? [hintGroup, activity(stats[hint.projectId]), hintFocus, hintNumber && keys(`⌘${hintNumber}`)]
+          .filter(Boolean)
+          .join(' · ')
+      : keys('⇧⌘N'))
+
+  // Holding ⌘ on its own numbers the projects, sliding the rail out if it's hidden, and ⌘ with a
+  // number opens that project. Off a Mac, a focused terminal keeps Ctrl and its numbers.
+  useEffect(() => {
+    const modifier = isMac ? 'Meta' : 'Control'
+    let wait: number | undefined
+    const cancel = () => {
+      window.clearTimeout(wait)
+      wait = undefined
+    }
+    const hideNumbers = () => {
+      cancel()
+      setNumbered(false)
+    }
+    const blocked = (e: KeyboardEvent) =>
+      e.shiftKey ||
+      e.altKey ||
+      otherModKey(e) ||
+      useApp.getState().settingsOpen ||
+      (!isMac && !!(e.target as HTMLElement | null)?.closest?.('.xterm'))
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === modifier) {
+        if (!e.repeat && !blocked(e)) {
+          cancel()
+          wait = window.setTimeout(() => setNumbered(true), NUMBERS_DELAY)
+        }
+        return
+      }
+      // By key position, so it's the same on layouts that need Shift for digits.
+      const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code)
+      if (digit && modKey(e) && !blocked(e)) {
+        const project = orderRef.current[Number(digit[1]) - 1]
+        if (!project) return
+        e.preventDefault()
+        const { route, navigate } = useApp.getState()
+        if (route.view !== 'board' || route.projectId !== project.id) {
+          navigate({ view: 'board', projectId: project.id })
+        }
+        // The numbers stay while ⌘ is held, to go on to another.
+        return
+      }
+      // ⌘ is part of another shortcut.
+      hideNumbers()
+    }
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === modifier || !modKey(e)) hideNumbers()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    // ⌘-click and ⌘-scroll aren't for the numbers.
+    window.addEventListener('pointerdown', cancel)
+    window.addEventListener('wheel', cancel, { passive: true })
+    window.addEventListener('blur', hideNumbers)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('pointerdown', cancel)
+      window.removeEventListener('wheel', cancel)
+      window.removeEventListener('blur', hideNumbers)
+      cancel()
+    }
+  }, [])
 
   // The badges need fresh stats; the projects view isn't there to load them.
   useEffect(() => {
@@ -138,10 +217,18 @@ export function ProjectRail({ activeId, pinned }: { activeId: string; pinned: bo
 
       <nav
         ref={railRef}
-        className={clsx('rail', shown && 'is-open', pinned && 'is-pinned')}
+        className={clsx('rail', shown && 'is-open', pinned && 'is-pinned', numbered && 'is-numbered')}
         aria-label="Projects"
         inert={!shown}
-        onPointerEnter={pinned ? undefined : keepOpen}
+        // Out for the numbers, it stays out under the pointer once ⌘ is let go.
+        onPointerEnter={
+          pinned
+            ? undefined
+            : () => {
+                keepOpen()
+                setOpen(true)
+              }
+        }
         onPointerLeave={pinned ? undefined : hide}
         onScroll={() => setHint(null)}
       >
@@ -151,6 +238,7 @@ export function ProjectRail({ activeId, pinned }: { activeId: string; pinned: bo
               const active = project.id === activeId
               const s = stats[project.id]
               const status = s?.waiting ? 'waiting' : s?.working ? 'working' : undefined
+              const number = numbered ? numberOf(project.id) : undefined
               return (
                 <button
                   key={project.id}
@@ -178,6 +266,11 @@ export function ProjectRail({ activeId, pinned }: { activeId: string; pinned: bo
                 >
                   <FolderIcon size={34} color={project.color} glyph={projectGlyph(project.name)} />
                   {status && <span className="status-dot rail-dot" data-status={status} />}
+                  {number && (
+                    <kbd className="rail-key" aria-hidden="true">
+                      {number}
+                    </kbd>
+                  )}
                 </button>
               )
             })}

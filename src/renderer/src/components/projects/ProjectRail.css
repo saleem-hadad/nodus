@@ -127,6 +127,40 @@
   border: 1.5px solid var(--bg-elevated);
 }
 
+/* Held ⌘ shows the rail over an open session too, to show where ⌘1 to ⌘9 go. */
+.rail.is-numbered {
+  z-index: 600;
+}
+
+/* A project's number for ⌘1 to ⌘9, on the folder's corner while ⌘ is held. */
+.rail-item .rail-key {
+  position: absolute;
+  right: 0;
+  bottom: 1px;
+  min-width: 16px;
+  margin: 0;
+  padding: 0 4px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-sm);
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 15px;
+  color: var(--text-primary);
+  pointer-events: none;
+  animation: rail-key-in var(--dur-fast) var(--ease-out);
+}
+
+@keyframes rail-key-in {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+}
+
 .rail-hint {
   position: fixed;
   z-index: 60;

@@ -131,7 +131,7 @@ export const IPC = {
   captureFiles: 'capture:files',
   captureClipboard: 'capture:clipboard',
   captureHide: 'capture:hide',
-  capturePassThrough: 'capture:pass-through',
+  captureResize: 'capture:resize',
   captureOpen: 'capture:open',
   captureSettings: 'capture:settings',
   captureShortcut: 'capture:shortcut',
@@ -375,8 +375,8 @@ export interface Api {
     /** What's on the clipboard, attached. */
     clipboard(): Promise<CaptureAttachment | null>
     hide(): void
-    /** Whether clicks go through the panel's window: true over its see-through margin. */
-    setPassThrough(through: boolean): void
+    /** The panel's page, this tall: its window follows, so no see-through space is left to click in. */
+    resize(height: number): void
     /** Puts the panel away and opens a card, or a board, in the window. */
     open(request: OpenCardRequest): Promise<void>
     /** Puts the panel away and opens Settings in the window. */

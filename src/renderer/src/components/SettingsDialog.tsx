@@ -216,8 +216,9 @@ function CaptureSettings({
           <span className="settings-row-text">
             <span className="settings-row-title">Allow Nodus in Accessibility</span>
             <span className="settings-row-hint">
-              macOS lets an app hear a key pressed in other apps only with this permission. Turn Nodus on in Privacy
-              &amp; Security › Accessibility.
+              macOS lets an app hear a key pressed in other apps only with this permission. Click Allow… and turn
+              Nodus on in Privacy &amp; Security › Accessibility. Already on there? It was given to another copy of
+              Nodus: Allow… clears it so macOS asks again.
             </span>
           </span>
           <button type="button" className="btn btn-primary" onClick={() => void window.api.capture.allow().then(setShortcut)}>

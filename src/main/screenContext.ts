@@ -10,6 +10,9 @@ import type { CaptureAttachment } from '@shared/types'
 
 const isMac = process.platform === 'darwin'
 
+/** macOS's own screenshot tool; NODUS_SCREENCAPTURE stands in for it in tests. */
+const SCREENCAPTURE = process.env.NODUS_SCREENCAPTURE || '/usr/sbin/screencapture'
+
 /** Screenshots and copied images older than this are cleared away at launch. */
 const KEEP_MS = 30 * 24 * 60 * 60 * 1000
 
@@ -36,9 +39,9 @@ export function parseAppInfo(out: string): FrontApp | null {
 export async function frontApp(): Promise<FrontApp | null> {
   if (!isMac) return null
   try {
-    const asn = (await run('lsappinfo', ['front'], 1000)).trim()
+    const asn = (await run('/usr/bin/lsappinfo', ['front'], 1000)).trim()
     if (!asn) return null
-    return parseAppInfo(await run('lsappinfo', ['info', '-only', 'bundleid', '-only', 'name', asn], 1000))
+    return parseAppInfo(await run('/usr/bin/lsappinfo', ['info', '-only', 'bundleid', '-only', 'name', asn], 1000))
   } catch {
     return null
   }
@@ -81,7 +84,7 @@ export async function browserTab(front: FrontApp): Promise<Extract<CaptureAttach
   if (!script) return null
   try {
     // Long enough for the user to answer macOS asking the first time.
-    const [url = '', ...title] = (await run('osascript', ['-e', script], 60_000)).trim().split('\n')
+    const [url = '', ...title] = (await run('/usr/bin/osascript', ['-e', script], 60_000)).trim().split('\n')
     if (!/^https?:\/\//i.test(url)) return null
     return { kind: 'tab', url, title: title.join(' ').trim(), app: front.name }
   } catch {
@@ -118,7 +121,7 @@ export async function takeScreenshot(): Promise<
   const file = newShotPath()
   if (isMac) {
     // -i lets the user choose, -x keeps it quiet, -o leaves out a window's shadow.
-    await run('screencapture', ['-i', '-x', '-o', file], 5 * 60_000).catch(() => '')
+    await run(SCREENCAPTURE, ['-i', '-x', '-o', file], 5 * 60_000).catch(() => '')
     // Read only after a shot that didn't come, as Nodus's own reading can lag behind a permission just given.
     if (!fs.existsSync(file) && systemPreferences.getMediaAccessStatus('screen') !== 'granted')
       return 'needs-permission'

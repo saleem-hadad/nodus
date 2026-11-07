@@ -59,6 +59,8 @@ const RECEIPT_MS = 2600
 const POLL_MS = 2000
 const MAX_HISTORY = 50
 const MAX_ROWS = 8
+/** Room under the open menu for its shadow. */
+const MENU_ROOM = 48
 
 const KINDS: Record<CaptureKind, { label: string; verb: string; hint: string }> = {
   session: { label: 'New session', verb: 'Start session', hint: 'Claude starts on it, in auto mode' },
@@ -199,8 +201,8 @@ export function CaptureApp() {
   const guessedFor = useRef('')
   const pendingGuess = useRef<Promise<CaptureGuess | null> | null>(null)
   const receiptTimer = useRef(0)
-  /** Whether the pointer is over something of the panel's, rather than its see-through margin. */
-  const overPanel = useRef<boolean | null>(null)
+  /** The height the window was last asked to be. */
+  const sentHeight = useRef(0)
 
   const projects = targets?.projects ?? []
   const sessions = targets?.sessions ?? []
@@ -239,7 +241,6 @@ export function CaptureApp() {
       setError(null)
       setShotBlocked(false)
       setContext(ctx)
-      overPanel.current = null
       refresh()
       // Typing starts the moment the panel is up, so the field takes the keyboard now, and again once it has drawn.
       const focus = () => {
@@ -280,17 +281,26 @@ export function CaptureApp() {
   useEffect(() => store.set('capture.draft', text || undefined), [text])
   useEffect(() => store.set('capture.attachments', attachments.length ? attachments : undefined), [attachments])
 
-  // Clicks pass through the see-through margin around the card to the app below.
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      const over = Boolean((e.target as Element | null)?.closest?.('.cap-hit'))
-      if (over === overPanel.current) return
-      overPanel.current = over
-      window.api.capture.setPassThrough(!over)
+  // The window is as tall as what it shows, the open menu included, so a click
+  // below the card lands in the app there rather than in an empty window.
+  useLayoutEffect(() => {
+    const stage = document.querySelector<HTMLElement>('.cap-stage')
+    if (!stage) return
+    const fit = () => {
+      let bottom = stage.offsetTop + stage.offsetHeight
+      for (const menu of stage.querySelectorAll<HTMLElement>('.cap-menu')) {
+        bottom = Math.max(bottom, menu.getBoundingClientRect().bottom + MENU_ROOM)
+      }
+      const height = Math.ceil(bottom)
+      if (height === sentHeight.current) return
+      sentHeight.current = height
+      window.api.capture.resize(height)
     }
-    window.addEventListener('mousemove', onMove)
-    return () => window.removeEventListener('mousemove', onMove)
-  }, [])
+    fit()
+    const watch = new ResizeObserver(fit)
+    watch.observe(stage)
+    return () => watch.disconnect()
+  })
 
   // The menu closes on a click anywhere but itself and the header that opens it.
   useEffect(() => {
@@ -743,7 +753,10 @@ export function CaptureApp() {
         <div className="cap-banner cap-hit">
           {context.shortcut === 'needs-permission' ? (
             <>
-              <span>To open this from any app with a double tap of ⇧, allow Nodus in Accessibility.</span>
+              <span>
+                To open this from any app with a double tap of ⇧, allow Nodus in Accessibility. Already on there? Click
+                Allow… anyway.
+              </span>
               <button
                 type="button"
                 className="cap-banner-btn"

@@ -17,9 +17,9 @@ html.capture-window body {
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  /* Room for the card's shadow inside the window (PANEL_W in src/main/capture.ts), so it isn't cut off. */
-  padding: 56px 80px 80px;
-  height: 100%;
+  /* Room for the card's shadow inside the window (PANEL_W in src/main/capture.ts), so it isn't cut off.
+     The window takes this stage's height (captureResize). */
+  padding: 40px 56px 64px;
   overflow: hidden;
 }
 @media (prefers-color-scheme: dark) {
@@ -132,7 +132,7 @@ html.capture-window body {
 /* ───── the card ───── */
 
 .cap-card {
-  --cap-shadow: 0 24px 60px rgba(0, 0, 0, 0.26), 0 0 0 0.5px rgba(0, 0, 0, 0.16);
+  --cap-shadow: 0 16px 40px rgba(0, 0, 0, 0.24), 0 0 0 0.5px rgba(0, 0, 0, 0.16);
 
   position: relative;
   width: var(--cap-w);
@@ -144,7 +144,7 @@ html.capture-window body {
 }
 @media (prefers-color-scheme: dark) {
   .cap-card {
-    --cap-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 0.5px rgba(255, 255, 255, 0.16);
+    --cap-shadow: 0 16px 40px rgba(0, 0, 0, 0.55), 0 0 0 0.5px rgba(255, 255, 255, 0.16);
   }
 }
 .cap-card.is-dropping {
@@ -704,7 +704,7 @@ html.capture-window body {
 /* ───── the receipt ───── */
 
 .cap-receipt-stage {
-  padding-top: 68px;
+  padding-top: 52px;
 }
 .cap-receipt {
   position: relative;
@@ -716,7 +716,7 @@ html.capture-window body {
   border-radius: 12px;
   background: var(--bg-elevated);
   box-shadow:
-    0 24px 60px rgba(0, 0, 0, 0.26),
+    0 16px 40px rgba(0, 0, 0, 0.24),
     0 0 0 0.5px rgba(0, 0, 0, 0.16);
   animation: cap-shrink 280ms var(--ease-spring);
 }

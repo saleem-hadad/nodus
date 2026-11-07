@@ -185,6 +185,10 @@ function createEntry(sessionId: string, kind: SessionKind, container: HTMLElemen
     outputListeners: new Set()
   }
 
+  // A wheel something else already handled (the board panning past) isn't
+  // sent on to the program either.
+  term.attachCustomWheelEventHandler((ev) => !ev.defaultPrevented)
+
   term.attachCustomKeyEventHandler((ev) => {
     // Shift+Enter inserts a newline in Claude's prompt (same sequence
     // `/terminal-setup` configures for other terminals). Swallow the

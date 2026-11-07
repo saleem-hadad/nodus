@@ -16,6 +16,27 @@ const pendingWake = new Set<string>()
 const wakers = new Map<string, () => void>()
 /** A card takes focus only right after it was asked to show its session. */
 const FOCUS_WINDOW_MS = 1500
+/** Wheel events further apart than this start a new scroll gesture. */
+const GESTURE_GAP_MS = 250
+
+let lastWheelAt = -Infinity
+/** The first wheel event of the scroll gesture under way. */
+let gestureStart: WheelEvent | null = null
+/** Whether that gesture pans the board, as it does unless it starts over a terminal. */
+let boardScrolls = false
+
+// Runs before anything under the pointer sees the event.
+window.addEventListener(
+  'wheel',
+  (e) => {
+    if (e.timeStamp - lastWheelAt > GESTURE_GAP_MS) {
+      gestureStart = e
+      boardScrolls = true
+    }
+    lastWheelAt = e.timeStamp
+  },
+  { capture: true, passive: true }
+)
 
 /**
  * Shows the session in its expanded card: starts (or resumes) it if it isn't
@@ -90,14 +111,26 @@ export function ExpandedCard({ card, heading, tools }: { card: SessionCard; head
   }, [id, enabled, wakes])
 
   // Scrolling over the terminal scrolls it, not the board; a pinch still zooms the board.
+  // A scroll that's panning the board keeps panning it when the card slides under the pointer.
   useEffect(() => {
     const body = bodyRef.current
     if (!body) return
-    const onWheel = (e: WheelEvent) => {
-      if (enabledRef.current && !e.ctrlKey) e.stopPropagation()
+    const claims = (e: WheelEvent) => enabledRef.current && !e.ctrlKey
+    const onWheelCapture = (e: WheelEvent) => {
+      if (!claims(e)) return
+      if (e === gestureStart) boardScrolls = false
+      // xterm leaves a prevented wheel alone; React Flow pans with it all the same.
+      else if (boardScrolls) e.preventDefault()
     }
+    const onWheel = (e: WheelEvent) => {
+      if (claims(e) && !boardScrolls) e.stopPropagation()
+    }
+    body.addEventListener('wheel', onWheelCapture, { capture: true, passive: false })
     body.addEventListener('wheel', onWheel)
-    return () => body.removeEventListener('wheel', onWheel)
+    return () => {
+      body.removeEventListener('wheel', onWheelCapture, { capture: true })
+      body.removeEventListener('wheel', onWheel)
+    }
   }, [])
 
   const canResume = started && !card.live && phase !== 'loading'

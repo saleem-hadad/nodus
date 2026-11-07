@@ -1,5 +1,12 @@
 /* ───────────── Title bar: branch chip and Changes button ───────────── */
 
+.git-branch-wrap {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  margin-left: 6px;
+}
+
 .git-branch {
   display: inline-flex;
   align-items: center;
@@ -7,7 +14,6 @@
   min-width: 0;
   max-width: 260px;
   height: 22px;
-  margin-left: 6px;
   padding: 0 8px;
   border-radius: 11px;
   background: var(--bg-sunken);
@@ -30,6 +36,99 @@
   flex: none;
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
+}
+
+/* The branch's last commits, hanging from the chip's left edge. */
+.git-log {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 360px;
+  padding: 5px;
+  border-radius: var(--radius-md);
+  /* Solid: inside the title bar's backdrop-filter, a blur here couldn't see the board. */
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  animation: git-log-in 90ms var(--ease-out);
+}
+/* Spans the gap up to the chip, so the pointer can cross into the log without leaving. */
+.git-log::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  right: 0;
+  left: 0;
+  height: 6px;
+}
+
+@keyframes git-log-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+}
+
+.git-log-head {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 8px 6px;
+}
+
+.git-log-branch {
+  overflow: hidden;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.git-log-tracking {
+  color: var(--text-secondary);
+}
+
+.git-log-list {
+  margin: 0;
+  padding: 4px 0 0;
+  border-top: 0.5px solid var(--separator);
+  list-style: none;
+}
+
+.git-log-commit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 10px;
+  padding: 4px 8px;
+  border-radius: 5px;
+}
+.git-log-commit:hover {
+  background: var(--bg-hover);
+}
+
+.git-log-subject {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.git-log-time {
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.git-log-meta {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.git-log-oid {
+  font-family: var(--font-mono);
 }
 
 .git-changes {

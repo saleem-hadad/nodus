@@ -23,6 +23,7 @@ import type {
   CreateSessionOptions,
   CreateViewOptions,
   FolderColor,
+  GitCommit,
   GitFileChange,
   GitFileDiff,
   GitStatus,
@@ -107,6 +108,7 @@ export const IPC = {
 
   gitStatus: 'git:status',
   gitDiff: 'git:diff',
+  gitLog: 'git:log',
 
   actionsGlobal: 'actions:global',
   actionsSave: 'actions:save',
@@ -311,6 +313,8 @@ export interface Api {
     status(projectId: string): Promise<GitStatus | null>
     /** Diff of one changed file (from status) against HEAD. */
     diff(projectId: string, file: GitFileChange): Promise<GitFileDiff>
+    /** The newest commits on the project's current branch (5 unless asked), newest first. */
+    log(projectId: string, limit?: number): Promise<GitCommit[]>
   }
 
   /** The Actions dock. An action runs through sessions.create with its actionId. */

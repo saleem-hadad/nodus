@@ -1,7 +1,7 @@
 // Read-only git queries behind the title bar's branch chip and the Changes modal.
 import { execFile } from 'child_process'
 import path from 'path'
-import type { GitFileChange, GitFileDiff, GitFileStatus, GitStatus } from '@shared/types'
+import type { GitCommit, GitFileChange, GitFileDiff, GitFileStatus, GitStatus } from '@shared/types'
 import { spawnEnv } from './env'
 
 /** Diffs larger than this are not shown. */
@@ -93,6 +93,28 @@ export async function gitStatus(repoPath: string): Promise<GitStatus | null> {
   }
   status.files.sort((a, b) => a.path.localeCompare(b.path))
   return status
+}
+
+/** The newest commits on HEAD; empty before the first commit or outside a repository. */
+export async function gitLog(repoPath: string, limit = 5): Promise<GitCommit[]> {
+  // Fields are split by 0x1f and commits by NUL, neither of which can be in a subject or name.
+  const res = await git(repoPath, [
+    'log',
+    `--max-count=${limit}`,
+    '--no-show-signature',
+    '--format=%H%x1f%an%x1f%at%x1f%s',
+    '-z',
+    'HEAD',
+    '--'
+  ])
+  if (res.code !== 0) return []
+  return res.stdout
+    .split('\0')
+    .filter(Boolean)
+    .map((rec) => {
+      const [oid, author, at, subject] = rec.split('\x1f')
+      return { oid, subject, author, time: Number(at) * 1000 }
+    })
 }
 
 let emptyTree: string | null = null

@@ -3,7 +3,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { gitDiff, gitStatus } from './git'
+import { gitDiff, gitLog, gitStatus } from './git'
 
 // The user's git config (signing, default branch, status options) must not
 // change what these tests see. Hoisted, so it's set before env.ts reads the environment.
@@ -157,5 +157,45 @@ describe('gitDiff', () => {
     } finally {
       fs.rmSync(plain, { recursive: true, force: true })
     }
+  })
+})
+
+describe('gitLog', () => {
+  it('is empty before the first commit and outside a repository', async () => {
+    expect(await gitLog(root)).toEqual([])
+    const plain = fs.mkdtempSync(path.join(os.tmpdir(), 'nodus-plain-'))
+    try {
+      expect(await gitLog(plain)).toEqual([])
+    } finally {
+      fs.rmSync(plain, { recursive: true, force: true })
+    }
+  })
+
+  it('lists the newest commits on the branch first, up to the limit', async () => {
+    for (let i = 1; i <= 7; i++) {
+      write('a.txt', `${i}\n`)
+      git(root, 'add', '-A')
+      git(root, 'commit', '-q', '-m', `Change ${i}: tabs\tand | pipes`, '-m', 'A body that is left out', '--date', `${1_700_000_000 + i * 3600} +0000`)
+    }
+    const log = await gitLog(root)
+    expect(log.map((c) => c.subject)).toEqual([7, 6, 5, 4, 3].map((i) => `Change ${i}: tabs\tand | pipes`))
+    expect(log[0]).toEqual({
+      oid: git(root, 'rev-parse', 'HEAD').trim(),
+      subject: 'Change 7: tabs\tand | pipes',
+      author: 'Test',
+      time: (1_700_000_000 + 7 * 3600) * 1000
+    })
+    expect(await gitLog(root, 2)).toHaveLength(2)
+  })
+
+  it('follows the branch that is checked out', async () => {
+    commitFiles({ 'a.txt': 'a\n' })
+    git(root, 'switch', '-q', '-c', 'feature')
+    write('b.txt', 'b\n')
+    git(root, 'add', '-A')
+    git(root, 'commit', '-q', '-m', 'On feature')
+    expect((await gitLog(root)).map((c) => c.subject)).toEqual(['On feature', 'files'])
+    git(root, 'switch', '-q', 'main')
+    expect((await gitLog(root)).map((c) => c.subject)).toEqual(['files'])
   })
 })

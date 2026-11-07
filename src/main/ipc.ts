@@ -60,7 +60,7 @@ import {
   watchProject
 } from './discovery'
 import { getClaudePath, getClaudeVersion, initEnv } from './env'
-import { gitDiff, gitStatus } from './git'
+import { gitDiff, gitLog, gitStatus } from './git'
 import { configureStatus, forgetStatus, getStatus } from './hooks'
 import { cleanInk } from './ink'
 import { installMenu, isMenuCommand, syncFocusMenu } from './menu'
@@ -594,6 +594,13 @@ export async function registerIpc(getWindow: () => BrowserWindow | null, showWin
   ipcMain.handle(IPC.gitDiff, async (_e, projectId: string, file: GitFileChange) => {
     await envReady
     return gitDiff(getProject(projectId).repoPath, file)
+  })
+
+  ipcMain.handle(IPC.gitLog, async (_e, projectId: string, limit?: number) => {
+    await envReady
+    // The count comes from the renderer: keep it a small whole number.
+    const n = Number.isInteger(limit) ? Math.min(Math.max(limit!, 1), 50) : 5
+    return gitLog(getProject(projectId).repoPath, n)
   })
 
   // --- Actions -------------------------------------------------------------

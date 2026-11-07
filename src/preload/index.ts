@@ -89,7 +89,8 @@ const api: Api = {
 
   git: {
     status: (projectId) => ipcRenderer.invoke(IPC.gitStatus, projectId),
-    diff: (projectId, file) => ipcRenderer.invoke(IPC.gitDiff, projectId, file)
+    diff: (projectId, file) => ipcRenderer.invoke(IPC.gitDiff, projectId, file),
+    log: (projectId, limit) => ipcRenderer.invoke(IPC.gitLog, projectId, limit)
   },
 
   actions: {

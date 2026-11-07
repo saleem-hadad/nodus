@@ -600,6 +600,16 @@ export interface GitFileDiff {
   tooLarge?: boolean
 }
 
+/** One commit in the branch's recent history. */
+export interface GitCommit {
+  oid: string
+  /** The message's first line. */
+  subject: string
+  author: string
+  /** Author date, in ms. */
+  time: number
+}
+
 /**
  * What floating capture makes of what the user typed:
  * - session: a new Claude session on it, in auto mode

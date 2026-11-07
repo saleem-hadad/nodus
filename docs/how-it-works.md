@@ -138,7 +138,7 @@ Screenshots and copied images are saved in `captures/` in the app's data folder,
 
 ↑ in an empty field brings back earlier captures. Esc or a click anywhere else puts the panel away, and what you typed is still there the next time.
 
-The double tap is heard through a global key hook ([uiohook-napi](https://github.com/SnosMe/uiohook-napi)). Only ⇧ pressed on its own counts: ⇧ held to type a capital or to click doesn't. On a Mac the hook needs Accessibility permission. **Allow…** in Settings asks for it and opens Privacy & Security › Accessibility. Until it's allowed, **File › Capture…** still opens the panel. On Windows it needs no permission. There, the screenshot is the whole screen the pointer is on, and the browser tab isn't read.
+The double tap is heard through a global key hook ([uiohook-napi](https://github.com/SnosMe/uiohook-napi)). Only ⇧ pressed on its own counts: ⇧ held to type a capital or to click doesn't. On a Mac the hook needs Accessibility permission. **Allow…** in Settings asks for it and opens Privacy & Security › Accessibility. macOS keeps the permission with the signature of the copy of Nodus it was given to, so one given to another copy (a build of your own, say) shows as on there but doesn't count. **Allow…** clears that and macOS asks again. Until it's allowed, **File › Capture…** still opens the panel. On Windows it needs no permission. There, the screenshot is the whole screen the pointer is on, and the browser tab isn't read.
 
 ## Cards
 

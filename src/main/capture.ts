@@ -9,6 +9,7 @@
 // #capture. The double tap is heard through a global key hook (uiohook-napi),
 // which on a Mac needs Accessibility permission.
 import { app, BrowserWindow, dialog, ipcMain, screen, shell, systemPreferences } from 'electron'
+import { execFile } from 'child_process'
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
@@ -52,13 +53,17 @@ import * as views from './views'
 const isMac = process.platform === 'darwin'
 
 /**
- * The panel's window: the card's width and the room its menu and recents
- * need, with a see-through margin its shadow fits in (.cap-stage).
+ * The panel's window: the card's width, with a see-through margin its shadow
+ * fits in (.cap-stage). Its height follows what the page shows (captureResize),
+ * so there's no see-through space below the card for a click to land in.
  */
-const PANEL_W = 700
-const PANEL_H = 640
+const PANEL_W = 652
+/** Until the page says how tall it is. */
+const PANEL_H = 320
+const MIN_PANEL_H = 120
+const MAX_PANEL_H = 900
 /** From the window's top to the card's. */
-const CARD_TOP = 56
+const CARD_TOP = 40
 /** How far down the screen the card's top sits. */
 const PANEL_TOP = 0.2
 /** How many captures are remembered for the recents. */
@@ -177,7 +182,8 @@ function place(win: BrowserWindow) {
     x: Math.round(workArea.x + (workArea.width - PANEL_W) / 2),
     y: Math.round(workArea.y + workArea.height * PANEL_TOP - CARD_TOP),
     width: PANEL_W,
-    height: PANEL_H
+    // As tall as it was last time, until the page measures itself again.
+    height: win.getBounds().height
   })
 }
 
@@ -192,8 +198,6 @@ export async function openPanel() {
   place(win)
   openedOn = { app: front?.name, targets: targets() }
   tellPanel(win, { app: front?.name, shortcut: shortcutState() }, true)
-  // Clicks go through until the pointer is over the card; its page says when (setPassThrough).
-  win.setIgnoreMouseEvents(true, { forward: true })
   shownAt = Date.now()
   resting = false
   win.show()
@@ -317,9 +321,25 @@ export function stopCapture() {
   stopHook()
 }
 
-/** Asks macOS for Accessibility permission, and opens the pane where it's given. */
-function askPermission(): CaptureShortcut {
+/** The bundle id macOS keeps Nodus's permissions under (appId in electron-builder.yml). */
+const BUNDLE_ID = 'dev.saleem.nodus'
+
+/**
+ * Asks macOS for Accessibility permission, and opens the pane where it's given.
+ *
+ * macOS keeps a permission with the code signature of the copy it was given
+ * to. Given to another copy of Nodus (a build of its own, signed differently),
+ * the switch in System Settings shows on but doesn't count for this one, and
+ * macOS doesn't ask again. So an entry that isn't working is cleared first,
+ * and macOS asks for this copy afresh.
+ */
+async function askPermission(): Promise<CaptureShortcut> {
   if (isMac && !trusted()) {
+    if (app.isPackaged) {
+      await new Promise<void>((resolve) =>
+        execFile('/usr/bin/tccutil', ['reset', 'Accessibility', BUNDLE_ID], { timeout: 5000 }, () => resolve())
+      )
+    }
     systemPreferences.isTrustedAccessibilityClient(true)
     void shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility')
     syncShortcut()
@@ -605,8 +625,11 @@ export function registerCapture(handlers: CaptureHandlers) {
 
   ipcMain.on(IPC.captureHide, () => hidePanel())
 
-  ipcMain.on(IPC.capturePassThrough, (_e, through: unknown) => {
-    if (panel && !panel.isDestroyed()) panel.setIgnoreMouseEvents(through === true, { forward: true })
+  ipcMain.on(IPC.captureResize, (_e, height: unknown) => {
+    if (!panel || panel.isDestroyed() || typeof height !== 'number' || !Number.isFinite(height)) return
+    const bounds = panel.getBounds()
+    const h = Math.round(Math.min(MAX_PANEL_H, Math.max(MIN_PANEL_H, height)))
+    if (h !== bounds.height) panel.setBounds({ ...bounds, height: h })
   })
 
   ipcMain.handle(IPC.captureOpen, (_e, request: OpenCardRequest) => {

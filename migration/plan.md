@@ -182,7 +182,8 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | ui-shell | `rust/ui-shell` | nodus-core skeleton (P4a); nodus-ui theme, controls, title bar, menus, settings, projects grid, rail (P5); test driver (D11) | 🟡 running |
 | views-tools | `rust/views-tools` | nodus-views, nodus-tools, nodus-board notes and ink | 🟡 running |
 | actions-voice-git | `rust/actions-voice-git` | nodus-actions, nodus-voice (incl. the recorder), nodus-git | 🟡 running |
-| capture | `rust/capture` | nodus-capture backend | ☐ next |
+| capture | `rust/capture` | nodus-capture backend: double tap, key hook, screen context, guess, submit | 🟡 running |
+| terminal | `rust/terminal` | nodus-terminal (GPUI-free): alacritty model, xterm key encoder, query answers, widths, registry | 🟡 running |
 
 ### Integration debts
 

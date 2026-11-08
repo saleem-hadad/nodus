@@ -166,6 +166,21 @@ Tracks after P1 run in parallel where the dependency column allows.
 | P11 | Packaging: .app and DMGs (same bundle id, Info.plist keys, entitlements, signing, notarizing), Windows NSIS (same flags), release workflow; 0.9.4 → Rust update test | P10 | ☐ |
 | P12 | Parity audit (every checklist item, screenshots light and dark), then cutover: delete Electron, update README and docs, release | P11 | ☐ |
 
+## Tracks
+
+Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its branch (done and deferred behavior IDs, interfaces for nodus-core); the orchestrator ticks the spec checklists from it when the branch merges.
+
+| Track | Branch | Scope | Status |
+| --- | --- | --- | --- |
+| host | `rust/host` | nodus-host-proto, nodus-host, nodus-sessions::client, `Nodus host` | 🟡 running |
+| status | `rust/status` | nodus-sessions hooks, agents, usage, notify, running | 🟡 running |
+| transcripts-board | `rust/transcripts-board` | nodus-transcripts, nodus-board, nodus-sessions::launch | 🟡 running |
+| platform-updater | `rust/platform-updater` | nodus-platform process, secrets, notify, permissions; nodus-updater | 🟡 running |
+| parity-harness | `rust/parity-harness` | golden screenshots of 0.9.4 (`migration/parity/`) | 🟡 running |
+| views-tools | `rust/views-tools` | nodus-views, nodus-tools, nodus-board notes and ink | ☐ next |
+| actions-voice-git | `rust/actions-voice-git` | nodus-actions, nodus-voice, nodus-git | ☐ next |
+| capture | `rust/capture` | nodus-capture backend | ☐ next |
+
 ## Spikes
 
 | # | Question | Status | Outcome |
@@ -213,6 +228,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-08: Every agent stopped at an account usage limit; the account was switched. host, status, transcripts-board and platform-updater restarted fresh (nothing was committed yet); S1 and parity-harness resumed with their work.
 - 2026-11-08: P1 merged from `rust/p1-foundations`: workspace with 19 crates, nodus-domain (38 tests), nodus-store (28), nodus-platform env (27), Rust CI on macOS and Windows.
 - 2026-11-08: All 12 feature specs on main (2,266 behaviors). Golden screenshot harness started (`rust/parity-harness`).
 

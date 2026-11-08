@@ -105,7 +105,7 @@ One file per domain in `migration/features/`. Each lists every behavior with an 
 | 01-platform-shell.md | app lifecycle, menu, env, store, settings, preload/IPC plumbing | ✅ 141 | ☐ |
 | 02-session-host-status.md | host, host protocol, pty client, hooks status machine, agents, usage, notifications | ⏳ | ☐ |
 | 03-sessions-transcripts.md | session create/open/send/kill, claude args, discovery, board merge, search, summarize, naming, geometry | ✅ 205 | ☐ |
-| 04-board-tools-views.md | board tools MCP, notes placement, views (main + renderer), view page, ink storage | ⏳ | ☐ |
+| 04-board-tools-views.md | board tools MCP, notes placement, views (main + renderer), view page, ink storage | ✅ 222 | ☐ |
 | 05-actions-voice-git.md | actions rail, voice prompts, git status/diff/log and their UI | ✅ 183 | ☐ |
 | 06-updater-release.md | updater, packaging, signing, CI, release, smoke test, 0.9.4 → Rust handoff | ⏳ | ☐ |
 | 07-capture.md | floating capture: panel window, double tap, screen context, guess, submit | ⏳ | ☐ |
@@ -153,6 +153,8 @@ Places where the code and the docs disagree, or where matching 0.9.4 exactly mea
 | 05 | Some errors shown to the user carry Electron's prefix `Error invoking remote method '<channel>': Error: …`. | Same text |
 | 05 | Esc doesn't cancel a session mic recording while a terminal has focus. | Same |
 | 12 | Clicking an OSC 8 link shows xterm's confirm, then most likely opens nothing; a right-click on a URL may open it. | Check in 0.9.4, then match |
+| 04 | how-it-works.md says a view is a picture until clicked, double-click opens it large, and there's a View button in the title bar; none is in 0.9.4 (the click shield went in 64d9dc4, "New view…" is in the New Session button's menu). | Follows the code |
+| 04 | Saving a note from the board drops `fromProject` and `fromTitle`, so a note another project's session wrote loses its signature once moved or edited. | Same (it's a bug; flag for after cutover) |
 | 01 | The hidden capture panel stops the Dock from reopening a closed window on macOS, and keeps the app running after its window closes on Windows. | Same |
 
 ## Decisions for the user

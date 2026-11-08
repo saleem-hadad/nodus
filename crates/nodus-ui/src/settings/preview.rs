@@ -13,9 +13,9 @@ use nodus_domain::ThemePreference;
 
 use crate::theme::tokens::hard::{MINI_CARD_SHADOW, MINI_DARK, MINI_LIGHT, MINI_LIGHTS, MiniTone};
 
-/// The tile's preview size: (396 − 2·16) / 3 wide, 16:10.
+/// The tile's preview size with no scrollbar beside it: (396 − 2·16) / 3
+/// wide, 16:10.
 pub const WIDTH: f32 = (396.0 - 32.0) / 3.0;
-pub const HEIGHT: f32 = WIDTH * 10.0 / 16.0;
 
 fn css(c: Rgba) -> String {
     format!(
@@ -119,8 +119,8 @@ fn tone_id(tone: MiniTone) -> &'static str {
 }
 
 /// The whole preview for a theme choice, as SVG.
-pub fn preview_svg(theme: ThemePreference, working: Rgba, done: Rgba) -> String {
-    let (w, h) = (WIDTH, HEIGHT);
+pub fn preview_svg(theme: ThemePreference, w: f32, working: Rgba, done: Rgba) -> String {
+    let h = w * 10.0 / 16.0;
     let mut body = String::new();
     if theme != ThemePreference::Dark {
         body.push_str(&window(MINI_LIGHT, w, h, working, done));
@@ -144,7 +144,7 @@ pub fn preview_svg(theme: ThemePreference, working: Rgba, done: Rgba) -> String 
 }
 
 #[derive(Default)]
-struct Previews(HashMap<(ThemePreference, u32, [u32; 2]), Arc<RenderImage>>);
+struct Previews(HashMap<(ThemePreference, (u32, u32), [u32; 2]), Arc<RenderImage>>);
 
 impl Global for Previews {}
 
@@ -160,22 +160,28 @@ fn key(c: Rgba) -> u32 {
 /// The preview rasterized at `scale`, cached.
 pub fn preview_image(
     theme: ThemePreference,
+    width: f32,
     working: Rgba,
     done: Rgba,
     scale: f32,
     cx: &mut App,
 ) -> Option<Arc<RenderImage>> {
-    let cache_key = (theme, (scale * 100.0) as u32, [key(working), key(done)]);
+    let cache_key = (
+        theme,
+        ((width * scale * 100.0) as u32, (scale * 100.0) as u32),
+        [key(working), key(done)],
+    );
     if let Some(image) = cx.try_global::<Previews>().and_then(|p| p.0.get(&cache_key)) {
         return Some(image.clone());
     }
-    let svg = preview_svg(theme, working, done);
+    let svg = preview_svg(theme, width, working, done);
+    let height = width * 10.0 / 16.0;
     let tree = resvg::usvg::Tree::from_str(&svg, &resvg::usvg::Options::default()).ok()?;
-    let (pw, ph) = ((WIDTH * scale).round() as u32, (HEIGHT * scale).round() as u32);
+    let (pw, ph) = ((width * scale).round() as u32, (height * scale).round() as u32);
     let mut pixmap = resvg::tiny_skia::Pixmap::new(pw, ph)?;
     resvg::render(
         &tree,
-        resvg::tiny_skia::Transform::from_scale(pw as f32 / WIDTH, ph as f32 / HEIGHT),
+        resvg::tiny_skia::Transform::from_scale(pw as f32 / width, ph as f32 / height),
         &mut pixmap.as_mut(),
     );
     let mut out = Vec::with_capacity((pw * ph * 4) as usize);
@@ -198,12 +204,13 @@ mod tests {
     fn draws_every_tone() {
         let t = Tokens::LIGHT;
         for theme in ThemePreference::ALL {
-            let svg = preview_svg(*theme, t.status_working, t.status_done);
+            let svg = preview_svg(*theme, WIDTH, t.status_working, t.status_done);
             let tree = resvg::usvg::Tree::from_str(&svg, &resvg::usvg::Options::default());
             assert!(tree.is_ok(), "{theme}: {svg}");
         }
         assert!(
-            preview_svg(ThemePreference::System, t.status_working, t.status_done).contains("clip-path=\"url(#split)\"")
+            preview_svg(ThemePreference::System, WIDTH, t.status_working, t.status_done)
+                .contains("clip-path=\"url(#split)\"")
         );
     }
 }

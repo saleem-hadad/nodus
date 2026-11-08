@@ -8,7 +8,7 @@
 //! {"cmd":"core","method":"settings.update","args":[{"theme":"dark"}]}
 //! {"cmd":"menu","command":"settings"}               a menu command, as the menu sends it
 //! {"cmd":"key","keystroke":"cmd-o"}                 a keystroke through GPUI
-//! {"cmd":"modifiers","cmd":true}                    modifiers held (⌘ for the rail's numbers)
+//! {"cmd":"modifiers","meta":true}                   modifiers held (⌘ for the rail's numbers)
 //! {"cmd":"mouse","kind":"click","x":100,"y":200}    move | down | up | click | double | right
 //! {"cmd":"wait","ms":300}
 //! {"cmd":"idle"}                                    until the window stops drawing
@@ -145,7 +145,7 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
         }
         "modifiers" => {
             let modifiers = Modifiers {
-                platform: command.get("cmd").and_then(Value::as_bool).unwrap_or(false),
+                platform: command.get("meta").and_then(Value::as_bool).unwrap_or(false),
                 control: command.get("ctrl").and_then(Value::as_bool).unwrap_or(false),
                 alt: command.get("alt").and_then(Value::as_bool).unwrap_or(false),
                 shift: command.get("shift").and_then(Value::as_bool).unwrap_or(false),
@@ -170,7 +170,7 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
                 .to_owned();
             let position = point(px(num(command, "x")), px(num(command, "y")));
             let modifiers = Modifiers {
-                platform: command.get("cmd").and_then(Value::as_bool).unwrap_or(false),
+                platform: command.get("meta").and_then(Value::as_bool).unwrap_or(false),
                 shift: command.get("shift").and_then(Value::as_bool).unwrap_or(false),
                 ..Modifiers::default()
             };
@@ -260,9 +260,9 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
 fn with_window<R>(cx: &mut AsyncApp, f: impl FnOnce(&mut gpui::Window, &mut App) -> R) -> Result<R, String> {
     cx.update(|cx| {
         let handle = window::main_window(cx).ok_or("no main window")?;
-        handle
-            .update(cx, |_, window, cx| f(window, cx))
-            .map_err(|e| e.to_string())
+        // Through the window, not its root view: input dispatched here
+        // reaches views that update the root themselves.
+        gpui::AppContext::update_window(cx, handle.into(), |_, window, cx| f(window, cx)).map_err(|e| e.to_string())
     })
 }
 

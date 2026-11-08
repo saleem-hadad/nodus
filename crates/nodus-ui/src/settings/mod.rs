@@ -14,8 +14,8 @@ use gpui::component::input::{InputEvent, InputState};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Context, Corners, CursorStyle, Entity, FocusHandle, Focusable, FontWeight, ImageSource,
-    InteractiveElement, IntoElement, KeyDownEvent, ParentElement, Render, SharedString, StatefulInteractiveElement,
-    Styled, Window, div, img, px,
+    InteractiveElement, IntoElement, KeyDownEvent, ParentElement, Render, ScrollHandle, SharedString,
+    StatefulInteractiveElement, Styled, Window, canvas, div, img, px,
 };
 use nodus_domain::{
     AppSettings, CaptureShortcut, SettingsPatch, ThemePreference, UpdateState, UpdateStatus, VoiceKeySource,
@@ -25,6 +25,7 @@ use crate::components::button::button;
 use crate::components::focus_ring::focus_ring;
 use crate::components::icon::Icon;
 use crate::components::modal::Modal;
+use crate::components::scroll::scroll_area;
 use crate::components::switch::switch;
 use crate::components::text_field::{input, new_input};
 use crate::platform::Platform;
@@ -56,6 +57,7 @@ pub struct SettingsDialog {
     /// Where the voice key comes from; None while loading (05).
     key_source: Option<Option<VoiceKeySource>>,
     key_error: Option<String>,
+    scroll: ScrollHandle,
     serial: usize,
 }
 
@@ -117,6 +119,7 @@ impl SettingsDialog {
             shortcut: None,
             key_source: None,
             key_error: None,
+            scroll: ScrollHandle::new(),
             serial: 0,
         }
     }
@@ -291,12 +294,39 @@ impl Render for SettingsDialog {
                     .on_click(move |_, _, cx| this.update(cx, SettingsDialog::close))
             });
 
-        // Appearance
-        let tiles = div().flex().gap(px(16.)).children(THEMES.iter().map(|&(value, label)| {
+        // Appearance: three tiles sharing the body's width, which a
+        // scrollbar beside them narrows.
+        let row_width = window.use_keyed_state("theme-tiles-width", cx, |_, _| px(396.));
+        let tile_w = ((f32::from(*row_width.read(cx)) - 32.0) / 3.0).max(1.0);
+        let tile_h = tile_w * 10.0 / 16.0;
+        let tiles = div().relative().flex().gap(px(16.)).child(
+            canvas(
+                move |bounds, _, cx| {
+                    let width = bounds.size.width;
+                    if *row_width.read(cx) != width {
+                        row_width.update(cx, |w, cx| {
+                            *w = width;
+                            cx.notify();
+                        });
+                    }
+                },
+                |_, _, _, _| {},
+            )
+            .absolute()
+            .size_full(),
+        );
+        let tiles = tiles.children(THEMES.iter().map(|&(value, label)| {
             let checked = s.theme == value && loaded;
             let hovered = window.use_keyed_state(("theme-tile-hover", value as usize), cx, |_, _| false);
             let hover = *hovered.read(cx);
-            let image = preview::preview_image(value, t.status_working, t.status_done, window.scale_factor(), cx);
+            let image = preview::preview_image(
+                value,
+                tile_w,
+                t.status_working,
+                t.status_done,
+                window.scale_factor(),
+                cx,
+            );
             let shadows = if checked {
                 vec![ring(4., t.accent), ring(2., t.bg_elevated)]
             } else if hover && loaded {
@@ -339,16 +369,12 @@ impl Render for SettingsDialog {
                 .child(
                     div()
                         .relative()
-                        .w(px(preview::WIDTH))
-                        .h(px(preview::HEIGHT))
+                        .w(px(tile_w))
+                        .h(px(tile_h))
                         .rounded(px(7.))
                         .shadow(shadows)
                         .when_some(image, |d, image| {
-                            d.child(
-                                img(ImageSource::Render(image))
-                                    .w(px(preview::WIDTH))
-                                    .h(px(preview::HEIGHT)),
-                            )
+                            d.child(img(ImageSource::Render(image)).w(px(tile_w)).h(px(tile_h)))
                         })
                         .when(focused, |d| {
                             d.child(focus_ring(Corners::all(px(7.)), px(5.), t.focus_ring))
@@ -679,15 +705,11 @@ impl Render for SettingsDialog {
                 this.update(cx, |d, cx| d.on_key_down(e, window, cx, &stops));
             })
             .child(header)
-            .child(
+            .child(scroll_area(
+                "settings-body",
+                &self.scroll,
+                [18., 22., 22., 22.],
                 div()
-                    .id("settings-body")
-                    .flex_1()
-                    .min_h_0()
-                    .overflow_y_scroll()
-                    .pt(px(18.))
-                    .px(px(22.))
-                    .pb(px(22.))
                     .flex()
                     .flex_col()
                     .child(appearance)
@@ -696,7 +718,9 @@ impl Render for SettingsDialog {
                     .child(notifications)
                     .child(voice)
                     .child(updates),
-            );
+                window,
+                cx,
+            ));
         self.serial = self.serial.max(1);
         Modal::new(("settings", self.serial), px(440.), move |_, cx| {
             close.update(cx, SettingsDialog::close);

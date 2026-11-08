@@ -20,9 +20,9 @@ struct Overflow {
     overflowing: bool,
 }
 
-/// A vertically scrolling area filling its parent: `content` is laid out in
-/// `content_padding` (top, right, bottom, left), and the scrollbar takes its
-/// gutter at the right edge while the content overflows.
+/// A vertically scrolling area that takes the rest of its flex column:
+/// `content` is laid out in `padding` (top, right, bottom, left), and the
+/// scrollbar takes its gutter at the right edge while the content overflows.
 pub fn scroll_area(
     id: impl Into<ElementId>,
     handle: &ScrollHandle,
@@ -44,11 +44,15 @@ pub fn scroll_area(
 
     div()
         .relative()
-        .size_full()
+        .flex_1()
+        .min_h_0()
+        .flex()
+        .flex_col()
         .child(
             div()
                 .id(id.clone())
-                .size_full()
+                .flex_1()
+                .min_h_0()
                 .overflow_y_scroll()
                 .track_scroll(handle)
                 .pt(px(top))

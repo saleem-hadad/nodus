@@ -19,7 +19,9 @@
 //!   `extra`, so a file written by a newer version is never cut down.
 //!
 //! Write JSON with [`json`] rather than serde_json directly: it writes numbers
-//! the way JSON.stringify does.
+//! the way JSON.stringify does. Measure, cut and round strings and numbers with
+//! [`js`] wherever the TypeScript does. Domains report what happens as
+//! [`Event`]s, into an [`EventSink`].
 
 #[macro_use]
 mod macros;
@@ -28,7 +30,9 @@ pub mod action;
 pub mod app;
 pub mod board;
 pub mod capture;
+pub mod event;
 pub mod git;
+pub mod js;
 pub mod json;
 mod nullable;
 pub mod project;
@@ -43,6 +47,7 @@ pub use action::*;
 pub use app::*;
 pub use board::*;
 pub use capture::*;
+pub use event::*;
 pub use git::*;
 pub use project::*;
 pub use search::*;

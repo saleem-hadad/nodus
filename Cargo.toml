@@ -78,8 +78,9 @@ resvg = { version = "0.46.0", default-features = false }
 indexmap = { version = "2.14", features = ["serde"] }
 # Watches transcript folders (FSEvents on macOS, ReadDirectoryChangesW on Windows).
 notify = "8.2"
-# The microphone through AVFAudio's voice processing.
-objc2-avf-audio = { version = "0.3", default-features = false, features = ["std"] }
+# The microphone through Core Audio's voice-processing unit.
+objc2-audio-toolbox = { version = "0.3", default-features = false, features = ["std"] }
+objc2-core-audio-types = { version = "0.3", default-features = false, features = ["std"] }
 # Opus in pure Rust (a port of libopus 1.6), so voice prompts are encoded as
 # Chromium's MediaRecorder encodes them, with nothing to compile for Windows.
 opus1 = "0.3"

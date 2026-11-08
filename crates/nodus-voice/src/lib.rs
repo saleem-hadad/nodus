@@ -13,9 +13,17 @@
 //! The microphone's permission and System Settings pane are nodus-platform's
 //! `permissions::{microphone, open_microphone_settings}` (VOICE-009, VOICE-010).
 
+mod capture;
+pub mod encode;
 mod key;
 mod keyterms;
+pub mod meter;
+mod recorder;
+pub mod resample;
 pub mod stt;
+pub mod webm;
+
+pub use recorder::{Audio, OpenError, Recording, Sink, Source};
 
 use std::path::Path;
 use std::sync::Arc;

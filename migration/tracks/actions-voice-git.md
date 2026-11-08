@@ -12,8 +12,8 @@
 | --- | --- |
 | `nodus-git` (runner, status, log, diff, diff parser, labels) | ✅ |
 | `nodus-actions` (normalize, lists, draft, run args, rail and dialog logic) | ✅ |
-| `nodus-voice` (key, xAI request, hint words) | ☐ |
-| `nodus-voice` recorder (capture, Opus, WebM, meter, controller) | ☐ |
+| `nodus-voice` (key, xAI request, hint words) | ✅ |
+| `nodus-voice` recorder (capture, Opus, WebM, meter) | ✅ (controller next) |
 
 Each module is checked with `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`
 (macOS and `--target x86_64-pc-windows-msvc`) and `cargo test --workspace`.

@@ -10,10 +10,12 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+getrandom.workspace = true
 nodus-domain.workspace = true
 nodus-git.workspace = true
 nodus-platform.workspace = true
 nodus-store.workspace = true
+opus1.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
@@ -22,8 +24,29 @@ tracing.workspace = true
 [target.'cfg(not(windows))'.dependencies]
 reqwest = { workspace = true, features = ["multipart", "rustls-tls"] }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-audio-toolbox = { workspace = true, features = [
+    "AUComponent",
+    "AudioComponent",
+    "AudioOutputUnit",
+    "AudioUnitProperties",
+    "objc2-core-audio-types",
+] }
+objc2-core-audio-types = { workspace = true, features = ["CoreAudioBaseTypes"] }
+
 [target.'cfg(windows)'.dependencies]
 reqwest = { workspace = true, features = ["multipart", "native-tls"] }
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Media_Audio",
+    "Win32_Media_KernelStreaming",
+    "Win32_Media_Multimedia",
+    "Win32_Security",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Threading",
+    "Win32_System_Variant",
+] }
 
 [dev-dependencies]
 tempfile.workspace = true

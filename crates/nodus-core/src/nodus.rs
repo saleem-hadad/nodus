@@ -94,6 +94,8 @@ pub struct NodusConfig {
     /// How a session host is started when none is running. None runs this
     /// binary as `Nodus host <socket> <key>` (HOST-091).
     pub host_launcher: Option<Arc<dyn HostLauncher>>,
+    /// GitHub and the OS as the updater reaches them. None for the real ones.
+    pub updates: Option<Arc<dyn nodus_updater::System>>,
 }
 
 impl NodusConfig {
@@ -111,6 +113,7 @@ impl NodusConfig {
             shell: None,
             notifications: Notifications::Off,
             host_launcher: None,
+            updates: None,
         }
     }
 }
@@ -260,7 +263,9 @@ impl Nodus {
             );
             let updater = Updater::new(
                 Arc::new(CoreUpdaterApp(core.clone())),
-                Arc::new(RealSystem::new(std::env::current_exe().unwrap_or_default())),
+                config
+                    .updates
+                    .unwrap_or_else(|| Arc::new(RealSystem::new(std::env::current_exe().unwrap_or_default()))),
                 sink,
             );
             Inner {

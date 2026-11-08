@@ -44,6 +44,8 @@
 
 mod app;
 mod board;
+#[cfg(test)]
+mod core_tests;
 mod error;
 mod groups;
 mod menu;

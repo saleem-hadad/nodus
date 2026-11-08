@@ -32,18 +32,7 @@ use tokio::task::JoinSet;
 /// no Dock icon, window or menu. (HOST-035)
 pub fn main(args: &[String]) -> i32 {
     let log = Logger::stdout();
-    // HOST-033: a crash would take every session with it, so a panic is
-    // logged and the host carries on (tokio keeps a panicking task to itself).
-    let panics = log.clone();
-    std::panic::set_hook(Box::new(move |info| {
-        let message = info
-            .payload()
-            .downcast_ref::<&str>()
-            .map(|s| (*s).to_owned())
-            .or_else(|| info.payload().downcast_ref::<String>().cloned())
-            .unwrap_or_default();
-        panics.log(&["uncaught", &format!("Error: {message}")]);
-    }));
+    log_panics(&log);
     let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
         Ok(runtime) => runtime,
         Err(err) => {
@@ -136,6 +125,23 @@ pub async fn run(args: &[String], log: Logger) -> i32 {
     tasks.shutdown().await;
     host.close_sessions();
     code
+}
+
+/// HOST-033: a crash would take every session with it, so a panic anywhere
+/// in this process is logged as `uncaught Error: <message>` and the host
+/// carries on (tokio keeps a panicking task to itself). [`main`] installs it
+/// before the host starts.
+pub fn log_panics(log: &Logger) {
+    let panics = log.clone();
+    std::panic::set_hook(Box::new(move |info| {
+        let message = info
+            .payload()
+            .downcast_ref::<&str>()
+            .map(|s| (*s).to_owned())
+            .or_else(|| info.payload().downcast_ref::<String>().cloned())
+            .unwrap_or_default();
+        panics.log(&["uncaught", &format!("Error: {message}")]);
+    }));
 }
 
 /// `crypto.randomBytes(n).toString('hex')`.

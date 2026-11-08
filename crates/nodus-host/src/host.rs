@@ -900,4 +900,107 @@ mod tests {
         assert_eq!(relay_id(0.0), None);
         assert_eq!(relay_id(-1.0), None);
     }
+
+    /// Lets tasks the paused clock has made due run.
+    async fn settle() {
+        for _ in 0..16 {
+            tokio::task::yield_now().await;
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn host_086_each_relay_gives_up_20_seconds_after_it_was_sent() {
+        let (log, _lines) = Logger::memory();
+        let host = Host::new(log, "token".into(), None);
+        // An app that never answers.
+        let (app, mut heard) = mpsc::unbounded_channel::<Line>();
+        host.lock().clients.insert(1, app);
+
+        let first = host
+            .start_relay("s1", json!({"id": 1, "method": "tools/call"}))
+            .unwrap();
+        tokio::time::advance(Duration::from_millis(10_000)).await;
+        let second = host
+            .start_relay("s1", json!({"id": 2, "method": "tools/call"}))
+            .unwrap();
+        assert!(heard.recv().await.unwrap().contains(r#""type":"mcp""#));
+        assert!(heard.recv().await.unwrap().contains(r#""sessionId":"s1""#));
+        let (first, second) = {
+            let host = Arc::clone(&host);
+            let other = Arc::clone(&host);
+            (
+                tokio::spawn(async move { host.finish_relay(first).await }),
+                tokio::spawn(async move { other.finish_relay(second).await }),
+            )
+        };
+        tokio::time::advance(Duration::from_millis(9_999)).await;
+        settle().await;
+        assert!(!first.is_finished());
+        // 20 s after the first was sent: it settles with nothing, and is forgotten.
+        tokio::time::advance(Duration::from_millis(1)).await;
+        settle().await;
+        assert!(first.is_finished());
+        assert_eq!(first.await.unwrap(), None);
+        assert!(!second.is_finished());
+        assert_eq!(host.lock().relays.len(), 1);
+        tokio::time::advance(Duration::from_millis(10_000)).await;
+        assert_eq!(second.await.unwrap(), None);
+        assert!(host.lock().relays.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test(start_paused = true)]
+    async fn host_064_exits_4_seconds_after_shutdown_whatever_is_left() {
+        let (log, lines) = Logger::memory();
+        let host = Host::new(log, "token".into(), None);
+        // A session that ignores SIGTERM and SIGHUP, whose exit the host never
+        // hears of (nothing follows its events), so it's still there when the
+        // time is up: as a process that outlived SIGKILL would be.
+        let (pty, mut events) = Pty::spawn(
+            &PtyOptions {
+                file: "/bin/sh".into(),
+                args: vec!["-c".into(), "trap '' TERM HUP; echo ready; exec sleep 30".into()],
+                env: vec![("PATH".into(), "/usr/bin:/bin".into())],
+                cwd: "/tmp".into(),
+                cols: 80.0,
+                rows: 24.0,
+            },
+            TERMINAL_NAME,
+        )
+        .unwrap();
+        // The trap is set before any signal goes.
+        let mut said = String::new();
+        while !said.contains("ready") {
+            match events.recv().await {
+                Some(PtyEvent::Data(data)) => said.push_str(&data),
+                other => panic!("{other:?}"),
+            }
+        }
+        host.lock().sessions.insert(
+            "s1".into(),
+            Session {
+                generation: 1,
+                project_id: "p".into(),
+                initial: SessionStatus::Done,
+                pty,
+                output: ReplayBuffer::new(),
+                history: VecDeque::new(),
+                status_line: None,
+                kill_timer: None,
+            },
+        );
+        host.shutdown(&mut host.lock());
+        let exited = {
+            let host = Arc::clone(&host);
+            tokio::spawn(async move { host.exited().await })
+        };
+        tokio::time::advance(Duration::from_millis(3_999)).await;
+        settle().await;
+        assert!(!exited.is_finished(), "{:?}", lines.lock().unwrap());
+        assert_eq!(host.lock().sessions.len(), 1);
+        tokio::time::advance(Duration::from_millis(1)).await;
+        assert_eq!(exited.await.unwrap(), 0);
+        let logged: Vec<String> = lines.lock().unwrap().iter().map(|l| l[25..].to_owned()).collect();
+        assert_eq!(logged, ["stopping every session"]);
+    }
 }

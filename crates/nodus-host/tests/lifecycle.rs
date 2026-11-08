@@ -391,3 +391,69 @@ async fn host_032_a_host_no_app_connects_to_gives_up_after_30_seconds() {
     assert_eq!(code, 0);
     assert!(lines.lock().unwrap().last().unwrap().ends_with("Z idle, exiting"));
 }
+
+#[tokio::test]
+async fn host_090_a_board_tools_request_that_fails_is_logged_and_answered_500() {
+    let host = TestHost::start().await;
+    let (mut a, welcome) = Conn::app(&host.socket).await;
+    a.send(spawn_msg(1, "s1", "/bin/sleep", &["30"])).await;
+    a.recv_event().await;
+    let port = u16::try_from(welcome["hookPort"].as_u64().unwrap()).unwrap();
+    let token = welcome["hookToken"].as_str().unwrap();
+    // A body cut short: the connection ends before the length it promised.
+    let request = format!(
+        "POST /mcp HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer {token}\r\nX-Nodus-Session: s1\r\nContent-Length: 100\r\n\r\n{{\"jsonrpc\""
+    );
+    let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+    stream.write_all(request.as_bytes()).await.unwrap();
+    stream.shutdown().await.unwrap();
+    let mut answer = Vec::new();
+    let _ = tokio::time::timeout(TIMEOUT, stream.read_to_end(&mut answer)).await;
+    assert!(
+        String::from_utf8_lossy(&answer).starts_with("HTTP/1.1 500"),
+        "{:?}",
+        String::from_utf8_lossy(&answer)
+    );
+    let failed: Vec<String> = host
+        .logged()
+        .into_iter()
+        .filter(|l| l.starts_with("mcp request failed "))
+        .collect();
+    assert_eq!(failed.len(), 1, "{:?}", host.logged());
+    // The host carries on.
+    assert!(host.still_running().await);
+    a.send(json!({"type": "shutdown"})).await;
+    assert_eq!(host.exit_code().await, 0);
+}
+
+#[tokio::test]
+async fn host_043_a_connection_that_breaks_is_let_go_quietly() {
+    let host = TestHost::start().await;
+    let (mut a, _) = Conn::app(&host.socket).await;
+    // A session that talks all the time, so the host is writing to the app when it goes.
+    a.send(spawn_msg(1, "s1", "/bin/sh", &["-c", "while :; do echo chatter; done"]))
+        .await;
+    assert_eq!(a.recv_event().await.unwrap(), json!({"type": "spawned", "id": 1}));
+    // The app goes without a word, mid-stream.
+    drop(a);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(host.still_running().await);
+    // Another app is served as if nothing happened, and hears the session.
+    let (mut b, welcome) = Conn::app(&host.socket).await;
+    assert_eq!(welcome["sessions"][0]["sessionId"], "s1");
+    assert_eq!(b.recv().await.unwrap()["type"], "data");
+    // Nothing was logged about it but the app leaving.
+    let logged = host.logged();
+    assert_eq!(
+        logged[1..],
+        [
+            "app connected ",
+            "spawned s1 /bin/sh",
+            "app disconnected",
+            "app connected "
+        ],
+        "{logged:?}"
+    );
+    b.send(json!({"type": "shutdown"})).await;
+    assert_eq!(host.exit_code().await, 0);
+}

@@ -26,6 +26,18 @@ Done means:
 7. **Port the tests.** Every Vitest case in `src/**/*.test.ts` gets a Rust counterpart in the crate that owns the behavior.
 8. **No secrets or personal data in the repo.** Nothing from the user's own `state.json`, boards, transcripts, Keychain, environment or clipboard: no keys, tokens or ciphertext, no real project names or repo paths. Fixtures are synthetic, and secrets appear only by name (`XAI_API_KEY`, `APPLE_APP_SPECIFIC_PASSWORD`). No absolute personal paths: write `~/…`, `<userData>/…` or `<scratch>/…`. Documenting *how* a secret is stored is fine.
 
+## JavaScript semantics to keep
+
+The TypeScript runs on V8, so some of its behavior comes from JavaScript itself. Ports must reproduce these, not Rust's defaults:
+
+- **String lengths are UTF-16 code units.** Every truncation, clip, window and highlight range (`slice`, `length`, `substring`) counts UTF-16 units, not bytes or chars. Use the helpers in `nodus-domain`.
+- **Numbers are f64.** Times and coordinates can be fractional (file mtimes become `createdAt`), so they're `f64`, and they serialize like `JSON.stringify`: `1700000000000`, not `1700000000000.0`.
+- **`Math.round` rounds .5 up**, toward +∞ (`Math.round(-2.5) === -2`); Rust's `f64::round` rounds away from zero.
+- **Objects keep insertion order.** serde_json uses `preserve_order`; maps keyed by id are `IndexMap`. Sorts are stable.
+- **Regexes:** JS `\s` includes U+FEFF and other Unicode spaces; JS `\w`, `\d` and `\b` without the `u` flag are ASCII-only. Check every ported regex.
+- **Paths:** Node's `realpath` keeps the case it's given and never adds `\\?\` on Windows; Rust's `canonicalize` may do both. The transcript folder name depends on this.
+- **Dates:** `Date.parse` is lenient; match what the code actually feeds it.
+
 ## Before every push
 
 The orchestrator is the only one who pushes. Before each push to `main`:
@@ -91,7 +103,7 @@ One file per domain in `migration/features/`. Each lists every behavior with an 
 | --- | --- | --- | --- |
 | 01-platform-shell.md | app lifecycle, menu, env, store, settings, preload/IPC plumbing | ⏳ | ☐ |
 | 02-session-host-status.md | host, host protocol, pty client, hooks status machine, agents, usage, notifications | ⏳ | ☐ |
-| 03-sessions-transcripts.md | session create/open/send/kill, claude args, discovery, board merge, search, summarize, naming, geometry | ⏳ | ☐ |
+| 03-sessions-transcripts.md | session create/open/send/kill, claude args, discovery, board merge, search, summarize, naming, geometry | ✅ 205 | ☐ |
 | 04-board-tools-views.md | board tools MCP, notes placement, views (main + renderer), view page, ink storage | ⏳ | ☐ |
 | 05-actions-voice-git.md | actions rail, voice prompts, git status/diff/log and their UI | ⏳ | ☐ |
 | 06-updater-release.md | updater, packaging, signing, CI, release, smoke test, 0.9.4 → Rust handoff | ⏳ | ☐ |

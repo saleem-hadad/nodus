@@ -8,7 +8,9 @@
 //! helpers in `src/shared/capture.ts`.
 
 pub mod double_tap;
+pub mod guess;
 pub mod text;
 
 pub use double_tap::{DoubleTap, GAP_MS, SHIFT_KEYS, TAP_MS};
+pub use guess::{ClaudeEnv, GuessInput, Guesser};
 pub use text::{TITLE_MAX, capture_kind, describe_attachments, fence, title_from, with_screen};

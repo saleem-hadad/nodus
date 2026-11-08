@@ -14,6 +14,7 @@
 //! `permissions::{microphone, open_microphone_settings}` (VOICE-009, VOICE-010).
 
 mod capture;
+pub mod controller;
 pub mod encode;
 mod key;
 mod keyterms;

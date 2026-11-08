@@ -61,6 +61,10 @@ Any finding blocks the push until the commit is rewritten without it. A secret t
 | D5 | **One binary.** `Nodus` runs the app; `Nodus host …` runs the session host (no Dock icon, outlives the app), as the Electron app runs its own binary as Node for `host.js`. | Proposed |
 | D6 | **Secrets:** read the 0.9.4 `safeStorage` ciphertext so a saved xAI key survives the upgrade. macOS: Chromium OSCrypt, password in the Keychain item service `Nodus Safe Storage`, account `Nodus Key`; the Rust app is signed with the same Team ID and bundle id so the Keychain doesn't prompt. Windows: AES-256-GCM with a key kept in `Local State` and protected by DPAPI. Exact parameters per spec 01. | Proposed |
 | D8 | **No visible difference for a 0.9.4 user (user, 2026-11-08).** Someone moving from 0.9.4 sees no difference in how the app looks or how it's used: same layout, colours, type, motion, shortcuts, gestures, copy and flows. Golden screenshots of 0.9.4 for every screen and state, light and dark, from synthetic seeded state, live in `migration/parity/`; every Rust UI slice renders the same scenes and is compared side by side (with a perceptual diff as an aid) before it merges. Same fonts (system UI font, SF Mono / Cascadia) and metrics. | Adopted |
+| D9 | **Windows installer: electron-builder's NSIS templates (MIT), built with `makensis`.** Every installed copy since 0.9.0 runs `Nodus-Setup-<arch>.exe --updated /S --force-run`, and expects the same registry id, the same `%LOCALAPPDATA%\Programs\nodus` folder, the old uninstaller run with data and shortcuts kept, and the app started again. cargo-packager's installer does none of that. | Proposed (spec 06) |
+| D10 | **Same Developer ID certificate (`CSC_LINK`), bundle id, macOS 13.0 minimum, arm64 and x64 on both OSes.** Copies since 0.8.1 reject an app signed by another team, and another identity loses the macOS permission grants and the Keychain item. Intel copies on Apple silicon and x64 copies on Windows on Arm download the arm64 asset. | Proposed (spec 06) |
+| D11 | **A test driver built into the app, off unless `NODUS_AUTOMATION` names a socket.** It runs core commands, sends input, and takes screenshots of scenes. It replaces the DevTools-protocol smoke test (`scripts/smoke.mjs`) and renders the Rust side of the golden screenshots. | Proposed |
+| D12 | **Handoff gates in the release workflow.** Before upload, CI replays 0.9.4's exact updater checks on each DMG, and installs a real 0.9.4 and updates it to the new build on Windows. `releases/latest` is the first place 0.9.4 sees a release, so there's no rehearsal after that. | Proposed (spec 06) |
 | D7 | **Branches:** each track works on a `rust/<track>` branch in its own worktree, and merges to `main` when `cargo test` and `pnpm typecheck/test/build` both pass. | Adopted |
 
 ## Architecture
@@ -108,7 +112,7 @@ One file per domain in `migration/features/`. Each lists every behavior with an 
 | 03-sessions-transcripts.md | session create/open/send/kill, claude args, discovery, board merge, search, summarize, naming, geometry | ✅ 205 | ☐ |
 | 04-board-tools-views.md | board tools MCP, notes placement, views (main + renderer), view page, ink storage | ✅ 222 | ☐ |
 | 05-actions-voice-git.md | actions rail, voice prompts, git status/diff/log and their UI | ✅ 183 | ☐ |
-| 06-updater-release.md | updater, packaging, signing, CI, release, smoke test, 0.9.4 → Rust handoff | ⏳ | ☐ |
+| 06-updater-release.md | updater, packaging, signing, CI, release, smoke test, 0.9.4 → Rust handoff | ✅ 132 | ☐ |
 | 07-capture.md | floating capture: panel window, double tap, screen context, guess, submit | ✅ 177 | ☐ |
 | 08-projects-shell-ui.md | App, title bar, settings, projects grid, project rail, tokens and global styles, menus, modals | ✅ 305 | ☐ |
 | 09-board-canvas.md | BoardView: pan/zoom, selection, drag, shortcuts, context menus, sections, archive, layout, edges | ✅ 177 | ☐ |
@@ -122,7 +126,7 @@ Tracks after P1 run in parallel where the dependency column allows.
 
 | Phase | What | Depends on | Status |
 | --- | --- | --- | --- |
-| P0 | Feature specs and this plan; UI stack spike (S1) | — | 🟡 in progress |
+| P0 | Feature specs and this plan; UI stack spike (S1) | — | 🟡 specs done (2,266 behaviors); S1 running |
 | P1 | Workspace, Rust CI job (macOS + Windows), `nodus-domain`, `nodus-store` (round-trips a real state.json), `nodus-platform` env | P0 | ☐ |
 | P2 | Session host: `nodus-host-proto`, `nodus-host`, `nodus-sessions` client; wire tests against the Node host both ways | P1 | ☐ |
 | P3 | Data domains: transcripts, board, git, search, summarize, naming, status machine, agents | P1 | ☐ |

@@ -5,3 +5,21 @@
 //! `nodus-core`.
 //!
 //! Ports `src/renderer/`.
+
+extern crate gpui_kit as gpui;
+
+pub mod app;
+pub mod automation;
+pub mod components;
+pub mod format;
+#[cfg(target_os = "macos")]
+pub mod mac;
+pub mod parity;
+pub mod platform;
+pub mod projects;
+pub mod settings;
+pub mod shell;
+pub mod state;
+pub mod theme;
+
+pub use app::run;

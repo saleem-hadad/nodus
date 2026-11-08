@@ -3881,6 +3881,8 @@ dependencies = [
  "nodus-domain",
  "nodus-host",
  "nodus-host-proto",
+ "nodus-store",
+ "nodus-ui",
  "serde_json",
  "tempfile",
  "tokio",
@@ -4074,8 +4076,25 @@ dependencies = [
 name = "nodus-ui"
 version = "0.9.4"
 dependencies = [
+ "anyhow",
+ "block2 0.6.2",
  "gpui-kit",
  "image",
+ "indexmap",
+ "nodus-core",
+ "nodus-domain",
+ "nodus-platform",
+ "nodus-sessions",
+ "objc2 0.6.5",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
+ "raw-window-handle",
+ "resvg 0.46.0",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

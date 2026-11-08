@@ -1,0 +1,196 @@
+//! The lucide icons the app draws (lucide-react 1.49, ISC licence), at the
+//! stroke width each place asks for: an icon's stroke is in its 24-unit
+//! viewBox, so it's part of the drawing GPUI rasterizes, and each width is its
+//! own asset (`icons/nodus/<name>@<width>.svg`).
+
+use std::borrow::Cow;
+
+use gpui::{AssetSource, Rgba, SharedString, Styled, Svg, px, svg};
+
+/// The icons, by lucide name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Icon {
+    ChevronLeft,
+    ChevronRight,
+    ChevronDown,
+    Menu,
+    Plus,
+    X,
+    SquareTerminal,
+    RotateCw,
+    Target,
+    FolderOpen,
+    Pencil,
+    FolderInput,
+    Search,
+    Archive,
+    ArchiveRestore,
+    Trash2,
+    Check,
+    Folders,
+    FolderMinus,
+    FolderPlus,
+}
+
+impl Icon {
+    const ALL: [Self; 20] = [
+        Self::ChevronLeft,
+        Self::ChevronRight,
+        Self::ChevronDown,
+        Self::Menu,
+        Self::Plus,
+        Self::X,
+        Self::SquareTerminal,
+        Self::RotateCw,
+        Self::Target,
+        Self::FolderOpen,
+        Self::Pencil,
+        Self::FolderInput,
+        Self::Search,
+        Self::Archive,
+        Self::ArchiveRestore,
+        Self::Trash2,
+        Self::Check,
+        Self::Folders,
+        Self::FolderMinus,
+        Self::FolderPlus,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::ChevronLeft => "chevron-left",
+            Self::ChevronRight => "chevron-right",
+            Self::ChevronDown => "chevron-down",
+            Self::Menu => "menu",
+            Self::Plus => "plus",
+            Self::X => "x",
+            Self::SquareTerminal => "square-terminal",
+            Self::RotateCw => "rotate-cw",
+            Self::Target => "target",
+            Self::FolderOpen => "folder-open",
+            Self::Pencil => "pencil",
+            Self::FolderInput => "folder-input",
+            Self::Search => "search",
+            Self::Archive => "archive",
+            Self::ArchiveRestore => "archive-restore",
+            Self::Trash2 => "trash-2",
+            Self::Check => "check",
+            Self::Folders => "folders",
+            Self::FolderMinus => "folder-minus",
+            Self::FolderPlus => "folder-plus",
+        }
+    }
+
+    /// The icon's shapes, inside a 24×24 viewBox.
+    pub fn body(self) -> &'static str {
+        match self {
+            Self::ChevronLeft => r#"<path d="m15 18-6-6 6-6"/>"#,
+            Self::ChevronRight => r#"<path d="m9 18 6-6-6-6"/>"#,
+            Self::ChevronDown => r#"<path d="m6 9 6 6 6-6"/>"#,
+            Self::Menu => r#"<path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h16"/>"#,
+            Self::Plus => r#"<path d="M5 12h14"/><path d="M12 5v14"/>"#,
+            Self::X => r#"<path d="M18 6 6 18"/><path d="m6 6 12 12"/>"#,
+            Self::SquareTerminal => {
+                r#"<path d="m7 11 2-2-2-2"/><path d="M11 13h4"/><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>"#
+            }
+            Self::RotateCw => r#"<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>"#,
+            Self::Target => {
+                r#"<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>"#
+            }
+            Self::FolderOpen => {
+                r#"<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>"#
+            }
+            Self::Pencil => {
+                r#"<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>"#
+            }
+            Self::FolderInput => {
+                r#"<path d="M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1"/><path d="M2 13h10"/><path d="m9 16 3-3-3-3"/>"#
+            }
+            Self::Search => r#"<path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/>"#,
+            Self::Archive => {
+                r#"<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>"#
+            }
+            Self::ArchiveRestore => {
+                r#"<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h2"/><path d="M20 8v11a2 2 0 0 1-2 2h-2"/><path d="m9 15 3-3 3 3"/><path d="M12 12v9"/>"#
+            }
+            Self::Trash2 => {
+                r#"<path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>"#
+            }
+            Self::Check => r#"<path d="M20 6 9 17l-5-5"/>"#,
+            Self::Folders => {
+                r#"<path d="M20 5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h2.5a1.5 1.5 0 0 1 1.2.6l.6.8a1.5 1.5 0 0 0 1.2.6z"/><path d="M3 8.268a2 2 0 0 0-1 1.738V19a2 2 0 0 0 2 2h11a2 2 0 0 0 1.732-1"/>"#
+            }
+            Self::FolderMinus => {
+                r#"<path d="M9 13h6"/><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>"#
+            }
+            Self::FolderPlus => {
+                r#"<path d="M12 10v6"/><path d="M9 13h6"/><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>"#
+            }
+        }
+    }
+
+    fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|i| i.name() == name)
+    }
+
+    /// The whole SVG at a stroke width.
+    pub fn svg_source(self, stroke: f32) -> String {
+        format!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="{stroke}" stroke-linecap="round" stroke-linejoin="round">{}</svg>"#,
+            self.body()
+        )
+    }
+
+    /// The asset path GPUI loads it by.
+    pub fn path(self, stroke: f32) -> SharedString {
+        format!("icons/nodus/{}@{stroke}.svg", self.name()).into()
+    }
+}
+
+/// A lucide icon `size` px square, its strokes `stroke` wide (in the 24-unit
+/// viewBox), in `color`.
+pub fn icon(icon: Icon, size: f32, stroke: f32, color: impl Into<Rgba>) -> Svg {
+    let color: Rgba = color.into();
+    svg()
+        .path(icon.path(stroke))
+        .size(px(size))
+        .flex_none()
+        .text_color(color)
+}
+
+/// The app's assets: the icons above, then gpui-kit's own for the
+/// components it draws.
+pub struct Assets;
+
+impl AssetSource for Assets {
+    fn load(&self, path: &str) -> gpui::Result<Option<Cow<'static, [u8]>>> {
+        if let Some(rest) = path.strip_prefix("icons/nodus/")
+            && let Some((name, stroke)) = rest.strip_suffix(".svg").and_then(|r| r.split_once('@'))
+            && let (Some(icon), Ok(stroke)) = (Icon::from_name(name), stroke.parse::<f32>())
+        {
+            return Ok(Some(Cow::Owned(icon.svg_source(stroke).into_bytes())));
+        }
+        gpui::assets::Assets.load(path)
+    }
+
+    fn list(&self, path: &str) -> gpui::Result<Vec<SharedString>> {
+        gpui::assets::Assets.list(path)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn serves_each_icon_at_any_stroke() {
+        let svg = Assets.load("icons/nodus/chevron-left@2.2.svg").unwrap().unwrap();
+        let text = String::from_utf8(svg.into_owned()).unwrap();
+        assert!(text.contains(r#"stroke-width="2.2""#));
+        assert!(text.contains("m15 18-6-6 6-6"));
+        assert_eq!(Icon::Trash2.path(2.0).as_ref(), "icons/nodus/trash-2@2.svg");
+        for icon in Icon::ALL {
+            assert_eq!(Icon::from_name(icon.name()), Some(icon));
+        }
+    }
+}

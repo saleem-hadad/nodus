@@ -11,6 +11,8 @@ publish.workspace = true
 
 [dependencies]
 nodus-host.workspace = true
+nodus-store.workspace = true
+nodus-ui.workspace = true
 
 [dev-dependencies]
 nodus-domain.workspace = true

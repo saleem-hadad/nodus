@@ -14,10 +14,18 @@ fn main() {
     if args.first().map(String::as_str) == Some("host") {
         std::process::exit(nodus_host::main(&args[1..]));
     }
-    app();
+    std::process::exit(app());
 }
 
-#[expect(clippy::print_stdout, reason = "the binary only says which version it is so far")]
-fn app() {
-    println!("Nodus {}", env!("CARGO_PKG_VERSION"));
+/// The app: its data folder (`NODUS_USER_DATA`, else the OS's app data
+/// folder, PLAT-003/PLAT-004), then the window. Anything else on the command
+/// line is ignored, as Electron ignored what macOS passes it.
+fn app() -> i32 {
+    let Some(user_data) = nodus_store::user_data_dir() else {
+        return 1;
+    };
+    match nodus_ui::run(user_data) {
+        Ok(()) => 0,
+        Err(_) => 1,
+    }
 }

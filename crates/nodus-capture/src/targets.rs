@@ -236,4 +236,4 @@ pub fn remember(state: &mut State, receipt: &CaptureReceipt, id: String, now: f6
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

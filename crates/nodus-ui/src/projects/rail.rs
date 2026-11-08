@@ -643,7 +643,6 @@ impl Render for ProjectRail {
 
         let rail = div()
             .id("rail")
-            .absolute()
             .flex()
             .flex_col()
             .items_center()
@@ -652,19 +651,13 @@ impl Render for ProjectRail {
             .overflow_y_scroll()
             .map(|d| {
                 if pinned {
-                    d.left_0()
-                        .top_0()
-                        .h(main_h)
+                    d.h(main_h)
                         .py(px(8.))
                         .border_r(px(0.5))
                         .border_color(t.separator)
                         .bg(t.bg_window)
                 } else {
-                    d.left(RAIL_INSET)
-                        .translate(px(-60. * (1. - slide)), px(0.))
-                        .top_0()
-                        .bottom_0()
-                        .my_auto()
+                    d.translate(px(-60. * (1. - slide)), px(0.))
                         .max_h(main_h - RAIL_INSET * 2.)
                         .py(px(6.))
                         .rounded(RADIUS_LG)
@@ -731,10 +724,21 @@ impl Render for ProjectRail {
             None
         };
 
+        // Floating, it's as tall as its items and centred in the main area
+        // (`height: fit-content; margin: auto 0`); pinned, it's the left column.
+        let column = div()
+            .absolute()
+            .top_0()
+            .left(if pinned { px(0.) } else { RAIL_INSET })
+            .h(main_h)
+            .flex()
+            .flex_col()
+            .justify_center()
+            .child(rail);
         div()
             .absolute()
             .inset_0()
-            .child(deferred(rail).with_priority(priority))
+            .child(deferred(column).with_priority(priority))
             .children(edge)
             .children(hint)
     }

@@ -12,6 +12,7 @@ pub mod keys;
 pub mod palette;
 pub mod paste;
 mod queries;
+pub mod registry;
 pub mod selection;
 pub mod snapshot;
 pub mod terminal;
@@ -20,6 +21,7 @@ mod unicode11_tables;
 
 pub use handler::{CursorKind, MouseEncoding, MouseProtocol};
 pub use keys::{KeyAction, KeyEvent, Modifiers, Platform};
+pub use registry::{ContainerId, Registry, Sessions};
 pub use selection::BufferPoint;
 pub use snapshot::{CellSnapshot, CursorSnapshot, Snapshot, Underline};
 pub use terminal::{Modes, Terminal};

@@ -322,14 +322,19 @@ impl Render for Effects {
 
         if self.stress {
             for i in 0..3 {
-                root = root.child(
-                    self.frosted(30., 1.8)
-                        .left(px(40. + i as f32 * 190.))
-                        .top(px(470.))
-                        .w(px(170.))
-                        .h(px(90.))
-                        .child(format!("Blurred {i}")),
-                );
+                let panel = self
+                    .frosted(30., 1.8)
+                    .left(px(40. + i as f32 * 190.))
+                    .top(px(470.))
+                    .w(px(170.))
+                    .h(px(90.))
+                    .child(format!("Blurred {i}"));
+                // The middle one is also turned: its backdrop follows the rotated outline.
+                root = root.child(if i == 1 && !self.off {
+                    panel.rotate(deg(6.))
+                } else {
+                    panel
+                });
             }
             for i in 0..20 {
                 let angle = (t * 2. + i as f32).sin() * 7.;

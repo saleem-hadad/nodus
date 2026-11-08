@@ -55,7 +55,7 @@ Any finding blocks the push until the commit is rewritten without it. A secret t
 | # | Decision | Status |
 | --- | --- | --- |
 | D1 | **UI: GPUI** (Zed's GPU-native UI framework) plus `gpui-component` where it fits. Native Metal / DirectX rendering, no webview for the app's own UI. | Pending spike (S1) |
-| D2 | **Terminal: `alacritty_terminal`** (Apache-2.0) for VT parsing and the grid, drawn by our own GPUI element in `nodus-terminal`. Zed's `terminal_view` is GPL, so nothing is copied from it. | Pending spike (S1) |
+| D2 | **Terminal: `alacritty_terminal`** (Apache-2.0) for VT parsing and the grid, wrapped GPUI-free in `nodus-terminal` and drawn by our own GPUI element in `nodus-ui`. Zed's `terminal_view` is GPL, so nothing is copied from it. | Pending spike (S1) |
 | D3 | **Views' pages: the system webview through `wry`** (WKWebView on macOS, WebView2 on Windows), embedded in the board. Views are HTML that Claude writes, so they need a browser engine; everything else is native. | Pending spike (S1) |
 | D4 | **PTYs: `portable-pty`**. Async runtime: `tokio`. HTTP (hook server, MCP relay): `axum`/`hyper`. | Proposed |
 | D5 | **One binary.** `Nodus` runs the app; `Nodus host …` runs the session host (no Dock icon, outlives the app), as the Electron app runs its own binary as Node for `host.js`. | Proposed |
@@ -88,7 +88,8 @@ crates/
   nodus-updater/            GitHub release updates and the swap on quit
   nodus-core/               composes the domains into one service: commands (= window.api) and an event stream
                             (= the ev:* channels). No UI dependency. This is the seam a headless server will reuse.
-  nodus-terminal/           GPUI terminal element over alacritty_terminal
+  nodus-terminal/           the terminal model, GPUI-free: alacritty_terminal's grid, xterm-compatible key encoding,
+                            query answers, selection, replay; nodus-ui draws it
   nodus-ui/                 GPUI: theme tokens, components, title bar, projects, board, overlays, capture panel
   nodus/                    the binary: app, and the `host` subcommand
 ```
@@ -112,7 +113,7 @@ One file per domain in `migration/features/`. Each lists every behavior with an 
 | 09-board-canvas.md | BoardView: pan/zoom, selection, drag, shortcuts, context menus, sections, archive, layout, edges | ⏳ | ☐ |
 | 10-board-cards-notes.md | session cards, expanded cards, agent deck, archive stack, notes and the pad | ✅ 203 | ☐ |
 | 11-board-overlays.md | prompt bar (sidekick), ⌘K search, merge dialog, ink layer, selection bar | ⏳ | ☐ |
-| 12-terminal-ui.md | terminal registry, modal, transcript preview, agent viewer, xterm behavior | ⏳ | ☐ |
+| 12-terminal-ui.md | terminal registry, modal, transcript preview, agent viewer, xterm behavior | ✅ 185 | ☐ |
 
 ## Phases
 
@@ -151,6 +152,7 @@ Places where the code and the docs disagree, or where matching 0.9.4 exactly mea
 | 05 | Recordings under 600 ms are thrown away; the docs say "about half a second". | 600 ms |
 | 05 | Some errors shown to the user carry Electron's prefix `Error invoking remote method '<channel>': Error: …`. | Same text |
 | 05 | Esc doesn't cancel a session mic recording while a terminal has focus. | Same |
+| 12 | Clicking an OSC 8 link shows xterm's confirm, then most likely opens nothing; a right-click on a URL may open it. | Check in 0.9.4, then match |
 | 01 | The hidden capture panel stops the Dock from reopening a closed window on macOS, and keeps the app running after its window closes on Windows. | Same |
 
 ## Decisions for the user
@@ -163,6 +165,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 | 01 | Page zoom (⌘+ / ⌘- / ⌘0), saved in Chromium's `Preferences`. | Same shortcuts scale the whole UI, read the saved zoom once on first launch and keep it in `state.json` after. |
 | 01 | Five `localStorage` keys (capture draft and history, ink colour, …) in Chromium's LevelDB. | Read them once from `Local Storage/leveldb` on first launch and move them into `state.json`. |
 | 01 | Spellcheck underlines in text fields. | Native spellcheck where the OS offers it (NSSpellChecker on macOS). |
+| 12 | Terminals on a zoomed board are a scaled bitmap, so their text goes soft. | Draw at the zoomed size, sharp, with the same columns and rows. |
 
 ## Status log
 

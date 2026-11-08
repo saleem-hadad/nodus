@@ -9,5 +9,43 @@ authors.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+[dependencies]
+# Electron's nativeImage reads PNG and JPEG, and on a Mac what NSImage reads (TIFF); Windows' clipboard has DIBs.
+image = { workspace = true, features = ["bmp", "jpeg", "png", "tiff"] }
+indexmap.workspace = true
+nodus-board.workspace = true
+nodus-domain.workspace = true
+nodus-platform.workspace = true
+nodus-store.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2.workspace = true
+objc2-app-kit = { workspace = true, features = ["NSPasteboard"] }
+objc2-core-foundation = { workspace = true, features = ["CFCGTypes", "CFData", "CFMachPort", "CFRunLoop"] }
+objc2-core-graphics = { workspace = true, features = ["CGEvent", "CGEventTypes"] }
+objc2-foundation = { workspace = true, features = ["NSArray", "NSData", "NSString"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_System_DataExchange",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_Ole",
+    "Win32_System_Threading",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "test-util"] }
+
 [lints]
 workspace = true

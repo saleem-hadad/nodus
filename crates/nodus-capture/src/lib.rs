@@ -6,3 +6,7 @@
 //! Ports `src/main/capture.ts`, `src/main/doubleTap.ts`,
 //! `src/main/screenContext.ts`, `src/main/captureGuess.ts` and the text
 //! helpers in `src/shared/capture.ts`.
+
+pub mod text;
+
+pub use text::{TITLE_MAX, capture_kind, describe_attachments, fence, title_from, with_screen};

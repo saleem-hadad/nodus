@@ -178,6 +178,8 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | transcripts-board | `rust/transcripts-board` | nodus-transcripts, nodus-board, nodus-sessions::launch | 🟡 running |
 | platform-updater | `rust/platform-updater` | nodus-platform process, secrets, notify, permissions; nodus-updater | 🟡 running |
 | parity-harness | `rust/parity-harness` | golden screenshots of 0.9.4 (`migration/parity/`) | 🟡 running |
+| gpui-fork | `rust/gpui-fork` | `third_party/gpui/`: backdrop blur, transforms, group opacity, frame capture (D13) | 🟡 running |
+| ui-shell | `rust/ui-shell` | nodus-core skeleton (P4a); nodus-ui theme, controls, title bar, menus, settings, projects grid, rail (P5); test driver (D11) | 🟡 running |
 | views-tools | `rust/views-tools` | nodus-views, nodus-tools, nodus-board notes and ink | ☐ next |
 | actions-voice-git | `rust/actions-voice-git` | nodus-actions, nodus-voice, nodus-git | ☐ next |
 | capture | `rust/capture` | nodus-capture backend | ☐ next |
@@ -229,6 +231,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-08: S1 done (D1–D3, D13 adopted). gpui-fork and ui-shell started.
 - 2026-11-08: Every agent stopped at an account usage limit; the account was switched. host, status, transcripts-board and platform-updater restarted fresh (nothing was committed yet); S1 and parity-harness resumed with their work.
 - 2026-11-08: P1 merged from `rust/p1-foundations`: workspace with 19 crates, nodus-domain (38 tests), nodus-store (28), nodus-platform env (27), Rust CI on macOS and Windows.
 - 2026-11-08: All 12 feature specs on main (2,266 behaviors). Golden screenshot harness started (`rust/parity-harness`).

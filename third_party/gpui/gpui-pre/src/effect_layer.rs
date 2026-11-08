@@ -397,7 +397,7 @@ pub struct EffectLayer {
 // WGSL rounds a struct that holds a `vec2<f32>` up to 8 bytes, and HLSL
 // structured buffers read it field by field: keep the size a multiple of 16,
 // so the field after a layer lands at the same offset on every side.
-const _: () = assert!(std::mem::size_of::<EffectLayer>() % 16 == 0);
+const _: () = assert!(std::mem::size_of::<EffectLayer>().is_multiple_of(16));
 
 impl EffectLayer {
     /// Whether the composite has to read what is under the layer: a

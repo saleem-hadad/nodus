@@ -661,7 +661,7 @@ impl Render for ProjectRail {
                         .max_h(main_h - RAIL_INSET * 2.)
                         .py(px(6.))
                         .rounded(RADIUS_LG)
-                        .map(|d| frosted(d, t.rail_surface, 24., 1.8))
+                        .map(|d| frosted(d, t.rail_surface, 24., 1.8, t.bg_canvas))
                         .shadow(t.lg())
                         .opacity(fade)
                 }

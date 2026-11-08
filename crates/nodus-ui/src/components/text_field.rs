@@ -34,15 +34,22 @@ pub fn input(state: &Entity<InputState>, height: Pixels, centered: bool) -> impl
         .appearance(false)
         .px(px(0.))
         .py(px(0.))
-        .h(height)
         .line_height(height);
+    // `Input::h` sizes a multi-line field; a single line takes the style's.
+    let field = Styled::h(field, height);
     if centered { field.text_center() } else { field }
 }
 
-/// Focuses the field with all its text selected (UI-237).
-pub fn focus_all(state: &Entity<InputState>, window: &mut Window, cx: &mut App) {
-    state.update(cx, |s, cx| {
-        s.focus(window, cx);
-        s.select_all(window, cx);
+/// Focuses the field with all its text selected (UI-237), once it has been
+/// drawn: a focus handle no frame has drawn yet doesn't keep the focus.
+pub fn focus_all(state: &Entity<InputState>, window: &mut Window, _: &mut App) {
+    let state = state.clone();
+    window.on_next_frame(move |window, _| {
+        window.on_next_frame(move |window, cx| {
+            state.update(cx, |s, cx| {
+                s.focus(window, cx);
+                s.select_all(window, cx);
+            });
+        });
     });
 }

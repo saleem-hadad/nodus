@@ -30,7 +30,7 @@ use crate::components::modal::Modal;
 use crate::components::scroll::scroll_area;
 use crate::components::spaced_text::spaced_text;
 use crate::components::text_field::{focus_all, input, new_input};
-use crate::components::tooltip::native_tooltip;
+use crate::components::tooltip::{native_tooltip, pressable_tooltip};
 use crate::components::tween::{enter, transition};
 use crate::platform::{Platform, keys};
 use crate::projects::folder_item::{FolderItem, rename_frame};
@@ -591,6 +591,7 @@ impl ProjectsView {
         let focus_feature = s.focus_feature();
         let id = SharedString::from(format!("folder-{}", project.id));
         let hovered = window.use_keyed_state((id.clone(), 0usize), cx, |_, _| false);
+        let pressed = window.use_keyed_state((id.clone(), 2usize), cx, |_, _| false);
         let pop = if self.new_ids.contains(&project.id) {
             enter(
                 window,
@@ -649,12 +650,19 @@ impl ProjectsView {
             .id(id)
             .relative()
             .child(item)
-            .tooltip(native_tooltip(project.repo_path.clone().into()))
+            .tooltip(pressable_tooltip(project.repo_path.clone().into(), pressed.clone()))
+            .capture_any_mouse_down({
+                let pressed = pressed.clone();
+                move |_, _, cx| pressed.update(cx, |p, _| *p = true)
+            })
             .on_hover(move |h, _, cx| {
                 hovered.update(cx, |s, cx| {
                     *s = *h;
                     cx.notify();
                 });
+                if !*h {
+                    pressed.update(cx, |p, _| *p = false);
+                }
             })
             // UI-202: a primary press selects.
             .on_mouse_down(MouseButton::Left, move |_, _, cx| {
@@ -1558,7 +1566,7 @@ fn drop_overlay(window: &mut Window, cx: &mut App, t: Tokens) -> AnyElement {
         .border_dashed()
         .border_color(t.accent)
         .rounded(RADIUS_XL)
-        .map(|d| frosted(d, t.archive_drop, 2., 1.))
+        .map(|d| frosted(d, t.archive_drop, 2., 1., t.bg_window))
         .opacity(fade)
         .child(
             div()

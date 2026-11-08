@@ -4,8 +4,8 @@
 //! (spec 08, Rust mapping risk 4).
 
 use gpui::{
-    AnyView, App, AppContext as _, Context, IntoElement, ParentElement as _, Render, SharedString, Styled, Window, div,
-    px,
+    AnyView, App, AppContext as _, Context, Entity, IntoElement, ParentElement as _, Render, SharedString, Styled,
+    Window, div, px,
 };
 
 use crate::theme::{self, fonts, tokens::*};
@@ -13,6 +13,30 @@ use crate::theme::{self, fonts, tokens::*};
 /// What a `.tooltip(…)` takes to show `text` (lines split on `\n`).
 pub fn native_tooltip(text: SharedString) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
     move |_, cx| cx.new(|_| NativeTooltip { text: text.clone() }).into()
+}
+
+/// A native tooltip that a press dismisses until the pointer leaves, as the
+/// OS's does: `pressed` is set on a press and cleared when hovering ends.
+pub fn pressable_tooltip(
+    text: SharedString,
+    pressed: Entity<bool>,
+) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+    move |_, cx| {
+        if *pressed.read(cx) {
+            cx.new(|_| Nothing).into()
+        } else {
+            cx.new(|_| NativeTooltip { text: text.clone() }).into()
+        }
+    }
+}
+
+/// No tooltip.
+struct Nothing;
+
+impl Render for Nothing {
+    fn render(&mut self, _: &mut Window, _: &mut Context<'_, Self>) -> impl IntoElement {
+        div()
+    }
 }
 
 pub struct NativeTooltip {

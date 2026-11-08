@@ -10,7 +10,7 @@ use gpui::{
 
 use crate::components::focus_ring::focus_ring;
 use crate::components::icon::{Icon, icon};
-use crate::components::tooltip::native_tooltip;
+use crate::components::tooltip::pressable_tooltip;
 use crate::components::tween::transition;
 use crate::theme::{self, fonts, motion, tokens::*};
 
@@ -161,6 +161,7 @@ impl RenderOnce for Button {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let t = theme::tokens(cx);
         let hovered_state = window.use_keyed_state((self.id.clone(), "hover"), cx, |_, _| false);
+        let pressed = window.use_keyed_state((self.id.clone(), "pressed"), cx, |_, _| false);
         let hovered = *hovered_state.read(cx) && !self.disabled;
 
         let (rest_bg, hover_bg, border, text, shadow) = match self.kind {
@@ -237,12 +238,18 @@ impl RenderOnce for Button {
             )
             .when(!self.disabled, |d| {
                 let state = hovered_state.clone();
+                let leave = pressed.clone();
+                let press = pressed.clone();
                 d.on_hover(move |h, _, cx| {
                     state.update(cx, |s, cx| {
                         *s = *h;
                         cx.notify();
                     });
+                    if !*h {
+                        leave.update(cx, |p, _| *p = false);
+                    }
                 })
+                .capture_any_mouse_down(move |_, _, cx| press.update(cx, |p, _| *p = true))
                 .when_some(active_bg, |d, bg| d.active(move |s| s.bg(bg)))
                 .when_some(on_click, |d, f| d.on_click(move |e, w, cx| f(e, w, cx)))
                 .when_some(on_press, |d, f| {
@@ -251,7 +258,7 @@ impl RenderOnce for Button {
                         f(w, cx);
                     })
                 })
-                .when_some(tooltip, |d, text| d.tooltip(native_tooltip(text)))
+                .when_some(tooltip, |d, text| d.tooltip(pressable_tooltip(text, pressed.clone())))
             })
             .when_some(self.icon, |d, (i, size, stroke)| {
                 d.child(icon(i, size, stroke, color.unwrap_or(t.text_primary)))

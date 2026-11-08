@@ -223,7 +223,7 @@ impl Render for MenuLayer {
             .min_w(px(200.))
             .p(px(5.))
             .rounded(RADIUS_MD)
-            .map(|d| frosted(d, t.menu_surface, 30., 1.8))
+            .map(|d| frosted(d, t.menu_surface, 30., 1.8, t.bg_window))
             .shadow(t.lg())
             .text_size(TEXT_MD)
             .font_weight(FontWeight::NORMAL)

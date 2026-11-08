@@ -1,0 +1,37 @@
+[package]
+name = "s1"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# GPUI (zed snapshot republished as gpui-pre =0.3.11) + gpui-component 0.9.0, through the gpui-kit facade.
+gpui-kit = "=0.9.0"
+alacritty_terminal = "=0.26.0"
+portable-pty = "=0.9.0"
+wry = "=0.57.1"
+raw-window-handle = "0.6.2"
+anyhow = "1"
+smol = "2"
+log = "0.4"
+env_logger = "0.11"
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+block2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSGeometry", "NSString"] }
+objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSView", "NSPanel", "NSResponder", "NSApplication", "NSScreen", "NSGraphics", "NSRunningApplication", "NSEvent", "NSImage", "NSImageRep", "NSBitmapImageRep"] }
+
+[profile.dev]
+# keep debug builds reasonably fast at runtime
+opt-level = 1
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 16
+
+# Built on its own, not as part of the Nodus workspace.
+[workspace]

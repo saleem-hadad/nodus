@@ -1,0 +1,30 @@
+[package]
+name = "s1-blur"
+version = "0.1.0"
+edition = "2024"
+
+# Step 8 proof: region backdrop blur in GPUI, using the (closed, unmerged) upstream "effect layers"
+# PR stack zed-industries/zed#63773..#63780, head e343ea6471ce (Metal + wgpu + DirectX 11 backends).
+# ../zed-fx = `git fetch --depth 1 https://github.com/zed-industries/zed e343ea6471ce2afdae5603702282301acd2eff70`
+# with zed-fx-metal-workaround.patch applied (macOS 27.2 Metal compiler crash, see S1 report).
+[dependencies]
+gpui = { path = "../zed-fx/crates/gpui" }
+gpui_platform = { path = "../zed-fx/crates/gpui_platform", features = ["font-kit", "runtime_shaders"] }
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSView", "NSResponder", "NSScreen"] }
+raw-window-handle = "0.6"
+
+[patch.crates-io]
+async-task = { git = "https://github.com/smol-rs/async-task.git", rev = "b4486cd71e4e94fbda54ce6302444de14f4d190e" }
+async-process = { git = "https://github.com/zed-industries/async-process.git", rev = "0b6d6713570af61806e1e5cb40e0f757cb93fd9d" }
+calloop = { git = "https://github.com/zed-industries/calloop" }
+notify = { git = "https://github.com/zed-industries/notify", rev = "0890bbb8ca40a4b5d1f67031698dd7918b37d991" }
+notify-types = { git = "https://github.com/zed-industries/notify", rev = "0890bbb8ca40a4b5d1f67031698dd7918b37d991" }
+
+[profile.dev]
+opt-level = 1
+[profile.dev.package."*"]
+opt-level = 2
+
+# Built on its own, not as part of the Nodus workspace.
+[workspace]

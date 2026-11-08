@@ -55,9 +55,9 @@ Any finding blocks the push until the commit is rewritten without it. A secret t
 
 | # | Decision | Status |
 | --- | --- | --- |
-| D1 | **UI: GPUI** (Zed's GPU-native UI framework) plus `gpui-component` where it fits. Native Metal / DirectX rendering, no webview for the app's own UI. | Pending spike (S1) |
-| D2 | **Terminal: `alacritty_terminal`** (Apache-2.0) for VT parsing and the grid, wrapped GPUI-free in `nodus-terminal` and drawn by our own GPUI element in `nodus-ui`. Zed's `terminal_view` is GPL, so nothing is copied from it. | Pending spike (S1) |
-| D3 | **Views' pages: the system webview through `wry`** (WKWebView on macOS, WebView2 on Windows), embedded in the board. Views are HTML that Claude writes, so they need a browser engine; everything else is native. | Pending spike (S1) |
+| D1 | **UI: GPUI through `gpui-kit =0.9.0`** (`gpui-pre =0.3.11`, a weekly snapshot of Zed's GPUI, plus `gpui-component 0.9.0`), with `runtime_shaders`. Native Metal / DirectX rendering, no webview for the app's own UI. Steps 1–6 of S1 pass on stock crates. | Adopted (S1) |
+| D2 | **Terminal: `alacritty_terminal =0.26.0`** (Apache-2.0) for VT parsing and the grid, wrapped GPUI-free in `nodus-terminal` and drawn by our own GPUI element in `nodus-ui`. Zed's `terminal_view` is GPL, so nothing is copied from it. | Adopted (S1) |
+| D3 | **Views' pages: the system webview through upstream `wry =0.57.1`** (WKWebView on macOS, WebView2 on Windows), embedded in the board. A native view always draws above GPUI, so whenever anything overlaps a view, it's dragged, or an ink tool is out, the board shows a snapshot of it instead (2–16 ms). Views are HTML that Claude writes; everything else is native. | Adopted (S1) |
 | D4 | **PTYs: `portable-pty`**. Async runtime: `tokio`. HTTP (hook server, MCP relay): `axum`/`hyper`. | Proposed |
 | D5 | **One binary.** `Nodus` runs the app; `Nodus host …` runs the session host (no Dock icon, outlives the app), as the Electron app runs its own binary as Node for `host.js`. | Proposed |
 | D6 | **Secrets:** read the 0.9.4 `safeStorage` ciphertext so a saved xAI key survives the upgrade. macOS: Chromium OSCrypt, password in the Keychain item service `Nodus Safe Storage`, account `Nodus Key`; the Rust app is signed with the same Team ID and bundle id so the Keychain doesn't prompt. Windows: AES-256-GCM with a key kept in `Local State` and protected by DPAPI. Exact parameters per spec 01. | Proposed |
@@ -66,6 +66,7 @@ Any finding blocks the push until the commit is rewritten without it. A secret t
 | D10 | **Same Developer ID certificate (`CSC_LINK`), bundle id, macOS 13.0 minimum, arm64 and x64 on both OSes.** Copies since 0.8.1 reject an app signed by another team, and another identity loses the macOS permission grants and the Keychain item. Intel copies on Apple silicon and x64 copies on Windows on Arm download the arm64 asset. | Proposed (spec 06) |
 | D11 | **A test driver built into the app, off unless `NODUS_AUTOMATION` names a socket.** It runs core commands, sends input, and takes screenshots of scenes. It replaces the DevTools-protocol smoke test (`scripts/smoke.mjs`) and renders the Rust side of the golden screenshots. | Proposed |
 | D12 | **Handoff gates in the release workflow.** Before upload, CI replays 0.9.4's exact updater checks on each DMG, and installs a real 0.9.4 and updates it to the new build on Windows. `releases/latest` is the first place 0.9.4 sees a release, so there's no rehearsal after that. | Proposed (spec 06) |
+| D13 | **We own a patched GPUI.** Stock GPUI can't blur behind an element (the prompt bar, menus, toasts, modals and archive panel all do) or rotate boxes and text (dragged notes, stickers, the pad, the agent fan), and fades elements primitive by primitive rather than as a group. The patch set: the effect-layers PR stack (zed#63773–#63780, backdrop blur on Metal, wgpu and DirectX 11) with a real fix for the two shaders Apple's Metal compiler crashes on, transforms on offscreen layers, and group opacity. The patched `gpui-pre*` crates are vendored under `third_party/gpui/`, keeping their package names and version, and swapped in with `[patch.crates-io]`. | Adopted (S1) |
 | D7 | **Branches:** each track works on a `rust/<track>` branch in its own worktree, and merges to `main` when `cargo test` and `pnpm typecheck/test/build` both pass. | Adopted |
 
 ## Architecture
@@ -152,7 +153,7 @@ Tracks after P1 run in parallel where the dependency column allows.
 
 | Phase | What | Depends on | Status |
 | --- | --- | --- | --- |
-| P0 | Feature specs and this plan; UI stack spike (S1) | — | 🟡 specs done (2,266 behaviors); S1 running |
+| P0 | Feature specs and this plan; UI stack spike (S1) | — | ✅ 2,266 behaviors specced; S1 done |
 | P1 | Workspace, Rust CI job (macOS + Windows), `nodus-domain`, `nodus-store` (round-trips a real state.json), `nodus-platform` env | P0 | ✅ merged (93 tests) |
 | P2 | Session host: `nodus-host-proto`, `nodus-host`, `nodus-sessions` client; wire tests against the Node host both ways | P1 | ☐ |
 | P3 | Data domains: transcripts, board, git, search, summarize, naming, status machine, agents | P1 | ☐ |
@@ -185,7 +186,7 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 
 | # | Question | Status | Outcome |
 | --- | --- | --- | --- |
-| S1 | Does GPUI (+ gpui-component) build and run here, with a pannable canvas, an alacritty terminal on a real PTY, a wry webview inside a GPUI window, and a transparent floating panel over full-screen apps? | 🟡 running | — |
+| S1 | Does GPUI (+ gpui-component) build and run here, with a pannable canvas, an alacritty terminal on a real PTY, a wry webview inside a GPUI window, and a transparent floating panel over full-screen apps? | ✅ done | Yes for steps 1–6 on stock crates; blur and rotation need the GPUI patch (D13). Report: `migration/spikes/S1-ui-stack.md`, sources in `s1-src/`. |
 
 ## Quirks to confirm with the user
 

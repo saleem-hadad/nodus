@@ -100,6 +100,31 @@ crates/
   nodus/                    the binary: app, and the `host` subcommand
 ```
 
+### Layers
+
+A crate depends only on crates in lower layers. When a crate needs something from a crate in its own layer or above (views starting a brain session, the board asking a session's status), it declares a small trait for it, and `nodus-core` implements that trait by calling the other crate. That keeps every domain testable on its own and lets a headless server wire them differently.
+
+| Layer | Crates |
+| --- | --- |
+| L0 | `nodus-domain` (types, events, JSON as JavaScript writes it, UTF-16 helpers) |
+| L1 | `nodus-store`, `nodus-platform`, `nodus-host-proto`, `nodus-terminal` |
+| L2 | `nodus-transcripts`, `nodus-git`, `nodus-host` |
+| L3 | `nodus-sessions`, `nodus-board` |
+| L4 | `nodus-views`, `nodus-tools`, `nodus-actions`, `nodus-voice`, `nodus-capture`, `nodus-updater` |
+| L5 | `nodus-core` |
+| L6 | `nodus-ui` |
+| L7 | `nodus` (the binary) |
+
+### Conventions
+
+- **One module per TypeScript file** where that reads naturally (`discovery.ts` → `discovery.rs`), with the TS doc comments carried over. Each spec's behavior IDs appear in the test names or a comment where the behavior is implemented (`// SESS-042`), so the parity audit can find them.
+- **Async is tokio.** Services are plain structs holding their dependencies; no global state. Timers go through `tokio::time` so tests can pause the clock.
+- **Events.** Domain crates emit `nodus_domain::Event` values (one variant per `api.on.*` event) into an `EventSink` they're given; `nodus-core` fans them out.
+- **Errors.** Each crate has its own `thiserror` error type. The text a user can see is the 0.9.4 text, verbatim.
+- **Processes.** Child processes are spawned through `nodus-platform` (environment, Windows quoting, killing the whole tree).
+- **Tests.** Every Vitest case is ported, named after it. Behaviors a test can reach get a test even if 0.9.4 had none.
+- **Dependencies.** Add shared ones to `[workspace.dependencies]`; keep the list small and well known.
+
 The UI only talks to the core through `nodus-core`'s API: async commands that mirror `src/shared/api.ts` one to one, and a subscription to events that mirror `api.on.*`. Nothing in `nodus-ui` reads `state.json` or spawns a process.
 
 ## Feature specs

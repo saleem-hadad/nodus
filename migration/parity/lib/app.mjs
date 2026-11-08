@@ -131,11 +131,14 @@ export class App {
   }
 
   async close() {
+    const proc = this.electron?.process()
     try {
-      await this.electron?.close()
+      await Promise.race([this.electron?.close(), sleep(10_000)])
     } catch {
       // Already gone.
     }
+    // An app that didn't quit in time (it happens now and then) mustn't outlive its scene.
+    if (proc && proc.exitCode === null && proc.signalCode === null) proc.kill('SIGKILL')
     // The session host outlives the app, with the stand-ins it runs.
     try {
       execFileSync('pkill', ['-f', path.join(this.buildDir, 'main', 'host.js')], { stdio: 'ignore' })

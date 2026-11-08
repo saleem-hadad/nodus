@@ -140,10 +140,14 @@ async function main() {
     for (const scene of scenes) {
       for (const theme of opts.themes) {
         let r
-        try {
-          r = await shoot(scene, theme, opts, dir)
-        } catch (err) {
-          r = { scene: scene.id, theme, error: err.message.split('\n')[0] }
+        // A launch now and then loses its window; a scene gets a second try before it counts as failed.
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            r = await shoot(scene, theme, opts, dir)
+          } catch (err) {
+            r = { scene: scene.id, theme, error: err.message.split('\n')[0] }
+          }
+          if (!r.error && r.stable) break
         }
         results.push(r)
         const note = r.error ? `FAILED: ${r.error}` : r.stable ? '' : `unstable (still changing in ${JSON.stringify(r.changing)})`

@@ -134,14 +134,14 @@ One file per domain in `migration/features/`. Each lists every behavior with an 
 
 | File | Covers (Electron sources) | Spec | Ported |
 | --- | --- | --- | --- |
-| 01-platform-shell.md | app lifecycle, menu, env, store, settings, preload/IPC plumbing | ✅ 141 | ☐ |
+| 01-platform-shell.md | app lifecycle, menu, env, store, settings, preload/IPC plumbing | ✅ 141 | 75/141 |
 | 02-session-host-status.md | host, host protocol, pty client, hooks status machine, agents, usage, notifications | ✅ 225 | 210/225 |
 | 03-sessions-transcripts.md | session create/open/send/kill, claude args, discovery, board merge, search, summarize, naming, geometry | ✅ 205 | 194/205 |
 | 04-board-tools-views.md | board tools MCP, notes placement, views (main + renderer), view page, ink storage | ✅ 222 | 168/222 |
-| 05-actions-voice-git.md | actions rail, voice prompts, git status/diff/log and their UI | ✅ 183 | ☐ |
+| 05-actions-voice-git.md | actions rail, voice prompts, git status/diff/log and their UI | ✅ 183 | 99/183 |
 | 06-updater-release.md | updater, packaging, signing, CI, release, smoke test, 0.9.4 → Rust handoff | ✅ 132 | 73/132 |
-| 07-capture.md | floating capture: panel window, double tap, screen context, guess, submit | ✅ 177 | ☐ |
-| 08-projects-shell-ui.md | App, title bar, settings, projects grid, project rail, tokens and global styles, menus, modals | ✅ 305 | ☐ |
+| 07-capture.md | floating capture: panel window, double tap, screen context, guess, submit | ✅ 177 | 98/177 |
+| 08-projects-shell-ui.md | App, title bar, settings, projects grid, project rail, tokens and global styles, menus, modals | ✅ 305 | 243/305 |
 | 09-board-canvas.md | BoardView: pan/zoom, selection, drag, shortcuts, context menus, sections, archive, layout, edges | ✅ 177 | ☐ |
 | 10-board-cards-notes.md | session cards, expanded cards, agent deck, archive stack, notes and the pad | ✅ 203 | ☐ |
 | 11-board-overlays.md | prompt bar (sidekick), ⌘K search, merge dialog, ink layer, selection bar | ✅ 111 | ☐ |
@@ -158,7 +158,7 @@ Tracks after P1 run in parallel where the dependency column allows.
 | P2 | Session host: `nodus-host-proto`, `nodus-host`, `nodus-sessions` client; wire tests against the Node host both ways | P1 | ✅ merged (host, status) |
 | P3 | Data domains: transcripts, board, git, search, summarize, naming, status machine, agents | P1 | ☐ |
 | P4 | `nodus-core`: every command and event in api.ts, tested headless | P2, P3 | 🟡 skeleton merged (a9d528f); track core running |
-| P5 | UI foundation: app shell, theme tokens (light/dark), title bar, menus, settings, projects grid, project rail | P1, S1 | ☐ |
+| P5 | UI foundation: app shell, theme tokens (light/dark), title bar, menus, settings, projects grid, project rail | P1, S1 | ✅ merged (ui-shell) |
 | P6 | Board canvas: pan/zoom/select/drag, cards, sections, archive, notes, edges, controls, context menus, shortcuts | P4, P5 | ☐ |
 | P7 | Terminal: element, modal, expanded cards, transcript preview, agent viewer | P2, P5 | ☐ |
 | P8 | Overlays: prompt bar, ⌘K search, merge dialog, ink, selection bar, agent deck | P6 | ☐ |
@@ -179,10 +179,10 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | platform-updater | `rust/platform-updater` | nodus-platform process, secrets, notify, permissions; nodus-updater | ✅ merged: UPD 73, PLAT 11, VOICE 2 (+ OS side of HOST-208…211/215, CAP-032/040/041/055/059); UPD-013/014/076…085 to core/UI |
 | parity-harness | `rust/parity-harness` | golden screenshots of 0.9.4 (`migration/parity/`) | 🟡 running |
 | gpui-fork | `rust/gpui-fork` | `third_party/gpui/`: backdrop blur, transforms, group opacity, frame capture (D13) | ✅ merged: Metal + wgpu verified at 60 fps; DirectX 11 HLSL unverified (CI step `continue-on-error` until green) |
-| ui-shell | `rust/ui-shell` | nodus-core skeleton (P4a); nodus-ui theme, controls, title bar, menus, settings, projects grid, rail (P5); test driver (D11) | 🟡 running |
+| ui-shell | `rust/ui-shell` | nodus-core skeleton (P4a); nodus-ui theme, controls, title bar, menus, settings, projects grid, rail (P5); test driver (D11) | ✅ merged: UI 243, PLAT 64; shell scenes within 0.03–0.3% of the goldens; board route, live counts and Settings rows on other APIs deferred |
 | views-tools | `rust/views-tools` | nodus-views, nodus-tools, nodus-board notes and ink | ✅ merged: NOTE 16, INK 12, TOOL 40 (004…013/015 by host), VIEW 100; 54 VIEW UI-only to the UI tracks |
-| actions-voice-git | `rust/actions-voice-git` | nodus-actions, nodus-voice (incl. the recorder), nodus-git | 🟡 running |
-| capture | `rust/capture` | nodus-capture backend: double tap, key hook, screen context, guess, submit | 🟡 running |
+| actions-voice-git | `rust/actions-voice-git` | nodus-actions, nodus-voice (incl. the recorder), nodus-git | ✅ merged: 97 (GIT 28, ACT 37, VOICE 32); recorder is Core Audio voice processing + Opus/WebM like MediaRecorder |
+| capture | `rust/capture` | nodus-capture backend: double tap, key hook, screen context, guess, submit | ✅ merged: 98 CAP; panel UI and page wiring to the capture-panel track |
 | core | `rust/core` | P4: wire every merged domain into nodus-core (sessions, board, views, updates, events, startup/quit), deferred core IDs, debts, headless end-to-end tests | 🟡 running |
 | terminal | `rust/terminal` | nodus-terminal (GPUI-free): alacritty model, xterm key encoder, query answers, widths, registry | 🟡 running |
 
@@ -205,6 +205,9 @@ Follow-ups a merge left for when the tracks meet in `nodus-core` (P4). Strike th
 - Views need a webview for every view, on screen or not, or `update_view`'s page checks time out (the UI track keeps them alive off screen).
 - `update_view` now fails before applying anything when writing `index.html` fails; 0.9.4 applied the title and the rest first. Deliberate, invisible unless the disk is full.
 - View command output is decoded whole, not per pipe chunk, so a character split across chunks can differ from 0.9.4 (it was garbled there).
+- Text parity (from ui-shell, side by side with the goldens): GPUI applies SF Pro's built-in tracking where Chromium doesn't (13 px labels come out ~1 px narrower), wraps counting the space after a word, and rounds some text half a pixel the other way; the window's Metal layer was untagged (P3 displays oversaturated every colour) — nodus-ui tags it sRGB for now. All four belong in the patched GPUI.
+- Thumbnails of copied images are encoded differently from Chromium's, so an image 0.9.4 already offered is offered once more after the upgrade; a non-ASCII host shows as written on a tab tile, where 0.9.4 shows punycode.
+- Changed files sort with root collation; 0.9.4 used ICU `localeCompare` in the user's locale.
 - Six host behaviors are implemented but have no test of their own: HOST-033, 043, 090, 098, the 4 s hard exit in HOST-064 and the 20 s relay timeout in HOST-086. Add tests in P4 and tick them.
 - The 0.9.4 `pty.ts` → Rust host check was run by hand under vitest and not committed (it has to live in `src/main`); repeat it before cutover.
 - The status machine and the host client both rely on `process_started` / `process_exited` being called exactly where pty.ts tracks and untracks a session.
@@ -257,6 +260,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-09: ui-shell, capture and actions-voice-git merged (fac662d); 996 tests; 1,160 of 2,266 behaviors ticked. The golden PNGs had been swept into two plan commits by `git add migration`; untracked in 954e195 (synthetic content only; one file named this Mac's temp folder id).
 - 2026-11-09: ui-shell's core skeleton cherry-picked to main (a9d528f) so track core (P4) could start; 715 tests.
 - 2026-11-09: views-tools merged (2c4bf9d): nodus-tools MCP server, `McpRelay`, nodus-views (files, page, commands, brains, schedules), notes placement and ink; MCP answers and view pages byte-identical to 0.9.4; 687 tests.
 - 2026-11-09: gpui-fork merged (9ea68bd): vendored gpui-pre 0.3.11 with effect layers. `.backdrop_blur(px).backdrop_saturate(s)`, `.rotate/.scale/.translate/.transform_origin`, `.group_opacity`, `Window::render_to_image()`; the Metal compiler crash was passing `Background` by value into multi-stop gradient code. Docs in `third_party/gpui/PATCHES.md`.

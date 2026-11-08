@@ -1108,55 +1108,55 @@ Risks:
 
 ## Parity checklist
 
-- [ ] UI-001 Effective appearance
-- [ ] UI-002 Live OS appearance
-- [ ] UI-003 Window background
-- [ ] UI-004 Theme before first paint
-- [ ] UI-005 Native chrome follows the theme
-- [ ] UI-006 No text selection by default
-- [ ] UI-007 Inputs select text
-- [ ] UI-008 Selectable path
-- [ ] UI-009 Arrow cursor
-- [ ] UI-010 Keyboard focus ring
-- [ ] UI-011 Scrollbars
-- [ ] UI-012 Reduced motion
-- [ ] UI-013 Stray file drops
-- [ ] UI-014 Title bar drags the window
-- [ ] UI-015 Button states
-- [ ] UI-016 Primary button
-- [ ] UI-017 Ghost button
-- [ ] UI-018 Switch
-- [ ] UI-019 Working dot
-- [ ] UI-020 Done dot
-- [ ] UI-021 Waiting dot
-- [ ] UI-022 Small dot
-- [ ] UI-023 Starts on the grid
-- [ ] UI-024 Startup loads
-- [ ] UI-025 Root layout
+- [x] UI-001 Effective appearance
+- [x] UI-002 Live OS appearance
+- [x] UI-003 Window background
+- [x] UI-004 Theme before first paint
+- [x] UI-005 Native chrome follows the theme
+- [x] UI-006 No text selection by default
+- [x] UI-007 Inputs select text
+- [x] UI-008 Selectable path
+- [x] UI-009 Arrow cursor
+- [x] UI-010 Keyboard focus ring
+- [x] UI-011 Scrollbars
+- [x] UI-012 Reduced motion
+- [x] UI-013 Stray file drops
+- [x] UI-014 Title bar drags the window
+- [x] UI-015 Button states
+- [x] UI-016 Primary button
+- [x] UI-017 Ghost button
+- [x] UI-018 Switch
+- [x] UI-019 Working dot
+- [x] UI-020 Done dot
+- [x] UI-021 Waiting dot
+- [x] UI-022 Small dot
+- [x] UI-023 Starts on the grid
+- [x] UI-024 Startup loads
+- [x] UI-025 Root layout
 - [ ] UI-026 Board route composition
-- [ ] UI-027 Pinned rail column
-- [ ] UI-028 Board remount per project
-- [ ] UI-029 Rail survives board switches
-- [ ] UI-030 App-level overlays
-- [ ] UI-031 Navigate resets
-- [ ] UI-032 Navigate loads
-- [ ] UI-033 Stats refresh
+- [x] UI-027 Pinned rail column
+- [x] UI-028 Board remount per project
+- [x] UI-029 Rail survives board switches
+- [x] UI-030 App-level overlays
+- [x] UI-031 Navigate resets
+- [x] UI-032 Navigate loads
+- [x] UI-033 Stats refresh
 - [ ] UI-034 Board changed event
-- [ ] UI-035 Projects changed event
+- [x] UI-035 Projects changed event
 - [ ] UI-036 Status event
 - [ ] UI-037 Agent status event
 - [ ] UI-038 Usage event
-- [ ] UI-039 Settings command
-- [ ] UI-040 ⌘W closes the top layer
-- [ ] UI-041 ⌘W never closes the window
-- [ ] UI-042 Ctrl shortcuts off a Mac
-- [ ] UI-043 Notification opens its card
-- [ ] UI-044 Launch open request
-- [ ] UI-045 Show card
-- [ ] UI-046 New project from anywhere
-- [ ] UI-047 Toggle focus command
-- [ ] UI-048 What persists
-- [ ] UI-049 Refresh projects
+- [x] UI-039 Settings command
+- [x] UI-040 ⌘W closes the top layer
+- [x] UI-041 ⌘W never closes the window
+- [x] UI-042 Ctrl shortcuts off a Mac
+- [x] UI-043 Notification opens its card
+- [x] UI-044 Launch open request
+- [x] UI-045 Show card
+- [x] UI-046 New project from anywhere
+- [x] UI-047 Toggle focus command
+- [x] UI-048 What persists
+- [x] UI-049 Refresh projects
 - [ ] UI-050 Board loading flag
 - [ ] UI-051 Stale board loads
 - [ ] UI-052 Archived terminal closes
@@ -1186,29 +1186,29 @@ Risks:
 - [ ] UI-076 Terminal vs preview
 - [ ] UI-077 Agents and diff flags
 - [ ] UI-078 Action lists
-- [ ] UI-079 Optimistic settings
-- [ ] UI-080 Settings survive navigation
-- [ ] UI-081 Duration format
-- [ ] UI-082 Tilde path
-- [ ] UI-083 Card title
-- [ ] UI-084 Agent urgency order
-- [ ] UI-085 Agent step line
-- [ ] UI-086 Agent status label
-- [ ] UI-087 Nested agents
-- [ ] UI-088 Always there
-- [ ] UI-089 Grid crumb
-- [ ] UI-090 Board crumbs
-- [ ] UI-091 Back to grid
-- [ ] UI-092 Project name source
-- [ ] UI-093 Project crumb tooltip
-- [ ] UI-094 Reveal from the crumb
-- [ ] UI-095 Right cluster order
-- [ ] UI-096 Focus switch visibility
-- [ ] UI-097 Focus switch toggles
-- [ ] UI-098 View action slot
+- [x] UI-079 Optimistic settings
+- [x] UI-080 Settings survive navigation
+- [x] UI-081 Duration format
+- [x] UI-082 Tilde path
+- [x] UI-083 Card title
+- [x] UI-084 Agent urgency order
+- [x] UI-085 Agent step line
+- [x] UI-086 Agent status label
+- [x] UI-087 Nested agents
+- [x] UI-088 Always there
+- [x] UI-089 Grid crumb
+- [x] UI-090 Board crumbs
+- [x] UI-091 Back to grid
+- [x] UI-092 Project name source
+- [x] UI-093 Project crumb tooltip
+- [x] UI-094 Reveal from the crumb
+- [x] UI-095 Right cluster order
+- [x] UI-096 Focus switch visibility
+- [x] UI-097 Focus switch toggles
+- [x] UI-098 View action slot
 - [ ] UI-099 Menu button off a Mac
-- [ ] UI-100 Crumbs hug the menu button
-- [ ] UI-101 Long names
+- [x] UI-100 Crumbs hug the menu button
+- [x] UI-101 Long names
 - [ ] UI-102 Hidden at zero
 - [ ] UI-103 What counts
 - [ ] UI-104 Label
@@ -1216,36 +1216,36 @@ Risks:
 - [ ] UI-106 Shown when ready
 - [ ] UI-107 Update tooltip
 - [ ] UI-108 Update click
-- [ ] UI-109 Nothing until reported
-- [ ] UI-110 Model
-- [ ] UI-111 Context meter
-- [ ] UI-112 Context tooltip
-- [ ] UI-113 Running time
-- [ ] UI-114 Cost
-- [ ] UI-115 Token format
-- [ ] UI-116 Opening
-- [ ] UI-117 Dialog frame
-- [ ] UI-118 Reload on open
-- [ ] UI-119 Focus in and back
-- [ ] UI-120 Keys stay inside
-- [ ] UI-121 Escape closes Settings
-- [ ] UI-122 Backdrop closes Settings
-- [ ] UI-123 Tab stays inside
-- [ ] UI-124 Disabled until loaded
-- [ ] UI-125 Theme tiles
-- [ ] UI-126 Theme tile states
-- [ ] UI-127 Theme previews
-- [ ] UI-128 Appearance hint
-- [ ] UI-129 Pin sidebar row
-- [ ] UI-130 Focus row
+- [x] UI-109 Nothing until reported
+- [x] UI-110 Model
+- [x] UI-111 Context meter
+- [x] UI-112 Context tooltip
+- [x] UI-113 Running time
+- [x] UI-114 Cost
+- [x] UI-115 Token format
+- [x] UI-116 Opening
+- [x] UI-117 Dialog frame
+- [x] UI-118 Reload on open
+- [x] UI-119 Focus in and back
+- [x] UI-120 Keys stay inside
+- [x] UI-121 Escape closes Settings
+- [x] UI-122 Backdrop closes Settings
+- [x] UI-123 Tab stays inside
+- [x] UI-124 Disabled until loaded
+- [x] UI-125 Theme tiles
+- [x] UI-126 Theme tile states
+- [x] UI-127 Theme previews
+- [x] UI-128 Appearance hint
+- [x] UI-129 Pin sidebar row
+- [x] UI-130 Focus row
 - [ ] UI-131 Capture switch
 - [ ] UI-132 Capture state polling
 - [ ] UI-133 Accessibility row
 - [ ] UI-134 Unavailable row
 - [ ] UI-135 Try row
-- [ ] UI-136 Notify row
-- [ ] UI-137 Dock badge row
-- [ ] UI-138 Whole row toggles
+- [x] UI-136 Notify row
+- [x] UI-137 Dock badge row
+- [x] UI-138 Whole row toggles
 - [ ] UI-139 Key field loading
 - [ ] UI-140 Key placeholder
 - [ ] UI-141 Save enabled
@@ -1259,157 +1259,157 @@ Risks:
 - [ ] UI-149 Update button in Settings
 - [ ] UI-150 Auto-update row
 - [ ] UI-151 Download link on error
-- [ ] UI-152 Links open in the browser
-- [ ] UI-153 Modal frame
-- [ ] UI-154 Modal enter
-- [ ] UI-155 Modal Escape
-- [ ] UI-156 Modal backdrop press
-- [ ] UI-157 Modal size limits
-- [ ] UI-158 Menu position
-- [ ] UI-159 Right-aligned menu
-- [ ] UI-160 Menu closes
-- [ ] UI-161 Anchor presses
-- [ ] UI-162 Choosing an item
-- [ ] UI-163 Item states
-- [ ] UI-164 Item hint
-- [ ] UI-165 Separators and custom rows
-- [ ] UI-166 No native menu over a menu
-- [ ] UI-167 Menu enter
-- [ ] UI-168 Swatch row
-- [ ] UI-169 Current swatch
-- [ ] UI-170 Swatch hover
-- [ ] UI-171 Pick a colour
-- [ ] UI-172 Main action
-- [ ] UI-173 Chevron toggles on press
-- [ ] UI-174 Chevron from the keyboard
-- [ ] UI-175 Open state
-- [ ] UI-176 Split button look
-- [ ] UI-177 Folder drawing
-- [ ] UI-178 Colour fallback
-- [ ] UI-179 Small folders
-- [ ] UI-180 Letter glyph
-- [ ] UI-181 Icon glyph
-- [ ] UI-182 Theme-independent hues
-- [ ] UI-183 Loads on show
-- [ ] UI-184 Empty state timing
-- [ ] UI-185 Empty state
-- [ ] UI-186 New Project button
-- [ ] UI-187 Recent order
-- [ ] UI-188 Top section
-- [ ] UI-189 Heading count
-- [ ] UI-190 Group sections
-- [ ] UI-191 Collapse a group
-- [ ] UI-192 Empty group
-- [ ] UI-193 Archived section
-- [ ] UI-194 All archived
-- [ ] UI-195 Focus filtering
-- [ ] UI-196 Focus hides archived
-- [ ] UI-197 Focus hides empty groups
-- [ ] UI-198 Hidden-count note
-- [ ] UI-199 Nothing-in-focus note
-- [ ] UI-200 Dimmed folders
-- [ ] UI-201 Focus mark
-- [ ] UI-202 Select on press
-- [ ] UI-203 Deselect on empty press
-- [ ] UI-204 Selection persists
-- [ ] UI-205 Stale selection
-- [ ] UI-206 Keep selection visible
-- [ ] UI-207 Double-click opens
-- [ ] UI-208 Open shortcut
-- [ ] UI-209 Remove shortcut
-- [ ] UI-210 Enter renames
-- [ ] UI-211 Escape deselects
-- [ ] UI-212 Arrows start at the first
-- [ ] UI-213 Left/Right
-- [ ] UI-214 Up/Down
-- [ ] UI-215 Keys ignored when busy
-- [ ] UI-216 Project menu
-- [ ] UI-217 Change colour
-- [ ] UI-218 Archive / Unarchive
-- [ ] UI-219 Focus from the grid
-- [ ] UI-220 Reveal
-- [ ] UI-221 Group header menu
-- [ ] UI-222 Rename group
-- [ ] UI-223 Delete group
-- [ ] UI-224 Drag to a section
-- [ ] UI-225 Drop highlight
-- [ ] UI-226 Drop moves
-- [ ] UI-227 Take-out placeholder
-- [ ] UI-228 OS folder drop overlay
-- [ ] UI-229 OS folder drop adds
-- [ ] UI-230 New folders pop in
-- [ ] UI-231 Folder hover and press
-- [ ] UI-232 Folder tooltip
-- [ ] UI-233 Subtitle
+- [x] UI-152 Links open in the browser
+- [x] UI-153 Modal frame
+- [x] UI-154 Modal enter
+- [x] UI-155 Modal Escape
+- [x] UI-156 Modal backdrop press
+- [x] UI-157 Modal size limits
+- [x] UI-158 Menu position
+- [x] UI-159 Right-aligned menu
+- [x] UI-160 Menu closes
+- [x] UI-161 Anchor presses
+- [x] UI-162 Choosing an item
+- [x] UI-163 Item states
+- [x] UI-164 Item hint
+- [x] UI-165 Separators and custom rows
+- [x] UI-166 No native menu over a menu
+- [x] UI-167 Menu enter
+- [x] UI-168 Swatch row
+- [x] UI-169 Current swatch
+- [x] UI-170 Swatch hover
+- [x] UI-171 Pick a colour
+- [x] UI-172 Main action
+- [x] UI-173 Chevron toggles on press
+- [x] UI-174 Chevron from the keyboard
+- [x] UI-175 Open state
+- [x] UI-176 Split button look
+- [x] UI-177 Folder drawing
+- [x] UI-178 Colour fallback
+- [x] UI-179 Small folders
+- [x] UI-180 Letter glyph
+- [x] UI-181 Icon glyph
+- [x] UI-182 Theme-independent hues
+- [x] UI-183 Loads on show
+- [x] UI-184 Empty state timing
+- [x] UI-185 Empty state
+- [x] UI-186 New Project button
+- [x] UI-187 Recent order
+- [x] UI-188 Top section
+- [x] UI-189 Heading count
+- [x] UI-190 Group sections
+- [x] UI-191 Collapse a group
+- [x] UI-192 Empty group
+- [x] UI-193 Archived section
+- [x] UI-194 All archived
+- [x] UI-195 Focus filtering
+- [x] UI-196 Focus hides archived
+- [x] UI-197 Focus hides empty groups
+- [x] UI-198 Hidden-count note
+- [x] UI-199 Nothing-in-focus note
+- [x] UI-200 Dimmed folders
+- [x] UI-201 Focus mark
+- [x] UI-202 Select on press
+- [x] UI-203 Deselect on empty press
+- [x] UI-204 Selection persists
+- [x] UI-205 Stale selection
+- [x] UI-206 Keep selection visible
+- [x] UI-207 Double-click opens
+- [x] UI-208 Open shortcut
+- [x] UI-209 Remove shortcut
+- [x] UI-210 Enter renames
+- [x] UI-211 Escape deselects
+- [x] UI-212 Arrows start at the first
+- [x] UI-213 Left/Right
+- [x] UI-214 Up/Down
+- [x] UI-215 Keys ignored when busy
+- [x] UI-216 Project menu
+- [x] UI-217 Change colour
+- [x] UI-218 Archive / Unarchive
+- [x] UI-219 Focus from the grid
+- [x] UI-220 Reveal
+- [x] UI-221 Group header menu
+- [x] UI-222 Rename group
+- [x] UI-223 Delete group
+- [x] UI-224 Drag to a section
+- [x] UI-225 Drop highlight
+- [x] UI-226 Drop moves
+- [x] UI-227 Take-out placeholder
+- [x] UI-228 OS folder drop overlay
+- [x] UI-229 OS folder drop adds
+- [x] UI-230 New folders pop in
+- [x] UI-231 Folder hover and press
+- [x] UI-232 Folder tooltip
+- [x] UI-233 Subtitle
 - [ ] UI-234 Live badges
-- [ ] UI-235 Label
-- [ ] UI-236 Faded folders
-- [ ] UI-237 Rename field opens
-- [ ] UI-238 Rename commits
-- [ ] UI-239 Rename isolation
-- [ ] UI-240 Project rename saves
-- [ ] UI-241 Picker opens
-- [ ] UI-242 Picker rows
-- [ ] UI-243 Current row
-- [ ] UI-244 Pick a group
-- [ ] UI-245 New group
-- [ ] UI-246 Picker focus
-- [ ] UI-247 Remove dialog
-- [ ] UI-248 Remove is focused
-- [ ] UI-249 Confirm removes
-- [ ] UI-250 Cancel
-- [ ] UI-251 Toast
-- [ ] UI-252 Toast belongs to the grid
-- [ ] UI-253 Rail only on boards
-- [ ] UI-254 Rail order
-- [ ] UI-255 Rail focus filter
-- [ ] UI-256 Rail separators
-- [ ] UI-257 Rail item states
+- [x] UI-235 Label
+- [x] UI-236 Faded folders
+- [x] UI-237 Rename field opens
+- [x] UI-238 Rename commits
+- [x] UI-239 Rename isolation
+- [x] UI-240 Project rename saves
+- [x] UI-241 Picker opens
+- [x] UI-242 Picker rows
+- [x] UI-243 Current row
+- [x] UI-244 Pick a group
+- [x] UI-245 New group
+- [x] UI-246 Picker focus
+- [x] UI-247 Remove dialog
+- [x] UI-248 Remove is focused
+- [x] UI-249 Confirm removes
+- [x] UI-250 Cancel
+- [x] UI-251 Toast
+- [x] UI-252 Toast belongs to the grid
+- [x] UI-253 Rail only on boards
+- [x] UI-254 Rail order
+- [x] UI-255 Rail focus filter
+- [x] UI-256 Rail separators
+- [x] UI-257 Rail item states
 - [ ] UI-258 Rail status dot
-- [ ] UI-259 Rail unfocused fade
-- [ ] UI-260 Rail click
-- [ ] UI-261 Rail add
-- [ ] UI-262 Edge reveal
-- [ ] UI-263 No reveal while dragging
-- [ ] UI-264 Hide grace
-- [ ] UI-265 Quick sweeps
-- [ ] UI-266 Rail keeps itself open
-- [ ] UI-267 Menu holds the rail
-- [ ] UI-268 Slide animation
-- [ ] UI-269 Hidden rail is inert
-- [ ] UI-270 Pinned rail
-- [ ] UI-271 Rail hint
-- [ ] UI-272 Hint content
-- [ ] UI-273 Hint hides
-- [ ] UI-274 Rail menu
-- [ ] UI-275 Held ⌘ shows numbers
-- [ ] UI-276 Number guard
-- [ ] UI-277 ⌘1–⌘9 switch
-- [ ] UI-278 Numbers stay while held
-- [ ] UI-279 Numbers hide
-- [ ] UI-280 ⌘-click and ⌘-scroll
-- [ ] UI-281 Numbers above modals
-- [ ] UI-282 Key badge
-- [ ] UI-283 Rail stats
-- [ ] UI-284 Rail overflow
-- [ ] UI-285 Group order
-- [ ] UI-286 Group split
-- [ ] UI-287 Move to group
-- [ ] UI-288 Optimistic group change
-- [ ] UI-289 Add project
-- [ ] UI-290 Add failure toasts
-- [ ] UI-291 Picker cancelled
-- [ ] UI-292 Add then show
-- [ ] UI-293 Set focused
-- [ ] UI-294 Toggle focus mode
-- [ ] UI-295 Folder glyph letter
-- [ ] UI-296 Focus mode on
-- [ ] UI-297 Focusing
-- [ ] UI-298 Shows in focus
-- [ ] UI-299 Focus everywhere off
-- [ ] UI-300 Focusing definition shared
-- [ ] UI-301 Platform detection
-- [ ] UI-302 Shortcut modifier
-- [ ] UI-303 Shortcut text
-- [ ] UI-304 Shortcut letter (Latin)
-- [ ] UI-305 Shortcut letter (other alphabets)
+- [x] UI-259 Rail unfocused fade
+- [x] UI-260 Rail click
+- [x] UI-261 Rail add
+- [x] UI-262 Edge reveal
+- [x] UI-263 No reveal while dragging
+- [x] UI-264 Hide grace
+- [x] UI-265 Quick sweeps
+- [x] UI-266 Rail keeps itself open
+- [x] UI-267 Menu holds the rail
+- [x] UI-268 Slide animation
+- [x] UI-269 Hidden rail is inert
+- [x] UI-270 Pinned rail
+- [x] UI-271 Rail hint
+- [x] UI-272 Hint content
+- [x] UI-273 Hint hides
+- [x] UI-274 Rail menu
+- [x] UI-275 Held ⌘ shows numbers
+- [x] UI-276 Number guard
+- [x] UI-277 ⌘1–⌘9 switch
+- [x] UI-278 Numbers stay while held
+- [x] UI-279 Numbers hide
+- [x] UI-280 ⌘-click and ⌘-scroll
+- [x] UI-281 Numbers above modals
+- [x] UI-282 Key badge
+- [x] UI-283 Rail stats
+- [x] UI-284 Rail overflow
+- [x] UI-285 Group order
+- [x] UI-286 Group split
+- [x] UI-287 Move to group
+- [x] UI-288 Optimistic group change
+- [x] UI-289 Add project
+- [x] UI-290 Add failure toasts
+- [x] UI-291 Picker cancelled
+- [x] UI-292 Add then show
+- [x] UI-293 Set focused
+- [x] UI-294 Toggle focus mode
+- [x] UI-295 Folder glyph letter
+- [x] UI-296 Focus mode on
+- [x] UI-297 Focusing
+- [x] UI-298 Shows in focus
+- [x] UI-299 Focus everywhere off
+- [x] UI-300 Focusing definition shared
+- [x] UI-301 Platform detection
+- [x] UI-302 Shortcut modifier
+- [x] UI-303 Shortcut text
+- [x] UI-304 Shortcut letter (Latin)
+- [x] UI-305 Shortcut letter (other alphabets)

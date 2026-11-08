@@ -786,83 +786,83 @@ Suggested new Rust tests (not in 0.9.4, for behaviors with no test): `ago`/`flat
 - [ ] CAP-005 macOS: all Spaces + over full-screen apps, Dock icon kept
 - [ ] CAP-006 Level `pop-up-menu` (101)
 - [ ] CAP-007 Width 652, initial height 320
-- [ ] CAP-008 Placed on pointer's display: centred, top = 20 % of work area − 40, height kept
-- [ ] CAP-009 `capture:resize` clamps 120–900, rounds, keeps top/width, ignores bad input
+- [x] CAP-008 Placed on pointer's display: centred, top = 20 % of work area − 40, height kept
+- [x] CAP-009 `capture:resize` clamps 120–900, rounds, keeps top/width, ignores bad input
 - [ ] CAP-010 Page reports `ceil(max(stage bottom, menu bottom + 48))` on change; no click-through
 - [ ] CAP-011 No navigation; http(s) new-window → browser
 - [ ] CAP-012 Blur hides after 50 ms re-check, except busy / resting / < 250 ms after show
 - [ ] CAP-013 Closed window reference dropped
-- [ ] CAP-014 Shown/context events; nothing sent while loading; `capture:ready` returns stored context while open
-- [ ] CAP-015 Open order: own-focus check, front app, place, targets snapshot, shown event, show+focus, then clipboard, then tab
-- [ ] CAP-016 Hide cancels the guess, clears resting, hides (never closes)
-- [ ] CAP-017 Toggle: hide only if open and focused, else open
-- [ ] CAP-018 Open = exists and visible (resting counts)
-- [ ] CAP-019 Rest after submit: hide + show without focus; blur ignored
-- [ ] CAP-020 Aside: busy during screenshot/dialog, then show + focus
-- [ ] CAP-021 TAP_MS 350, GAP_MS 400 (inclusive), Shift codes 42/54, either key
-- [ ] CAP-022 Detector state downAt / spoiled / lastTapAt
-- [ ] CAP-023 Non-Shift key down = other()
-- [ ] CAP-024 Shift repeat / Shift while spoiled ignored
-- [ ] CAP-025 Non-Shift key up ignored
-- [ ] CAP-026 Shift up: clean check, reset, unclean clears lastTapAt
-- [ ] CAP-027 Second clean tap within gap fires and resets; else remembers key-up time
-- [ ] CAP-028 other(): spoil a held Shift, clear downAt and lastTapAt
-- [ ] CAP-029 Any mouse button down = other(); moves/wheel ignored
-- [ ] CAP-030 Monotonic ms clock at receipt, not hook timestamps
-- [ ] CAP-031 Double tap toggles; no other global shortcut
-- [ ] CAP-032 Shortcut state priority off > unavailable > needs-permission > ready
-- [ ] CAP-033 `settings.capture` defaults true
-- [ ] CAP-034 Hook start once; failure → unavailable for the run + log
-- [ ] CAP-035 Hook stop; failure logged and swallowed
-- [ ] CAP-036 Panel pre-created 3000 ms after hook start
-- [ ] CAP-037 syncShortcut: off → stop, trusted → start, else poll 3000 ms
-- [ ] CAP-038 syncShortcut at registration and on every settings update
-- [ ] CAP-039 Quit clears poll and stops hook
-- [ ] CAP-040 Allow…: tccutil reset (packaged), AX prompt, open Accessibility pane, sync, return state
-- [ ] CAP-041 Dev builds never run tccutil reset
+- [x] CAP-014 Shown/context events; nothing sent while loading; `capture:ready` returns stored context while open
+- [x] CAP-015 Open order: own-focus check, front app, place, targets snapshot, shown event, show+focus, then clipboard, then tab
+- [x] CAP-016 Hide cancels the guess, clears resting, hides (never closes)
+- [x] CAP-017 Toggle: hide only if open and focused, else open
+- [x] CAP-018 Open = exists and visible (resting counts)
+- [x] CAP-019 Rest after submit: hide + show without focus; blur ignored
+- [x] CAP-020 Aside: busy during screenshot/dialog, then show + focus
+- [x] CAP-021 TAP_MS 350, GAP_MS 400 (inclusive), Shift codes 42/54, either key
+- [x] CAP-022 Detector state downAt / spoiled / lastTapAt
+- [x] CAP-023 Non-Shift key down = other()
+- [x] CAP-024 Shift repeat / Shift while spoiled ignored
+- [x] CAP-025 Non-Shift key up ignored
+- [x] CAP-026 Shift up: clean check, reset, unclean clears lastTapAt
+- [x] CAP-027 Second clean tap within gap fires and resets; else remembers key-up time
+- [x] CAP-028 other(): spoil a held Shift, clear downAt and lastTapAt
+- [x] CAP-029 Any mouse button down = other(); moves/wheel ignored
+- [x] CAP-030 Monotonic ms clock at receipt, not hook timestamps
+- [x] CAP-031 Double tap toggles; no other global shortcut
+- [x] CAP-032 Shortcut state priority off > unavailable > needs-permission > ready
+- [x] CAP-033 `settings.capture` defaults true
+- [x] CAP-034 Hook start once; failure → unavailable for the run + log
+- [x] CAP-035 Hook stop; failure logged and swallowed
+- [x] CAP-036 Panel pre-created 3000 ms after hook start
+- [x] CAP-037 syncShortcut: off → stop, trusted → start, else poll 3000 ms
+- [x] CAP-038 syncShortcut at registration and on every settings update
+- [x] CAP-039 Quit clears poll and stops hook
+- [x] CAP-040 Allow…: tccutil reset (packaged), AX prompt, open Accessibility pane, sync, return state
+- [x] CAP-041 Dev builds never run tccutil reset
 - [ ] CAP-042 File › Capture… first File item + separator, no accelerator, always opens
-- [ ] CAP-043 `capture:show` opens like the menu
-- [ ] CAP-044 `capture:shortcut` returns state
-- [ ] CAP-045 Front app via lsappinfo (1000 ms timeouts), macOS only
-- [ ] CAP-046 lsappinfo parsing: bundleID, quoted name or last id segment
+- [x] CAP-043 `capture:show` opens like the menu
+- [x] CAP-044 `capture:shortcut` returns state
+- [x] CAP-045 Front app via lsappinfo (1000 ms timeouts), macOS only
+- [x] CAP-046 lsappinfo parsing: bundleID, quoted name or last id segment
 - [ ] CAP-047 Front app name only feeds the guess and tab reading
-- [ ] CAP-048 Readable browser bundle ids (2 Safari + 10 Chromium)
-- [ ] CAP-049 Tab script per family; odd ids → none
-- [ ] CAP-050 osascript 60 s; URL must be http(s); title = rest joined by space
+- [x] CAP-048 Readable browser bundle ids (2 Safari + 10 Chromium)
+- [x] CAP-049 Tab script per family; odd ids → none
+- [x] CAP-050 osascript 60 s; URL must be http(s); title = rest joined by space
 - [ ] CAP-051 Tab attachment inserted first unless one exists
-- [ ] CAP-052 Clipboard offer: trimmed text ≤ 20 000 first, else first image/* item
-- [ ] CAP-053 Thumbnail ≤ 360 px wide, PNG data URL
-- [ ] CAP-054 Taking clipboard: text, or image saved to captures/ with copied: true
-- [ ] CAP-055 macOS screenshot `screencapture -i -x -o`, 5 min, needs-permission only when no file and not granted; NODUS_SCREENCAPTURE
+- [x] CAP-052 Clipboard offer: trimmed text ≤ 20 000 first, else first image/* item
+- [x] CAP-053 Thumbnail ≤ 360 px wide, PNG data URL
+- [x] CAP-054 Taking clipboard: text, or image saved to captures/ with copied: true
+- [x] CAP-055 macOS screenshot `screencapture -i -x -o`, 5 min, needs-permission only when no file and not granted; NODUS_SCREENCAPTURE
 - [ ] CAP-056 Windows screenshot: whole display under pointer at physical size
-- [ ] CAP-057 Missing/empty image → null, else image attachment
-- [ ] CAP-058 Screenshot hides panel, waits 150 ms, shows + focuses after
-- [ ] CAP-059 Allow-screen opens Privacy_ScreenCapture (macOS only)
-- [ ] CAP-060 Files: absolute dropped paths, or multi-select open dialog aside
-- [ ] CAP-061 Describe ≤ 20 files/dirs: name, size (0 for dirs); errors skipped
+- [x] CAP-057 Missing/empty image → null, else image attachment
+- [x] CAP-058 Screenshot hides panel, waits 150 ms, shows + focuses after
+- [x] CAP-059 Allow-screen opens Privacy_ScreenCapture (macOS only)
+- [x] CAP-060 Files: absolute dropped paths, or multi-select open dialog aside
+- [x] CAP-061 Describe ≤ 20 files/dirs: name, size (0 for dirs); errors skipped
 - [ ] CAP-062 Drag over/leave/drop on the card; paths from dropped files
-- [ ] CAP-063 Launch sweep of captures/ older than 30 days by mtime
+- [x] CAP-063 Launch sweep of captures/ older than 30 days by mtime
 - [ ] CAP-064 Guess after 700 ms pause, ≥ 3 chars, no choice, text changed
 - [ ] CAP-065 Empty text resets guess, choice and in-flight state
 - [ ] CAP-066 Ask: run counter, stale answers dropped, null keeps previous guess
-- [ ] CAP-067 Main guess uses opened-on targets and app, text ≤ 20 000, cleaned attachments
-- [ ] CAP-068 guessCapture cancels previous; empty text/no projects → null; no claude → reject
-- [ ] CAP-069 Spawn: exact argv, temp cwd, login env, stdin closed, hidden window
-- [ ] CAP-070 30 s timeout → SIGKILL → null
-- [ ] CAP-071 Spawn error logged → null
-- [ ] CAP-072 Close: parse JSON, is_error → null, else readGuess(structured_output)
-- [ ] CAP-073 Settles once, clears timer and running slot
-- [ ] CAP-074 cancelGuess kills (SIGKILL) and resolves null
-- [ ] CAP-075 Guess prompt layout, ≤ 8 sessions per project, text ≤ 4000
-- [ ] CAP-076 Prompt ages `just now` / `N min ago` / `N h ago` (< 48) / `N days ago`
-- [ ] CAP-077 flat(): collapse whitespace, cut with `…` (80/120/200/120)
-- [ ] CAP-078 Status words waiting/working/idle/stopped
-- [ ] CAP-079 Screen lines: app, tab, image, file, text wording
-- [ ] CAP-080 readGuess fallbacks: project, kind, into→session, reason, session's project
+- [x] CAP-067 Main guess uses opened-on targets and app, text ≤ 20 000, cleaned attachments
+- [x] CAP-068 guessCapture cancels previous; empty text/no projects → null; no claude → reject
+- [x] CAP-069 Spawn: exact argv, temp cwd, login env, stdin closed, hidden window
+- [x] CAP-070 30 s timeout → SIGKILL → null
+- [x] CAP-071 Spawn error logged → null
+- [x] CAP-072 Close: parse JSON, is_error → null, else readGuess(structured_output)
+- [x] CAP-073 Settles once, clears timer and running slot
+- [x] CAP-074 cancelGuess kills (SIGKILL) and resolves null
+- [x] CAP-075 Guess prompt layout, ≤ 8 sessions per project, text ≤ 4000
+- [x] CAP-076 Prompt ages `just now` / `N min ago` / `N h ago` (< 48) / `N days ago`
+- [x] CAP-077 flat(): collapse whitespace, cut with `…` (80/120/200/120)
+- [x] CAP-078 Status words waiting/working/idle/stopped
+- [x] CAP-079 Screen lines: app, tab, image, file, text wording
+- [x] CAP-080 readGuess fallbacks: project, kind, into→session, reason, session's project
 - [ ] CAP-081 Page start: transparent doc, subscribe, ask ready
 - [ ] CAP-082 Initial state from saved draft, attachments, history, offer key
 - [ ] CAP-083 On shown: clear receipt/menu/error/notice, replace context, refresh, focus caret end (twice); draft kept
-- [ ] CAP-084 Route = choice > guess > fallback (default or first project)
+- [x] CAP-084 Route = choice > guess > fallback (default or first project)
 - [ ] CAP-085 No projects / has text definitions
 - [ ] CAP-086 Header contents: project / thinking line / kind badge + label + project
 - [ ] CAP-087 Header disabled until targets load and when no projects; click toggles menu
@@ -903,56 +903,56 @@ Suggested new Rust tests (not in 0.9.4, for behaviors with no test): `ago`/`flat
 - [ ] CAP-122 ↑/↓ history browsing rules
 - [ ] CAP-123 Send flow: wait for guess, checks, submit, history (50), offer done, clear, receipt, refresh, timer
 - [ ] CAP-124 Send error message (IPC prefix stripped); draft kept
-- [ ] CAP-125 Submit validation and errors in order; prompt = withScreen
-- [ ] CAP-126 Session: 720×480 spot, auto mode expanded, yellow note with typed text stuck on it
-- [ ] CAP-127 Into: session check, 03 send path, title from sessionTitle
-- [ ] CAP-128 Note: fitNote(prompt), yellow, w/h, prompt text
-- [ ] CAP-129 View: 480×360 spot, createView(description = prompt)
-- [ ] CAP-130 Remember, board-changed event, receipt shape
-- [ ] CAP-131 Rest after successful submit only
-- [ ] CAP-132 Failed submit leaves nothing, remembers nothing
-- [ ] CAP-133 spotOnBoard: viewport centre / right of right-most card + 32 / dock + 80; free spot; rounded
-- [ ] CAP-134 Window size or 1440×920
-- [ ] CAP-135 cleanAttachments shapes and limits (20, 4000, 500, 100, 20 000)
-- [ ] CAP-136 titleFrom 48 chars, sentence, word cut, `…`
-- [ ] CAP-137 describeAttachments wording and order
-- [ ] CAP-138 withScreen
-- [ ] CAP-139 Fence longer than any backtick run, min 3
+- [x] CAP-125 Submit validation and errors in order; prompt = withScreen
+- [x] CAP-126 Session: 720×480 spot, auto mode expanded, yellow note with typed text stuck on it
+- [x] CAP-127 Into: session check, 03 send path, title from sessionTitle
+- [x] CAP-128 Note: fitNote(prompt), yellow, w/h, prompt text
+- [x] CAP-129 View: 480×360 spot, createView(description = prompt)
+- [x] CAP-130 Remember, board-changed event, receipt shape
+- [x] CAP-131 Rest after successful submit only
+- [x] CAP-132 Failed submit leaves nothing, remembers nothing
+- [x] CAP-133 spotOnBoard: viewport centre / right of right-most card + 32 / dock + 80; free spot; rounded
+- [x] CAP-134 Window size or 1440×920
+- [x] CAP-135 cleanAttachments shapes and limits (20, 4000, 500, 100, 20 000)
+- [x] CAP-136 titleFrom 48 chars, sentence, word cut, `…`
+- [x] CAP-137 describeAttachments wording and order
+- [x] CAP-138 withScreen
+- [x] CAP-139 Fence longer than any backtick run, min 3
 - [ ] CAP-140 Receipt replaces the page
 - [ ] CAP-141 Note receipt: sticky with 160-char text, caption `On <project>’s board · Open`
 - [ ] CAP-142 Receipt card: top line, title, body line, footer, `· auto mode`
 - [ ] CAP-143 Session sticker 70 chars, title padding 56
 - [ ] CAP-144 Open link clears receipt and opens card/board
-- [ ] CAP-145 `capture:open` hides then openCard
+- [x] CAP-145 `capture:open` hides then openCard
 - [ ] CAP-146 Receipt entrance 280 ms spring from 1.5× / +18 px / 0.4
 - [ ] CAP-147 Receipt hides after 2600 ms; re-show cancels
-- [ ] CAP-148 Session check filters and title fallbacks (`Untitled session`)
-- [ ] CAP-149 Targets: non-archived projects, sessions by activity, recents, default
-- [ ] CAP-150 Record → recent resolution rules (`New view` title)
-- [ ] CAP-151 Default project rule (capture vs openedAt vs last board)
+- [x] CAP-148 Session check filters and title fallbacks (`Untitled session`)
+- [x] CAP-149 Targets: non-archived projects, sessions by activity, recents, default
+- [x] CAP-150 Record → recent resolution rules (`New view` title)
+- [x] CAP-151 Default project rule (capture vs openedAt vs last board)
 - [ ] CAP-152 Recent cards: mark, project, age, title, status, waiting ring, open
 - [ ] CAP-153 More pill with 4th/5th titles and ↑ hint
-- [ ] CAP-154 board:load records last board (memory only)
-- [ ] CAP-155 Capture record prepended, cap 20, saved
-- [ ] CAP-156 `captures` array read/write as is
+- [x] CAP-154 board:load records last board (memory only)
+- [x] CAP-155 Capture record prepended, cap 20, saved
+- [x] CAP-156 `captures` array read/write as is
 - [ ] CAP-157 Draft, attachments, history, clipboardDone persisted per machine
-- [ ] CAP-158 captures/<uuid>.png, never deleted except by the sweep
-- [ ] CAP-159 `capture:settings` hides and opens Settings in the board window
-- [ ] CAP-160 `capture:hide` hides
-- [ ] CAP-161 Hide during guess → null, previous guess kept
-- [ ] CAP-162 Send while hidden still makes it; receipt cleared on next show
-- [ ] CAP-163 Into a session that became waiting → error, text kept
-- [ ] CAP-164 Vanished into session → `a session`, then error on send
-- [ ] CAP-165 Banner stays after Allow… until next show
+- [x] CAP-158 captures/<uuid>.png, never deleted except by the sweep
+- [x] CAP-159 `capture:settings` hides and opens Settings in the board window
+- [x] CAP-160 `capture:hide` hides
+- [x] CAP-161 Hide during guess → null, previous guess kept
+- [x] CAP-162 Send while hidden still makes it; receipt cleared on next show
+- [x] CAP-163 Into a session that became waiting → error, text kept
+- [x] CAP-164 Vanished into session → `a session`, then error on send
+- [x] CAP-165 Banner stays after Allow… until next show
 - [ ] CAP-166 Restored tab blocks the new front tab
 - [ ] CAP-167 Already-seen clipboard not offered, across restarts
-- [ ] CAP-168 Opened over Nodus: no app, no tab, clipboard still
-- [ ] CAP-169 Archived project's recents show a blank name
+- [x] CAP-168 Opened over Nodus: no app, no tab, clipboard still
+- [x] CAP-169 Archived project's recents show a blank name
 - [ ] CAP-170 Future createdAt shows `now`
-- [ ] CAP-171 Dropped directories as size-less file tiles
+- [x] CAP-171 Dropped directories as size-less file tiles
 - [ ] CAP-172 Draft thumbnails kept in page storage
-- [ ] CAP-173 Old subdirectory stops the sweep
+- [x] CAP-173 Old subdirectory stops the sweep
 - [ ] CAP-174 macOS Dock-click quirk with the hidden panel (decide with 01)
 - [ ] CAP-175 Windows close-doesn't-quit quirk with the hidden panel (decide with 01)
-- [ ] CAP-176 One guess process at a time
+- [x] CAP-176 One guess process at a time
 - [ ] CAP-177 No polling while hidden

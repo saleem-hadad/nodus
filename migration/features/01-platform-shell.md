@@ -914,8 +914,8 @@ Risks and unknowns:
 
 - [ ] PLAT-001 App name `Nodus` in OS and menus
 - [x] PLAT-002 Windows AUMID `dev.saleem.nodus` at start
-- [ ] PLAT-003 Default userData folder per OS
-- [ ] PLAT-004 `NODUS_USER_DATA` override (non-empty, raw)
+- [x] PLAT-003 Default userData folder per OS
+- [x] PLAT-004 `NODUS_USER_DATA` override (non-empty, raw)
 - [ ] PLAT-005 userData string byte-identical to 0.9.4
 - [ ] PLAT-006 No single-instance lock on macOS
 - [ ] PLAT-007 Windows lock; second launch exits 0
@@ -925,75 +925,75 @@ Risks and unknowns:
 - [ ] PLAT-011 Window waits for host connect to settle
 - [ ] PLAT-012 Env capture non-blocking; ⏳env commands wait
 - [ ] PLAT-013 All commands registered before the window
-- [ ] PLAT-014 Window 1440×920, min 960×620, centered, title `Nodus`
-- [ ] PLAT-015 No window bounds persistence
-- [ ] PLAT-016 Hidden until first frame
-- [ ] PLAT-017 macOS hiddenInset, traffic lights (18,18)
+- [x] PLAT-014 Window 1440×920, min 960×620, centered, title `Nodus`
+- [x] PLAT-015 No window bounds persistence
+- [x] PLAT-016 Hidden until first frame
+- [x] PLAT-017 macOS hiddenInset, traffic lights (18,18)
 - [ ] PLAT-018 Windows caption overlay h52 + colors
-- [ ] PLAT-019 Window background `#1e1e20` / `#f5f5f4`
+- [x] PLAT-019 Window background `#1e1e20` / `#f5f5f4`
 - [ ] PLAT-020 No vibrancy/transparency
-- [ ] PLAT-021 Live theme change updates background/overlay
-- [ ] PLAT-022 Single main window; events dropped without it
-- [ ] PLAT-023 showWindow: create / restore / show+focus
+- [x] PLAT-021 Live theme change updates background/overlay
+- [x] PLAT-022 Single main window; events dropped without it
+- [x] PLAT-023 showWindow: create / restore / show+focus
 - [ ] PLAT-024 New-window requests: http(s) → browser, else ignored
 - [ ] PLAT-025 Main window never navigates away; http(s) → browser
 - [ ] PLAT-026 View frames only load their own `nodus-view://<id>`
 - [ ] PLAT-027 Bridge never exposed to view frames
-- [ ] PLAT-028 Theme source system/light/dark everywhere
-- [ ] PLAT-029 macOS: closing window keeps app running
-- [ ] PLAT-030 macOS activate recreates window only with zero windows (panel quirk)
+- [x] PLAT-028 Theme source system/light/dark everywhere
+- [x] PLAT-029 macOS: closing window keeps app running
+- [x] PLAT-030 macOS activate recreates window only with zero windows (panel quirk)
 - [ ] PLAT-031 Windows quits on all windows closed (panel quirk)
 - [ ] PLAT-032 shutdown() order on before-quit
 - [ ] PLAT-033 Quitting leaves sessions running
 - [ ] PLAT-034 Quit and Stop Sessions: shutdown host, ≤5000 ms, then quit
 - [ ] PLAT-035 Windows logoff skips shutdown()
-- [ ] PLAT-036 Menu commands dropped with no window; others still work
-- [ ] PLAT-037 Menu bar order / Windows popup
-- [ ] PLAT-038 macOS app menu items
-- [ ] PLAT-039 macOS File menu
-- [ ] PLAT-040 Windows File menu
-- [ ] PLAT-041 Edit menu
-- [ ] PLAT-042 View menu
-- [ ] PLAT-043 Window menu
-- [ ] PLAT-044 Help menu
+- [x] PLAT-036 Menu commands dropped with no window; others still work
+- [x] PLAT-037 Menu bar order / Windows popup
+- [x] PLAT-038 macOS app menu items
+- [x] PLAT-039 macOS File menu
+- [x] PLAT-040 Windows File menu
+- [x] PLAT-041 Edit menu
+- [x] PLAT-042 View menu
+- [x] PLAT-043 Window menu
+- [x] PLAT-044 Help menu
 - [ ] PLAT-045 AppKit-added menu items match 0.9.4
 - [ ] PLAT-046 Check for Updates… → settings + check(true)
-- [ ] PLAT-047 Settings… → settings
+- [x] PLAT-047 Settings… → settings
 - [ ] PLAT-048 Capture… → openPanel
-- [ ] PLAT-049 File/Edit commands → menu commands
-- [ ] PLAT-050 Star on GitHub URL
-- [ ] PLAT-051 Report a Bug… URL
-- [ ] PLAT-052 Focus Mode item visibility/enabled/tick/click
-- [ ] PLAT-053 Focus menu re-sync on applySettings
+- [x] PLAT-049 File/Edit commands → menu commands
+- [x] PLAT-050 Star on GitHub URL
+- [x] PLAT-051 Report a Bug… URL
+- [x] PLAT-052 Focus Mode item visibility/enabled/tick/click
+- [x] PLAT-053 Focus menu re-sync on applySettings
 - [ ] PLAT-054 Quit/Exit behavior
-- [ ] PLAT-055 Off-Mac shown-not-registered accelerators
+- [x] PLAT-055 Off-Mac shown-not-registered accelerators
 - [ ] PLAT-056 Edit roles act on focused field/terminal
 - [ ] PLAT-057 Reload/DevTools/zoom/full screen semantics (decision)
-- [ ] PLAT-058 About panel (macOS) / message box (Windows)
-- [ ] PLAT-059 Native Hide/Show All/Services/Minimize/Zoom/Front
-- [ ] PLAT-060 app:show-menu popup at rounded (x,y)
-- [ ] PLAT-061 app:menu-command validation + echo
-- [ ] PLAT-062 Seven MenuCommand values
-- [ ] PLAT-063 Settings normalization + key order
-- [ ] PLAT-064 settings:get
-- [ ] PLAT-065 settings:update merge/apply/save/autoUpdate check
-- [ ] PLAT-066 applySettings four effects
-- [ ] PLAT-067 projects:list
-- [ ] PLAT-068 projects:add picker strings, modality, cancel → null
-- [ ] PLAT-069 addProject realpath + errors
-- [ ] PLAT-070 "Focusing" definition
-- [ ] PLAT-071 Existing project match + unarchive/join focus
-- [ ] PLAT-072 New project fields
-- [ ] PLAT-073 pickFolderColor least-used random
-- [ ] PLAT-074 projects:update rules + partial-mutation edge
-- [ ] PLAT-075 projects:remove effects
+- [x] PLAT-058 About panel (macOS) / message box (Windows)
+- [x] PLAT-059 Native Hide/Show All/Services/Minimize/Zoom/Front
+- [x] PLAT-060 app:show-menu popup at rounded (x,y)
+- [x] PLAT-061 app:menu-command validation + echo
+- [x] PLAT-062 Seven MenuCommand values
+- [x] PLAT-063 Settings normalization + key order
+- [x] PLAT-064 settings:get
+- [x] PLAT-065 settings:update merge/apply/save/autoUpdate check
+- [x] PLAT-066 applySettings four effects
+- [x] PLAT-067 projects:list
+- [x] PLAT-068 projects:add picker strings, modality, cancel → null
+- [x] PLAT-069 addProject realpath + errors
+- [x] PLAT-070 "Focusing" definition
+- [x] PLAT-071 Existing project match + unarchive/join focus
+- [x] PLAT-072 New project fields
+- [x] PLAT-073 pickFolderColor least-used random
+- [x] PLAT-074 projects:update rules + partial-mutation edge
+- [x] PLAT-075 projects:remove effects
 - [x] PLAT-076 projects:reveal
-- [ ] PLAT-077 projects:stats
-- [ ] PLAT-078 projectsChanged only from create_project
-- [ ] PLAT-079 groups:list
-- [ ] PLAT-080 groups:create default `New Group`
-- [ ] PLAT-081 groups:update
-- [ ] PLAT-082 groups:remove ungroups projects
+- [x] PLAT-077 projects:stats
+- [x] PLAT-078 projectsChanged only from create_project
+- [x] PLAT-079 groups:list
+- [x] PLAT-080 groups:create default `New Group`
+- [x] PLAT-081 groups:update
+- [x] PLAT-082 groups:remove ungroups projects
 - [ ] PLAT-083 Single state.json, full rewrite
 - [ ] PLAT-084 Old-app state migration (voiceKey dropped)
 - [ ] PLAT-085 Load: per-field acceptance + key order
@@ -1033,19 +1033,19 @@ Risks and unknowns:
 - [x] PLAT-119 Encryption-unavailable messages
 - [x] PLAT-120 Decrypt failure → no key (source still settings)
 - [x] PLAT-121 Write the same secret format
-- [ ] PLAT-122 Command/event contract per API tables
-- [ ] PLAT-123 Event routing (main vs panel), no queue
-- [ ] PLAT-124 `Error invoking remote method '…': …` format
-- [ ] PLAT-125 Fire-and-forget commands
-- [ ] PLAT-126 pathForFile / dropped paths
-- [ ] PLAT-127 Subscriptions + unsubscribe, multi-listener
+- [x] PLAT-122 Command/event contract per API tables
+- [x] PLAT-123 Event routing (main vs panel), no queue
+- [x] PLAT-124 `Error invoking remote method '…': …` format
+- [x] PLAT-125 Fire-and-forget commands
+- [x] PLAT-126 pathForFile / dropped paths
+- [x] PLAT-127 Subscriptions + unsubscribe, multi-listener
 - [ ] PLAT-128 ⏳env commands wait; failure still resolves
 - [ ] PLAT-129 Structured-clone argument semantics
-- [ ] PLAT-130 isMac / platform value
-- [ ] PLAT-131 modKey / otherModKey
-- [ ] PLAT-132 shortcutKey layout handling
-- [ ] PLAT-133 keys() label conversion
-- [ ] PLAT-134 data-platform root attribute
+- [x] PLAT-130 isMac / platform value
+- [x] PLAT-131 modKey / otherModKey
+- [x] PLAT-132 shortcutKey layout handling
+- [x] PLAT-133 keys() label conversion
+- [x] PLAT-134 data-platform root attribute
 - [ ] PLAT-135 `#capture` page routing
 - [ ] PLAT-136 CSP: frames only nodus-view
 - [ ] PLAT-137 Spellcheck underlines in opted-in fields

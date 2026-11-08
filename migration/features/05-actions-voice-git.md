@@ -713,50 +713,50 @@ Risks:
 
 ## Parity checklist
 
-- [ ] ACT-001 Action shape
-- [ ] ACT-002 Where actions live
-- [ ] ACT-003 Icon list
-- [ ] ACT-004 Clip rule
-- [ ] ACT-005 Normalize · prompt
-- [ ] ACT-006 Normalize · id
-- [ ] ACT-007 Normalize · name
-- [ ] ACT-008 Normalize · icon
-- [ ] ACT-009 Normalize · description
-- [ ] ACT-010 Normalize · global
-- [ ] ACT-011 Normalize · createdAt
-- [ ] ACT-012 Normalize · key order
-- [ ] ACT-013 Global list command
-- [ ] ACT-014 Save command
-- [ ] ACT-015 Remove command
+- [x] ACT-001 Action shape
+- [x] ACT-002 Where actions live
+- [x] ACT-003 Icon list
+- [x] ACT-004 Clip rule
+- [x] ACT-005 Normalize · prompt
+- [x] ACT-006 Normalize · id
+- [x] ACT-007 Normalize · name
+- [x] ACT-008 Normalize · icon
+- [x] ACT-009 Normalize · description
+- [x] ACT-010 Normalize · global
+- [x] ACT-011 Normalize · createdAt
+- [x] ACT-012 Normalize · key order
+- [x] ACT-013 Global list command
+- [x] ACT-014 Save command
+- [x] ACT-015 Remove command
 - [ ] ACT-016 Draft command
 - [ ] ACT-017 Renderer list update
 - [ ] ACT-018 Global list loading
-- [ ] ACT-019 Empty description
-- [ ] ACT-020 Claude required
-- [ ] ACT-021 Draft argv
-- [ ] ACT-022 Draft user prompt
-- [ ] ACT-023 Draft process
-- [ ] ACT-024 Draft timeout
-- [ ] ACT-025 Draft spawn failure
-- [ ] ACT-026 Draft success
-- [ ] ACT-027 Draft failure reason
-- [ ] ACT-028 Run args
-- [ ] ACT-029 Starting a run (main)
-- [ ] ACT-030 Run node
+- [x] ACT-019 Empty description
+- [x] ACT-020 Claude required
+- [x] ACT-021 Draft argv
+- [x] ACT-022 Draft user prompt
+- [x] ACT-023 Draft process
+- [x] ACT-024 Draft timeout
+- [x] ACT-025 Draft spawn failure
+- [x] ACT-026 Draft success
+- [x] ACT-027 Draft failure reason
+- [x] ACT-028 Run args
+- [x] ACT-029 Starting a run (main)
+- [x] ACT-030 Run node
 - [ ] ACT-031 Starting a run (renderer)
 - [ ] ACT-032 Runs are hidden from the board
-- [ ] ACT-033 Run tools
-- [ ] ACT-034 Finish trigger · status
-- [ ] ACT-035 Finish trigger · board load
-- [ ] ACT-036 finishRun guard
-- [ ] ACT-037 finishRun effects, in order
-- [ ] ACT-038 Run result fields
+- [x] ACT-033 Run tools
+- [x] ACT-034 Finish trigger · status
+- [x] ACT-035 Finish trigger · board load
+- [x] ACT-036 finishRun guard
+- [x] ACT-037 finishRun effects, in order
+- [x] ACT-038 Run result fields
 - [ ] ACT-039 Finish notice
-- [ ] ACT-040 Takeover detection
-- [ ] ACT-041 Takeover quirks (keep)
+- [x] ACT-040 Takeover detection
+- [x] ACT-041 Takeover quirks (keep)
 - [ ] ACT-042 Takeover hook
-- [ ] ACT-043 claimRun
-- [ ] ACT-044 Prompt into a run
+- [x] ACT-043 claimRun
+- [x] ACT-044 Prompt into a run
 - [ ] ACT-045 Taken-over placement
 - [ ] ACT-046 Rail presence
 - [ ] ACT-047 Rail order
@@ -795,44 +795,44 @@ Risks:
 - [ ] ACT-080 Dialog error
 - [ ] ACT-081 Icon fallback
 - [ ] ACT-082 Rail independent of dialog
-- [ ] ACT-083 IPC error text (keep)
-- [ ] VOICE-001 Key source
+- [x] ACT-083 IPC error text (keep)
+- [x] VOICE-001 Key source
 - [ ] VOICE-002 Env wait
-- [ ] VOICE-003 Save key
-- [ ] VOICE-004 Key storage
-- [ ] VOICE-005 Non-string argument
-- [ ] VOICE-006 Key used
-- [ ] VOICE-007 Key confinement
-- [ ] VOICE-008 Key load/migration
+- [x] VOICE-003 Save key
+- [x] VOICE-004 Key storage
+- [x] VOICE-005 Non-string argument
+- [x] VOICE-006 Key used
+- [x] VOICE-007 Key confinement
+- [x] VOICE-008 Key load/migration
 - [x] VOICE-009 Mic check
 - [x] VOICE-010 Mic settings link
-- [ ] VOICE-011 No key
-- [ ] VOICE-012 Hint words
-- [ ] VOICE-013 MIME and file name
-- [ ] VOICE-014 Request
-- [ ] VOICE-015 Timeout
-- [ ] VOICE-016 Response body
-- [ ] VOICE-017 HTTP error
-- [ ] VOICE-018 Success
+- [x] VOICE-011 No key
+- [x] VOICE-012 Hint words
+- [x] VOICE-013 MIME and file name
+- [x] VOICE-014 Request
+- [x] VOICE-015 Timeout
+- [x] VOICE-016 Response body
+- [x] VOICE-017 HTTP error
+- [x] VOICE-018 Success
 - [ ] VOICE-019 Transcribe command
-- [ ] VOICE-020 Capture
-- [ ] VOICE-021 Encoding
-- [ ] VOICE-022 Level meter
-- [ ] VOICE-023 Stop / cancel
-- [ ] VOICE-024 Phases
-- [ ] VOICE-025 One mic at a time
-- [ ] VOICE-026 Start
-- [ ] VOICE-027 While recording
-- [ ] VOICE-028 Stop
-- [ ] VOICE-029 Transcribe
-- [ ] VOICE-030 Cancel
-- [ ] VOICE-031 Retry
-- [ ] VOICE-032 Dismiss
+- [x] VOICE-020 Capture
+- [x] VOICE-021 Encoding
+- [x] VOICE-022 Level meter
+- [x] VOICE-023 Stop / cancel
+- [x] VOICE-024 Phases
+- [x] VOICE-025 One mic at a time
+- [x] VOICE-026 Start
+- [x] VOICE-027 While recording
+- [x] VOICE-028 Stop
+- [x] VOICE-029 Transcribe
+- [x] VOICE-030 Cancel
+- [x] VOICE-031 Retry
+- [x] VOICE-032 Dismiss
 - [ ] VOICE-033 Esc
-- [ ] VOICE-034 Notice timeout
-- [ ] VOICE-035 Unmount
-- [ ] VOICE-036 Clock
-- [ ] VOICE-037 Unhandled IPC failure (keep)
+- [x] VOICE-034 Notice timeout
+- [x] VOICE-035 Unmount
+- [x] VOICE-036 Clock
+- [x] VOICE-037 Unhandled IPC failure (keep)
 - [ ] VOICE-038 Status (recording)
 - [ ] VOICE-039 Status (transcribing)
 - [ ] VOICE-040 Notice
@@ -841,26 +841,26 @@ Risks:
 - [ ] VOICE-043 Session mic button
 - [ ] VOICE-044 Session mic recording look
 - [ ] VOICE-045 Session mic notice
-- [ ] GIT-001 Runner argv
-- [ ] GIT-002 Runner results
+- [x] GIT-001 Runner argv
+- [x] GIT-002 Runner results
 - [ ] GIT-003 Env wait
-- [ ] GIT-004 Status argv
-- [ ] GIT-005 Not a repository
-- [ ] GIT-006 Status headers
-- [ ] GIT-007 Status entries
-- [ ] GIT-008 XY mapping
-- [ ] GIT-009 Status order
-- [ ] GIT-010 Status in use
-- [ ] GIT-011 Log argv
-- [ ] GIT-012 Log parse
-- [ ] GIT-013 Log limit
-- [ ] GIT-014 Diff root
-- [ ] GIT-015 Path check
-- [ ] GIT-016 Base revision
-- [ ] GIT-017 Diff argv
-- [ ] GIT-018 Too large
-- [ ] GIT-019 Diff exit
-- [ ] GIT-020 Binary
+- [x] GIT-004 Status argv
+- [x] GIT-005 Not a repository
+- [x] GIT-006 Status headers
+- [x] GIT-007 Status entries
+- [x] GIT-008 XY mapping
+- [x] GIT-009 Status order
+- [x] GIT-010 Status in use
+- [x] GIT-011 Log argv
+- [x] GIT-012 Log parse
+- [x] GIT-013 Log limit
+- [x] GIT-014 Diff root
+- [x] GIT-015 Path check
+- [x] GIT-016 Base revision
+- [x] GIT-017 Diff argv
+- [x] GIT-018 Too large
+- [x] GIT-019 Diff exit
+- [x] GIT-020 Binary
 - [ ] GIT-021 Shared read
 - [ ] GIT-022 Reset
 - [ ] GIT-023 Refresh triggers
@@ -888,11 +888,11 @@ Risks:
 - [ ] GIT-045 Pane body precedence
 - [ ] GIT-046 Scroll
 - [ ] GIT-047 Line rendering
-- [ ] GIT-048 Lines
-- [ ] GIT-049 Hunk header
-- [ ] GIT-050 Header lines
-- [ ] GIT-051 Hunk lines
-- [ ] GIT-052 Changed spans
-- [ ] GIT-053 maxLineNo
-- [ ] GIT-054 Summary trigger
-- [ ] GIT-055 Summary text
+- [x] GIT-048 Lines
+- [x] GIT-049 Hunk header
+- [x] GIT-050 Header lines
+- [x] GIT-051 Hunk lines
+- [x] GIT-052 Changed spans
+- [x] GIT-053 maxLineNo
+- [x] GIT-054 Summary trigger
+- [x] GIT-055 Summary text

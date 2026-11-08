@@ -181,7 +181,7 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | gpui-fork | `rust/gpui-fork` | `third_party/gpui/`: backdrop blur, transforms, group opacity, frame capture (D13) | 🟡 running |
 | ui-shell | `rust/ui-shell` | nodus-core skeleton (P4a); nodus-ui theme, controls, title bar, menus, settings, projects grid, rail (P5); test driver (D11) | 🟡 running |
 | views-tools | `rust/views-tools` | nodus-views, nodus-tools, nodus-board notes and ink | 🟡 running |
-| actions-voice-git | `rust/actions-voice-git` | nodus-actions, nodus-voice, nodus-git | ☐ next |
+| actions-voice-git | `rust/actions-voice-git` | nodus-actions, nodus-voice (incl. the recorder), nodus-git | 🟡 running |
 | capture | `rust/capture` | nodus-capture backend | ☐ next |
 
 ### Integration debts
@@ -193,6 +193,7 @@ Follow-ups a merge left for when the tracks meet in `nodus-core` (P4). Strike th
 - `nodus-sessions::agents` turns a non-string `.meta.json` field into its `String()` form, where 0.9.4 passed the raw value on. Check what the agent viewer shows for one.
 - `nodus-board`'s `BoardSessions` and `Launcher` traits are called while the board holds the state, so their nodus-core implementations must not touch the `Store`. `kill` waits up to 4 s.
 - `nodus-sessions::launch::SpawnOptions` may duplicate a type the host client defines; keep one.
+- `nodus-transcripts::claude::spawn` uses tokio's `Command` directly; switch it to `nodus_platform::process` (31013c8).
 - `nodus-transcripts` reads only the ISO timestamps Claude Code writes; one with no offset is UTC, where Node reads local time (same as the agents note above).
 - The status machine and the host client both rely on `process_started` / `process_exited` being called exactly where pty.ts tracks and untracks a session.
 
@@ -243,6 +244,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-08: `nodus_platform::process` cherry-picked to main from platform-updater (31013c8) so every track spawns through it; 338 tests. actions-voice-git started.
 - 2026-11-08: transcripts-board merged (eee039a): nodus-transcripts, nodus-board, nodus-sessions::launch; 317 workspace tests. Spec 03 fixed: Node's readdir is sorted on Unix.
 - 2026-11-08: status merged (3ae719c): status machine, hook settings, usage, agents, notify, running counts; 172 workspace tests. Checklists are ticked with `python3 migration/tick.py <IDs>`.
 - 2026-11-08: S1 done (D1–D3, D13 adopted). gpui-fork and ui-shell started.

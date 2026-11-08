@@ -180,9 +180,18 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | parity-harness | `rust/parity-harness` | golden screenshots of 0.9.4 (`migration/parity/`) | 🟡 running |
 | gpui-fork | `rust/gpui-fork` | `third_party/gpui/`: backdrop blur, transforms, group opacity, frame capture (D13) | 🟡 running |
 | ui-shell | `rust/ui-shell` | nodus-core skeleton (P4a); nodus-ui theme, controls, title bar, menus, settings, projects grid, rail (P5); test driver (D11) | 🟡 running |
-| views-tools | `rust/views-tools` | nodus-views, nodus-tools, nodus-board notes and ink | ☐ next |
+| views-tools | `rust/views-tools` | nodus-views, nodus-tools, nodus-board notes and ink | 🟡 running |
 | actions-voice-git | `rust/actions-voice-git` | nodus-actions, nodus-voice, nodus-git | ☐ next |
 | capture | `rust/capture` | nodus-capture backend | ☐ next |
+
+### Integration debts
+
+Follow-ups a merge left for when the tracks meet in `nodus-core` (P4). Strike them through when done.
+
+- `nodus-sessions::agents` keeps private copies of the discovery.ts helpers it needs; switch it to `nodus-transcripts`' once transcripts-board merges.
+- `nodus-sessions::agents` reads a timestamp with no zone as no time, where V8's `Date.parse` reads it as local time. Claude Code always writes UTC, so this only matters if that changes.
+- `nodus-sessions::agents` turns a non-string `.meta.json` field into its `String()` form, where 0.9.4 passed the raw value on. Check what the agent viewer shows for one.
+- The status machine and the host client both rely on `process_started` / `process_exited` being called exactly where pty.ts tracks and untracks a session.
 
 ## Spikes
 

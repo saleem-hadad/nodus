@@ -51,8 +51,13 @@ objc2-core-graphics = { version = "0.3", default-features = false, features = ["
 objc2-foundation = { version = "0.3", default-features = false, features = ["std"] }
 objc2-user-notifications = { version = "0.3", default-features = false, features = ["std"] }
 pbkdf2 = "0.12"
+# HTTP for GitHub releases and xAI. Crates pick the TLS: rustls (webpki roots,
+# as Node bundles its own) on macOS; Windows' own TLS there, since ring can't
+# be cross-checked for Windows from a Mac.
+reqwest = { version = "0.12", default-features = false }
 security-framework = "3"
 sha1 = "0.10"
+sha2 = "0.10"
 indexmap = { version = "2.14", features = ["serde"] }
 # Watches transcript folders (FSEvents on macOS, ReadDirectoryChangesW on Windows).
 notify = "8.2"

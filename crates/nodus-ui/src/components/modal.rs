@@ -56,7 +56,7 @@ impl Modal {
             .flex()
             .items_center()
             .justify_center()
-            .map(|d| frosted(d, t.modal_backdrop, 3., 1., t.bg_window))
+            .map(|d| frosted(d, t.modal_backdrop, 3., 1.))
             .opacity(progress)
             // UI-156: a press on the backdrop itself, not inside the panel.
             .on_mouse_down(MouseButton::Left, move |_, window, cx| {

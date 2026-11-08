@@ -276,7 +276,9 @@ pub fn title_bar(state: &Entity<AppState>, actions: Vec<AnyElement>, window: &mu
                 d.pl(px(8.)).pr(px(14. + CAPTION_W))
             }
         })
-        .map(|d| crate::components::frosted::frosted(d, t.titlebar_surface, 24., 1.6, t.bg_window))
+        // `--bg-toolbar` over a 24px blur of the window behind it, which is the
+        // plain window background: the composite, without a layer to pay for.
+        .bg(t.titlebar_surface)
         // The hairline is drawn over the bar's bottom rather than taking
         // layout room, so the controls centre on the whole 52px and land on
         // the device pixels Chromium snaps them to.

@@ -10,7 +10,7 @@ use gpui::{
 
 use crate::components::focus_ring::focus_ring;
 use crate::components::icon::{Icon, icon};
-use crate::components::tooltip::pressable_tooltip;
+use crate::components::tooltip::{TooltipPress, pressable_tooltip};
 use crate::components::tween::transition;
 use crate::theme::{self, fonts, motion, tokens::*};
 
@@ -161,7 +161,7 @@ impl RenderOnce for Button {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let t = theme::tokens(cx);
         let hovered_state = window.use_keyed_state((self.id.clone(), "hover"), cx, |_, _| false);
-        let pressed = window.use_keyed_state((self.id.clone(), "pressed"), cx, |_, _| false);
+        let pressed = window.use_keyed_state((self.id.clone(), "pressed"), cx, |_, _| TooltipPress::default());
         let hovered = *hovered_state.read(cx) && !self.disabled;
 
         let (rest_bg, hover_bg, border, text, shadow) = match self.kind {
@@ -240,16 +240,16 @@ impl RenderOnce for Button {
                 let state = hovered_state.clone();
                 let leave = pressed.clone();
                 let press = pressed.clone();
+                let moved = pressed.clone();
                 d.on_hover(move |h, _, cx| {
                     state.update(cx, |s, cx| {
                         *s = *h;
                         cx.notify();
                     });
-                    if !*h {
-                        leave.update(cx, |p, _| *p = false);
-                    }
+                    leave.update(cx, |p, _| p.hover(*h));
                 })
-                .capture_any_mouse_down(move |_, _, cx| press.update(cx, |p, _| *p = true))
+                .on_mouse_move(move |_, _, cx| moved.update(cx, |p, _| p.moved()))
+                .capture_any_mouse_down(move |_, _, cx| press.update(cx, |p, _| p.press()))
                 .when_some(active_bg, |d, bg| d.active(move |s| s.bg(bg)))
                 .when_some(on_click, |d, f| d.on_click(move |e, w, cx| f(e, w, cx)))
                 .when_some(on_press, |d, f| {

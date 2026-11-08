@@ -96,6 +96,13 @@ impl Menu {
     }
 }
 
+/// Whether a context menu is open: tooltips stay away meanwhile, as an
+/// HTML menu covered whatever had one in 0.9.4.
+#[derive(Default, Clone, Copy)]
+pub struct MenuOpen(pub bool);
+
+impl gpui::Global for MenuOpen {}
+
 /// The window's menu, if one is open.
 #[derive(Default)]
 pub struct MenuLayer {
@@ -108,6 +115,7 @@ impl MenuLayer {
         self.serial += 1;
         menu.serial = self.serial;
         self.menu = Some(menu);
+        cx.set_global(MenuOpen(true));
         cx.notify();
     }
 
@@ -118,6 +126,7 @@ impl MenuLayer {
     /// Closes the menu and tells its owner.
     pub fn close(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         if let Some(menu) = self.menu.take() {
+            cx.set_global(MenuOpen(false));
             cx.notify();
             if let Some(on_close) = menu.on_close {
                 on_close(window, cx);
@@ -223,7 +232,7 @@ impl Render for MenuLayer {
             .min_w(px(200.))
             .p(px(5.))
             .rounded(RADIUS_MD)
-            .map(|d| frosted(d, t.menu_surface, 30., 1.8, t.bg_window))
+            .map(|d| frosted(d, t.menu_surface, 30., 1.8))
             .shadow(t.lg())
             .text_size(TEXT_MD)
             .font_weight(FontWeight::NORMAL)

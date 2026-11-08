@@ -143,8 +143,11 @@ pub fn preview_svg(theme: ThemePreference, w: f32, working: Rgba, done: Rgba) ->
     )
 }
 
+/// A preview: theme, (width, scale) in hundredths, the two status colours.
+type PreviewKey = (ThemePreference, (u32, u32), [u32; 2]);
+
 #[derive(Default)]
-struct Previews(HashMap<(ThemePreference, (u32, u32), [u32; 2]), Arc<RenderImage>>);
+struct Previews(HashMap<PreviewKey, Arc<RenderImage>>);
 
 impl Global for Previews {}
 

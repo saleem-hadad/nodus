@@ -12,20 +12,61 @@ use crate::theme::{self, fonts, tokens::*};
 
 /// What a `.tooltip(…)` takes to show `text` (lines split on `\n`).
 pub fn native_tooltip(text: SharedString) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
-    move |_, cx| cx.new(|_| NativeTooltip { text: text.clone() }).into()
-}
-
-/// A native tooltip that a press dismisses until the pointer leaves, as the
-/// OS's does: `pressed` is set on a press and cleared when hovering ends.
-pub fn pressable_tooltip(
-    text: SharedString,
-    pressed: Entity<bool>,
-) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
     move |_, cx| {
-        if *pressed.read(cx) {
+        if menu_open(cx) {
             cx.new(|_| Nothing).into()
         } else {
             cx.new(|_| NativeTooltip { text: text.clone() }).into()
+        }
+    }
+}
+
+/// A native tooltip that a press dismisses until the pointer leaves and
+/// comes back, as the OS's does. See [`TooltipPress`].
+pub fn pressable_tooltip(
+    text: SharedString,
+    press: Entity<TooltipPress>,
+) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+    move |_, cx| {
+        if press.read(cx).pressed || menu_open(cx) {
+            cx.new(|_| Nothing).into()
+        } else {
+            cx.new(|_| NativeTooltip { text: text.clone() }).into()
+        }
+    }
+}
+
+fn menu_open(cx: &App) -> bool {
+    cx.try_global::<crate::components::context_menu::MenuOpen>()
+        .is_some_and(|m| m.0)
+}
+
+/// Whether an element's tooltip was pressed away: set on a press, cleared
+/// once the pointer has left and then moves over it again (leaving alone
+/// isn't enough: a menu opening over it makes it "unhovered" too).
+#[derive(Debug, Default, Clone, Copy)]
+pub struct TooltipPress {
+    pub pressed: bool,
+    left: bool,
+}
+
+impl TooltipPress {
+    pub fn press(&mut self) {
+        self.pressed = true;
+        self.left = false;
+    }
+
+    pub fn hover(&mut self, hovered: bool) {
+        if !hovered {
+            self.left = true;
+        }
+    }
+
+    /// The pointer moved over the element.
+    pub fn moved(&mut self) {
+        if self.left {
+            self.pressed = false;
+            self.left = false;
         }
     }
 }

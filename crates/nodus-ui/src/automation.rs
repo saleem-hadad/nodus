@@ -18,10 +18,9 @@
 //! ```
 //!
 //! Input is synthetic (`Window::dispatch_event`): it never moves the user's
-//! pointer, and the window ignores the real one while driven. Screenshots are
-//! `screencapture -l <window>` with the traffic lights hidden, so they hold
-//! the content only, as the goldens do; GPUI's in-process frame capture
-//! (gpui-fork) replaces it.
+//! pointer, and the window ignores the real one while driven. Screenshots
+//! are the patched GPUI's `Window::render_to_image`: the content only, as
+//! the goldens are.
 
 use std::io::{BufRead, BufReader, Write};
 use std::time::Duration;
@@ -266,31 +265,15 @@ fn with_window<R>(cx: &mut AsyncApp, f: impl FnOnce(&mut gpui::Window, &mut App)
     })
 }
 
-#[cfg(target_os = "macos")]
+/// Saves the window's last frame as a PNG, at the drawable's size (device
+/// pixels), drawn again offscreen by the patched GPUI: what GPUI draws and
+/// nothing else, so no traffic lights, as the goldens have none.
 async fn screenshot(cx: &mut AsyncApp, path: &str) -> Result<Value, String> {
-    let number = with_window(cx, |window, _| {
-        crate::mac::set_traffic_lights_hidden(window, true);
-        crate::mac::window_number(window)
-    })?
-    .ok_or("no window number")?;
-    cx.background_executor().timer(Duration::from_millis(120)).await;
-    let status = std::process::Command::new("/usr/sbin/screencapture")
-        .arg("-x")
-        .arg("-o")
-        .arg(format!("-l{number}"))
-        .arg(path)
-        .status();
-    let _ = with_window(cx, |window, _| crate::mac::set_traffic_lights_hidden(window, false));
-    match status {
-        Ok(s) if s.success() => Ok(json!({ "path": path })),
-        Ok(s) => Err(format!("screencapture exited with {s}")),
-        Err(e) => Err(e.to_string()),
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
-async fn screenshot(_: &mut AsyncApp, _: &str) -> Result<Value, String> {
-    Err("screenshots need macOS until GPUI's frame capture lands".into())
+    // Let the frame in flight land first.
+    cx.background_executor().timer(Duration::from_millis(50)).await;
+    let image = with_window(cx, |window, _| window.render_to_image().map_err(|e| e.to_string()))??;
+    image.save(path).map_err(|e| e.to_string())?;
+    Ok(json!({ "path": path, "width": image.width(), "height": image.height() }))
 }
 
 /// Calls a core command by its `window.api` name.

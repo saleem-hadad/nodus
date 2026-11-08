@@ -15,7 +15,7 @@
 | `screen` | screenContext.ts + `describeFiles`: lsappinfo, tab AppleScripts, screencapture, Windows GDI shot, clipboard, thumbnails, files, 30-day sweep | screenContext.test.ts (7 cases) + stand-in `lsappinfo`/`osascript`/`screencapture`, a fake clipboard, synthetic images |
 | `hook` | uiohook-napi: CGEventTap (macOS), WH_KEYBOARD_LL/WH_MOUSE_LL (Windows), translation to libuiohook's events, `Listener` | synthetic OS events end to end; no real tap |
 | `targets` | `sessionInfo`, `recentOf`, `defaultProject`, `targets`, `remember` | synthetic state.json |
-| `submit` | `cleanAttachments`, `spotOnBoard`, `submit`; private copies of notes.ts `fitNote` and views.ts `obstacles` | fake handlers over a real `Store` in a temp folder |
+| `submit` | `cleanAttachments`, `spotOnBoard`, `submit` (notes are sized and placed with nodus-board's `notes::fit_note` and `notes::obstacles`) | fake handlers over a real `Store` in a temp folder |
 | `service` | the rest of capture.ts: open/hide/toggle/rest/aside, blur rule, resize, shortcut state, hook, permission poll, Allow…, every `capture:*` command | fake panel, screen, hook and permissions, paused clock |
 | `page` | CaptureApp.tsx logic: route, pick/cycle kinds, `GuessState`, history, offer key, sizes/ages/clips, copy | spec's suggested tests, arithmetic checked under Node |
 
@@ -87,7 +87,6 @@ Events: `Event::CaptureShown`, `Event::CaptureContext` (only while the panel's p
 
 ## Notes for integration
 
-- `submit::fit_note` and `submit::obstacles` are private copies of notes.ts / views.ts helpers; switch to nodus-board's / nodus-views' once views-tools merges.
 - libuiohook reads Shift from the device-independent flag, so letting go of one Shift while the other is held reads as a press; Caps Lock and media keys come as `NX_SYSDEFINED` key events; another mouse button coming up counts as a click. The port does the same. The tap is re-enabled on both timeout and user-input disables (libuiohook only on timeout).
 - Thumbnails are PNGs made by the `image` crate (Catmull-Rom down to 360 px), so their bytes differ from Chromium's; an image clipboard already offered under 0.9.4 is offered once more after the upgrade (its offer key is the thumbnail's tail).
 - `clean_attachments` reads a file size as `Number(size) || 0` but keeps it a whole, non-negative number (the domain type is `u64`).

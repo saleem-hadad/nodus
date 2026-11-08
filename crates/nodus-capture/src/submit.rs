@@ -4,14 +4,14 @@
 
 use nodus_board::BoxFuture;
 use nodus_board::geometry::{
-    EXPANDED_H, EXPANDED_W, NOTE_H, NOTE_W, Point, Size, VIEW_H, VIEW_W, card_size, dock_rect, find_free_spot,
-    note_size, view_size,
+    EXPANDED_H, EXPANDED_W, Point, Size, VIEW_H, VIEW_W, card_size, dock_rect, find_free_spot,
 };
+use nodus_board::notes::{fit_note, obstacles};
 use nodus_domain::js;
 use nodus_domain::json::number_to_string;
 use nodus_domain::{
     BoardNote, CaptureAttachment, CaptureKind, CaptureReceipt, CreateSessionOptions, Event, EventSink, FileAttachment,
-    FolderColor, ImageAttachment, OpenCardRequest, Rect, TabAttachment, TextAttachment,
+    FolderColor, ImageAttachment, OpenCardRequest, TabAttachment, TextAttachment,
 };
 use nodus_store::{BoardState, Store};
 use serde_json::Value;
@@ -168,52 +168,6 @@ fn set(value: Option<&str>) -> bool {
     value.is_some_and(|v| !v.is_empty())
 }
 
-/// What a new card, note or view keeps clear of: the cards on the board,
-/// the notes not stuck on a card, and the views (nodus-views' `obstacles`).
-pub fn obstacles(board: &BoardState) -> Vec<Rect> {
-    let rect = |x: f64, y: f64, size: Size| Rect {
-        x,
-        y,
-        w: size.w,
-        h: size.h,
-    };
-    let cards = board
-        .nodes
-        .values()
-        .filter(|n| !n.archived && !set(n.run_of.as_deref()) && !set(n.view_of.as_deref()))
-        .map(|n| rect(n.x, n.y, card_size(Some(n))));
-    let notes = board
-        .notes
-        .values()
-        .filter(|n| !set(n.session_id.as_deref()))
-        .map(|n| rect(n.x, n.y, note_size(n)));
-    let views = board.views.values().map(|v| rect(v.x, v.y, view_size(v)));
-    cards.chain(notes).chain(views).collect()
-}
-
-/// A size that shows `text` whole, as far as a note grows by itself; a
-/// short note stays square (notes.ts `fitNote`).
-pub fn fit_note(text: &str) -> Size {
-    const FIT_MAX_W: f64 = 360.0;
-    const FIT_MAX_H: f64 = 480.0;
-    const LINE_H: f64 = 21.0;
-    const CHAR_W: f64 = 7.4;
-    const PAD_X: f64 = 36.0;
-    const PAD_Y: f64 = 32.0;
-    const FROM_H: f64 = 22.0;
-    let clamp = |n: f64, min: f64, max: f64| js::round(n.max(min).min(max));
-    let lengths: Vec<f64> = text.split('\n').map(|line| js::utf16_len(line) as f64).collect();
-    let longest = lengths.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-    let w = clamp(longest * CHAR_W + PAD_X, NOTE_W, FIT_MAX_W);
-    // Lines wrap at words, so they fit fewer characters than the width holds.
-    let per_line = (((w - PAD_X) / CHAR_W) * 0.9).floor().max(1.0);
-    let rows: f64 = lengths.iter().map(|len| (len / per_line).ceil().max(1.0)).sum();
-    Size {
-        w,
-        h: clamp(rows * LINE_H + PAD_Y + FROM_H, NOTE_H, FIT_MAX_H),
-    }
-}
-
 /// Near the middle of the board as the window last showed it, in the
 /// nearest free spot (CAP-133); without a saved view of it, right of the
 /// right-most card, else right of the archive dock.
@@ -246,7 +200,7 @@ pub fn spot_on_board(board: &BoardState, size: Size, window: (f64, f64)) -> Poin
             }
         }
     };
-    let spot = find_free_spot(preferred, &obstacles(board), Some(dock), size);
+    let spot = find_free_spot(preferred, &obstacles(board, None), Some(dock), size);
     Point {
         x: js::round(spot.x),
         y: js::round(spot.y),

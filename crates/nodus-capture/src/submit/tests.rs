@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use nodus_board::geometry::find_free_spot;
-use nodus_domain::RecordingSink;
+use nodus_domain::{RecordingSink, Rect};
 use serde_json::json;
 
 use super::*;
@@ -494,7 +494,7 @@ fn finds_a_spot_on_the_board() {
     assert_eq!(spot_on_board(&b, size, DEFAULT_WINDOW).x, 3320.0);
 }
 
-/// The cards, free notes and views a new thing keeps clear of.
+/// The cards, free notes and views a new thing keeps clear of (nodus-board's `obstacles`).
 #[test]
 fn keeps_clear_of_cards_notes_and_views() {
     let b: BoardState = serde_json::from_value(board(
@@ -512,7 +512,7 @@ fn keeps_clear_of_cards_notes_and_views() {
     ))
     .unwrap();
     assert_eq!(
-        obstacles(&b),
+        obstacles(&b, None),
         vec![
             Rect {
                 x: 1.0,
@@ -534,14 +534,4 @@ fn keeps_clear_of_cards_notes_and_views() {
             },
         ]
     );
-}
-
-/// notes.ts `fitNote`, checked against the TypeScript under Node.
-#[test]
-fn fits_a_note_to_its_text() {
-    assert_eq!(fit_note("short"), Size { w: 216.0, h: 216.0 });
-    assert_eq!(fit_note(&"x".repeat(60)), Size { w: 360.0, h: 216.0 });
-    assert_eq!(fit_note(&"x".repeat(30)), Size { w: 258.0, h: 216.0 });
-    assert_eq!(fit_note(&"line\n".repeat(30)), Size { w: 216.0, h: 480.0 });
-    assert_eq!(fit_note(&"word ".repeat(80)), Size { w: 360.0, h: 285.0 });
 }

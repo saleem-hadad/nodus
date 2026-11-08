@@ -685,3 +685,22 @@ fn usage_reads_reports_as_hooks_ts_did() {
         );
     }
 }
+
+#[tokio::test(start_paused = true)]
+async fn the_host_client_feeds_it_through_session_input() {
+    // HOST-108: a welcome session is tracked, then its history replayed with recorded times.
+    use nodus_sessions::hooks::SessionInput;
+    let h = Harness::new();
+    let input: &dyn SessionInput = &h.machine;
+    input.process_started("s1", Working);
+    input.hook("PermissionRequest", "s1", &json!({}), Some(1.0));
+    input.user_input("s1", "\r", Some(2.0));
+    assert_eq!(h.machine.status("s1"), Working);
+    input.hook("StatusLine", "s1", &json!({"model": {"id": "m"}}), Some(3.0));
+    assert_eq!(h.machine.usage("s1").map(|u| u.at), Some(3.0));
+    input.process_exited("s1");
+    assert_eq!(
+        h.changes("s1"),
+        vec![(Working, true), (Waiting, true), (Working, true), (Done, false)]
+    );
+}

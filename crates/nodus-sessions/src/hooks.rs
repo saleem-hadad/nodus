@@ -423,6 +423,37 @@ impl StatusMachine {
     }
 }
 
+/// What the session host client tells the status machine, as pty.ts calls
+/// hooks.ts. [`StatusMachine`] is one; a test of the client can pass a fake.
+pub trait SessionInput: Send + Sync {
+    /// The client started tracking a session: spawned, or adopted from a welcome.
+    fn process_started(&self, session_id: &str, initial: SessionStatus);
+    /// The client stopped tracking a session: it exited, or the host was lost.
+    fn process_exited(&self, session_id: &str);
+    /// A `hook` message, or a hook or status line replayed from a welcome with its recorded time.
+    fn hook(&self, event: &str, session_id: &str, payload: &Value, at: Option<f64>);
+    /// A write to a session, before it's sent, or an `input` replayed from a welcome with its recorded time.
+    fn user_input(&self, session_id: &str, data: &str, at: Option<f64>);
+}
+
+impl SessionInput for StatusMachine {
+    fn process_started(&self, session_id: &str, initial: SessionStatus) {
+        StatusMachine::process_started(self, session_id, initial);
+    }
+
+    fn process_exited(&self, session_id: &str) {
+        StatusMachine::process_exited(self, session_id);
+    }
+
+    fn hook(&self, event: &str, session_id: &str, payload: &Value, at: Option<f64>) {
+        self.receive_hook(event, session_id, payload, at);
+    }
+
+    fn user_input(&self, session_id: &str, data: &str, at: Option<f64>) {
+        self.note_user_input(session_id, data, at);
+    }
+}
+
 /// `/^[1-9]$/`: the menu choices in Claude's prompts.
 fn is_digit_key(data: &str) -> bool {
     matches!(data.as_bytes(), [b'1'..=b'9'])

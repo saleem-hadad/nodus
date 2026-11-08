@@ -11,4 +11,6 @@
 pub mod agents;
 pub mod hooks;
 mod jsvalue;
+pub mod notify;
+pub mod running;
 pub mod usage;

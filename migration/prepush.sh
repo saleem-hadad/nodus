@@ -17,10 +17,12 @@ if ! gitleaks git --redact --no-banner --log-opts="$range" . >&2; then
 fi
 
 # Personal paths and the pre-rename app name, in added lines only.
-# Made-up placeholders such as /Users/example and /Users/<name> are fine.
+# Made-up placeholders such as /Users/example and /Users/<name> are fine, and so
+# is the one constant that names the old app's data folder, as store.ts does.
 found=$(git log -p --no-color "$range" \
   | grep -niE '^\+.*(/Users/[a-z]|/private/tmp/claude-[0-9]|claude.?nodes)' \
   | grep -vE '/Users/(example|<)' \
+  | grep -vE '^[0-9]+:\+const OLD_APP_NAME: &str = ' \
   | head -20)
 if [ -n "$found" ]; then
   echo "prepush: personal paths or the old app name in added lines:" >&2

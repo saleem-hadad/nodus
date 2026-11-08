@@ -31,7 +31,8 @@ Done means:
 The TypeScript runs on V8, so some of its behavior comes from JavaScript itself. Ports must reproduce these, not Rust's defaults:
 
 - **String lengths are UTF-16 code units.** Every truncation, clip, window and highlight range (`slice`, `length`, `substring`) counts UTF-16 units, not bytes or chars. Use the helpers in `nodus-domain`.
-- **Numbers are f64.** Times and coordinates can be fractional (file mtimes become `createdAt`), so they're `f64`, and they serialize like `JSON.stringify`: `1700000000000`, not `1700000000000.0`.
+- **Numbers are f64.** Times and coordinates can be fractional (file mtimes become `createdAt`), so they're `f64`, and they serialize like `JSON.stringify`: `1700000000000`, not `1700000000000.0`. **Write every JSON through `nodus_domain::json`**, never `serde_json::to_string` directly.
+- **`delete` is `shift_remove`.** With `preserve_order`, serde_json's `Map::remove` swaps the last key into the hole; use `shift_remove` (on `IndexMap` too) so the order stays as JavaScript leaves it.
 - **`Math.round` rounds .5 up**, toward +∞ (`Math.round(-2.5) === -2`); Rust's `f64::round` rounds away from zero.
 - **Objects keep insertion order.** serde_json uses `preserve_order`; maps keyed by id are `IndexMap`. Sorts are stable.
 - **Regexes:** JS `\s` includes U+FEFF and other Unicode spaces; JS `\w`, `\d` and `\b` without the `u` flag are ASCII-only. Check every ported regex.
@@ -127,7 +128,7 @@ Tracks after P1 run in parallel where the dependency column allows.
 | Phase | What | Depends on | Status |
 | --- | --- | --- | --- |
 | P0 | Feature specs and this plan; UI stack spike (S1) | — | 🟡 specs done (2,266 behaviors); S1 running |
-| P1 | Workspace, Rust CI job (macOS + Windows), `nodus-domain`, `nodus-store` (round-trips a real state.json), `nodus-platform` env | P0 | ☐ |
+| P1 | Workspace, Rust CI job (macOS + Windows), `nodus-domain`, `nodus-store` (round-trips a real state.json), `nodus-platform` env | P0 | ✅ merged (93 tests) |
 | P2 | Session host: `nodus-host-proto`, `nodus-host`, `nodus-sessions` client; wire tests against the Node host both ways | P1 | ☐ |
 | P3 | Data domains: transcripts, board, git, search, summarize, naming, status machine, agents | P1 | ☐ |
 | P4 | `nodus-core`: every command and event in api.ts, tested headless | P2, P3 | ☐ |
@@ -165,6 +166,8 @@ Places where the code and the docs disagree, or where matching 0.9.4 exactly mea
 | 11 | Fuzzy matching can throw on titles with characters like `İ` (lowercasing changes the length), and a negative top score makes the archive stack show no results. | Same, unless the user rules them bugs |
 | 09 | "New section here" beside a card puts the section about 9,920 units below the click. | Same, unless the user rules it a bug |
 | 09 | The zoom pill's fit button jumps instead of gliding; on Windows Ctrl-click doesn't add to the selection; single-letter shortcuts don't work on non-Latin layouts. | Same |
+| 01 PLAT-086/088 | The TS store drops unknown top-level and settings keys, and overwrites a `state.json` that parses but doesn't fit on the next save. | Deliberately safer, invisible to users: unknown keys are kept, and a misfit file is moved aside to `state.json.unreadable-<ms>` |
+| 01 | A login shell that hangs ignores the SIGTERM Node sends at the 10 s timeout, so 0.9.4 never stops it. | Killed at 10 s |
 | 01, 07 CAP-174/175 | The hidden capture panel stops the Dock from reopening a closed window on macOS, and keeps the app running after its window closes on Windows (the docs say closing the window quits). | Same, unless the user rules them bugs |
 
 ## Decisions for the user
@@ -184,6 +187,9 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 ## Status log
 
 Newest first. One line per event: date, what, branch or commit.
+
+- 2026-11-08: P1 merged from `rust/p1-foundations`: workspace with 19 crates, nodus-domain (38 tests), nodus-store (28), nodus-platform env (27), Rust CI on macOS and Windows.
+- 2026-11-08: All 12 feature specs on main (2,266 behaviors). Golden screenshot harness started (`rust/parity-harness`).
 
 - 2026-11-08: Plan written. Rust 1.99.1 installed with rustup (no shell profile edits; `source ~/.cargo/env`). Spec agents and spike S1 launched.
 

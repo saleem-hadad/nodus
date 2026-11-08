@@ -105,7 +105,7 @@ One file per domain in `migration/features/`. Each lists every behavior with an 
 | 02-session-host-status.md | host, host protocol, pty client, hooks status machine, agents, usage, notifications | ⏳ | ☐ |
 | 03-sessions-transcripts.md | session create/open/send/kill, claude args, discovery, board merge, search, summarize, naming, geometry | ✅ 205 | ☐ |
 | 04-board-tools-views.md | board tools MCP, notes placement, views (main + renderer), view page, ink storage | ⏳ | ☐ |
-| 05-actions-voice-git.md | actions rail, voice prompts, git status/diff/log and their UI | ⏳ | ☐ |
+| 05-actions-voice-git.md | actions rail, voice prompts, git status/diff/log and their UI | ✅ 183 | ☐ |
 | 06-updater-release.md | updater, packaging, signing, CI, release, smoke test, 0.9.4 → Rust handoff | ⏳ | ☐ |
 | 07-capture.md | floating capture: panel window, double tap, screen context, guess, submit | ⏳ | ☐ |
 | 08-projects-shell-ui.md | App, title bar, settings, projects grid, project rail, tokens and global styles, menus, modals | ⏳ | ☐ |
@@ -139,6 +139,18 @@ Tracks after P1 run in parallel where the dependency column allows.
 | # | Question | Status | Outcome |
 | --- | --- | --- | --- |
 | S1 | Does GPUI (+ gpui-component) build and run here, with a pannable canvas, an alacritty terminal on a real PTY, a wry webview inside a GPUI window, and a transparent floating panel over full-screen apps? | 🟡 running | — |
+
+## Quirks to confirm with the user
+
+Places where the code and the docs disagree, or where matching 0.9.4 exactly means copying something odd. The port follows the code (ground rule 1) unless the user decides otherwise before cutover.
+
+| Spec | Quirk | Port does |
+| --- | --- | --- |
+| 10 NOTEUI-030 | how-it-works.md says deleting a note with writing asks first; the code deletes it at once. | Deletes at once |
+| 10 | The agents tooltip says `1 agents, all done` for a single agent. | Same text |
+| 05 | Recordings under 600 ms are thrown away; the docs say "about half a second". | 600 ms |
+| 05 | Some errors shown to the user carry Electron's prefix `Error invoking remote method '<channel>': Error: …`. | Same text |
+| 05 | Esc doesn't cancel a session mic recording while a terminal has focus. | Same |
 
 ## Status log
 

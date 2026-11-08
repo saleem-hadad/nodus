@@ -4,6 +4,8 @@ dist
 .DS_Store
 *.log
 /target
+# Golden screenshots for the Rust port: regenerated locally (migration/parity/README.md).
+migration/parity/golden/
 # Secrets and local machine files never belong in the repo.
 .env
 .env.*

@@ -1,0 +1,19 @@
+{
+  "name": "nodus-parity",
+  "private": true,
+  "description": "Golden screenshots of Nodus 0.9.4 for the Rust port (migration/plan.md, decision D8).",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "capture": "node capture-electron.mjs",
+    "diff": "node diff.mjs"
+  },
+  "dependencies": {
+    "pixelmatch": "8.0.0",
+    "playwright-core": "1.65.0",
+    "pngjs": "7.0.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

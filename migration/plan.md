@@ -159,7 +159,7 @@ Tracks after P1 run in parallel where the dependency column allows.
 | P3 | Data domains: transcripts, board, git, search, summarize, naming, status machine, agents | P1 | ☐ |
 | P4 | `nodus-core`: every command and event in api.ts, tested headless | P2, P3 | 🟡 skeleton merged (a9d528f); track core running |
 | P5 | UI foundation: app shell, theme tokens (light/dark), title bar, menus, settings, projects grid, project rail | P1, S1 | ✅ merged (ui-shell) |
-| P6 | Board canvas: pan/zoom/select/drag, cards, sections, archive, notes, edges, controls, context menus, shortcuts | P4, P5 | ☐ |
+| P6 | Board canvas: pan/zoom/select/drag, cards, sections, archive, notes, edges, controls, context menus, shortcuts | P4, P5 | 🟡 board-canvas + board-cards running |
 | P7 | Terminal: element, modal, expanded cards, transcript preview, agent viewer | P2, P5 | ☐ |
 | P8 | Overlays: prompt bar, ⌘K search, merge dialog, ink, selection bar, agent deck | P6 | ☐ |
 | P9 | Views (wry), board tools, actions, voice, git UI | P6 | ☐ |
@@ -184,6 +184,10 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | actions-voice-git | `rust/actions-voice-git` | nodus-actions, nodus-voice (incl. the recorder), nodus-git | ✅ merged: 97 (GIT 28, ACT 37, VOICE 32); recorder is Core Audio voice processing + Opus/WebM like MediaRecorder |
 | capture | `rust/capture` | nodus-capture backend: double tap, key hook, screen context, guess, submit | ✅ merged: 98 CAP; panel UI and page wiring to the capture-panel track |
 | core | `rust/core` | P4: wire every merged domain into nodus-core (sessions, board, views, updates, events, startup/quit), deferred core IDs, debts, headless end-to-end tests | 🟡 running |
+| gpui-text | `rust/gpui-text` | patched GPUI text parity with Chromium: sRGB tagging, no SF Pro tracking, hanging trailing spaces, Chromium's rounding; Windows effects CI step | 🟡 running |
+| board-canvas | `rust/board-canvas` | P6, spec 09: the board route and canvas (pan/zoom/select/drag, sections, edges, menus, shortcuts), node plug-in interface | 🟡 running |
+| board-cards | `rust/board-cards` | P6, spec 10: session cards, expanded card chrome, agent deck, archive stack, notes, pad (`nodus-ui/src/board/cards/`) | 🟡 running |
+| capture-panel | `rust/capture-panel` | P10, spec 07 UI: the panel window and page, Settings' capture rows, File › Capture…, `nodus.capture()` | 🟡 running |
 | terminal | `rust/terminal` | nodus-terminal (GPUI-free): alacritty model, xterm key encoder, query answers, widths, registry | 🟡 running |
 
 ### Integration debts
@@ -260,6 +264,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-09: Windows CI ran the Rust tests for the first time: all passed except one quoting test whose expectation was wrong (fixed in cd25612). gpui-text, board-canvas, board-cards and capture-panel started.
 - 2026-11-09: ui-shell, capture and actions-voice-git merged (fac662d); 996 tests; 1,160 of 2,266 behaviors ticked. The golden PNGs had been swept into two plan commits by `git add migration`; untracked in 954e195 (synthetic content only; one file named this Mac's temp folder id).
 - 2026-11-09: ui-shell's core skeleton cherry-picked to main (a9d528f) so track core (P4) could start; 715 tests.
 - 2026-11-09: views-tools merged (2c4bf9d): nodus-tools MCP server, `McpRelay`, nodus-views (files, page, commands, brains, schedules), notes placement and ink; MCP answers and view pages byte-identical to 0.9.4; 687 tests.

@@ -28,7 +28,6 @@ mod app;
 mod error;
 mod groups;
 mod nodus;
-mod os;
 mod projects;
 mod realpath;
 mod settings;
@@ -56,6 +55,8 @@ mod tests {
             user_data: dir.path().join("userData"),
             env: EnvSource::Given(nodus_platform::Env::from_process()),
             dialogs: None,
+            runtime: tokio::runtime::Handle::current(),
+            home: dir.path().join("home"),
         })
         .unwrap();
         (dir, nodus)

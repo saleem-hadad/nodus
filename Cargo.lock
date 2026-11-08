@@ -3918,9 +3918,11 @@ name = "nodus-core"
 version = "0.9.4"
 dependencies = [
  "indexmap",
+ "nodus-board",
  "nodus-domain",
  "nodus-platform",
  "nodus-store",
+ "nodus-transcripts",
  "serde",
  "serde_json",
  "tempfile",

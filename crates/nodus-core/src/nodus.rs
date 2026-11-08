@@ -5,9 +5,11 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use nodus_domain::{AppSettings, Event, EventSink, OpenCardRequest};
+use nodus_board::{Board, BoardSessions, BoxFuture};
+use nodus_domain::{AppSettings, Event, EventSink, OpenCardRequest, SessionCard, SessionStatus, SessionUsage};
 use nodus_platform::Env;
 use nodus_store::Store;
+use nodus_transcripts::Transcripts;
 use tokio::sync::{broadcast, watch};
 
 use crate::{AppApi, GroupsApi, ProjectsApi, SettingsApi};
@@ -48,10 +50,34 @@ pub type SettingsHook = Arc<dyn Fn(&AppSettings) + Send + Sync>;
 /// Where the user's environment and `claude` come from.
 pub enum EnvSource {
     /// Read the login shell's environment in the background, as the app does
-    /// at startup (PLAT-010 step 4). Needs a tokio runtime to run on.
-    Capture(tokio::runtime::Handle),
+    /// at startup (PLAT-010 step 4).
+    Capture,
     /// This environment, now (tests, and a server that has its own).
     Given(Env),
+}
+
+/// No session processes: what the board sees before the core connects the
+/// session host (02). Nothing is live, so every card reads done and there's
+/// nothing to stop.
+struct NoProcesses;
+
+impl BoardSessions for NoProcesses {
+    fn is_live(&self, _: &str) -> bool {
+        false
+    }
+    fn status(&self, _: &str) -> SessionStatus {
+        SessionStatus::Done
+    }
+    fn usage(&self, _: &str) -> Option<SessionUsage> {
+        None
+    }
+    fn attach_agents(&self, _: &mut SessionCard, _: &str, _: Option<f64>) {}
+    fn stop(&self, _: &str) {}
+    fn stop_and_forget(&self, _: &str) {}
+    fn kill(&self, _: &str) -> BoxFuture<'_, ()> {
+        Box::pin(async {})
+    }
+    fn forget_status(&self, _: &str) {}
 }
 
 /// What the service starts with.
@@ -61,6 +87,11 @@ pub struct NodusConfig {
     pub env: EnvSource,
     /// The windowed dialogs; none for a headless server or a test.
     pub dialogs: Option<Arc<dyn Dialogs>>,
+    /// Where the core's own work runs (the login shell, transcript watchers).
+    pub runtime: tokio::runtime::Handle,
+    /// The home folder whose `.claude/projects` holds the transcripts
+    /// (`os.homedir()`).
+    pub home: PathBuf,
 }
 
 /// Every domain composed into one service. Cheap to clone; clones share it.
@@ -70,7 +101,9 @@ pub struct Nodus {
 }
 
 pub(crate) struct Inner {
-    pub(crate) store: Store,
+    pub(crate) store: Arc<Store>,
+    /// The boards: their cards merged with the transcripts on disk (03).
+    pub(crate) board: Board,
     pub(crate) events: broadcast::Sender<Event>,
     pub(crate) dialogs: Arc<dyn Dialogs>,
     pub(crate) settings_hooks: Mutex<Vec<SettingsHook>>,
@@ -86,15 +119,22 @@ impl Nodus {
     /// environment, as the main process does before its window opens
     /// (PLAT-010 steps 2 and 4).
     pub fn start(config: NodusConfig) -> std::io::Result<Self> {
-        let store = Store::open(&config.user_data)?;
+        let store = Arc::new(Store::open(&config.user_data)?);
         let (events, _) = broadcast::channel(EVENT_BACKLOG);
+        let board = Board::new(
+            Arc::clone(&store),
+            Arc::new(Transcripts::new(config.home)),
+            Arc::new(NoProcesses),
+            Arc::new(Sink(events.clone())),
+            config.runtime.clone(),
+        );
         let (env_tx, env) = watch::channel(None);
         match config.env {
             EnvSource::Given(env) => {
                 env_tx.send_replace(Some(Arc::new(env)));
             }
-            EnvSource::Capture(runtime) => {
-                runtime.spawn(async move {
+            EnvSource::Capture => {
+                config.runtime.spawn(async move {
                     let env = Env::init().await;
                     env_tx.send_replace(Some(Arc::new(env)));
                 });
@@ -103,6 +143,7 @@ impl Nodus {
         Ok(Self {
             inner: Arc::new(Inner {
                 store,
+                board,
                 events,
                 dialogs: config.dialogs.unwrap_or_else(|| Arc::new(NoDialogs)),
                 settings_hooks: Mutex::new(Vec::new()),
@@ -162,8 +203,11 @@ impl Nodus {
         *lock(&self.inner.open_request) = request;
     }
 
-    /// Writes a pending state.json save now, as quitting does (PLAT-032 step 5).
-    pub fn flush(&self) {
+    /// What quitting does before the app goes (PLAT-032): stops watching
+    /// transcripts (step 3) and writes a pending state.json save (step 5).
+    /// Letting go of the session host (step 2) comes with the host wiring.
+    pub fn shutdown(&self) {
+        self.inner.board.watcher().unwatch_all();
         self.inner.store.flush();
     }
 

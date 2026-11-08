@@ -10,10 +10,10 @@ use nodus_domain::{SettingsPatch, UpdateState};
 
 use crate::components::{Icon, button, folder_icon, icon, native_tooltip, spaced_text, switch};
 use crate::platform::{Platform, keys};
-use crate::shell::running::{running_by_project, running_total};
 use crate::state::{AppState, Route};
 use crate::theme::tokens::*;
 use crate::theme::{self, fonts};
+use nodus_sessions::running::{running_by_project, running_total};
 
 /// The windows caption buttons' width, which the bar leaves free off a Mac.
 pub const CAPTION_W: f32 = 138.0;
@@ -27,10 +27,10 @@ pub fn title_bar(state: &Entity<AppState>, actions: Vec<AnyElement>, window: &mu
     let project = s.route_project().cloned();
     let focus_feature = s.focus_feature();
     let focus_mode = s.settings.as_ref().is_some_and(|s| s.focus_mode);
-    let total = running_total(&s.stats);
+    let total = running_total(s.stats.values());
     let breakdown: Vec<String> = running_by_project(&s.projects, &s.stats)
         .into_iter()
-        .map(|(_, name, count)| format!("{name} ({count})"))
+        .map(|row| format!("{} ({})", row.name, row.count))
         .collect();
     let ready_version = match &s.update_status {
         Some(status) => match &status.state {

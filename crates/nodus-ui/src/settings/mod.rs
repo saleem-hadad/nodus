@@ -786,7 +786,11 @@ fn link(id: &'static str, text: &'static str, url: Option<&'static str>, t: Toke
         .text_color(t.accent)
         .cursor(CursorStyle::Arrow)
         .hover(Styled::underline)
-        .when_some(url, |d, url| d.on_click(move |_, _, cx| cx.open_url(url)))
+        .when_some(url, |d, url| {
+            d.on_click(move |_, _, _| {
+                nodus_platform::shell::open_external(url);
+            })
+        })
         .child(text)
         .into_any_element()
 }

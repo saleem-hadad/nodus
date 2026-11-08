@@ -257,8 +257,12 @@ pub fn register_actions(nodus: &Nodus, cx: &mut App) {
     cx.on_action(|_: &QuitAndStopSessions, cx| cx.quit());
     // Opens the floating capture panel, once the capture track is in (07).
     cx.on_action(|_: &Capture, _| {});
-    cx.on_action(|_: &StarOnGitHub, cx| cx.open_url(REPO_URL));
-    cx.on_action(|_: &ReportBug, cx| cx.open_url(&bug_report_url(env!("CARGO_PKG_VERSION"), &system_version())));
+    cx.on_action(|_: &StarOnGitHub, _| {
+        nodus_platform::shell::open_external(REPO_URL);
+    });
+    cx.on_action(|_: &ReportBug, _| {
+        nodus_platform::shell::open_external(&bug_report_url(env!("CARGO_PKG_VERSION"), &system_version()));
+    });
     cx.on_action(|_: &ToggleFullScreen, cx| with_main(cx, |w| w.toggle_fullscreen()));
     cx.on_action(|_: &Minimize, cx| with_main(cx, |w| w.minimize_window()));
     cx.on_action(|_: &Zoom, cx| with_main(cx, |w| w.zoom_window()));

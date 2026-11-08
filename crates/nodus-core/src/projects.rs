@@ -7,12 +7,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use indexmap::IndexMap;
 use nodus_domain::focus::is_focusing;
 use nodus_domain::{FolderColor, Project, ProjectPatch, ProjectStats};
-use nodus_store::State;
 use serde_json::Map;
 
 use crate::error::OnChannel;
 use crate::realpath::realpath;
-use crate::{CommandError, CommandResult, Nodus, os};
+use crate::{CommandError, CommandResult, Nodus};
 
 /// `window.api.projects`.
 pub struct ProjectsApi<'a> {
@@ -137,10 +136,11 @@ impl ProjectsApi<'_> {
     }
 
     /// `projects:remove` (PLAT-075): the project and its board leave state.json.
-    /// Its groups, captures and transcripts on disk stay. Stopping its
-    /// processes (02), its transcript watcher (03) and deleting its views'
-    /// folders (04) come with those tracks.
+    /// Its groups, captures and transcripts on disk stay. Its transcript
+    /// watcher stops; stopping its processes (02) and deleting its views'
+    /// folders (04) come with those wirings.
     pub async fn remove(&self, id: &str) {
+        self.nodus.inner.board.watcher().unwatch_project(id);
         self.nodus.inner.store.update(|state| {
             state.projects.retain(|p| p.id != id);
             state.boards.shift_remove(id);
@@ -157,23 +157,15 @@ impl ProjectsApi<'_> {
             .store
             .read(|state| state.project(id).map(|p| p.repo_path.clone()))
             .on(CHANNEL)?;
-        os::show_item_in_folder(Path::new(&path));
+        nodus_platform::shell::show_item_in_folder(Path::new(&path));
         Ok(())
     }
 
     /// `projects:stats` (PLAT-077): each project's sessions and what's
-    /// running in it, by project id.
-    ///
-    /// Deferred: the counts come from the transcripts and status tracks
-    /// (03 `projectStats`); until they land every project reads empty.
+    /// running in it, by project id (03 `projectStats`). Until the core
+    /// connects the session host nothing reads as running.
     pub async fn stats(&self) -> IndexMap<String, ProjectStats> {
-        self.nodus.inner.store.read(|state: &State| {
-            state
-                .projects
-                .iter()
-                .map(|p| (p.id.clone(), ProjectStats::default()))
-                .collect()
-        })
+        self.nodus.inner.board.all_project_stats()
     }
 }
 

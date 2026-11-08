@@ -34,6 +34,8 @@ impl Dialogs for WindowDialogs {
 /// Runs the app until it quits. `user_data` is the data folder (PLAT-003,
 /// PLAT-004).
 pub fn run(user_data: PathBuf) -> anyhow::Result<()> {
+    // PLAT-002: Windows' AppUserModelID, before any window or notification.
+    nodus_platform::app::set_app_user_model_id();
     // The core's own work (the login shell, later the host) runs on tokio.
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
@@ -43,8 +45,10 @@ pub fn run(user_data: PathBuf) -> anyhow::Result<()> {
     let (requests, mut picks) = tokio::sync::mpsc::unbounded_channel();
     let nodus = Nodus::start(NodusConfig {
         user_data,
-        env: EnvSource::Capture(runtime.handle().clone()),
+        env: EnvSource::Capture,
         dialogs: Some(Arc::new(WindowDialogs { requests })),
+        runtime: runtime.handle().clone(),
+        home: std::env::home_dir().unwrap_or_default(),
     })?;
 
     // UI-004: the saved settings, read before the window exists.
@@ -95,7 +99,7 @@ pub fn run(user_data: PathBuf) -> anyhow::Result<()> {
         // PLAT-032: quitting writes a pending save now.
         let flush = nodus.clone();
         cx.on_app_quit(move |_| {
-            flush.flush();
+            flush.shutdown();
             async {}
         })
         .detach();

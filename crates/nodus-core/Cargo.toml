@@ -11,9 +11,11 @@ publish.workspace = true
 
 [dependencies]
 indexmap.workspace = true
+nodus-board.workspace = true
 nodus-domain.workspace = true
 nodus-platform.workspace = true
 nodus-store.workspace = true
+nodus-transcripts.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

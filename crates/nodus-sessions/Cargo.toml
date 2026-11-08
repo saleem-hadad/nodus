@@ -1,0 +1,13 @@
+[package]
+name = "nodus-sessions"
+description = "The app's side of the session host, and each session's status, agents and usage"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

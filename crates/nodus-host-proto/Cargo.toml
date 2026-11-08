@@ -1,0 +1,13 @@
+[package]
+name = "nodus-host-proto"
+description = "The session host's wire protocol, compatible with the 0.9.4 host"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

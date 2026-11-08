@@ -1,0 +1,8 @@
+//! Floating capture: double-tap Shift in any app and a panel floats up over
+//! it. This owns hearing the double tap, what comes along from the screen (the
+//! app in front, its browser tab, a screenshot, the clipboard), Claude's guess
+//! at what a capture is and where it goes, and making it on the board.
+//!
+//! Ports `src/main/capture.ts`, `src/main/doubleTap.ts`,
+//! `src/main/screenContext.ts`, `src/main/captureGuess.ts` and the text
+//! helpers in `src/shared/capture.ts`.

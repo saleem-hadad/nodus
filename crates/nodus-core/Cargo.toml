@@ -1,0 +1,13 @@
+[package]
+name = "nodus-core"
+description = "Every domain composed into one service: the app's commands and events, with no UI"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

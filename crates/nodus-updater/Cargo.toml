@@ -1,0 +1,13 @@
+[package]
+name = "nodus-updater"
+description = "Updating the app from GitHub releases, and the swap on quit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

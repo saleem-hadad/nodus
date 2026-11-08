@@ -1,0 +1,13 @@
+[package]
+name = "nodus-git"
+description = "Read-only git queries: status, diffs and the branch's recent commits"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,13 @@
+[package]
+name = "nodus-ui"
+description = "The native UI: theme, components, and every screen of the app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

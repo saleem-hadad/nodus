@@ -1,0 +1,74 @@
+# The native Nodus: one crate per domain, built beside the Electron app until
+# it replaces it. See migration/plan.md for how the crates fit together.
+[workspace]
+members = ["crates/*"]
+resolver = "3"
+
+[workspace.package]
+version = "0.9.4"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+authors = ["Saleem Hadad"]
+repository = "https://github.com/saleem-hadad/nodus"
+publish = false
+
+[workspace.dependencies]
+nodus-actions = { path = "crates/nodus-actions" }
+nodus-board = { path = "crates/nodus-board" }
+nodus-capture = { path = "crates/nodus-capture" }
+nodus-core = { path = "crates/nodus-core" }
+nodus-domain = { path = "crates/nodus-domain" }
+nodus-git = { path = "crates/nodus-git" }
+nodus-host = { path = "crates/nodus-host" }
+nodus-host-proto = { path = "crates/nodus-host-proto" }
+nodus-platform = { path = "crates/nodus-platform" }
+nodus-sessions = { path = "crates/nodus-sessions" }
+nodus-store = { path = "crates/nodus-store" }
+nodus-terminal = { path = "crates/nodus-terminal" }
+nodus-tools = { path = "crates/nodus-tools" }
+nodus-transcripts = { path = "crates/nodus-transcripts" }
+nodus-ui = { path = "crates/nodus-ui" }
+nodus-updater = { path = "crates/nodus-updater" }
+nodus-views = { path = "crates/nodus-views" }
+nodus-voice = { path = "crates/nodus-voice" }
+
+anyhow = "1.0.104"
+indexmap = { version = "2.14", features = ["serde"] }
+rustix = { version = "1.1", features = ["fs"] }
+# The shortest digits for a number, breaking ties to even as JavaScript does.
+ryu = "1.0.23"
+serde = { version = "1.0.229", features = ["derive"] }
+# Keeps objects' keys in the order they were read, as JavaScript does, and
+# reads every number exactly, so state.json is written back the way it was found.
+serde_json = { version = "1.0.154", features = ["float_roundtrip", "preserve_order"] }
+tempfile = "3.27"
+thiserror = "2.0"
+tokio = { version = "1.54", features = ["io-util", "macros", "process", "rt", "rt-multi-thread", "sync", "time"] }
+tracing = "0.1.44"
+uuid = { version = "1.29", features = ["serde", "v4"] }
+
+[workspace.lints.rust]
+rust_2018_idioms = { level = "warn", priority = -1 }
+unsafe_op_in_unsafe_fn = "deny"
+unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+cloned_instead_of_copied = "warn"
+dbg_macro = "warn"
+explicit_iter_loop = "warn"
+implicit_clone = "warn"
+inefficient_to_string = "warn"
+manual_let_else = "warn"
+map_unwrap_or = "warn"
+needless_pass_by_value = "warn"
+print_stderr = "warn"
+print_stdout = "warn"
+redundant_closure_for_method_calls = "warn"
+semicolon_if_nothing_returned = "warn"
+todo = "warn"
+undocumented_unsafe_blocks = "warn"
+unimplemented = "warn"
+uninlined_format_args = "warn"
+unnested_or_patterns = "warn"

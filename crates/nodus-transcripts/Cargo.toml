@@ -1,0 +1,13 @@
+[package]
+name = "nodus-transcripts"
+description = "Claude Code transcripts: discovery, parsing, search, naming and handoff summaries"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

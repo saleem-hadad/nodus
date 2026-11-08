@@ -9,7 +9,7 @@
 | Module | Commit | State |
 | --- | --- | --- |
 | `nodus_platform::process` | *Start every child process through nodus-platform* | ✅ ready to merge to main on its own |
-| `nodus_platform::secrets` | — | ☐ next |
+| `nodus_platform::secrets` | *Read and write the xAI key as 0.9.4's safeStorage does* | ✅ |
 | `nodus_platform::notify` | — | ☐ |
 | `nodus_platform::{open, permissions}` | — | ☐ |
 | `nodus-updater` | — | ☐ |
@@ -17,10 +17,19 @@
 ## Done (implemented and tested)
 
 - PLAT-097 / PLAT-105: the login-shell capture and `claude --version` now run through `process::Command` (10 s timeout, 8 MiB cap / Node's 1 MiB default, the shell killed outright at the timeout as the plan decided).
+- PLAT-115 (base64 as Node writes and leniently reads it), PLAT-116 (macOS v10 AES-128-CBC/PBKDF2), PLAT-117 (Keychain `Nodus Safe Storage` / `Nodus Key`, legacy account `Nodus` moved, 24-character random password created), PLAT-118 (Windows v10 AES-256-GCM, `Local State` DPAPI key: read, created, replaced when DPAPI can't open it, audit flag), PLAT-119 (`CANNOT_SAVE_KEY` texts), PLAT-120 (Electron's decrypt checks: empty → "", no v10/v11 → refused, failures as errors), PLAT-121 (same format written). Known-answer vectors from Python's hashlib + the openssl tool (macOS) and OpenSSL's EVP AES-256-GCM plus McGrew–Viega cases 13/14 (Windows); synthetic passwords and keys only. The real Keychain and DPAPI are behind traits and never touched by tests.
 
 ## Deferred
 
 - (none yet)
+
+## Verified OSCrypt parameters
+
+From Electron 44.5.1's `patches/chromium/revert_oscrypt_remove_sync_backend.patch` (Chromium 152 dropped `os_crypt/sync`; Electron restores it), `feat_ensure_mas_builds_of_the_same_application_can_use_safestorage.patch`, `shell/browser/electron_browser_main_parts.cc`, `shell/browser/api/electron_api_safe_storage.cc`, and Chromium 152.0.7977.130's `components/os_crypt/common/keychain_password_mac.mm`, `crypto/apple/keychain_v2.mm`, `crypto/aes_cbc.h`:
+
+- macOS: prefix `v10`; IV 16 × `' '`; salt `saltysalt`; 1003 iterations; PBKDF2-HMAC-SHA1 (`crypto::kdf::Pbkdf2HmacSha1`); key 16 bytes (`kDerivedKeySize`); AES-CBC with PKCS#7 (`crypto::aes_cbc`); empty plaintext → empty ciphertext; ciphertext without `v10` → failure (not plaintext, as older Chromium did). Keychain: SecItem generic password, service `<app> Safe Storage`, account `<app>` + ` Key`; if missing, the legacy account `<app>` is copied to `<app> Key` and deleted; else `base64(16 random bytes)` is added (`kSecAttrAccessibleWhenUnlocked`, the default). The Keychain is tried once per process; a failure is final until relaunch.
+- Windows: prefix `v10` + 12-byte nonce + AES-256-GCM (`crypto::Aead`, empty AAD) ciphertext‖tag; key 32 bytes from `Local State` › `os_crypt.encrypted_key` = base64(`DPAPI` + `CryptProtectData(key)`), protected with `CRYPTPROTECT_AUDIT`, unprotected with flags 0; `os_crypt.audit_enabled` set to true (an older key is re-protected once). No key or a key DPAPI can't open → a new random key replaces it; a value without the `DPAPI` header → no encryption. Data without `v10` → `CryptUnprotectData` directly (legacy).
+- Electron's `decryptString`: empty → `""`; neither `v10` nor `v11` → `Ciphertext does not appear to be encrypted.`; `encryptString`/`decryptString` throw when encryption isn't available.
 
 ## APIs other tracks use
 
@@ -80,3 +89,17 @@ Command::new(installer).args(["--updated", "/S", "--force-run"]).spawn_detached(
 - Windows: every non-detached child gets `CREATE_NO_WINDOW`; detached ones get `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP`, as libuv. Exit reports `Exit::Signal(sent)` when Nodus stopped it, as libuv does.
 - After a stop, pipes held open by a process that left the tree are given up on after 1 s; otherwise `wait()` lasts until the output closes, like Node's `close` event.
 - `Capture::First(n)` for a view's output in UTF-16 units: keep `3 * MAX_CHARS` bytes, then `slice_utf16` to `MAX_CHARS`.
+
+### `nodus_platform::secrets` (crates/nodus-platform/src/secrets.rs)
+
+```rust
+use nodus_platform::secrets::{SafeStorage, decode_base64, encode_base64, CANNOT_SAVE_KEY};
+
+let storage = SafeStorage::system(&user_data);       // Keychain (macOS) / Local State + DPAPI (Windows); lazy
+storage.is_encryption_available();                    // macOS: first call reads or creates the Keychain item
+let sealed = storage.encrypt_string(key.trim())?;     // Err(SafeStorageError) when unavailable
+state.voice_key = Some(encode_base64(&sealed));       // Buffer.toString('base64')
+let key = storage.decrypt_string(&decode_base64(&state_voice_key)); // Buffer.from(…, 'base64'), lenient
+// Err(e) → log "[voice] could not decrypt the saved key {e}" and act as if no key; Ok("") → no key.
+// Tests: SafeStorage::with_mac_password(b"synthetic"), SafeStorage::with_windows_key([7; 32]), SafeStorage::unavailable().
+```

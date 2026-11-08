@@ -33,7 +33,14 @@ nodus-updater = { path = "crates/nodus-updater" }
 nodus-views = { path = "crates/nodus-views" }
 nodus-voice = { path = "crates/nodus-voice" }
 
+aes = "0.8"
+aes-gcm = "0.10"
 anyhow = "1.0.104"
+cbc = { version = "0.1", features = ["alloc"] }
+getrandom = "0.3"
+pbkdf2 = "0.12"
+security-framework = "3"
+sha1 = "0.10"
 indexmap = { version = "2.14", features = ["serde"] }
 # Watches transcript folders (FSEvents on macOS, ReadDirectoryChangesW on Windows).
 notify = "8.2"

@@ -1,0 +1,4 @@
+# Upstream Zed's formatting, so edits to the vendored GPUI stay in its style
+# (and diff cleanly against it) instead of picking up the repo's 120 columns.
+edition = "2024"
+style_edition = "2024"

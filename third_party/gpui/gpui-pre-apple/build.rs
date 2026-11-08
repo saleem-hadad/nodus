@@ -1,4 +1,5 @@
 // Modified for gpui-pre (snapshot of zed@f816e1f): the gpui sources it reads are vendored under `vendor/gpui`.
+// Modified for Nodus (third_party/gpui/PATCHES.md): exports the effect layer types to the shaders.
 #![allow(clippy::disallowed_methods, reason = "build scripts are exempt")]
 
 fn main() {
@@ -65,6 +66,11 @@ mod apple_build {
             "SurfaceInputIndex".into(),
             "SurfaceBounds".into(),
             "TransformationMatrix".into(),
+            "EffectLayer".into(),
+            "LayerComposite".into(),
+            "LayerInputIndex".into(),
+            "BlurParams".into(),
+            "BlurInputIndex".into(),
         ]);
         config.no_includes = true;
         config.enumeration.prefix_with_name = true;
@@ -76,6 +82,7 @@ mod apple_build {
         // Source files from gpui that define types used in shaders
         let gpui_src_paths = [
             gpui_dir.join("src/scene.rs"),
+            gpui_dir.join("src/effect_layer.rs"),
             gpui_dir.join("src/geometry.rs"),
             gpui_dir.join("src/color.rs"),
             gpui_dir.join("src/window.rs"),
@@ -83,7 +90,10 @@ mod apple_build {
         ];
 
         // Source files from this crate
-        let local_src_paths = [crate_dir.join("src/metal_renderer.rs")];
+        let local_src_paths = [
+            crate_dir.join("src/metal_renderer.rs"),
+            crate_dir.join("src/metal_effects.rs"),
+        ];
 
         for src_path in gpui_src_paths.iter().chain(local_src_paths.iter()) {
             println!("cargo:rerun-if-changed={}", src_path.display());

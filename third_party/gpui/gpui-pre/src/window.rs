@@ -10,23 +10,25 @@ use crate::{
     Action, AnyDrag, AnyElement, AnyImageCache, AnyTooltip, AnyView, App, AppContext, Arena, Asset,
     AsyncWindowContext, AtlasTile, AvailableSpace, Background, BorderStyle, Bounds, BoxShadow,
     Capslock, Context, Corners, CursorHideMode, CursorStyle, Decorations, DevicePixels,
-    DispatchActionListener, DispatchNodeId, DispatchTree, DisplayId, Edges, Effect, Entity,
-    EntityId, EventEmitter, FileDropEvent, FontId, Global, GlobalElementId, GlyphId, GpuSpecs,
-    Hsla, InputHandler, InputPreference, IsZero, KeyBinding, KeyContext, KeyDownEvent, KeyEvent,
-    Keystroke, KeystrokeEvent, LayoutId, LineLayoutIndex, Modifiers, ModifiersChangedEvent,
-    MonochromeSprite, MouseButton, MouseEvent, MouseMoveEvent, MouseUpEvent, Path, Pixels,
-    PlatformAtlas, PlatformDisplay, PlatformInput, PlatformInputHandler, PlatformWindow, Point,
-    PolychromeSprite, Priority, PromptButton, PromptLevel, Quad, Render, RenderGlyphParams,
-    RenderImage, RenderImageParams, RenderSvgParams, Replay, ResizeEdge, SMOOTH_SVG_SCALE_FACTOR,
-    SUBPIXEL_VARIANTS_X, SUBPIXEL_VARIANTS_Y, ScaledPixels, Scene, Shadow, SharedString, Size,
-    StrikethroughStyle, Style, SubpixelSprite, Subscription, SystemWindowTab,
-    SystemWindowTabController, TabStopMap, Task, TextInputConfiguration, TextInputStateChange,
-    TextRenderingMode, TextStyle, TextStyleRefinement, ThermalState, TransformationMatrix,
-    Underline, UnderlineStyle, WindowAppearance, WindowBackgroundAppearance, WindowBounds,
-    WindowControls, WindowDecorations, WindowInsets, WindowOptions, WindowParams, WindowTextSystem,
-    WindowVisibility, point, prelude::*, px, rems, size, transparent_black,
+    DispatchActionListener, DispatchNodeId, DispatchTree, DisplayId, Edges, Effect, EffectLayer,
+    ElementTransform, Entity, EntityId, EventEmitter, FileDropEvent, FontId, Global,
+    GlobalElementId, GlyphId, GpuSpecs, Hsla, InputHandler, InputPreference, IsZero, KeyBinding,
+    KeyContext, KeyDownEvent, KeyEvent, Keystroke, KeystrokeEvent, LayerEffects, LayoutId,
+    LineLayoutIndex, Modifiers, ModifiersChangedEvent, MonochromeSprite, MouseButton, MouseEvent,
+    MouseMoveEvent, MouseUpEvent, Path, Pixels, PlatformAtlas, PlatformDisplay, PlatformInput,
+    PlatformInputHandler, PlatformWindow, Point, PolychromeSprite, Priority, PromptButton,
+    PromptLevel, Quad, Render, RenderGlyphParams, RenderImage, RenderImageParams, RenderSvgParams,
+    Replay, ResizeEdge, SMOOTH_SVG_SCALE_FACTOR, SUBPIXEL_VARIANTS_X, SUBPIXEL_VARIANTS_Y,
+    ScaledPixels, Scene, Shadow, SharedString, Size, StrikethroughStyle, Style, SubpixelSprite,
+    Subscription, SystemWindowTab, SystemWindowTabController, TabStopMap, Task,
+    TextInputConfiguration, TextInputStateChange, TextRenderingMode, TextStyle,
+    TextStyleRefinement, ThermalState, TransformationMatrix, Underline, UnderlineStyle,
+    WindowAppearance, WindowBackgroundAppearance, WindowBounds, WindowControls, WindowDecorations,
+    WindowInsets, WindowOptions, WindowParams, WindowTextSystem, WindowVisibility, point,
+    prelude::*, px, rems, size, transparent_black,
 };
 
+use crate::effect_layer::HitTransform;
 use crate::gestures::{GestureTuning, RecognizedTouchGesture, TouchGestureRecognizer};
 use crate::interactive::TouchEvent;
 use anyhow::{Context as _, Result, anyhow};
@@ -1044,6 +1046,9 @@ pub(crate) struct Frame {
     pub(crate) dispatch_tree: DispatchTree,
     pub(crate) scene: Scene,
     pub(crate) hitboxes: Vec<Hitbox>,
+    /// The transform each hitbox of `hitboxes` was inserted under, if any
+    /// (Nodus patch: hit testing through element transforms).
+    pub(crate) hitbox_transforms: Vec<Option<Arc<HitTransform>>>,
     pub(crate) window_control_hitboxes: Vec<(WindowControlArea, Hitbox)>,
     pub(crate) deferred_draws: Vec<DeferredDraw>,
     pub(crate) input_handlers: Vec<Option<PlatformInputHandler>>,
@@ -1100,6 +1105,7 @@ impl Frame {
             dispatch_tree,
             scene: Scene::default(),
             hitboxes: Vec::new(),
+            hitbox_transforms: Vec::new(),
             window_control_hitboxes: Vec::new(),
             deferred_draws: Vec::new(),
             input_handlers: Vec::new(),
@@ -1130,6 +1136,7 @@ impl Frame {
         self.tooltip_requests.clear();
         self.cursor_styles.clear();
         self.hitboxes.clear();
+        self.hitbox_transforms.clear();
         self.window_control_hitboxes.clear();
         self.deferred_draws.clear();
         self.tab_stops.clear();
@@ -1166,8 +1173,15 @@ impl Frame {
     pub(crate) fn hit_test(&self, position: Point<Pixels>) -> HitTest {
         let mut set_hover_hitbox_count = false;
         let mut hit_test = HitTest::default();
-        for hitbox in self.hitboxes.iter().rev() {
+        for (index, hitbox) in self.hitboxes.iter().enumerate().rev() {
             let bounds = hitbox.bounds.intersect(&hitbox.content_mask.bounds);
+            let position = match self.hitbox_transforms.get(index).and_then(Option::as_ref) {
+                Some(transform) => match transform.local_point(position) {
+                    Some(local) => local,
+                    None => continue,
+                },
+                None => position,
+            };
             if bounds.contains(&position) {
                 hit_test.ids.push(hitbox.id);
                 if !set_hover_hitbox_count
@@ -1241,6 +1255,8 @@ pub struct Window {
     pub(crate) element_offset_stack: Vec<Point<Pixels>>,
     pub(crate) element_opacity: f32,
     pub(crate) content_mask_stack: Vec<ContentMask<Pixels>>,
+    /// The element transform prepaint is inside, for hit testing.
+    hit_transform: Option<Arc<HitTransform>>,
     pub(crate) requested_autoscroll: Option<Bounds<Pixels>>,
     /// The [`TextInputConfiguration`] most recently forwarded to the platform
     /// window, so that only actual changes are forwarded (reconfiguring a live
@@ -2367,6 +2383,7 @@ impl Window {
             rendered_entity_stack: Vec::new(),
             element_offset_stack: Vec::new(),
             content_mask_stack: Vec::new(),
+            hit_transform: None,
             element_opacity: 1.0,
             requested_autoscroll: None,
             last_text_input_configuration: None,
@@ -3088,7 +3105,14 @@ impl Window {
     /// Renders the current frame's scene to a texture and returns the pixel data as an RGBA image.
     /// This does not present the frame to screen - useful for visual testing where we want
     /// to capture what would be rendered without displaying it or requiring the window to be visible.
-    #[cfg(any(test, feature = "test-support"))]
+    ///
+    /// Nodus patch: available in every build, so parity screenshots need no screen recording
+    /// permission. The frame is the last one GPUI rendered, drawn again into an offscreen texture
+    /// of the window's drawable size (device pixels, so 2x on Retina) and read back, unpremultiplied
+    /// only as far as the window's own pixels are: an opaque window gives opaque pixels. Native
+    /// views GPUI doesn't draw (a webview, the traffic lights) aren't in it. It costs nothing
+    /// until called, and a GPU round trip when called. Metal and DirectX 11 implement it; other
+    /// backends return an error.
     pub fn render_to_image(&self) -> anyhow::Result<image::RgbaImage> {
         self.platform_window
             .render_to_image(&self.rendered_frame.scene)
@@ -4226,6 +4250,12 @@ impl Window {
                 .iter()
                 .cloned(),
         );
+        self.next_frame.hitbox_transforms.extend(
+            self.rendered_frame.hitbox_transforms
+                [range.start.hitboxes_index..range.end.hitboxes_index]
+                .iter()
+                .cloned(),
+        );
         self.next_frame.tooltip_requests.extend(
             self.rendered_frame.tooltip_requests
                 [range.start.tooltips_index..range.end.tooltips_index]
@@ -4465,6 +4495,9 @@ impl Window {
         let result = f(self);
         if result.is_err() {
             self.next_frame.hitboxes.truncate(index.hitboxes_index);
+            self.next_frame
+                .hitbox_transforms
+                .truncate(index.hitboxes_index);
             self.next_frame
                 .tooltip_requests
                 .truncate(index.tooltips_index);
@@ -4774,6 +4807,135 @@ impl Window {
             self.next_frame.scene.pop_layer();
         }
 
+        result
+    }
+
+    /// Draws everything `f` paints into a texture of its own, then paints
+    /// that texture over the frame with `effects`. This is how `filter`,
+    /// `backdrop-filter`, `mask-image`, `mix-blend-mode`, `transform` and
+    /// group `opacity` reach the GPU. The corners clip the backdrop effect
+    /// the way CSS clips it to the border box. When `effects` does nothing,
+    /// `f` paints straight into the frame.
+    ///
+    /// Under a transform, `f` paints untransformed, with a content mask that
+    /// starts afresh at the whole window; the layer applies the outer mask
+    /// once it has moved the picture. Pair it with
+    /// [`Window::with_element_transform`] in prepaint, so hit testing
+    /// follows.
+    ///
+    /// This method should only be called as part of the paint phase of element drawing.
+    pub fn paint_effect_layer<R>(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        corner_radii: Corners<Pixels>,
+        effects: &LayerEffects,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        self.invalidator.debug_assert_paint();
+
+        let opacity = self.element_opacity();
+        let group = effects.group && opacity < 1.0;
+        let transform = effects
+            .transform
+            .filter(|transform| !transform.is_identity())
+            .map(|transform| transform.to_matrix(bounds));
+        if (effects.is_none() && !group) || bounds.size.width <= px(0.) {
+            return f(self);
+        }
+        let content_mask = self.content_mask();
+        if transform.is_none() && !bounds.intersects(&content_mask.bounds) && !group {
+            // Nothing of the box shows; its content is clipped anyway.
+            return f(self);
+        }
+
+        let scale_factor = self.scale_factor();
+        let device_transform = transform
+            .map(|transform| crate::effect_layer::to_device_transform(transform, scale_factor))
+            .unwrap_or_default();
+        let layer = EffectLayer {
+            bounds: bounds.scale(scale_factor),
+            content_mask: self.snapped_content_mask(),
+            corner_radii: corner_radii.scale(scale_factor),
+            painted: crate::effect_layer::no_bounds(),
+            transform: device_transform,
+            blur: effects.blur.0 * scale_factor,
+            backdrop_blur: effects.backdrop_blur.0 * scale_factor,
+            opacity,
+            blend_mode: effects.blend_mode as u32,
+            has_mask: effects.mask.is_some() as u32,
+            has_backdrop: effects.has_backdrop() as u32,
+            clips_content: effects.clips as u32,
+            has_transform: transform.is_some() as u32,
+            color_matrix: effects.color_matrix.0,
+            backdrop_matrix: effects.backdrop_matrix.0,
+            mask: effects.mask.unwrap_or_default(),
+        };
+        self.next_frame.scene.push_effect_layer(layer);
+        // The layer applies the opacity once to its whole picture, so the
+        // content inside paints at full opacity.
+        let saved_opacity = self.element_opacity;
+        self.element_opacity = 1.0;
+        // Under a transform the content paints in the layer's own space,
+        // where the masks around it mean nothing.
+        let saved_masks = transform.map(|_| {
+            mem::replace(
+                &mut self.content_mask_stack,
+                vec![ContentMask {
+                    bounds: Bounds {
+                        origin: Point::default(),
+                        size: self.viewport_size,
+                    },
+                }],
+            )
+        });
+        let result = f(self);
+        if let Some(saved_masks) = saved_masks {
+            self.content_mask_stack = saved_masks;
+        }
+        self.element_opacity = saved_opacity;
+        self.next_frame.scene.pop_effect_layer();
+        result
+    }
+
+    /// Hit tests the hitboxes `f` inserts through `transform`, the transform
+    /// [`Window::paint_effect_layer`] draws the element with: the pointer is
+    /// mapped back into the element's untransformed space, as CSS hit tests
+    /// a transformed box. Like that paint, `f` starts with a content mask of
+    /// the whole window. Event positions handed to listeners stay in window
+    /// coordinates.
+    ///
+    /// This method should only be called as part of the prepaint phase of element drawing.
+    pub fn with_element_transform<R>(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        transform: Option<&ElementTransform>,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        self.invalidator.debug_assert_prepaint();
+        let Some(inverse) = transform
+            .filter(|transform| !transform.is_identity())
+            .and_then(|transform| transform.to_matrix(bounds).inverse())
+        else {
+            return f(self);
+        };
+        let hit_transform = Arc::new(HitTransform {
+            inverse,
+            parent_mask: self.content_mask(),
+            parent: self.hit_transform.clone(),
+        });
+        let saved_transform = mem::replace(&mut self.hit_transform, Some(hit_transform));
+        let saved_masks = mem::replace(
+            &mut self.content_mask_stack,
+            vec![ContentMask {
+                bounds: Bounds {
+                    origin: Point::default(),
+                    size: self.viewport_size,
+                },
+            }],
+        );
+        let result = f(self);
+        self.content_mask_stack = saved_masks;
+        self.hit_transform = saved_transform;
         result
     }
 
@@ -5532,6 +5694,9 @@ impl Window {
             behavior,
         };
         self.next_frame.hitboxes.push(hitbox.clone());
+        self.next_frame
+            .hitbox_transforms
+            .push(self.hit_transform.clone());
         hitbox
     }
 

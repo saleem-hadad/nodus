@@ -12,6 +12,7 @@ publish.workspace = true
 [dev-dependencies]
 # For examples/effects.rs, the proof of the GPUI patch set.
 gpui-kit.workspace = true
+image.workspace = true
 
 [lints]
 workspace = true

@@ -5,11 +5,11 @@ use std::{
 };
 
 use crate::{
-    AbsoluteLength, App, Background, BackgroundTag, BorderStyle, Bounds, ContentMask, Corners,
-    CornersRefinement, CursorStyle, DefiniteLength, DevicePixels, Edges, EdgesRefinement, Font,
-    FontFallbacks, FontFeatures, FontStyle, FontWeight, GridLocation, Hsla, Length, Pixels, Point,
-    PointRefinement, Rgba, SharedString, Size, SizeRefinement, Styled, TextRun, Window, black, phi,
-    point, px, quad, rems, size,
+    AbsoluteLength, App, Background, BackgroundTag, BlendMode, BorderStyle, Bounds, ColorMatrix,
+    ContentMask, Corners, CornersRefinement, CursorStyle, DefiniteLength, DevicePixels, Edges,
+    EdgesRefinement, ElementTransform, Font, FontFallbacks, FontFeatures, FontStyle, FontWeight,
+    GridLocation, Hsla, Length, Pixels, Point, PointRefinement, Rgba, SharedString, Size,
+    SizeRefinement, Styled, TextRun, Window, black, phi, point, px, quad, rems, size,
 };
 use collections::HashSet;
 use refineable::Refineable;
@@ -291,6 +291,24 @@ pub struct Style {
     /// Box shadow of the element
     pub box_shadow: Vec<BoxShadow>,
 
+    /// A second fill painted over `background`, the way CSS paints
+    /// `background-image` over `background-color`.
+    pub background_image: Option<Background>,
+
+    /// How `background_image` mixes with the pixels under it. When
+    /// `background` is opaque, those pixels are the background color, and
+    /// this matches CSS `background-blend-mode`. When `background` lets the
+    /// content behind the element show through, the mix includes that
+    /// content, the way CSS `mix-blend-mode` does. CSS instead blends with
+    /// transparent there, which needs an isolated backdrop that the
+    /// renderer does not have.
+    pub background_blend_mode: BlendMode,
+
+    /// What the element does to the picture of itself and its children.
+    /// CSS `filter`, `backdrop-filter`, `mask-image` and `mix-blend-mode`.
+    #[refineable]
+    pub effects: LayerEffects,
+
     /// The text style of this element
     #[refineable]
     pub text: TextStyleRefinement,
@@ -342,6 +360,59 @@ pub enum Visibility {
     Visible,
     /// The element should not be drawn, but should still take up space in the layout.
     Hidden,
+}
+
+/// What an element does to the picture of its subtree before that picture
+/// lands on the frame. The renderer draws the subtree offscreen when any of
+/// these is set, so leave them alone for elements that need none.
+#[derive(Refineable, Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[refineable(Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct LayerEffects {
+    /// CSS `filter: blur()`, as the standard deviation of the Gaussian.
+    pub blur: Pixels,
+    /// The other CSS `filter` functions, multiplied into one matrix.
+    pub color_matrix: ColorMatrix,
+    /// CSS `backdrop-filter: blur()`.
+    pub backdrop_blur: Pixels,
+    /// The other CSS `backdrop-filter` functions.
+    pub backdrop_matrix: ColorMatrix,
+    /// CSS `mask-image`. Only the alpha of the fill matters.
+    pub mask: Option<Background>,
+    /// CSS `mix-blend-mode`.
+    pub blend_mode: BlendMode,
+    /// True for a box with round corners and an `overflow` that clips.
+    /// The layer drops the content outside the rounded box, which a
+    /// rectangular content mask cannot do.
+    pub clips: bool,
+    /// CSS `transform` and `transform-origin` (Nodus patch).
+    pub transform: Option<ElementTransform>,
+    /// Fades the element and its children as one picture, the way CSS
+    /// `opacity` does, rather than primitive by primitive (Nodus patch).
+    pub group: bool,
+}
+
+impl LayerEffects {
+    /// Whether the element paints straight into the frame.
+    pub fn is_none(&self) -> bool {
+        self.blur <= px(0.)
+            && self.color_matrix.is_identity()
+            && !self.has_backdrop()
+            && self.mask.is_none()
+            && self.blend_mode == BlendMode::Normal
+            && !self.clips
+            && !self.has_transform()
+    }
+
+    /// Whether the element draws somewhere other than its box.
+    pub fn has_transform(&self) -> bool {
+        self.transform
+            .is_some_and(|transform| !transform.is_identity())
+    }
+
+    /// Whether the element changes what is under it.
+    pub fn has_backdrop(&self) -> bool {
+        self.backdrop_blur > px(0.) || !self.backdrop_matrix.is_identity()
+    }
 }
 
 /// The possible values of the box-shadow property
@@ -708,6 +779,26 @@ impl Style {
             .to_pixels(rem_size)
             .clamp_radii_for_quad_size(bounds.size);
 
+        // Nodus patch: zed#63794 gives every rounded box that hides its
+        // overflow a layer, so the clip follows the corner arcs. Each layer
+        // costs a frame-sized offscreen pass, and gpui-component rounds and
+        // clips nearly every control, so here a box asks for it with
+        // `Styled::clip_rounded` instead.
+        window.paint_effect_layer(bounds, corner_radii, &self.effects, |window| {
+            self.paint_box(bounds, corner_radii, window, cx, continuation)
+        });
+    }
+
+    /// Paints the shadows, fills, content and border of the box.
+    fn paint_box(
+        &self,
+        bounds: Bounds<Pixels>,
+        corner_radii: Corners<Pixels>,
+        window: &mut Window,
+        cx: &mut App,
+        continuation: impl FnOnce(&mut Window, &mut App),
+    ) {
+        let rem_size = window.rem_size();
         window.paint_drop_shadows(bounds, corner_radii, &self.box_shadow);
 
         let background_color = self.background.as_ref().and_then(Fill::color);
@@ -735,6 +826,32 @@ impl Style {
                 border_color,
                 self.border_style,
             ));
+        }
+
+        if let Some(image) = self
+            .background_image
+            .filter(|image| !image.is_transparent())
+        {
+            let effects = LayerEffects {
+                blend_mode: self.background_blend_mode,
+                ..LayerEffects::default()
+            };
+            window.paint_effect_layer(bounds, corner_radii, &effects, |window| {
+                let mut border_color = image
+                    .colors
+                    .first()
+                    .map(|stop| stop.color)
+                    .unwrap_or(image.solid);
+                border_color.a = 0.;
+                window.paint_quad(quad(
+                    bounds,
+                    corner_radii,
+                    image,
+                    Edges::default(),
+                    border_color,
+                    self.border_style,
+                ));
+            });
         }
 
         window.paint_inset_shadows(bounds, corner_radii, &self.box_shadow);
@@ -806,6 +923,9 @@ impl Default for Style {
             border_style: BorderStyle::default(),
             corner_radii: Corners::default(),
             box_shadow: Default::default(),
+            background_image: None,
+            background_blend_mode: BlendMode::Normal,
+            effects: LayerEffects::default(),
             text: TextStyleRefinement::default(),
             mouse_cursor: None,
             opacity: None,
@@ -1525,5 +1645,21 @@ mod tests {
             Some(FontWeight::SEMIBOLD),
             style.text_style().unwrap().font_weight
         );
+    }
+
+    #[perf]
+    fn a_hover_refinement_keeps_the_other_effects() {
+        let mut base = StyleRefinement::default();
+        base.effects.mask = Some(red().into());
+        let mut hover = StyleRefinement::default();
+        hover.effects.blur = Some(px(4.));
+        base.refine(&hover);
+        assert_eq!(base.effects.blur, Some(px(4.)));
+        assert_eq!(base.effects.mask, Some(red().into()));
+
+        let mut style = Style::default();
+        style.refine(&base);
+        assert_eq!(style.effects.blur, px(4.));
+        assert!(style.effects.mask.is_some());
     }
 }

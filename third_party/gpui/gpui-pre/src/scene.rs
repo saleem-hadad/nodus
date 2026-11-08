@@ -5,8 +5,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AtlasTextureId, AtlasTile, Background, Bounds, ContentMask, Corners, Edges, Hsla, Pixels,
-    Point, Radians, ScaledPixels, Size, bounds_tree::BoundsTree, point,
+    AtlasTextureId, AtlasTile, Background, Bounds, ContentMask, Corners, Edges, EffectLayer, Hsla,
+    Pixels, Point, Radians, ScaledPixels, Size, bounds_tree::BoundsTree, point,
 };
 use std::{
     fmt::Debug,
@@ -41,7 +41,20 @@ impl From<bool> for PaddedBool32 {
 pub struct Scene {
     pub(crate) paint_operations: Vec<PaintOperation>,
     primitive_bounds: BoundsTree<ScaledPixels>,
-    layer_stack: Vec<DrawOrder>,
+    /// One entry per open layer. `Some` is a batching layer whose order every
+    /// primitive shares. `None` is an effect layer, which orders its content
+    /// by overlap like the rest of the scene.
+    layer_stack: Vec<Option<DrawOrder>>,
+    /// Every effect layer of the frame, in begin order.
+    pub effect_layers: Vec<EffectLayer>,
+    /// The begin mark of each effect layer, sorted by order in `finish`.
+    pub(crate) layer_begins: Vec<LayerMark>,
+    /// The end mark of each effect layer, sorted by order in `finish`.
+    pub(crate) layer_ends: Vec<LayerMark>,
+    /// The effect layers that have no end mark yet, innermost last.
+    open_effect_layers: Vec<u32>,
+    /// What each open effect layer has painted so far, in its own space.
+    open_painted: Vec<Bounds<ScaledPixels>>,
     pub shadows: Vec<Shadow>,
     pub quads: Vec<Quad>,
     pub paths: Vec<Path<ScaledPixels>>,
@@ -58,6 +71,11 @@ impl Scene {
         self.paint_operations.clear();
         self.primitive_bounds.clear();
         self.layer_stack.clear();
+        self.effect_layers.clear();
+        self.layer_begins.clear();
+        self.layer_ends.clear();
+        self.open_effect_layers.clear();
+        self.open_painted.clear();
         self.paths.clear();
         self.shadows.clear();
         self.quads.clear();
@@ -74,7 +92,7 @@ impl Scene {
 
     pub fn push_layer(&mut self, bounds: Bounds<ScaledPixels>) {
         let order = self.primitive_bounds.insert(bounds);
-        self.layer_stack.push(order);
+        self.layer_stack.push(Some(order));
         self.paint_operations
             .push(PaintOperation::StartLayer(bounds));
     }
@@ -82,6 +100,62 @@ impl Scene {
     pub fn pop_layer(&mut self) {
         self.layer_stack.pop();
         self.paint_operations.push(PaintOperation::EndLayer);
+    }
+
+    /// Opens an effect layer. The renderer draws everything up to the matching
+    /// `pop_effect_layer` offscreen, then composites the result with the
+    /// effects of `layer`. The begin mark takes an order above every earlier
+    /// primitive, so the content always lands after it.
+    pub fn push_effect_layer(&mut self, layer: EffectLayer) {
+        let order = self.primitive_bounds.insert(Self::everywhere());
+        let index = self.effect_layers.len() as u32;
+        self.layer_begins.push(LayerMark {
+            order,
+            layer: index,
+        });
+        self.open_effect_layers.push(index);
+        self.open_painted.push(crate::effect_layer::no_bounds());
+        self.effect_layers.push(layer);
+        self.layer_stack.push(None);
+        self.paint_operations
+            .push(PaintOperation::StartEffectLayer(layer));
+    }
+
+    /// Closes the innermost effect layer. The end mark takes an order above
+    /// every primitive of the layer, so later siblings draw over its result.
+    pub fn pop_effect_layer(&mut self) {
+        let Some(layer) = self.open_effect_layers.pop() else {
+            debug_assert!(
+                false,
+                "pop_effect_layer without a matching push_effect_layer"
+            );
+            return;
+        };
+        // The renderer reads only what the content painted, and the parent
+        // grows by what the layer paints into it.
+        let painted = self
+            .open_painted
+            .pop()
+            .unwrap_or_else(crate::effect_layer::no_bounds);
+        let effect_layer = &mut self.effect_layers[layer as usize];
+        effect_layer.painted = painted;
+        let extent = effect_layer.extent_in_parent();
+        if let Some(parent) = self.open_painted.last_mut() {
+            *parent = crate::effect_layer::union_bounds(*parent, extent);
+        }
+        let order = self.primitive_bounds.insert(Self::everywhere());
+        self.layer_ends.push(LayerMark { order, layer });
+        self.layer_stack.pop();
+        self.paint_operations.push(PaintOperation::EndEffectLayer);
+    }
+
+    /// Bounds that overlap every primitive, so an order inserted with them
+    /// comes after everything inserted so far.
+    fn everywhere() -> Bounds<ScaledPixels> {
+        Bounds::from_corners(
+            point(ScaledPixels(-1.0e9), ScaledPixels(-1.0e9)),
+            point(ScaledPixels(1.0e9), ScaledPixels(1.0e9)),
+        )
     }
 
     pub fn insert_primitive(&mut self, primitive: impl Into<Primitive>) {
@@ -93,11 +167,23 @@ impl Scene {
         if clipped_bounds.is_empty() {
             return;
         }
+        if let Some(painted) = self.open_painted.last_mut() {
+            // A shadow's quad reaches three sigmas past its bounds.
+            let extent = match &primitive {
+                Primitive::Shadow(shadow) => shadow
+                    .bounds
+                    .dilate(ScaledPixels((3.0 * shadow.blur_radius.0).ceil()))
+                    .intersect(&shadow.content_mask.bounds),
+                _ => clipped_bounds,
+            };
+            *painted = crate::effect_layer::union_bounds(*painted, extent);
+        }
 
         let order = self
             .layer_stack
             .last()
             .copied()
+            .flatten()
             .unwrap_or_else(|| self.primitive_bounds.insert(clipped_bounds));
         match &mut primitive {
             Primitive::Shadow(shadow) => {
@@ -144,6 +230,8 @@ impl Scene {
                 PaintOperation::Primitive(primitive) => self.insert_primitive(primitive.clone()),
                 PaintOperation::StartLayer(bounds) => self.push_layer(*bounds),
                 PaintOperation::EndLayer => self.pop_layer(),
+                PaintOperation::StartEffectLayer(layer) => self.push_effect_layer(*layer),
+                PaintOperation::EndEffectLayer => self.pop_effect_layer(),
             }
         }
     }
@@ -160,6 +248,8 @@ impl Scene {
         self.polychrome_sprites
             .sort_by_key(|sprite| (sprite.order, sprite.tile.texture_id.index));
         self.surfaces.sort_by_key(|surface| surface.order);
+        self.layer_begins.sort_by_key(|mark| mark.order);
+        self.layer_ends.sort_by_key(|mark| mark.order);
     }
 
     #[cfg_attr(
@@ -187,6 +277,8 @@ impl Scene {
             polychrome_sprites_iter: self.polychrome_sprites.iter().peekable(),
             surfaces_start: 0,
             surfaces_iter: self.surfaces.iter().peekable(),
+            layer_begins_iter: self.layer_begins.iter().peekable(),
+            layer_ends_iter: self.layer_ends.iter().peekable(),
         }
     }
 }
@@ -200,6 +292,8 @@ impl Scene {
     allow(dead_code)
 )]
 pub(crate) enum PrimitiveKind {
+    /// Sorts first at its order, so the layer opens before its content.
+    LayerBegin,
     Shadow,
     #[default]
     Quad,
@@ -209,12 +303,24 @@ pub(crate) enum PrimitiveKind {
     SubpixelSprite,
     PolychromeSprite,
     Surface,
+    /// Sorts last at its order, so the layer closes after its content.
+    LayerEnd,
 }
 
 pub(crate) enum PaintOperation {
     Primitive(Primitive),
     StartLayer(Bounds<ScaledPixels>),
     EndLayer,
+    StartEffectLayer(EffectLayer),
+    EndEffectLayer,
+}
+
+/// Where an effect layer opens or closes in draw order.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct LayerMark {
+    pub order: DrawOrder,
+    /// Index into `Scene::effect_layers`.
+    pub layer: u32,
 }
 
 #[derive(Clone)]
@@ -283,6 +389,8 @@ struct BatchIterator<'a> {
     polychrome_sprites_iter: Peekable<slice::Iter<'a, PolychromeSprite>>,
     surfaces_start: usize,
     surfaces_iter: Peekable<slice::Iter<'a, PaintSurface>>,
+    layer_begins_iter: Peekable<slice::Iter<'a, LayerMark>>,
+    layer_ends_iter: Peekable<slice::Iter<'a, LayerMark>>,
 }
 
 impl<'a> Iterator for BatchIterator<'a> {
@@ -290,6 +398,14 @@ impl<'a> Iterator for BatchIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut orders_and_kinds = [
+            (
+                self.layer_begins_iter.peek().map(|m| m.order),
+                PrimitiveKind::LayerBegin,
+            ),
+            (
+                self.layer_ends_iter.peek().map(|m| m.order),
+                PrimitiveKind::LayerEnd,
+            ),
             (
                 self.shadows_iter.peek().map(|s| s.order),
                 PrimitiveKind::Shadow,
@@ -328,6 +444,14 @@ impl<'a> Iterator for BatchIterator<'a> {
         };
 
         match batch_kind {
+            PrimitiveKind::LayerBegin => {
+                let mark = self.layer_begins_iter.next()?;
+                Some(PrimitiveBatch::LayerBegin(mark.layer as usize))
+            }
+            PrimitiveKind::LayerEnd => {
+                let mark = self.layer_ends_iter.next()?;
+                Some(PrimitiveBatch::LayerEnd(mark.layer as usize))
+            }
             PrimitiveKind::Shadow => {
                 let shadows_start = self.shadows_start;
                 let mut shadows_end = shadows_start + 1;
@@ -493,6 +617,10 @@ pub enum PrimitiveBatch {
         range: Range<usize>,
     },
     Surfaces(Range<usize>),
+    /// Everything up to the matching `LayerEnd` belongs to this effect layer.
+    LayerBegin(usize),
+    /// Composite this effect layer over what is under it.
+    LayerEnd(usize),
 }
 
 impl PrimitiveBatch {
@@ -525,6 +653,8 @@ impl PrimitiveBatch {
                 )
             }
             Self::Surfaces(range) => format!("surfaces ({})", range.len()),
+            Self::LayerBegin(layer) => format!("effect layer {layer} begins"),
+            Self::LayerEnd(layer) => format!("effect layer {layer} ends"),
         }
     }
 }
@@ -684,6 +814,42 @@ impl TransformationMatrix {
                     + self.rotation_scale[1][1] * other.translation[1],
             ],
         }
+    }
+
+    /// Applies the transformation to a point given as `[x, y]`.
+    pub fn apply_f32(&self, [x, y]: [f32; 2]) -> [f32; 2] {
+        [
+            self.rotation_scale[0][0] * x + self.rotation_scale[0][1] * y + self.translation[0],
+            self.rotation_scale[1][0] * x + self.rotation_scale[1][1] * y + self.translation[1],
+        ]
+    }
+
+    /// The determinant of the rotation and scale: the factor areas grow by.
+    pub fn determinant(&self) -> f32 {
+        self.rotation_scale[0][0] * self.rotation_scale[1][1]
+            - self.rotation_scale[0][1] * self.rotation_scale[1][0]
+    }
+
+    /// The transformation that undoes this one, or `None` when this one
+    /// squashes the plane flat.
+    pub fn inverse(&self) -> Option<Self> {
+        let determinant = self.determinant();
+        if determinant.abs() < 1e-12 || !determinant.is_finite() {
+            return None;
+        }
+        let [[a, b], [c, d]] = self.rotation_scale;
+        let rotation_scale = [
+            [d / determinant, -b / determinant],
+            [-c / determinant, a / determinant],
+        ];
+        let [tx, ty] = self.translation;
+        Some(Self {
+            rotation_scale,
+            translation: [
+                -(rotation_scale[0][0] * tx + rotation_scale[0][1] * ty),
+                -(rotation_scale[1][0] * tx + rotation_scale[1][1] * ty),
+            ],
+        })
     }
 
     /// Apply transformation to a point, mainly useful for debugging

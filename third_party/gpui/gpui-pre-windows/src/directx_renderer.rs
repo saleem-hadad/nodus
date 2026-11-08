@@ -19,12 +19,13 @@ use windows::{
     core::{HSTRING, Interface},
 };
 
+use crate::directx_effects::{DirectXEffects, EffectFrame};
 use crate::directx_renderer::shader_resources::{RawShaderBytes, ShaderModule, ShaderTarget};
 use crate::*;
 use gpui::*;
 
 pub(crate) const DISABLE_DIRECT_COMPOSITION: &str = "GPUI_DISABLE_DIRECT_COMPOSITION";
-const RENDER_TARGET_FORMAT: DXGI_FORMAT = DXGI_FORMAT_B8G8R8A8_UNORM;
+pub(crate) const RENDER_TARGET_FORMAT: DXGI_FORMAT = DXGI_FORMAT_B8G8R8A8_UNORM;
 // This configuration is used for MSAA rendering on paths only, and it's guaranteed to be supported by DirectX 11.
 const PATH_MULTISAMPLE_COUNT: u32 = 4;
 const MAX_INSTANCE_BUFFER_SIZE: usize = 256 * 1024 * 1024;
@@ -43,6 +44,7 @@ pub(crate) struct DirectXRenderer {
     resources: Option<DirectXResources>,
     globals: DirectXGlobalElements,
     pipelines: DirectXRenderPipelines,
+    effects: DirectXEffects,
     direct_composition: Option<DirectComposition>,
     font_info: &'static FontInfo,
 
@@ -170,6 +172,8 @@ impl DirectXRenderer {
             .context("Creating DirectX global elements")?;
         let pipelines = DirectXRenderPipelines::new(&devices.device)
             .context("Creating DirectX render pipelines")?;
+        let effects = DirectXEffects::new(&devices.device, &devices.device_context)
+            .context("Creating DirectX effect layers")?;
 
         let direct_composition = if disable_direct_composition {
             None
@@ -189,6 +193,7 @@ impl DirectXRenderer {
             resources: Some(resources),
             globals,
             pipelines,
+            effects,
             direct_composition,
             font_info: Self::get_font_info(),
             width: 1,
@@ -300,6 +305,8 @@ impl DirectXRenderer {
             .context("Creating DirectXGlobalElements")?;
         let pipelines = DirectXRenderPipelines::new(&devices.device)
             .context("Creating DirectXRenderPipelines")?;
+        let effects = DirectXEffects::new(&devices.device, &devices.device_context)
+            .context("Creating DirectX effect layers")?;
 
         let direct_composition = if disable_direct_composition {
             None
@@ -322,6 +329,7 @@ impl DirectXRenderer {
         self.resources = Some(resources);
         self.globals = globals;
         self.pipelines = pipelines;
+        self.effects = effects;
         self.direct_composition = direct_composition;
         self.skip_draws = true;
         Ok(())
@@ -355,6 +363,7 @@ impl DirectXRenderer {
             WindowBackgroundAppearance::Opaque => [1.0f32; 4],
             _ => [0.0f32; 4],
         })?;
+        self.effects.begin_frame();
         self.upload_scene_buffers(scene)?;
 
         let annotation = self
@@ -385,6 +394,10 @@ impl DirectXRenderer {
                     self.draw_polychrome_sprites(texture_id, range.start, range.len())
                 }
                 PrimitiveBatch::Surfaces(range) => self.draw_surfaces(&scene.surfaces[range]),
+                PrimitiveBatch::LayerBegin(index) => {
+                    self.begin_layer(&scene.effect_layers[index])
+                }
+                PrimitiveBatch::LayerEnd(index) => self.end_layer(&scene.effect_layers[index]),
             }
             .with_context(|| {
                 format!(
@@ -401,6 +414,7 @@ impl DirectXRenderer {
                 )
             })?;
         }
+        debug_assert!(!self.effects.has_open_layers());
         Ok(())
     }
 
@@ -482,6 +496,16 @@ impl DirectXRenderer {
             .context("Failed to build RgbaImage from staging readback")
     }
 
+    fn begin_layer(&mut self, layer: &EffectLayer) -> Result<()> {
+        let frame = effect_frame(&self.resources, self.width, self.height)?;
+        self.effects.begin_layer(&frame, layer)
+    }
+
+    fn end_layer(&mut self, layer: &EffectLayer) -> Result<()> {
+        let frame = effect_frame(&self.resources, self.width, self.height)?;
+        self.effects.end_layer(&frame, layer)
+    }
+
     pub(crate) fn resize(&mut self, new_size: Size<DevicePixels>) -> Result<()> {
         let width = new_size.width.0.max(1) as u32;
         let height = new_size.height.0.max(1) as u32;
@@ -516,6 +540,7 @@ impl DirectXRenderer {
         }
 
         resources.recreate_resources(devices, width, height)?;
+        self.effects.forget_textures();
 
         unsafe {
             devices
@@ -666,10 +691,14 @@ impl DirectXRenderer {
                 0,
                 RENDER_TARGET_FORMAT,
             );
-            // Restore main render target
-            devices
-                .device_context
-                .OMSetRenderTargets(Some(slice::from_ref(&resources.render_target_view)), None);
+            // Restore the render target the scene draws into, which is an
+            // effect layer when one is open.
+            devices.device_context.OMSetRenderTargets(
+                Some(slice::from_ref(
+                    self.effects.target_view(&resources.render_target_view),
+                )),
+                None,
+            );
         }
 
         Ok(())
@@ -1085,7 +1114,7 @@ struct BatchParams {
 
 const _: () = assert!(std::mem::size_of::<BatchParams>() == 16);
 
-struct PipelineState<T> {
+pub(crate) struct PipelineState<T> {
     label: &'static str,
     vertex: ID3D11VertexShader,
     fragment: ID3D11PixelShader,
@@ -1097,7 +1126,7 @@ struct PipelineState<T> {
 }
 
 impl<T> PipelineState<T> {
-    fn new(
+    pub(crate) fn new(
         device: &ID3D11Device,
         label: &'static str,
         shader_module: ShaderModule,
@@ -1127,7 +1156,7 @@ impl<T> PipelineState<T> {
         })
     }
 
-    fn update_buffer(
+    pub(crate) fn update_buffer(
         &mut self,
         device: &ID3D11Device,
         device_context: &ID3D11DeviceContext,
@@ -1181,7 +1210,7 @@ impl<T> PipelineState<T> {
         Ok(())
     }
 
-    fn draw_with_texture(
+    pub(crate) fn draw_with_texture(
         &self,
         device_context: &ID3D11DeviceContext,
         texture: &[Option<ID3D11ShaderResourceView>],
@@ -1664,6 +1693,24 @@ fn update_batch_start(
     )
 }
 
+/// Bundles the renderer state that effect layers need for one frame.
+fn effect_frame<'a>(
+    resources: &'a Option<DirectXResources>,
+    width: u32,
+    height: u32,
+) -> Result<EffectFrame<'a>> {
+    let resources = resources.as_ref().context("resources missing")?;
+    Ok(EffectFrame {
+        texture: resources
+            .render_target
+            .as_ref()
+            .context("render target missing")?,
+        view: &resources.render_target_view,
+        viewport: resources.viewport,
+        viewport_size: size(DevicePixels(width as i32), DevicePixels(height as i32)),
+    })
+}
+
 #[inline]
 fn set_pipeline_state(
     device_context: &ID3D11DeviceContext,
@@ -1717,6 +1764,9 @@ pub(crate) mod shader_resources {
         SubpixelSprite,
         PolychromeSprite,
         EmojiRasterization,
+        Blur,
+        VariableBlur,
+        LayerComposite,
     }
 
     #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -1793,6 +1843,18 @@ pub(crate) mod shader_resources {
                 ShaderModule::EmojiRasterization => match target {
                     ShaderTarget::Vertex => EMOJI_RASTERIZATION_VERTEX_BYTES,
                     ShaderTarget::Fragment => EMOJI_RASTERIZATION_FRAGMENT_BYTES,
+                },
+                ShaderModule::Blur => match target {
+                    ShaderTarget::Vertex => BLUR_VERTEX_BYTES,
+                    ShaderTarget::Fragment => BLUR_FRAGMENT_BYTES,
+                },
+                ShaderModule::VariableBlur => match target {
+                    ShaderTarget::Vertex => VARIABLE_BLUR_VERTEX_BYTES,
+                    ShaderTarget::Fragment => VARIABLE_BLUR_FRAGMENT_BYTES,
+                },
+                ShaderModule::LayerComposite => match target {
+                    ShaderTarget::Vertex => LAYER_COMPOSITE_VERTEX_BYTES,
+                    ShaderTarget::Fragment => LAYER_COMPOSITE_FRAGMENT_BYTES,
                 },
             };
             Self { inner: bytes }
@@ -1881,6 +1943,9 @@ pub(crate) mod shader_resources {
                 ShaderModule::SubpixelSprite => "subpixel_sprite",
                 ShaderModule::PolychromeSprite => "polychrome_sprite",
                 ShaderModule::EmojiRasterization => "emoji_rasterization",
+                ShaderModule::Blur => "blur",
+                ShaderModule::VariableBlur => "variable_blur",
+                ShaderModule::LayerComposite => "layer_composite",
             }
         }
     }

@@ -67,6 +67,8 @@ sha2 = "0.10"
 http-body-util = "0.1"
 hyper = { version = "1", features = ["http1", "server"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
+# PNG files, for window captures. GPUI already depends on it.
+image = { version = "0.25", default-features = false, features = ["png"] }
 indexmap = { version = "2.14", features = ["serde"] }
 # Watches transcript folders (FSEvents on macOS, ReadDirectoryChangesW on Windows).
 notify = "8.2"

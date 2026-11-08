@@ -1277,3 +1277,411 @@ float4 fill_color(Background background,
 
   return color;
 }
+
+// Effect layers: zed#63777 and #63780, adapted to this snapshot's fills, with
+// the Nodus patches (third_party/gpui/PATCHES.md): transforms, group opacity,
+// a backdrop mirrored at the edges of its box, and a hardware-blended
+// composite. The renderer draws a subtree into a texture, then these shaders
+// blur it and paint it over the frame with a colour matrix, a mask, a blend
+// mode and a transform. Every texture here holds premultiplied colour.
+//
+// Apple's AGX compiler (macOS 27.2, M4) crashes building these pipelines when
+// a fill whose `Background` was passed by value walks its colour stops with a
+// data-dependent index (zed#63793's multi-stop gradients). This snapshot's
+// fills read two fixed stops, and the mask's colours are prepared in the
+// vertex shader like a quad's. A port of multi-stop gradients must pass the
+// `Background` by `thread const &` to the functions that index its stops.
+
+struct BlurVertexOutput {
+  float4 position [[position]];
+  float2 uv;
+};
+
+vertex BlurVertexOutput blur_vertex(uint unit_vertex_id [[vertex_id]],
+                                    constant float2 *unit_vertices
+                                    [[buffer(BlurInputIndex_Vertices)]]) {
+  float2 unit_vertex = unit_vertices[unit_vertex_id];
+  return BlurVertexOutput{
+      float4(unit_vertex.x * 2.0 - 1.0, 1.0 - unit_vertex.y * 2.0, 0.0, 1.0),
+      unit_vertex};
+}
+
+// One pass of a separable Gaussian, or a 2 by 2 box average when the
+// radius is 0. With `edge` 1 the source mirrors at its edges, the edge mode
+// CSS gives a backdrop; with 0 a tap past the edge drops out and the weights
+// renormalize.
+fragment float4 blur_fragment(BlurVertexOutput input [[stage_in]],
+                              constant BlurParams *params
+                              [[buffer(BlurInputIndex_Params)]],
+                              texture2d<float> source
+                              [[texture(BlurInputIndex_Source)]]) {
+  constexpr sampler edge_sampler(mag_filter::linear, min_filter::linear,
+                                 address::clamp_to_edge);
+  constexpr sampler mirror_sampler(mag_filter::linear, min_filter::linear,
+                                   address::mirrored_repeat);
+  float2 step = float2(params->step[0], params->step[1]);
+  float sigma = max(params->sigma, 1e-3);
+  int radius = params->radius;
+  bool mirror = params->edge != 0;
+  float4 sum = float4(0.0);
+  float weight_sum = 0.0;
+  for (int i = -radius; i <= radius; i++) {
+    float2 uv = input.uv + step * float(i);
+    float weight = exp(-0.5 * float(i * i) / (sigma * sigma));
+    if (mirror) {
+      sum += weight * source.sample(mirror_sampler, uv);
+    } else {
+      if (any(uv < 0.0) || any(uv > 1.0)) {
+        continue;
+      }
+      sum += weight * source.sample(edge_sampler, uv);
+    }
+    weight_sum += weight;
+  }
+  return sum / weight_sum;
+}
+
+// A row-major 4 by 5 matrix on straight (not premultiplied) rgba.
+float4 apply_color_matrix(constant float *m, float4 c) {
+  return float4(
+      m[0] * c.r + m[1] * c.g + m[2] * c.b + m[3] * c.a + m[4],
+      m[5] * c.r + m[6] * c.g + m[7] * c.b + m[8] * c.a + m[9],
+      m[10] * c.r + m[11] * c.g + m[12] * c.b + m[13] * c.a + m[14],
+      m[15] * c.r + m[16] * c.g + m[17] * c.b + m[18] * c.a + m[19]);
+}
+
+float4 unpremultiply(float4 c) {
+  return c.a > 0.0 ? float4(c.rgb / c.a, c.a) : float4(0.0);
+}
+
+float4 premultiply(float4 c) {
+  return float4(c.rgb * c.a, c.a);
+}
+
+// Runs a premultiplied colour through a matrix, clamped, premultiplied again.
+float4 filter_color(constant float *m, float4 premultiplied) {
+  float4 c = apply_color_matrix(m, unpremultiply(premultiplied));
+  return premultiply(saturate(c));
+}
+
+// Compositing and Blending 1 blend functions on straight colours, with the
+// backdrop first and the source second.
+float lum(float3 c) { return dot(c, float3(0.3, 0.59, 0.11)); }
+
+float3 clip_color(float3 c) {
+  float l = lum(c);
+  float n = min(c.r, min(c.g, c.b));
+  float x = max(c.r, max(c.g, c.b));
+  if (n < 0.0) {
+    c = l + (c - l) * l / max(l - n, 1e-5);
+  }
+  if (x > 1.0) {
+    c = l + (c - l) * (1.0 - l) / max(x - l, 1e-5);
+  }
+  return c;
+}
+
+float3 set_lum(float3 c, float l) { return clip_color(c + (l - lum(c))); }
+
+float sat(float3 c) {
+  return max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
+}
+
+float3 set_sat(float3 c, float s) {
+  float mx = max(c.r, max(c.g, c.b));
+  float mn = min(c.r, min(c.g, c.b));
+  if (mx <= mn) {
+    return float3(0.0);
+  }
+  return (c - mn) * s / (mx - mn);
+}
+
+float blend_channel(uint mode, float b, float s) {
+  switch (mode) {
+    case 1: return b * s;
+    case 2: return b + s - b * s;
+    case 3: return b <= 0.5 ? s * 2.0 * b : 1.0 - (1.0 - s) * (1.0 - (2.0 * b - 1.0));
+    case 4: return min(b, s);
+    case 5: return max(b, s);
+    case 6:
+      if (b == 0.0) return 0.0;
+      if (s >= 1.0) return 1.0;
+      return min(1.0, b / (1.0 - s));
+    case 7:
+      if (b >= 1.0) return 1.0;
+      if (s <= 0.0) return 0.0;
+      return 1.0 - min(1.0, (1.0 - b) / s);
+    case 8: return s <= 0.5 ? b * 2.0 * s : 1.0 - (1.0 - b) * (1.0 - (2.0 * s - 1.0));
+    case 9: {
+      float d = b <= 0.25 ? ((16.0 * b - 12.0) * b + 4.0) * b : sqrt(b);
+      return s <= 0.5 ? b - (1.0 - 2.0 * s) * b * (1.0 - b)
+                      : b + (2.0 * s - 1.0) * (d - b);
+    }
+    case 10: return fabs(b - s);
+    case 11: return b + s - 2.0 * b * s;
+    default: return s;
+  }
+}
+
+float3 blend_colors(uint mode, float3 b, float3 s) {
+  switch (mode) {
+    case 0: return s;
+    case 12: return set_lum(set_sat(s, sat(b)), lum(b));
+    case 13: return set_lum(set_sat(b, sat(s)), lum(b));
+    case 14: return set_lum(s, lum(b));
+    case 15: return set_lum(b, lum(s));
+    case 16: return s;
+    default:
+      return float3(blend_channel(mode, b.r, s.r), blend_channel(mode, b.g, s.g),
+                    blend_channel(mode, b.b, s.b));
+  }
+}
+
+// Paints a premultiplied source over a premultiplied backdrop with a blend
+// mode, as Compositing and Blending 1 says.
+float4 blend_over(uint mode, float4 backdrop, float4 source) {
+  if (mode == 16) {
+    return min(backdrop + source, 1.0);
+  }
+  if (mode != 0 && source.a > 0.0 && backdrop.a > 0.0) {
+    float3 cs = source.rgb / source.a;
+    float3 cb = backdrop.rgb / backdrop.a;
+    float3 mixed = (1.0 - backdrop.a) * cs + backdrop.a * blend_colors(mode, cb, cs);
+    source = float4(mixed * source.a, source.a);
+  }
+  return source + backdrop * (1.0 - source.a);
+}
+
+// Takes a pixel of the target to the layer's own space.
+float2 layer_point(constant LayerComposite *composite, float2 position) {
+  constant TransformationMatrix &m = composite->inverse;
+  return float2(
+      m.rotation_scale[0][0] * position.x + m.rotation_scale[0][1] * position.y +
+          m.translation[0],
+      m.rotation_scale[1][0] * position.x + m.rotation_scale[1][1] * position.y +
+          m.translation[1]);
+}
+
+// How much of the pixel at `point`, in the layer's space, lies inside the
+// box. `aa_scale` is how many target pixels one layer pixel spans.
+float box_coverage(float2 point, Bounds_ScaledPixels bounds,
+                   Corners_ScaledPixels corner_radii, float aa_scale) {
+  return saturate(0.5 - quad_sdf(point, bounds, corner_radii) * aa_scale);
+}
+
+// The layer's own picture at `point`, in its space: premultiplied, run
+// through its colour matrix and faded by its opacity, clipped to its
+// rounded box when it clips. Nothing outside its texture.
+float4 layer_content(constant LayerComposite *composite, float2 point,
+                     texture2d<float> content_texture) {
+  constexpr sampler smooth(mag_filter::linear, min_filter::linear,
+                           address::clamp_to_edge);
+  constexpr sampler exact(mag_filter::nearest, min_filter::nearest,
+                          address::clamp_to_edge);
+  constant EffectLayer &layer = composite->layer;
+  float2 source_origin = float2(composite->source.origin.x, composite->source.origin.y);
+  float2 source_size = float2(composite->source.size.width, composite->source.size.height);
+  float2 uv = (point - source_origin) / source_size;
+  float4 content = float4(0.0);
+  if (all(uv >= 0.0) && all(uv <= 1.0)) {
+    content = composite->smooth_content != 0 ? content_texture.sample(smooth, uv)
+                                             : content_texture.sample(exact, uv);
+  }
+  content = filter_color(layer.color_matrix, content) * layer.opacity;
+  if (layer.clips_content != 0) {
+    content *= box_coverage(point, layer.bounds, layer.corner_radii, composite->aa_scale);
+  }
+  return content;
+}
+
+struct LayerCompositeVertexOutput {
+  float4 position [[position]];
+  float4 mask_solid [[flat]];
+  float4 mask_color0 [[flat]];
+  float4 mask_color1 [[flat]];
+  float clip_distance [[clip_distance]][4];
+};
+
+struct LayerCompositeFragmentInput {
+  float4 position [[position]];
+  float4 mask_solid [[flat]];
+  float4 mask_color0 [[flat]];
+  float4 mask_color1 [[flat]];
+};
+
+GradientColor prepare_mask_color(constant LayerComposite *composite) {
+  constant Background &mask = composite->layer.mask;
+  return prepare_fill_color(mask.tag, mask.color_space, mask.solid,
+                            mask.colors[0].color, mask.colors[1].color);
+}
+
+vertex LayerCompositeVertexOutput layer_composite_vertex(
+    uint unit_vertex_id [[vertex_id]],
+    constant float2 *unit_vertices [[buffer(LayerInputIndex_Vertices)]],
+    constant LayerComposite *composite [[buffer(LayerInputIndex_Layer)]],
+    constant Size_DevicePixels *viewport_size
+    [[buffer(LayerInputIndex_ViewportSize)]]) {
+  float2 unit_vertex = unit_vertices[unit_vertex_id];
+  float4 device_position =
+      to_device_position(unit_vertex, composite->target, viewport_size);
+  float4 clip_distance = distance_from_clip_rect(
+      unit_vertex, composite->target, composite->layer.content_mask.bounds);
+  GradientColor mask = prepare_mask_color(composite);
+  return LayerCompositeVertexOutput{
+      device_position,
+      mask.solid,
+      mask.color0,
+      mask.color1,
+      {clip_distance.x, clip_distance.y, clip_distance.z, clip_distance.w}};
+}
+
+// The composite of a layer that leaves what is under it alone: its picture,
+// premultiplied, for the pipeline to blend over the target.
+fragment float4 layer_blend_fragment(
+    LayerCompositeFragmentInput input [[stage_in]],
+    constant LayerComposite *composite [[buffer(LayerInputIndex_Layer)]],
+    texture2d<float> content_texture [[texture(LayerInputIndex_ContentTexture)]]) {
+  float2 point = layer_point(composite, input.position.xy);
+  return layer_content(composite, point, content_texture);
+}
+
+// The composite of a layer with a backdrop, a mask or a blend mode. It reads
+// what is under the layer and writes the result as is.
+fragment float4 layer_composite_fragment(
+    LayerCompositeFragmentInput input [[stage_in]],
+    constant LayerComposite *composite [[buffer(LayerInputIndex_Layer)]],
+    texture2d<float> content_texture [[texture(LayerInputIndex_ContentTexture)]],
+    texture2d<float> under_texture [[texture(LayerInputIndex_UnderTexture)]],
+    texture2d<float> backdrop_texture [[texture(LayerInputIndex_BackdropTexture)]]) {
+  constexpr sampler smooth(mag_filter::linear, min_filter::linear,
+                           address::clamp_to_edge);
+  constexpr sampler exact(mag_filter::nearest, min_filter::nearest,
+                          address::clamp_to_edge);
+  constant EffectLayer &layer = composite->layer;
+  float2 position = input.position.xy;
+  float2 point = layer_point(composite, position);
+  float2 target_origin = float2(composite->target.origin.x, composite->target.origin.y);
+  float2 target_size = float2(composite->target.size.width, composite->target.size.height);
+  float2 uv = (position - target_origin) / target_size;
+
+  float4 under = under_texture.sample(exact, uv);
+  float4 content = layer_content(composite, point, content_texture);
+  float shape = box_coverage(point, layer.bounds, layer.corner_radii, composite->aa_scale);
+
+  float keep = 1.0;
+  if (layer.has_mask != 0) {
+    float2 box_min = float2(layer.bounds.origin.x, layer.bounds.origin.y);
+    float2 box_max = box_min + float2(layer.bounds.size.width, layer.bounds.size.height);
+    bool inside = all(point >= box_min) && all(point < box_max);
+    keep = inside ? fill_color(layer.mask, point, layer.bounds, input.mask_solid,
+                               input.mask_color0, input.mask_color1).a
+                  : 0.0;
+  }
+
+  float4 base = under;
+  if (layer.has_backdrop != 0) {
+    float4 backdrop = under;
+    if (layer.backdrop_blur > 0.0) {
+      if (layer.has_mask != 0) {
+        // The variable blur covers the target, already at the width the
+        // mask asks for at every pixel.
+        backdrop = backdrop_texture.sample(smooth, uv);
+      } else {
+        float2 backdrop_origin =
+            float2(composite->backdrop.origin.x, composite->backdrop.origin.y);
+        float2 backdrop_size =
+            float2(composite->backdrop.size.width, composite->backdrop.size.height);
+        backdrop = backdrop_texture.sample(
+            smooth, saturate((position - backdrop_origin) / backdrop_size));
+      }
+    }
+    backdrop = mix(backdrop, filter_color(layer.backdrop_matrix, backdrop), keep);
+    base = mix(under, backdrop, shape);
+  }
+
+  float4 result = blend_over(layer.blend_mode, base, content);
+  return mix(base, result, keep);
+}
+
+struct VariableBlurVertexOutput {
+  float4 position [[position]];
+  float2 uv;
+  float4 mask_solid [[flat]];
+  float4 mask_color0 [[flat]];
+  float4 mask_color1 [[flat]];
+};
+
+// The most taps a variable blur pass takes on each side of a pixel. The
+// cap trims the tails of a sigma past 32 device pixels, and it bounds
+// the cost of one huge blur.
+constant int VARIABLE_BLUR_RADIUS_CAP = 96;
+
+vertex VariableBlurVertexOutput variable_blur_vertex(
+    uint unit_vertex_id [[vertex_id]],
+    constant float2 *unit_vertices [[buffer(BlurInputIndex_Vertices)]],
+    constant LayerComposite *composite [[buffer(BlurInputIndex_Layer)]]) {
+  float2 unit_vertex = unit_vertices[unit_vertex_id];
+  GradientColor mask = prepare_mask_color(composite);
+  return VariableBlurVertexOutput{
+      float4(unit_vertex.x * 2.0 - 1.0, 1.0 - unit_vertex.y * 2.0, 0.0, 1.0),
+      unit_vertex, mask.solid, mask.color0, mask.color1};
+}
+
+// One pass of the variable backdrop blur, the blur a gradient mask asks
+// for. The sigma at each pixel is the mask value there times the full
+// sigma, the contract of the variable blur filter of iOS. Two passes,
+// one per axis, come close to the true variable Gaussian, because the
+// mask changes slowly against the width of the kernel. Pairs of taps
+// merge into one linear read at their weighted centre, which halves the
+// reads. A tap past the source is dropped and the weights renormalize,
+// as in the fixed blur.
+fragment float4 variable_blur_fragment(
+    VariableBlurVertexOutput input [[stage_in]],
+    constant LayerComposite *composite [[buffer(BlurInputIndex_Layer)]],
+    texture2d<float> source [[texture(BlurInputIndex_Source)]]) {
+  constexpr sampler edge_sampler(mag_filter::linear, min_filter::linear,
+                                 address::clamp_to_edge);
+  constant EffectLayer &layer = composite->layer;
+  float2 position =
+      float2(composite->target.origin.x, composite->target.origin.y) +
+      input.uv * float2(composite->target.size.width, composite->target.size.height);
+  float2 point = layer_point(composite, position);
+  float2 box_min = float2(layer.bounds.origin.x, layer.bounds.origin.y);
+  float2 box_max = box_min + float2(layer.bounds.size.width, layer.bounds.size.height);
+  // The pass also blurs the pad around the layer, the pixels only the
+  // other pass reads. Clamp the mask read to the bounds, so a pad row
+  // above the layer blurs like the top row.
+  float2 mask_point = clamp(point, box_min, box_max);
+  float mask = saturate(fill_color(layer.mask, mask_point, layer.bounds, input.mask_solid,
+                                   input.mask_color0, input.mask_color1).a);
+  float sigma = mask * layer.backdrop_blur;
+  float4 centre = source.sample(edge_sampler, input.uv);
+  if (sigma < 0.3) {
+    return centre;
+  }
+  int radius = min(int(ceil(3.0 * sigma)), VARIABLE_BLUR_RADIUS_CAP);
+  float2 texel = 1.0 / float2(source.get_width(), source.get_height());
+  float2 step = composite->blur_axis == 0u ? float2(texel.x, 0.0) : float2(0.0, texel.y);
+  float4 sum = centre;
+  float weight_sum = 1.0;
+  for (int i = 1; i <= radius; i += 2) {
+    float near_weight = exp(-0.5 * float(i * i) / (sigma * sigma));
+    float far_weight =
+        exp(-0.5 * float((i + 1) * (i + 1)) / (sigma * sigma));
+    float pair = near_weight + far_weight;
+    float offset =
+        (float(i) * near_weight + float(i + 1) * far_weight) / pair;
+    float2 reach = step * offset;
+    float2 left = input.uv - reach;
+    if (all(left >= 0.0) && all(left <= 1.0)) {
+      sum += pair * source.sample(edge_sampler, left);
+      weight_sum += pair;
+    }
+    float2 right = input.uv + reach;
+    if (all(right >= 0.0) && all(right <= 1.0)) {
+      sum += pair * source.sample(edge_sampler, right);
+      weight_sum += pair;
+    }
+  }
+  return sum / weight_sum;
+}

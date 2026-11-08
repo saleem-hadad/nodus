@@ -4051,6 +4051,7 @@ name = "nodus-ui"
 version = "0.9.4"
 dependencies = [
  "gpui-kit",
+ "image",
 ]
 
 [[package]]

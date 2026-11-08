@@ -9,6 +9,7 @@ mod dispatcher;
 pub mod display_link;
 pub mod keychain;
 mod metal_atlas;
+mod metal_effects;
 pub mod metal_renderer;
 pub mod process_info;
 

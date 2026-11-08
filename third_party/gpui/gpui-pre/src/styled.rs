@@ -1,9 +1,10 @@
 use crate::{
-    self as gpui, AbsoluteLength, AlignContent, AlignItems, AlignSelf, BorderStyle, CursorStyle,
-    DefiniteLength, Display, Fill, FlexDirection, FlexWrap, Font, FontFeatures, FontStyle,
-    FontWeight, GridPlacement, GridTemplate, GridTemplateMinSize, Hsla, JustifyContent, Length,
-    SharedString, StrikethroughStyle, StyleRefinement, TextAlign, TextOverflow,
-    TextStyleRefinement, UnderlineStyle, WhiteSpace, px, relative, rems,
+    self as gpui, AbsoluteLength, AlignContent, AlignItems, AlignSelf, Background, BlendMode,
+    BorderStyle, ColorMatrix, CursorStyle, DefiniteLength, Display, ElementTransform, Fill,
+    FlexDirection, FlexWrap, Font, FontFeatures, FontStyle, FontWeight, GridPlacement,
+    GridTemplate, GridTemplateMinSize, Hsla, JustifyContent, Length, Pixels, Radians, SharedString,
+    StrikethroughStyle, StyleRefinement, TextAlign, TextOverflow, TextStyleRefinement,
+    UnderlineStyle, WhiteSpace, px, relative, rems,
 };
 pub use gpui_macros::{
     border_style_methods, box_shadow_style_methods, cursor_style_methods, margin_style_methods,
@@ -493,6 +494,153 @@ pub trait Styled: Sized {
         Self: Sized,
     {
         self.style().background = Some(fill.into());
+        self
+    }
+
+    /// Sets a fill painted over the background colour, like CSS
+    /// `background-image`.
+    fn background_image(mut self, image: impl Into<Background>) -> Self
+    where
+        Self: Sized,
+    {
+        self.style().background_image = Some(image.into());
+        self
+    }
+
+    /// Sets how the background image mixes with the background colour. CSS
+    /// `background-blend-mode`.
+    fn background_blend_mode(mut self, mode: BlendMode) -> Self
+    where
+        Self: Sized,
+    {
+        self.style().background_blend_mode = Some(mode);
+        self
+    }
+
+    /// Blurs the picture of the element and its children. CSS `filter: blur()`.
+    fn blur(mut self, sigma: Pixels) -> Self
+    where
+        Self: Sized,
+    {
+        self.style().effects.blur = Some(sigma);
+        self
+    }
+
+    /// Runs the picture of the element through a colour matrix, which is
+    /// what the CSS `filter` functions do.
+    fn color_matrix(mut self, matrix: ColorMatrix) -> Self
+    where
+        Self: Sized,
+    {
+        self.style().effects.color_matrix = Some(matrix);
+        self
+    }
+
+    /// Blurs what is under the element. CSS `backdrop-filter: blur()`.
+    fn backdrop_blur(mut self, sigma: Pixels) -> Self
+    where
+        Self: Sized,
+    {
+        self.style().effects.backdrop_blur = Some(sigma);
+        self
+    }
+
+    /// Runs what is under the element through a colour matrix. The other
+    /// CSS `backdrop-filter` functions.
+    fn backdrop_matrix(mut self, matrix: ColorMatrix) -> Self
+    where
+        Self: Sized,
+    {
+        self.style().effects.backdrop_matrix = Some(matrix);
+        self
+    }
+
+    /// Keeps each pixel of the element by the alpha of `mask` at that
+    /// point. CSS `mask-image`.
+    fn mask(mut self, mask: impl Into<Background>) -> Self
+    where
+        Self: Sized,
+    {
+        self.style().effects.mask = Some(mask.into());
+        self
+    }
+
+    /// Sets how the element mixes with what is under it. CSS `mix-blend-mode`.
+    fn blend_mode(mut self, mode: BlendMode) -> Self
+    where
+        Self: Sized,
+    {
+        self.style().effects.blend_mode = Some(mode);
+        self
+    }
+
+    /// Runs what is under the element through CSS `saturate(amount)` after
+    /// the backdrop blur, so `.backdrop_blur(px(30.)).backdrop_saturate(1.8)`
+    /// is `backdrop-filter: blur(30px) saturate(1.8)`. To chain more filter
+    /// functions, multiply their matrices into `backdrop_matrix` (Nodus
+    /// patch).
+    fn backdrop_saturate(mut self, amount: f32) -> Self {
+        self.style().effects.backdrop_matrix = Some(ColorMatrix::saturate(amount));
+        self
+    }
+
+    /// Clips the children to the rounded corners of the box, as CSS does for
+    /// a rounded box that hides its overflow. It draws the element through
+    /// an offscreen layer, so use it only where a child reaches into a
+    /// corner (Nodus patch; zed#63794 does it for every such box).
+    fn clip_rounded(mut self) -> Self {
+        self.style().effects.clips = Some(true);
+        self
+    }
+
+    /// Draws the element and everything it paints through a 2D transform,
+    /// like CSS `transform`. Layout ignores it; hit testing follows it
+    /// (Nodus patch).
+    fn transform(mut self, transform: ElementTransform) -> Self {
+        self.style().effects.transform = Some(transform);
+        self
+    }
+
+    /// Appends CSS `rotate(angle)` to the transform. Positive angles turn
+    /// clockwise, around the centre unless `transform_origin` says otherwise
+    /// (Nodus patch).
+    fn rotate(mut self, angle: Radians) -> Self {
+        let effects = &mut self.style().effects;
+        effects.transform = Some(effects.transform.unwrap_or_default().rotate(angle));
+        self
+    }
+
+    /// Appends CSS `scale(factor)` to the transform (Nodus patch).
+    fn scale(mut self, factor: f32) -> Self {
+        let effects = &mut self.style().effects;
+        effects.transform = Some(effects.transform.unwrap_or_default().scale(factor));
+        self
+    }
+
+    /// Appends CSS `translate(x, y)` to the transform (Nodus patch).
+    fn translate(mut self, x: Pixels, y: Pixels) -> Self {
+        let effects = &mut self.style().effects;
+        effects.transform = Some(effects.transform.unwrap_or_default().translate(x, y));
+        self
+    }
+
+    /// Sets CSS `transform-origin` as fractions of the border box; the
+    /// default is the centre, `(0.5, 0.5)` (Nodus patch).
+    fn transform_origin(mut self, x: f32, y: f32) -> Self {
+        let effects = &mut self.style().effects;
+        effects.transform = Some(effects.transform.unwrap_or_default().origin(x, y));
+        self
+    }
+
+    /// Fades the element and its children as one picture, like CSS
+    /// `opacity`: overlapping children don't show through each other.
+    /// `opacity` instead fades each primitive on its own, which costs
+    /// nothing; this draws through an offscreen layer while `opacity` is
+    /// below 1 (Nodus patch).
+    fn group_opacity(mut self, opacity: f32) -> Self {
+        let style = self.style();
+        style.opacity = Some(opacity);
+        style.effects.group = Some(true);
         self
     }
 

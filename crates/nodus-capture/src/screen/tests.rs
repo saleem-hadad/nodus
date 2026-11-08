@@ -348,6 +348,89 @@ mod screencapture {
             Some(Screenshot::NeedsPermission)
         );
     }
+
+    /// A tool named `name` that logs each call's arguments on a line
+    /// (separated by `|`) and runs `body`.
+    fn tool(dir: &Path, name: &str, body: &str) -> String {
+        let script = dir.join(name);
+        let text = format!(
+            "#!/bin/sh\nlog='{}/{name}.log'\nfirst=1\nfor a in \"$@\"; do if [ $first = 1 ]; then first=0; else printf '|' >> \"$log\"; fi; printf '%s' \"$a\" >> \"$log\"; done\necho >> \"$log\"\n{body}\n",
+            dir.display()
+        );
+        fs::write(&script, text).unwrap();
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+        script.to_string_lossy().into_owned()
+    }
+
+    /// macOS checks a script it hasn't run before, which can take longer
+    /// than lsappinfo's own 1 s on a busy machine.
+    const SLOW: Duration = Duration::from_secs(30);
+
+    /// CAP-045: `lsappinfo front`, then `lsappinfo info` on its ASN.
+    #[tokio::test]
+    async fn reads_the_app_in_front_with_lsappinfo() {
+        let dir = tempfile::tempdir().unwrap();
+        let lsappinfo = tool(
+            dir.path(),
+            "lsappinfo",
+            "if [ \"$1\" = front ]; then echo ' ASN:0x0-0x1a01a: '; else printf '\"Safari\" ASN:0x0-0x1a01a: (in front)\\n    bundleID=\"com.apple.Safari\"\\n'; fi",
+        );
+        assert_eq!(
+            front_app_with(&lsappinfo, SLOW).await,
+            Some(FrontApp {
+                name: "Safari".into(),
+                bundle_id: "com.apple.Safari".into()
+            })
+        );
+        let log = fs::read_to_string(dir.path().join("lsappinfo.log")).unwrap();
+        assert_eq!(log, "front\ninfo|-only|bundleid|-only|name|ASN:0x0-0x1a01a:\n");
+        // No ASN, a failure, or no tool at all: no app.
+        let empty = tool(dir.path(), "empty", "echo '  '");
+        assert_eq!(front_app_with(&empty, SLOW).await, None);
+        let failing = tool(dir.path(), "failing", "echo 'ASN:0x1:'; exit 1");
+        assert_eq!(front_app_with(&failing, SLOW).await, None);
+        assert_eq!(
+            front_app_with(&dir.path().join("none").to_string_lossy(), SLOW).await,
+            None
+        );
+    }
+
+    /// CAP-050: `osascript -e <script>`, the URL then the title.
+    #[tokio::test]
+    async fn reads_the_tab_with_osascript() {
+        let dir = tempfile::tempdir().unwrap();
+        let osascript = tool(dir.path(), "osascript", "printf 'https://example.com/a\\nA title\\n'");
+        let arc = FrontApp {
+            name: "Arc".into(),
+            bundle_id: "company.thebrowser.Browser".into(),
+        };
+        assert_eq!(
+            browser_tab_with(&osascript, &arc).await,
+            Some(TabAttachment {
+                url: "https://example.com/a".into(),
+                title: "A title".into(),
+                app: "Arc".into()
+            })
+        );
+        let log = fs::read_to_string(dir.path().join("osascript.log")).unwrap();
+        assert_eq!(log, format!("-e|{}\n", tab_script(&arc.bundle_id).unwrap()));
+        // Not a readable browser: nothing is run.
+        let firefox = FrontApp {
+            name: "Firefox".into(),
+            bundle_id: "org.mozilla.firefox".into(),
+        };
+        assert_eq!(browser_tab_with(&osascript, &firefox).await, None);
+        assert_eq!(
+            fs::read_to_string(dir.path().join("osascript.log"))
+                .unwrap()
+                .lines()
+                .count(),
+            1
+        );
+        // Refused (macOS's Automation prompt answered no): no tab.
+        let refused = tool(dir.path(), "refused", "echo 'Not authorized' >&2; exit 1");
+        assert_eq!(browser_tab_with(&refused, &arc).await, None);
+    }
 }
 
 /// CAP-061, CAP-171

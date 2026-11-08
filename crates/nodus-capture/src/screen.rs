@@ -107,17 +107,23 @@ pub async fn front_app() -> Option<FrontApp> {
     if !cfg!(target_os = "macos") {
         return None;
     }
-    let asn = run("/usr/bin/lsappinfo", &["front"], LSAPPINFO_TIMEOUT).await?;
+    front_app_with(LSAPPINFO, LSAPPINFO_TIMEOUT).await
+}
+
+/// macOS's app-list tool (CAP-045).
+pub const LSAPPINFO: &str = "/usr/bin/lsappinfo";
+/// macOS's AppleScript runner (CAP-050).
+pub const OSASCRIPT: &str = "/usr/bin/osascript";
+
+/// [`front_app`] with `lsappinfo` at `tool`, each call given `timeout`: its
+/// front app's ASN, then that app's bundle id and name. Any failure is no app.
+pub async fn front_app_with(tool: &str, timeout: Duration) -> Option<FrontApp> {
+    let asn = run(tool, &["front"], timeout).await?;
     let asn = js::trim(&asn);
     if asn.is_empty() {
         return None;
     }
-    let info = run(
-        "/usr/bin/lsappinfo",
-        &["info", "-only", "bundleid", "-only", "name", asn],
-        LSAPPINFO_TIMEOUT,
-    )
-    .await?;
+    let info = run(tool, &["info", "-only", "bundleid", "-only", "name", asn], timeout).await?;
     parse_app_info(&info)
 }
 
@@ -191,8 +197,13 @@ pub fn parse_tab(out: &str, app: &str) -> Option<TabAttachment> {
 /// The front tab of a browser in front (CAP-050). macOS asks once, for each
 /// browser, whether Nodus may read it; until it may, there's no tab.
 pub async fn browser_tab(front: &FrontApp) -> Option<TabAttachment> {
+    browser_tab_with(OSASCRIPT, front).await
+}
+
+/// [`browser_tab`] with `osascript` at `tool`: `-e <script>`, one argument.
+pub async fn browser_tab_with(tool: &str, front: &FrontApp) -> Option<TabAttachment> {
     let script = tab_script(&front.bundle_id)?;
-    let out = run("/usr/bin/osascript", &["-e", &script], TAB_TIMEOUT).await?;
+    let out = run(tool, &["-e", &script], TAB_TIMEOUT).await?;
     parse_tab(&out, &front.name)
 }
 

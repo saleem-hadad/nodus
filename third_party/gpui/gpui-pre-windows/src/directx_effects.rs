@@ -322,9 +322,10 @@ impl DirectXEffects {
             context.OMSetRenderTargets(Some(slice::from_ref(&parent_view)), None);
             context.RSSetViewports(Some(slice::from_ref(&frame.viewport)));
             let under_resource = under.as_ref().unwrap_or(&content).resource.clone();
-            let backdrop_resource = backdrop
-                .as_ref()
-                .map_or_else(|| under_resource.clone(), |texture| texture.resource.clone());
+            let backdrop_resource = backdrop.as_ref().map_or_else(
+                || under_resource.clone(),
+                |texture| texture.resource.clone(),
+            );
             context.PSSetShaderResources(2, Some(&[under_resource, backdrop_resource]));
             context.PSSetSamplers(1, Some(slice::from_ref(&self.exact_sampler)));
         }

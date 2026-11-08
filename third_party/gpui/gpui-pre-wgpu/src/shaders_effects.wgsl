@@ -40,7 +40,8 @@ struct EffectLayer {
 
 struct LayerComposite {
     layer: EffectLayer,
-    target: Bounds,
+    // `target` in the Rust struct; the name is reserved in WGSL.
+    target_bounds: Bounds,
     source: Bounds,
     backdrop: Bounds,
     inverse: TransformationMatrix,
@@ -332,11 +333,11 @@ fn vs_layer_composite(@builtin(vertex_index) vertex_id: u32) -> LayerCompositeVa
     let mask = b_layer.layer.mask;
     let gradient = prepare_gradient_color(mask.tag, mask.color_space, mask.solid, mask.colors);
     var out: LayerCompositeVarying;
-    out.position = to_device_position(unit_vertex, b_layer.target);
+    out.position = to_device_position(unit_vertex, b_layer.target_bounds);
     out.mask_solid = gradient.solid;
     out.mask_color0 = gradient.color0;
     out.mask_color1 = gradient.color1;
-    out.clip_distances = distance_from_clip_rect(unit_vertex, b_layer.target, b_layer.layer.content_mask);
+    out.clip_distances = distance_from_clip_rect(unit_vertex, b_layer.target_bounds, b_layer.layer.content_mask);
     return out;
 }
 
@@ -356,7 +357,7 @@ fn fs_layer_blend(input: LayerCompositeVarying) -> @location(0) vec4<f32> {
 fn fs_layer_composite(input: LayerCompositeVarying) -> @location(0) vec4<f32> {
     let layer = b_layer.layer;
     let position = input.position.xy;
-    let uv = (position - b_layer.target.origin) / b_layer.target.size;
+    let uv = (position - b_layer.target_bounds.origin) / b_layer.target_bounds.size;
     let under = textureSampleLevel(t_layer_under, s_layer_exact, uv, 0.0);
     if (any(input.clip_distances < vec4<f32>(0.0))) {
         return under;
@@ -438,7 +439,7 @@ const VARIABLE_BLUR_RADIUS_CAP: i32 = 96;
 @fragment
 fn fs_variable_blur(input: VariableBlurVarying) -> @location(0) vec4<f32> {
     let layer = b_layer.layer;
-    let position = b_layer.target.origin + input.uv * b_layer.target.size;
+    let position = b_layer.target_bounds.origin + input.uv * b_layer.target_bounds.size;
     let point = layer_point(position);
     let box_min = layer.bounds.origin;
     let box_max = box_min + layer.bounds.size;

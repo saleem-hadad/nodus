@@ -9,10 +9,10 @@ patch does, where it comes from and how to re-apply it: `third_party/gpui/PATCHE
 | # | Deliverable | Status |
 | --- | --- | --- |
 | 1 | Vendor `gpui-pre`, `-apple`, `-macos`, `-wgpu`, `-windows` 0.3.11 unmodified, wire `[patch.crates-io]`, one GPUI in the graph | done (commits "Vendor the five…", "Build GPUI from the vendored crates…") |
-| 2 | Backdrop blur: effect-layers stack (zed#63773, #63777, #63780; #63794 opt-in) on the snapshot, Metal crash fixed | Metal done; DirectX 11 and wgpu next |
-| 3 | Transforms (rotate, scale, translate, origin) through layers, hit testing through the inverse | Metal done |
-| 4 | Group opacity | Metal done |
-| 5 | Window capture (`Window::render_to_image`, ungated) | Metal done; DirectX 11 next |
+| 2 | Backdrop blur: effect-layers stack (zed#63773, #63777, #63780; #63794 opt-in) on the snapshot, Metal crash fixed | Metal done and verified; DirectX 11 ported, `cargo clippy --target x86_64-pc-windows-msvc` clean, HLSL not compiled yet; wgpu ported, compiles, but its WGSL module fails validation (WIP, see below) |
+| 3 | Transforms (rotate, scale, translate, origin) through layers, hit testing through the inverse | Metal done; DX11/wgpu share the code above |
+| 4 | Group opacity | Metal done; DX11/wgpu share the code above |
+| 5 | Window capture (`Window::render_to_image`, ungated) | Metal and DirectX 11 ungated; wgpu returns the trait's error |
 | 6 | Proof: `crates/nodus-ui/examples/effects.rs` | runs; numbers below |
 
 ## How to verify
@@ -25,6 +25,19 @@ EFFECTS_CAPTURE=<scratch>/effects.png cargo run -p nodus-ui --example effects --
 
 The window is a non-activating pop-up in the bottom-right corner of the main display; it never
 takes focus and quits by itself after `EFFECTS_SECONDS` (8).
+
+## Next (WIP)
+
+- wgpu: `third_party/gpui/gpui-pre-wgpu/src/shaders_effects.wgsl` doesn't validate yet
+  ("ShaderModule 'gpui_shaders' is invalid" when building `effect_blend`). Check it with a scratch
+  crate that depends on the patched `gpui-pre-wgpu` (`bench-support`) and renders a `Scene` with
+  `WgpuHeadlessRenderer` (its instance only enables Vulkan and GL, so on macOS a scratch copy with
+  `Backends::all()` is needed to get Metal). Likely suspects: names clashing with `shaders.wgsl`,
+  `saturate`, or the storage-buffer bindings.
+- Windows: cross-clippy needs an `llvm-rc` for gpui's manifest resource; a check-only stand-in
+  (`RC=<scratch>/llvm-rc` that writes an empty file) works. HLSL compiles only in Windows release
+  builds (fxc); add a CI step that builds and runs the example there.
+- Then: PATCHES.md, perf numbers in stress mode, workspace fmt/clippy/test, prepush.
 
 ## Resuming
 

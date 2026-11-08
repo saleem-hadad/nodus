@@ -1,23 +1,29 @@
 //! Effect layers for the wgpu renderer.
 //!
 //! An effect layer is a subtree of the scene that the renderer must paint
-//! with a blur, a colour matrix, a mask or a blend mode. The scene marks
-//! the layer with `LayerBegin` and `LayerEnd`. Between the two marks the
-//! renderer draws into a texture the size of the whole frame, because the
-//! fragment shaders read their pixel position in render-target pixels and
-//! a smaller texture would shift every rounded corner and gradient. At
-//! `LayerEnd` this module copies the region the layer touches out of that
-//! texture and out of the parent target, blurs one or both, and paints the
-//! result back into the parent with the composite pipeline.
+//! with a blur, a colour matrix, a mask, a blend mode, a transform or an
+//! opacity. The scene marks the layer with `LayerBegin` and `LayerEnd`.
+//! Between the two marks the renderer draws into a texture the size of the
+//! whole frame, because the fragment shaders read their pixel position in
+//! render-target pixels and a smaller texture would shift every rounded
+//! corner and gradient. At `LayerEnd` this module blurs what it must and
+//! paints the result back into the parent.
 //!
-//! Every texture holds premultiplied colour, in the format of the frame.
-//! The composite pipeline runs with blending off and mixes with the pixel
-//! under it in the shader, so it needs a copy of the parent region. That
-//! copy needs `COPY_SRC` on the frame texture, which the renderer requests
-//! when the surface allows it.
+//! Every texture holds premultiplied colour, in the format of the frame. A
+//! layer with a backdrop, a mask or a blend mode composites with blending
+//! off and mixes with the pixel under it in the shader, so it needs a copy
+//! of the parent region, which needs `COPY_SRC` on the frame texture; any
+//! other layer blends in hardware.
+//!
+//! zed#63778 and #63780, with the Nodus patches: transforms, group opacity,
+//! reading only what the content painted, a backdrop blurred inside its box
+//! with mirrored edges, and the hardware-blended composite. See
+//! third_party/gpui/PATCHES.md.
 
-use crate::wgpu_renderer::WgpuRenderer;
-use gpui::{BlurPlan, Bounds, DevicePixels, EffectLayer, LayerRegion, ScaledPixels, Size};
+use gpui::{
+    BlurPlan, Bounds, DevicePixels, EffectLayer, LayerRegion, ScaledPixels, Size,
+    TransformationMatrix,
+};
 
 /// Textures kept for reuse between frames. Each open layer holds one
 /// frame-sized texture plus a few region-sized ones, so a handful is
@@ -27,44 +33,67 @@ const POOL_LIMIT: usize = 16;
 /// First size of the parameter buffer. It grows when a frame needs more.
 const PARAMS_CAPACITY: u64 = 64 * 1024;
 
+/// One pass of a separable Gaussian blur, laid out like the WGSL
+/// `BlurParams`.
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct BlurParams {
+    /// One tap in texture coordinates of the source.
     step: [f32; 2],
+    /// Standard deviation in taps.
     sigma: f32,
+    /// Taps on each side of the centre.
     radius: i32,
+    /// 1 mirrors the source at its edges; 0 drops the taps past them.
+    edge: u32,
+    pad: [u32; 3],
 }
 
-/// One composite draw. The region sits first so the `Bounds` inside the
-/// layer keep their 8 byte alignment in the storage buffer.
+/// One composite draw, laid out like the WGSL `LayerComposite`, field for
+/// field like the Metal one.
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct LayerComposite {
-    region: Bounds<ScaledPixels>,
     layer: EffectLayer,
+    /// The pixels of the target the composite writes. The under texture
+    /// covers them.
+    target: Bounds<ScaledPixels>,
+    /// Where the content texture sits in the layer's space.
+    source: Bounds<ScaledPixels>,
+    /// Where the backdrop texture sits in the target.
+    backdrop: Bounds<ScaledPixels>,
+    /// Takes a pixel of the target to the layer's space.
+    inverse: TransformationMatrix,
+    /// Target pixels per layer pixel, which sets the width of anti-aliased
+    /// edges.
+    aa_scale: f32,
+    /// 1 when the content is read between its pixels: blurred or moved.
+    smooth_content: u32,
     /// Which axis a variable blur pass runs along: 0 is x, 1 is y. The
     /// composite draw does not read it.
     blur_axis: u32,
-    /// Brings the size up to the 8 byte stride of the WGSL struct.
-    _pad: u32,
+    pad: u32,
 }
 
 // `ParamsBuffer::write` reads these structs as raw bytes, which is only
 // sound when every byte is initialized. Both hold 4-byte fields alone, down
 // through `EffectLayer`, so the compiler inserts no padding. The size and
 // offset checks keep the Rust structs in step with the WGSL ones, whose
-// `Bounds` members align to 8 bytes.
-const _: () = assert!(std::mem::size_of::<BlurParams>() == 16);
+// `Bounds` and matrix members align to 8 bytes.
+const _: () = assert!(std::mem::size_of::<BlurParams>() == 32);
 const _: () = assert!(std::mem::size_of::<EffectLayer>().is_multiple_of(8));
 const _: () = assert!(std::mem::size_of::<LayerComposite>().is_multiple_of(8));
-const _: () = assert!(std::mem::offset_of!(LayerComposite, layer) == 16);
+const _: () = assert!(std::mem::offset_of!(LayerComposite, target).is_multiple_of(8));
+const _: () = assert!(std::mem::offset_of!(LayerComposite, inverse).is_multiple_of(8));
+const _: () = assert!(std::mem::offset_of!(EffectLayer, painted).is_multiple_of(8));
+const _: () = assert!(std::mem::offset_of!(EffectLayer, transform).is_multiple_of(8));
 
 /// Bind group layouts shared by the blur and composite pipelines.
 #[derive(Clone)]
 pub(crate) struct EffectLayouts {
     /// Group 1: one storage buffer with `BlurParams` or `LayerComposite`.
     pub params: wgpu::BindGroupLayout,
-    /// Group 2: content, under and backdrop textures plus two samplers.
+    /// Group 2: content, under and backdrop textures plus three samplers.
     pub textures: wgpu::BindGroupLayout,
 }
 
@@ -107,6 +136,7 @@ impl EffectLayouts {
                 texture(2),
                 sampler(3, wgpu::SamplerBindingType::Filtering),
                 sampler(4, wgpu::SamplerBindingType::NonFiltering),
+                sampler(5, wgpu::SamplerBindingType::Filtering),
             ],
         });
         Self { params, textures }
@@ -117,7 +147,10 @@ pub(crate) struct EffectPipelines {
     blur: wgpu::RenderPipeline,
     /// The blur whose width follows the mask of the layer, pixel by pixel.
     variable_blur: wgpu::RenderPipeline,
+    /// Reads what is under the layer and writes the result as is.
     composite: wgpu::RenderPipeline,
+    /// Writes the layer's premultiplied picture for the hardware to blend.
+    blend: wgpu::RenderPipeline,
 }
 
 impl EffectPipelines {
@@ -137,7 +170,7 @@ impl EffectPipelines {
             ],
             immediate_size: 0,
         });
-        let create = |name: &str, vs_entry: &str, fs_entry: &str, format: wgpu::TextureFormat| {
+        let create = |name: &str, vs_entry: &str, fs_entry: &str, blend| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(name),
                 layout: Some(&pipeline_layout),
@@ -152,7 +185,7 @@ impl EffectPipelines {
                     entry_point: Some(fs_entry),
                     targets: &[Some(wgpu::ColorTargetState {
                         format,
-                        blend: None,
+                        blend,
                         write_mask: wgpu::ColorWrites::ALL,
                     })],
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
@@ -168,18 +201,24 @@ impl EffectPipelines {
             })
         };
         Self {
-            blur: create("effect_blur", "vs_blur", "fs_blur", format),
+            blur: create("effect_blur", "vs_blur", "fs_blur", None),
             variable_blur: create(
                 "effect_variable_blur",
                 "vs_variable_blur",
                 "fs_variable_blur",
-                format,
+                None,
             ),
             composite: create(
                 "effect_composite",
                 "vs_layer_composite",
                 "fs_layer_composite",
-                format,
+                None,
+            ),
+            blend: create(
+                "effect_blend",
+                "vs_layer_composite",
+                "fs_layer_blend",
+                Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
             ),
         }
     }
@@ -189,8 +228,11 @@ impl EffectPipelines {
 pub(crate) struct EffectFrame<'a> {
     pub pipelines: &'a EffectPipelines,
     pub globals: &'a wgpu::BindGroup,
-    pub texture: &'a wgpu::Texture,
+    /// The frame's texture, when it can be copied from. Without it, layers
+    /// that read what is under them composite as if they didn't.
+    pub texture: Option<&'a wgpu::Texture>,
     pub view: &'a wgpu::TextureView,
+    pub format: wgpu::TextureFormat,
     pub viewport_size: Size<DevicePixels>,
 }
 
@@ -199,17 +241,10 @@ struct LayerTexture {
     view: wgpu::TextureView,
 }
 
-/// A layer between its begin and end marks. `texture` is `None` when the
-/// region is empty, in which case the content draws into the parent and
-/// the end mark does nothing.
-struct OpenLayer {
-    region: LayerRegion,
-    texture: Option<LayerTexture>,
-}
-
 struct Samplers {
     smooth: wgpu::Sampler,
     exact: wgpu::Sampler,
+    mirror: wgpu::Sampler,
 }
 
 /// A bump allocator over one storage buffer for the per-draw parameters.
@@ -253,9 +288,11 @@ impl ParamsBuffer {
             self.buffer = Self::create(&self.device, capacity);
         }
         // SAFETY: `T` is `BlurParams` or `LayerComposite`. The assertions at
-        // their definitions keep them free of padding, so every byte is
-        // initialized.
-        let bytes = unsafe { WgpuRenderer::instance_bytes(std::slice::from_ref(data)) };
+        // their definitions keep them free of padding, so every byte of the
+        // live `data` is initialized, and the slice spans exactly its size.
+        let bytes = unsafe {
+            std::slice::from_raw_parts((data as *const T).cast::<u8>(), std::mem::size_of::<T>())
+        };
         self.queue.write_buffer(&self.buffer, offset, bytes);
         self.used = offset + size;
         self.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -312,9 +349,10 @@ impl TexturePool {
     }
 
     fn give_back(&mut self, texture: LayerTexture) {
-        if self.textures.len() < POOL_LIMIT {
-            self.textures.push(texture);
+        if self.textures.len() >= POOL_LIMIT {
+            self.textures.remove(0);
         }
+        self.textures.push(texture);
     }
 }
 
@@ -324,17 +362,18 @@ pub(crate) struct Effects {
     samplers: Samplers,
     params: ParamsBuffer,
     pool: TexturePool,
-    open: Vec<OpenLayer>,
+    /// The frame-sized textures of the layers whose content is drawing now.
+    open: Vec<LayerTexture>,
 }
 
 impl Effects {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, layouts: &EffectLayouts) -> Self {
-        let sampler = |label, filter| {
+        let sampler = |label, filter, address| {
             device.create_sampler(&wgpu::SamplerDescriptor {
                 label: Some(label),
-                address_mode_u: wgpu::AddressMode::ClampToEdge,
-                address_mode_v: wgpu::AddressMode::ClampToEdge,
-                address_mode_w: wgpu::AddressMode::ClampToEdge,
+                address_mode_u: address,
+                address_mode_v: address,
+                address_mode_w: address,
                 mag_filter: filter,
                 min_filter: filter,
                 ..Default::default()
@@ -344,8 +383,21 @@ impl Effects {
             device: device.clone(),
             layouts: layouts.clone(),
             samplers: Samplers {
-                smooth: sampler("effect_smooth_sampler", wgpu::FilterMode::Linear),
-                exact: sampler("effect_exact_sampler", wgpu::FilterMode::Nearest),
+                smooth: sampler(
+                    "effect_smooth_sampler",
+                    wgpu::FilterMode::Linear,
+                    wgpu::AddressMode::ClampToEdge,
+                ),
+                exact: sampler(
+                    "effect_exact_sampler",
+                    wgpu::FilterMode::Nearest,
+                    wgpu::AddressMode::ClampToEdge,
+                ),
+                mirror: sampler(
+                    "effect_mirror_sampler",
+                    wgpu::FilterMode::Linear,
+                    wgpu::AddressMode::MirrorRepeat,
+                ),
             },
             params: ParamsBuffer::new(device, queue, &layouts.params),
             pool: TexturePool {
@@ -375,29 +427,17 @@ impl Effects {
     /// The view the scene draws into right now: the innermost open layer,
     /// or the frame.
     pub fn target_view<'a>(&'a self, frame: &EffectFrame<'a>) -> &'a wgpu::TextureView {
-        target(&self.open, frame).1
+        self.open.last().map_or(frame.view, |texture| &texture.view)
     }
 
     /// Opens a layer. The caller must have ended the current render pass
     /// and must begin a new one on `target_view` afterwards.
-    pub fn begin_layer(
-        &mut self,
-        frame: &EffectFrame,
-        encoder: &mut wgpu::CommandEncoder,
-        layer: &EffectLayer,
-    ) {
-        let region = layer.region(target(&self.open, frame).2);
-        let texture = if region.is_empty() {
-            None
-        } else {
-            let texture = self.pool.take(
-                LayerRegion::of_viewport(frame.viewport_size),
-                frame.texture.format(),
-            );
-            drop(begin_pass(encoder, &texture.view, true, "layer_clear"));
-            Some(texture)
-        };
-        self.open.push(OpenLayer { region, texture });
+    pub fn begin_layer(&mut self, frame: &EffectFrame, encoder: &mut wgpu::CommandEncoder) {
+        let texture = self
+            .pool
+            .take(LayerRegion::of_viewport(frame.viewport_size), frame.format);
+        drop(begin_pass(encoder, &texture.view, true, "layer_clear"));
+        self.open.push(texture);
     }
 
     /// Closes the innermost layer and paints it into its parent. The caller
@@ -409,56 +449,94 @@ impl Effects {
         encoder: &mut wgpu::CommandEncoder,
         layer: &EffectLayer,
     ) {
-        let Some(open) = self.open.pop() else {
+        let Some(content_frame) = self.open.pop() else {
             return;
         };
-        let Some(full) = open.texture else {
+        let format = frame.format;
+        let viewport = LayerRegion::of_viewport(frame.viewport_size);
+        let source = layer.source_region(viewport);
+        let target = layer.target_region(source, viewport);
+        if source.is_empty() || target.is_empty() {
+            self.pool.give_back(content_frame);
             return;
-        };
-        let region = open.region;
-        let format = frame.texture.format();
-        let (parent_texture, parent_view, _) = target(&self.open, frame);
-        let (parent_texture, parent_view) = (parent_texture.clone(), parent_view.clone());
-
-        let content = self.pool.take(region, format);
-        copy_region(encoder, &full.texture, &content.texture, region);
-        self.pool.give_back(full);
-
-        let under = self.pool.take(region, format);
-        copy_region(encoder, &parent_texture, &under.texture, region);
-
-        let composite = LayerComposite {
-            region: region.bounds(),
-            layer: *layer,
-            blur_axis: 0,
-            _pad: 0,
+        }
+        let parent_view = self.target_view(frame).clone();
+        // The parent can be copied from when it is a layer, or a frame that
+        // allows it.
+        let parent_texture = match self.open.last() {
+            Some(texture) => Some(texture.texture.clone()),
+            None => frame.texture.cloned(),
         };
 
-        let blurred_content = (layer.blur > 0.0)
-            .then(|| self.blur(frame, encoder, &content, region, layer.blur, format));
-        // A mask over a blurred backdrop asks for a blur whose width
-        // follows the mask, pixel by pixel. That blur reads the mask,
-        // so it runs at full size, not on the shrunk texture the fixed
-        // blur uses.
-        let backdrop_blurs = layer.has_backdrop != 0 && layer.backdrop_blur > 0.0;
-        let blurred_under = backdrop_blurs.then(|| {
-            if layer.has_mask != 0 {
-                self.variable_blur(frame, encoder, &under, region, &composite)
-            } else {
-                self.blur(frame, encoder, &under, region, layer.backdrop_blur, format)
+        // A blurred content reads a blurred copy of what it painted; any
+        // other reads its frame-sized texture as is.
+        let (content, content_region) = if layer.blur > 0.0 {
+            let copy = self.pool.take(source, format);
+            copy_region(encoder, &content_frame.texture, &copy.texture, source);
+            self.pool.give_back(content_frame);
+            let blurred = self.blur(frame, encoder, &copy, source, layer.blur, false);
+            self.pool.give_back(copy);
+            (blurred, source)
+        } else {
+            (content_frame, viewport)
+        };
+
+        let under = match &parent_texture {
+            Some(parent) if layer.reads_under() => {
+                let under = self.pool.take(target, format);
+                copy_region(encoder, parent, &under.texture, target);
+                Some(under)
             }
-        });
+            _ => None,
+        };
+
+        let (inverse, aa_scale) = layer.inverse_transform();
+        let mut composite = LayerComposite {
+            layer: *layer,
+            target: target.bounds(),
+            source: content_region.bounds(),
+            backdrop: target.bounds(),
+            inverse,
+            aa_scale,
+            smooth_content: (layer.blur > 0.0 || layer.has_transform != 0) as u32,
+            blur_axis: 0,
+            pad: 0,
+        };
+
+        // CSS blurs the backdrop inside the border box, mirrored at its
+        // edges. A mask asks instead for a blur whose width follows the
+        // mask, pixel by pixel, which runs at full size over the target.
+        let mut backdrop = None;
+        if layer.has_backdrop != 0 && layer.backdrop_blur > 0.0 {
+            if let (Some(under), Some(parent)) = (&under, &parent_texture) {
+                if layer.has_mask != 0 {
+                    backdrop = Some(self.variable_blur(frame, encoder, under, target, &composite));
+                } else {
+                    let region = layer.backdrop_region(target);
+                    if !region.is_empty() {
+                        let copy = self.pool.take(region, format);
+                        copy_region(encoder, parent, &copy.texture, region);
+                        let blurred =
+                            self.blur(frame, encoder, &copy, region, layer.backdrop_blur, true);
+                        self.pool.give_back(copy);
+                        composite.backdrop = region.bounds();
+                        backdrop = Some(blurred);
+                    }
+                }
+            }
+        }
 
         let params = self.params.write(&composite);
-        let backdrop = blurred_under.as_ref().unwrap_or(&under);
-        let textures = self.texture_bind_group(
-            blurred_content.as_ref().unwrap_or(&content),
-            &under,
-            backdrop,
-        );
+        let under_texture = under.as_ref().unwrap_or(&content);
+        let backdrop_texture = backdrop.as_ref().unwrap_or(under_texture);
+        let textures = self.texture_bind_group(&content, under_texture, backdrop_texture);
         {
             let mut pass = begin_pass(encoder, &parent_view, false, "layer_composite");
-            pass.set_pipeline(&frame.pipelines.composite);
+            pass.set_pipeline(if under.is_some() {
+                &frame.pipelines.composite
+            } else {
+                &frame.pipelines.blend
+            });
             pass.set_bind_group(0, frame.globals, &[]);
             pass.set_bind_group(1, &params, &[]);
             pass.set_bind_group(2, &textures, &[]);
@@ -466,11 +544,10 @@ impl Effects {
         }
 
         self.pool.give_back(content);
-        self.pool.give_back(under);
-        if let Some(texture) = blurred_content {
+        if let Some(texture) = under {
             self.pool.give_back(texture);
         }
-        if let Some(texture) = blurred_under {
+        if let Some(texture) = backdrop {
             self.pool.give_back(texture);
         }
     }
@@ -478,6 +555,8 @@ impl Effects {
     /// Two separable gaussian passes over a shrunk copy of `source`. The
     /// result is a texture the size of the small region, which the
     /// composite samples with the linear sampler to scale it back up.
+    /// `mirror` reflects the source at its edges, as CSS does for a
+    /// backdrop; otherwise taps past the edge drop out.
     fn blur(
         &mut self,
         frame: &EffectFrame,
@@ -485,10 +564,12 @@ impl Effects {
         source: &LayerTexture,
         region: LayerRegion,
         sigma: f32,
-        format: wgpu::TextureFormat,
+        mirror: bool,
     ) -> LayerTexture {
         let plan = BlurPlan::new(sigma);
         let BlurPlan { sigma, radius, .. } = plan;
+        let edge = mirror as u32;
+        let format = frame.format;
 
         // Halve the source until it is `plan.scale` times smaller. One tap
         // at the centre of a 2 by 2 block is an exact box average.
@@ -506,6 +587,8 @@ impl Effects {
                     step: [0.0, 0.0],
                     sigma: 1.0,
                     radius: 0,
+                    edge,
+                    pad: [0; 3],
                 },
             );
             if let Some(texture) = shrunk {
@@ -525,6 +608,8 @@ impl Effects {
                 step: [1.0 / size.width as f32, 0.0],
                 sigma,
                 radius,
+                edge,
+                pad: [0; 3],
             },
         );
         if let Some(texture) = shrunk {
@@ -540,6 +625,8 @@ impl Effects {
                 step: [0.0, 1.0 / size.height as f32],
                 sigma,
                 radius,
+                edge,
+                pad: [0; 3],
             },
         );
         self.pool.give_back(first);
@@ -576,11 +663,10 @@ impl Effects {
         region: LayerRegion,
         composite: &LayerComposite,
     ) -> LayerTexture {
-        let format = frame.texture.format();
         let size = LayerRegion::new(0, 0, region.width, region.height);
-        let first = self.pool.take(size, format);
+        let first = self.pool.take(size, frame.format);
         self.variable_blur_pass(frame, encoder, source, &first, composite, 0);
-        let second = self.pool.take(size, format);
+        let second = self.pool.take(size, frame.format);
         self.variable_blur_pass(frame, encoder, &first, &second, composite, 1);
         self.pool.give_back(first);
         second
@@ -639,30 +725,13 @@ impl Effects {
                     binding: 4,
                     resource: wgpu::BindingResource::Sampler(&self.samplers.exact),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: wgpu::BindingResource::Sampler(&self.samplers.mirror),
+                },
             ],
         })
     }
-}
-
-/// The texture, view and region the scene draws into: the innermost open
-/// layer with a texture, or the frame.
-fn target<'a>(
-    open: &'a [OpenLayer],
-    frame: &EffectFrame<'a>,
-) -> (&'a wgpu::Texture, &'a wgpu::TextureView, LayerRegion) {
-    open.iter()
-        .rev()
-        .find_map(|layer| {
-            layer
-                .texture
-                .as_ref()
-                .map(|t| (&t.texture, &t.view, layer.region))
-        })
-        .unwrap_or((
-            frame.texture,
-            frame.view,
-            LayerRegion::of_viewport(frame.viewport_size),
-        ))
 }
 
 /// Copies `region` of `source` into the top left of `target`.
@@ -677,8 +746,8 @@ fn copy_region(
             texture: source,
             mip_level: 0,
             origin: wgpu::Origin3d {
-                x: region.x as u32,
-                y: region.y as u32,
+                x: region.x.max(0) as u32,
+                y: region.y.max(0) as u32,
                 z: 0,
             },
             aspect: wgpu::TextureAspect::All,

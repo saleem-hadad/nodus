@@ -372,8 +372,7 @@ fn main() {
         .and_then(|value| value.parse().ok())
         .unwrap_or(8.);
     let capture_path = std::env::var_os("EFFECTS_CAPTURE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| std::env::temp_dir().join("effects.png"));
+        .map_or_else(|| std::env::temp_dir().join("effects.png"), PathBuf::from);
     let stress = env_flag("EFFECTS_STRESS");
     let off = env_flag("EFFECTS_OFF");
 

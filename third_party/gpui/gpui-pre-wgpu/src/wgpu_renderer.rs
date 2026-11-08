@@ -1,4 +1,6 @@
 // Modified for gpui-pre (snapshot of zed@f816e1f): adapt device queues and sRGB detection to wgpu 30.0.1.
+// Modified for Nodus (third_party/gpui/PATCHES.md): effect layers.
+use crate::wgpu_effects::{EffectFrame, EffectLayouts, EffectPipelines, Effects, begin_pass};
 use crate::{CompositorGpuHint, DeviceErrorState, WgpuAtlas, WgpuContext};
 use anyhow::{Context as _, Result};
 use bytemuck::{Pod, Zeroable};
@@ -26,6 +28,7 @@ const INSTANCE_TEXTURE_TEXEL_SIZE: u64 = 16;
 const STORAGE_BUFFER_SHADERS: &str = concat!(
     include_str!("shaders.wgsl"),
     include_str!("shaders_storage.wgsl"),
+    include_str!("shaders_effects.wgsl"),
 );
 
 /// Shader variant for WebGL2, which has no storage buffers: the shared shader
@@ -135,6 +138,9 @@ struct WgpuPipelines {
     poly_sprites: wgpu::RenderPipeline,
     #[allow(dead_code)]
     surfaces: wgpu::RenderPipeline,
+    /// Blur and composite pipelines for effect layers. `None` on WebGL,
+    /// which has no storage buffers, so effect layers draw with no effect.
+    effects: Option<EffectPipelines>,
 }
 
 /// One frame allocation of instance data, ready to bind.
@@ -162,6 +168,7 @@ struct WgpuBindGroupLayouts {
     instances: wgpu::BindGroupLayout,
     texture: wgpu::BindGroupLayout,
     surfaces: wgpu::BindGroupLayout,
+    effects: EffectLayouts,
 }
 
 /// Shared GPU context reference, used to coordinate device recovery across multiple windows.
@@ -195,6 +202,7 @@ struct WgpuResources {
     path_intermediate_view: Option<wgpu::TextureView>,
     path_msaa_texture: Option<wgpu::Texture>,
     path_msaa_view: Option<wgpu::TextureView>,
+    effects: Effects,
 }
 
 struct CachedTextureBindGroup {
@@ -208,6 +216,7 @@ impl WgpuResources {
         self.path_intermediate_view = None;
         self.path_msaa_texture = None;
         self.path_msaa_view = None;
+        self.effects.forget_textures();
     }
 }
 
@@ -461,8 +470,18 @@ impl WgpuRenderer {
             );
         }
 
+        // Effect layers copy the pixels under a layer out of the frame, which
+        // needs `COPY_SRC` (zed#63778). Without it they composite as if they
+        // didn't read them. wgpu reports the browser canvas as
+        // `RENDER_ATTACHMENT` only, but the WebGPU spec accepts `COPY_SRC` in
+        // `GPUCanvasConfiguration.usage`, so the browser backend asks anyway.
+        let mut usage = wgpu::TextureUsages::RENDER_ATTACHMENT;
+        let canvas = adapter.get_info().backend == wgpu::Backend::BrowserWebGpu;
+        if canvas || surface_caps.usages.contains(wgpu::TextureUsages::COPY_SRC) {
+            usage |= wgpu::TextureUsages::COPY_SRC;
+        }
         let surface_config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            usage,
             format: surface_format,
             color_space: wgpu::SurfaceColorSpace::Auto,
             width: clamped_width.max(1),
@@ -651,6 +670,7 @@ impl WgpuRendererCore {
             instances,
             texture,
             surfaces,
+            effects: EffectLayouts::new(device),
         }
     }
 
@@ -965,6 +985,15 @@ impl WgpuRendererCore {
             subpixel_sprites,
             poly_sprites,
             surfaces,
+            effects: (!uses_webgl_instance_data).then(|| {
+                EffectPipelines::new(
+                    device,
+                    &shader_module,
+                    &layouts.globals,
+                    &layouts.effects,
+                    surface_format,
+                )
+            }),
         }
     }
 
@@ -1221,9 +1250,15 @@ impl WgpuRenderer {
             .create_view(&wgpu::TextureViewDescriptor::default());
         let premultiplied_alpha =
             self.surface_config.alpha_mode == wgpu::CompositeAlphaMode::PreMultiplied;
+        let frame_texture = frame
+            .texture
+            .usage()
+            .contains(wgpu::TextureUsages::COPY_SRC)
+            .then_some(&frame.texture);
         if let Err(error) = core.render_frame(
             scene,
             &frame_view,
+            frame_texture,
             size,
             premultiplied_alpha,
             wgpu::Color::TRANSPARENT,
@@ -1361,6 +1396,7 @@ impl WgpuRendererCore {
             ],
         });
         let max_texture_size = device.limits().max_texture_dimension_2d;
+        let effects = Effects::new(&device, &queue, &bind_group_layouts.effects);
 
         Self {
             resources: WgpuResources {
@@ -1378,6 +1414,7 @@ impl WgpuRendererCore {
                 path_intermediate_view: None,
                 path_msaa_texture: None,
                 path_msaa_view: None,
+                effects,
             },
             atlas,
             path_globals_offset,
@@ -1443,6 +1480,7 @@ impl WgpuRendererCore {
         &mut self,
         scene: &Scene,
         target_view: &wgpu::TextureView,
+        target_texture: Option<&wgpu::Texture>,
         size: Size<DevicePixels>,
         premultiplied_alpha: bool,
         clear_color: wgpu::Color,
@@ -1493,7 +1531,7 @@ impl WgpuRendererCore {
             bytemuck::bytes_of(&gamma_params),
         );
 
-        self.record_frame(scene, target_view, clear_color)
+        self.record_frame(scene, target_view, target_texture, size, clear_color)
             .inspect_err(|_| {
                 // Queue writes are staged before encoding; flush them even if the frame fails.
                 self.resources.queue.submit(std::iter::empty());
@@ -1504,6 +1542,8 @@ impl WgpuRendererCore {
         &mut self,
         scene: &Scene,
         frame_view: &wgpu::TextureView,
+        frame_texture: Option<&wgpu::Texture>,
+        viewport_size: Size<DevicePixels>,
         clear_color: wgpu::Color,
     ) -> Result<wgpu::SubmissionIndex> {
         let mut instance_offset = 0;
@@ -1529,6 +1569,10 @@ impl WgpuRendererCore {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("main_encoder"),
                 });
+        self.resources.effects.begin_frame();
+        let frame_format = frame_texture
+            .map(|texture| texture.format())
+            .unwrap_or(self.target_format);
 
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -1573,20 +1617,23 @@ impl WgpuRendererCore {
                             &mut instance_offset,
                         )?;
 
-                        pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                            label: Some("main_pass_continued"),
-                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                view: frame_view,
-                                resolve_target: None,
-                                ops: wgpu::Operations {
-                                    load: wgpu::LoadOp::Load,
-                                    store: wgpu::StoreOp::Store,
-                                },
-                                depth_slice: None,
-                            })],
-                            depth_stencil_attachment: None,
-                            ..Default::default()
-                        });
+                        // The scene draws into an effect layer when one is open.
+                        let resources = &self.resources;
+                        let view = match resources.pipelines.effects.as_ref() {
+                            Some(pipelines) => resources
+                                .effects
+                                .target_view(&EffectFrame {
+                                    pipelines,
+                                    globals: &resources.globals_bind_group,
+                                    texture: frame_texture,
+                                    view: frame_view,
+                                    format: frame_format,
+                                    viewport_size,
+                                })
+                                .clone(),
+                            None => frame_view.clone(),
+                        };
+                        pass = begin_pass(&mut encoder, &view, false, "main_pass_continued");
 
                         if rasterized {
                             self.draw_paths_from_intermediate(
@@ -1637,9 +1684,39 @@ impl WgpuRendererCore {
                     // Surfaces are macOS-only for video playback and are not
                     // implemented by the WGPU renderer.
                     PrimitiveBatch::Surfaces(_surfaces) => {}
+                    // An effect layer draws into its own texture, then its
+                    // end mark paints that texture into the parent. Without
+                    // storage buffers the content draws straight into the
+                    // frame with no effect.
+                    PrimitiveBatch::LayerBegin(_) | PrimitiveBatch::LayerEnd(_) => {
+                        let resources = &mut self.resources;
+                        let Some(pipelines) = resources.pipelines.effects.as_ref() else {
+                            continue;
+                        };
+                        drop(pass);
+                        let frame = EffectFrame {
+                            pipelines,
+                            globals: &resources.globals_bind_group,
+                            texture: frame_texture,
+                            view: frame_view,
+                            format: frame_format,
+                            viewport_size,
+                        };
+                        match batch {
+                            PrimitiveBatch::LayerEnd(index) => resources.effects.end_layer(
+                                &frame,
+                                &mut encoder,
+                                &scene.effect_layers[index],
+                            ),
+                            _ => resources.effects.begin_layer(&frame, &mut encoder),
+                        }
+                        let view = resources.effects.target_view(&frame).clone();
+                        pass = begin_pass(&mut encoder, &view, false, "layer_pass");
+                    }
                 }
             }
         }
+        debug_assert!(!self.resources.effects.has_open_layers());
 
         let submission = self
             .resources()
@@ -2430,14 +2507,19 @@ impl WgpuHeadlessRenderer {
     fn render(&mut self, scene: &Scene, size: Size<DevicePixels>) -> anyhow::Result<()> {
         self.check_gpu_errors()?;
         self.ensure_render_target(size)?;
-        let view = self
+        let target = self
             .render_target
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Headless render target was not created"))?
-            .view
-            .clone();
-        self.core
-            .render_frame(scene, &view, size, false, wgpu::Color::BLACK)?;
+            .ok_or_else(|| anyhow::anyhow!("Headless render target was not created"))?;
+        let (view, texture) = (target.view.clone(), target.texture.clone());
+        self.core.render_frame(
+            scene,
+            &view,
+            Some(&texture),
+            size,
+            false,
+            wgpu::Color::BLACK,
+        )?;
         Ok(())
     }
 

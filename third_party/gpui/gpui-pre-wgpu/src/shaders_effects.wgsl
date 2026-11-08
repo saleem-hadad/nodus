@@ -1,23 +1,30 @@
 
 // --- effect layers --- //
 //
-// The renderer draws the content of an effect layer into its own texture.
-// These shaders then blur that texture and paint it over the frame with a
-// colour matrix, a mask and a blend mode. Every texture here holds
-// premultiplied colour. The composite pipeline runs with blending off, so
-// the fragment shader mixes the result with the pixel under it by hand.
+// zed#63778 and #63780, adapted to this snapshot's fills, with the Nodus
+// patches (third_party/gpui/PATCHES.md): transforms, group opacity, a
+// backdrop mirrored at the edges of its box, and a hardware-blended
+// composite. The renderer draws the content of an effect layer into its own
+// texture. These shaders then blur that texture and paint it over the frame
+// with a colour matrix, a mask, a blend mode and a transform. Every texture
+// here holds premultiplied colour.
 
 struct BlurParams {
     step: vec2<f32>,
     sigma: f32,
     radius: i32,
+    edge: u32,
+    pad0: u32,
+    pad1: u32,
+    pad2: u32,
 }
 
 struct EffectLayer {
     bounds: Bounds,
     content_mask: Bounds,
     corner_radii: Corners,
-    corner_shapes: Corners,
+    painted: Bounds,
+    transform: TransformationMatrix,
     blur: f32,
     backdrop_blur: f32,
     opacity: f32,
@@ -25,18 +32,24 @@ struct EffectLayer {
     has_mask: u32,
     has_backdrop: u32,
     clips_content: u32,
+    has_transform: u32,
     color_matrix: array<f32, 20>,
     backdrop_matrix: array<f32, 20>,
     mask: Background,
-    pad: u32,
 }
 
 struct LayerComposite {
-    region: Bounds,
     layer: EffectLayer,
+    target: Bounds,
+    source: Bounds,
+    backdrop: Bounds,
+    inverse: TransformationMatrix,
+    aa_scale: f32,
+    smooth_content: u32,
     // Which axis a variable blur pass runs along: 0 is x, 1 is y. The
     // composite draw does not read it.
     blur_axis: u32,
+    pad: u32,
 }
 
 @group(1) @binding(0) var<storage, read> b_blur: BlurParams;
@@ -46,6 +59,7 @@ struct LayerComposite {
 @group(2) @binding(2) var t_layer_backdrop: texture_2d<f32>;
 @group(2) @binding(3) var s_layer_smooth: sampler;
 @group(2) @binding(4) var s_layer_exact: sampler;
+@group(2) @binding(5) var s_layer_mirror: sampler;
 
 fn full_screen_unit_vertex(vertex_id: u32) -> vec2<f32> {
     return vec2<f32>(f32(vertex_id & 1u), 0.5 * f32(vertex_id & 2u));
@@ -65,20 +79,28 @@ fn vs_blur(@builtin(vertex_index) vertex_id: u32) -> BlurVarying {
     return out;
 }
 
-// One separable gaussian pass. The step is one source texel along the axis
-// of this pass, and the source texture is bound at every texture slot.
+// One separable gaussian pass, or a 2 by 2 box average when the radius is
+// 0. The step is one source texel along the axis of this pass, and the
+// source texture is bound at every texture slot. With `edge` 1 the source
+// mirrors at its edges, the edge mode CSS gives a backdrop; with 0 a tap
+// past the edge drops out and the weights renormalize.
 @fragment
 fn fs_blur(input: BlurVarying) -> @location(0) vec4<f32> {
     let sigma = max(b_blur.sigma, 0.001);
+    let mirror = b_blur.edge != 0u;
     var sum = vec4<f32>(0.0);
     var weight_sum = 0.0;
     for (var i = -b_blur.radius; i <= b_blur.radius; i++) {
         let uv = input.uv + b_blur.step * f32(i);
-        if (any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0))) {
-            continue;
-        }
         let weight = exp(-0.5 * f32(i * i) / (sigma * sigma));
-        sum += weight * textureSampleLevel(t_layer_content, s_layer_smooth, uv, 0.0);
+        if (mirror) {
+            sum += weight * textureSampleLevel(t_layer_content, s_layer_mirror, uv, 0.0);
+        } else {
+            if (any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0))) {
+                continue;
+            }
+            sum += weight * textureSampleLevel(t_layer_content, s_layer_smooth, uv, 0.0);
+        }
         weight_sum += weight;
     }
     return sum / weight_sum;
@@ -263,67 +285,146 @@ fn blend_over(mode: u32, backdrop: vec4<f32>, source: vec4<f32>) -> vec4<f32> {
     return src + backdrop * (1.0 - src.a);
 }
 
-// Anti-aliased coverage of a rounded box at `position`.
-fn box_coverage(position: vec2<f32>, bounds: Bounds, radii: Corners, shapes: Corners) -> f32 {
-    let half_size = bounds.size / 2.0;
-    let center = bounds.origin + half_size;
-    let center_to_point = position - center;
-    let corner_radius = pick_corner_radius(center_to_point, radii);
-    let corner_shape = pick_corner_radius(center_to_point, shapes);
-    let corner_to_point = abs(center_to_point) - half_size;
-    let corner_center_to_point = corner_to_point + corner_radius;
-    var distance: f32;
-    if (corner_shape == 1.0 || corner_radius == 0.0) {
-        distance = quad_sdf_impl(corner_center_to_point, corner_radius);
-    } else {
-        let no_border = vec2<f32>(-0.5);
-        distance = shaped_corner_sdf(
-            corner_to_point,
-            corner_radius,
-            corner_shape,
-            no_border,
-            corner_to_point + no_border,
-        ).x;
+// Takes a pixel of the target to the layer's own space. The Rust side
+// stores the matrix row-major, so it reads back transposed here.
+fn layer_point(position: vec2<f32>) -> vec2<f32> {
+    return transpose(b_layer.inverse.rotation_scale) * position + b_layer.inverse.translation;
+}
+
+// How much of the pixel at `point`, in the layer's space, lies inside the
+// box. `aa_scale` is how many target pixels one layer pixel spans.
+fn box_coverage(point: vec2<f32>, bounds: Bounds, radii: Corners, aa_scale: f32) -> f32 {
+    return saturate(0.5 - quad_sdf(point, bounds, radii) * aa_scale);
+}
+
+// The layer's own picture at `point`, in its space: premultiplied, run
+// through its colour matrix and faded by its opacity, clipped to its
+// rounded box when it clips. Nothing outside its texture.
+fn layer_content(point: vec2<f32>) -> vec4<f32> {
+    let layer = b_layer.layer;
+    let uv = (point - b_layer.source.origin) / b_layer.source.size;
+    var content = vec4<f32>(0.0);
+    if (all(uv >= vec2<f32>(0.0)) && all(uv <= vec2<f32>(1.0))) {
+        if (b_layer.smooth_content != 0u) {
+            content = textureSampleLevel(t_layer_content, s_layer_smooth, uv, 0.0);
+        } else {
+            content = textureSampleLevel(t_layer_content, s_layer_exact, uv, 0.0);
+        }
     }
-    return saturate(0.5 - distance);
+    content = filter_color(layer.color_matrix, content) * layer.opacity;
+    if (layer.clips_content != 0u) {
+        content *= box_coverage(point, layer.bounds, layer.corner_radii, b_layer.aa_scale);
+    }
+    return content;
 }
 
 struct LayerCompositeVarying {
     @builtin(position) position: vec4<f32>,
     @location(0) @interpolate(flat) mask_solid: vec4<f32>,
-    @location(1) clip_distances: vec4<f32>,
+    @location(1) @interpolate(flat) mask_color0: vec4<f32>,
+    @location(2) @interpolate(flat) mask_color1: vec4<f32>,
+    @location(3) clip_distances: vec4<f32>,
 }
 
 @vertex
 fn vs_layer_composite(@builtin(vertex_index) vertex_id: u32) -> LayerCompositeVarying {
     let unit_vertex = full_screen_unit_vertex(vertex_id);
+    let mask = b_layer.layer.mask;
+    let gradient = prepare_gradient_color(mask.tag, mask.color_space, mask.solid, mask.colors);
     var out: LayerCompositeVarying;
-    out.position = to_device_position(unit_vertex, b_layer.region);
-    out.mask_solid = prepare_fill_color(b_layer.layer.mask);
-    out.clip_distances = distance_from_clip_rect(unit_vertex, b_layer.region, b_layer.layer.content_mask);
+    out.position = to_device_position(unit_vertex, b_layer.target);
+    out.mask_solid = gradient.solid;
+    out.mask_color0 = gradient.color0;
+    out.mask_color1 = gradient.color1;
+    out.clip_distances = distance_from_clip_rect(unit_vertex, b_layer.target, b_layer.layer.content_mask);
     return out;
 }
 
+// The composite of a layer that leaves what is under it alone: its picture,
+// premultiplied, for the pipeline to blend over the target.
+@fragment
+fn fs_layer_blend(input: LayerCompositeVarying) -> @location(0) vec4<f32> {
+    if (any(input.clip_distances < vec4<f32>(0.0))) {
+        return vec4<f32>(0.0);
+    }
+    return layer_content(layer_point(input.position.xy));
+}
+
+// The composite of a layer with a backdrop, a mask or a blend mode. It reads
+// what is under the layer and writes the result as is.
+@fragment
+fn fs_layer_composite(input: LayerCompositeVarying) -> @location(0) vec4<f32> {
+    let layer = b_layer.layer;
+    let position = input.position.xy;
+    let uv = (position - b_layer.target.origin) / b_layer.target.size;
+    let under = textureSampleLevel(t_layer_under, s_layer_exact, uv, 0.0);
+    if (any(input.clip_distances < vec4<f32>(0.0))) {
+        return under;
+    }
+    let point = layer_point(position);
+    let content = layer_content(point);
+    let shape = box_coverage(point, layer.bounds, layer.corner_radii, b_layer.aa_scale);
+
+    var keep = 1.0;
+    if (layer.has_mask != 0u) {
+        let box_min = layer.bounds.origin;
+        let box_max = box_min + layer.bounds.size;
+        let inside = all(point >= box_min) && all(point < box_max);
+        if (inside) {
+            keep = gradient_color(layer.mask, point, layer.bounds, input.mask_solid,
+                                  input.mask_color0, input.mask_color1).a;
+        } else {
+            keep = 0.0;
+        }
+    }
+
+    var base = under;
+    if (layer.has_backdrop != 0u) {
+        var backdrop = under;
+        if (layer.backdrop_blur > 0.0) {
+            if (layer.has_mask != 0u) {
+                // The variable blur covers the target, already at the width
+                // the mask asks for at every pixel.
+                backdrop = textureSampleLevel(t_layer_backdrop, s_layer_smooth, uv, 0.0);
+            } else {
+                let backdrop_uv =
+                    saturate((position - b_layer.backdrop.origin) / b_layer.backdrop.size);
+                backdrop = textureSampleLevel(t_layer_backdrop, s_layer_smooth, backdrop_uv, 0.0);
+            }
+        }
+        backdrop = mix(backdrop, filter_color(layer.backdrop_matrix, backdrop), keep);
+        base = mix(under, backdrop, shape);
+    }
+
+    let result = blend_over(layer.blend_mode, base, content);
+    return mix(base, result, keep);
+}
 
 struct VariableBlurVarying {
     @builtin(position) position: vec4<f32>,
     @location(0) uv: vec2<f32>,
     @location(1) @interpolate(flat) mask_solid: vec4<f32>,
+    @location(2) @interpolate(flat) mask_color0: vec4<f32>,
+    @location(3) @interpolate(flat) mask_color1: vec4<f32>,
 }
 
 @vertex
 fn vs_variable_blur(@builtin(vertex_index) vertex_id: u32) -> VariableBlurVarying {
     let unit_vertex = full_screen_unit_vertex(vertex_id);
+    let mask = b_layer.layer.mask;
+    let gradient = prepare_gradient_color(mask.tag, mask.color_space, mask.solid, mask.colors);
     var out: VariableBlurVarying;
     out.position = vec4<f32>(unit_vertex.x * 2.0 - 1.0, 1.0 - unit_vertex.y * 2.0, 0.0, 1.0);
     out.uv = unit_vertex;
-    out.mask_solid = prepare_fill_color(b_layer.layer.mask);
+    out.mask_solid = gradient.solid;
+    out.mask_color0 = gradient.color0;
+    out.mask_color1 = gradient.color1;
     return out;
 }
 
 // The most taps a variable blur pass takes on each side of a pixel. The
-// cap trims the tails of a sigma past 32 device pixels, and it bounds
-// the cost of one huge blur.
+// cap trims the tails of a sigma past 32 device pixels, and it bounds the
+// cost of one huge blur.
 const VARIABLE_BLUR_RADIUS_CAP: i32 = 96;
 
 // One pass of the variable backdrop blur, the blur a gradient mask asks
@@ -333,35 +434,31 @@ const VARIABLE_BLUR_RADIUS_CAP: i32 = 96;
 // mask changes slowly against the width of the kernel. Pairs of taps
 // merge into one linear read at their weighted centre, which halves the
 // reads. A tap past the source is dropped and the weights renormalize,
-// as in the fixed blur. The source is bound at every texture slot.
+// as in the fixed blur.
 @fragment
 fn fs_variable_blur(input: VariableBlurVarying) -> @location(0) vec4<f32> {
-    let position = b_layer.region.origin + input.uv * b_layer.region.size;
-    let box_min = b_layer.layer.bounds.origin;
-    let box_max = box_min + b_layer.layer.bounds.size;
+    let layer = b_layer.layer;
+    let position = b_layer.target.origin + input.uv * b_layer.target.size;
+    let point = layer_point(position);
+    let box_min = layer.bounds.origin;
+    let box_max = box_min + layer.bounds.size;
     // The pass also blurs the pad around the layer, the pixels only the
     // other pass reads. Clamp the mask read to the bounds, so a pad row
-    // above the layer blurs like the top row. With a mask of zero there,
-    // the pad stays sharp, and the other pass then mixes that sharpness
-    // back into the layer near its edge.
-    let mask_position = clamp(position, box_min, box_max);
-    let mask = saturate(gradient_color(
-        b_layer.layer.mask,
-        mask_position,
-        b_layer.layer.bounds,
-        input.mask_solid,
-    ).a);
-    let sigma = mask * b_layer.layer.backdrop_blur;
+    // above the layer blurs like the top row.
+    let mask_point = clamp(point, box_min, box_max);
+    let mask = saturate(gradient_color(layer.mask, mask_point, layer.bounds, input.mask_solid,
+                                       input.mask_color0, input.mask_color1).a);
+    let sigma = mask * layer.backdrop_blur;
     let centre = textureSampleLevel(t_layer_content, s_layer_smooth, input.uv, 0.0);
     if (sigma < 0.3) {
         return centre;
     }
-    let texel = 1.0 / vec2<f32>(textureDimensions(t_layer_content));
-    var step = vec2<f32>(texel.x, 0.0);
-    if (b_layer.blur_axis != 0u) {
-        step = vec2<f32>(0.0, texel.y);
-    }
     let radius = min(i32(ceil(3.0 * sigma)), VARIABLE_BLUR_RADIUS_CAP);
+    let size = vec2<f32>(textureDimensions(t_layer_content));
+    var step = vec2<f32>(0.0, 1.0 / size.y);
+    if (b_layer.blur_axis == 0u) {
+        step = vec2<f32>(1.0 / size.x, 0.0);
+    }
     var sum = centre;
     var weight_sum = 1.0;
     for (var i = 1; i <= radius; i += 2) {
@@ -382,63 +479,4 @@ fn fs_variable_blur(input: VariableBlurVarying) -> @location(0) vec4<f32> {
         }
     }
     return sum / weight_sum;
-}
-
-@fragment
-fn fs_layer_composite(input: LayerCompositeVarying) -> @location(0) vec4<f32> {
-    if (any(input.clip_distances < vec4<f32>(0.0))) {
-        discard;
-    }
-    let position = input.position.xy;
-    let uv = (position - b_layer.region.origin) / b_layer.region.size;
-    let under = textureSampleLevel(t_layer_under, s_layer_exact, uv, 0.0);
-
-    var content: vec4<f32>;
-    if (b_layer.layer.blur > 0.0) {
-        content = textureSampleLevel(t_layer_content, s_layer_smooth, uv, 0.0);
-    } else {
-        content = textureSampleLevel(t_layer_content, s_layer_exact, uv, 0.0);
-    }
-    content = filter_color(b_layer.layer.color_matrix, content) * b_layer.layer.opacity;
-
-    let shape = box_coverage(
-        position,
-        b_layer.layer.bounds,
-        b_layer.layer.corner_radii,
-        b_layer.layer.corner_shapes,
-    );
-    if (b_layer.layer.clips_content != 0u) {
-        content *= shape;
-    }
-
-    var keep = 1.0;
-    if (b_layer.layer.has_mask != 0u) {
-        let box_min = b_layer.layer.bounds.origin;
-        let box_max = box_min + b_layer.layer.bounds.size;
-        if (all(position >= box_min) && all(position < box_max)) {
-            keep = gradient_color(
-                b_layer.layer.mask,
-                position,
-                b_layer.layer.bounds,
-                input.mask_solid,
-            ).a;
-        } else {
-            keep = 0.0;
-        }
-    }
-
-    var base = under;
-    if (b_layer.layer.has_backdrop != 0u) {
-        var backdrop = under;
-        if (b_layer.layer.backdrop_blur > 0.0) {
-            // With a mask, the texture holds the variable blur, already
-            // at the width the mask asks for at every pixel.
-            backdrop = textureSampleLevel(t_layer_backdrop, s_layer_smooth, uv, 0.0);
-        }
-        backdrop = mix(backdrop, filter_color(b_layer.layer.backdrop_matrix, backdrop), keep);
-        base = mix(under, backdrop, shape);
-    }
-
-    let result = blend_over(b_layer.layer.blend_mode, base, content);
-    return mix(base, result, keep);
 }

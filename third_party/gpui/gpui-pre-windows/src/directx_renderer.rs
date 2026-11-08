@@ -394,9 +394,7 @@ impl DirectXRenderer {
                     self.draw_polychrome_sprites(texture_id, range.start, range.len())
                 }
                 PrimitiveBatch::Surfaces(range) => self.draw_surfaces(&scene.surfaces[range]),
-                PrimitiveBatch::LayerBegin(index) => {
-                    self.begin_layer(&scene.effect_layers[index])
-                }
+                PrimitiveBatch::LayerBegin(_) => self.begin_layer(),
                 PrimitiveBatch::LayerEnd(index) => self.end_layer(&scene.effect_layers[index]),
             }
             .with_context(|| {
@@ -423,7 +421,8 @@ impl DirectXRenderer {
     /// goes through MetalRenderer; this is the Windows analogue). Draws into
     /// the existing render target, copies it into a `D3D11_USAGE_STAGING`
     /// texture, maps it, and converts BGRA to RGBA.
-    #[cfg(feature = "test-support")]
+    ///
+    /// Nodus patch: available in every build, not only with `test-support`.
     pub(crate) fn render_to_image(
         &mut self,
         scene: &Scene,
@@ -496,9 +495,9 @@ impl DirectXRenderer {
             .context("Failed to build RgbaImage from staging readback")
     }
 
-    fn begin_layer(&mut self, layer: &EffectLayer) -> Result<()> {
+    fn begin_layer(&mut self) -> Result<()> {
         let frame = effect_frame(&self.resources, self.width, self.height)?;
-        self.effects.begin_layer(&frame, layer)
+        self.effects.begin_layer(&frame)
     }
 
     fn end_layer(&mut self, layer: &EffectLayer) -> Result<()> {
@@ -1767,6 +1766,7 @@ pub(crate) mod shader_resources {
         Blur,
         VariableBlur,
         LayerComposite,
+        LayerBlend,
     }
 
     #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -1855,6 +1855,10 @@ pub(crate) mod shader_resources {
                 ShaderModule::LayerComposite => match target {
                     ShaderTarget::Vertex => LAYER_COMPOSITE_VERTEX_BYTES,
                     ShaderTarget::Fragment => LAYER_COMPOSITE_FRAGMENT_BYTES,
+                },
+                ShaderModule::LayerBlend => match target {
+                    ShaderTarget::Vertex => LAYER_BLEND_VERTEX_BYTES,
+                    ShaderTarget::Fragment => LAYER_BLEND_FRAGMENT_BYTES,
                 },
             };
             Self { inner: bytes }
@@ -1946,6 +1950,7 @@ pub(crate) mod shader_resources {
                 ShaderModule::Blur => "blur",
                 ShaderModule::VariableBlur => "variable_blur",
                 ShaderModule::LayerComposite => "layer_composite",
+                ShaderModule::LayerBlend => "layer_blend",
             }
         }
     }

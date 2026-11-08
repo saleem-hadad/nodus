@@ -85,7 +85,7 @@ impl Terminal {
     }
 
     /// `getTrimmedLength`: just past the last cell holding a character.
-    fn trimmed_length(&self, line: i32) -> usize {
+    pub(crate) fn trimmed_length(&self, line: i32) -> usize {
         let cells = self.row_cells(line);
         for (i, cell) in cells.iter().enumerate().rev() {
             let (chars, width) = cell_content(cell);

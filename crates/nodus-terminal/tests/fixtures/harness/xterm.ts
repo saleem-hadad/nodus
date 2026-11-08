@@ -10,6 +10,7 @@ import { DEFAULT_ANSI_COLORS } from 'browser/Types'
 import { BufferNamespaceApi } from 'common/public/BufferNamespaceApi'
 import { UnicodeV11 } from '@xterm/addon-unicode11/src/UnicodeV11'
 import { LinkComputer } from '@xterm/addon-web-links/src/WebLinkProvider'
+import { OscLinkProvider } from 'browser/OscLinkProvider'
 
 export { evaluateKeyboardEvent }
 
@@ -19,6 +20,15 @@ export const unicode11 = new UnicodeV11()
 export function computeLinks(term: Headless, y: number, regex: RegExp): Array<{ text: string; range: unknown }> {
   const api = { buffer: new BufferNamespaceApi(term as never) }
   return LinkComputer.computeLink(y, regex, api as never, () => {}).map((l) => ({ text: l.text, range: l.range }))
+}
+
+/** xterm's built-in OSC 8 link provider on line `y` (1-based). */
+export function oscLinks(term: Headless, y: number): Array<{ text: string; range: unknown }> {
+  const t = term as any
+  const provider = new OscLinkProvider(t._bufferService, t.optionsService, t._oscLinkService)
+  let links: Array<{ text: string; range: unknown }> = []
+  provider.provideLinks(y, (found) => (links = (found ?? []).map((l) => ({ text: l.text, range: l.range }))))
+  return links
 }
 
 type Rgb = [number, number, number]

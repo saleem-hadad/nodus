@@ -9,6 +9,7 @@
 
 mod handler;
 pub mod keys;
+pub mod links;
 pub mod palette;
 pub mod paste;
 mod queries;

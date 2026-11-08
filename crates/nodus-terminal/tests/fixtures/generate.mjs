@@ -562,20 +562,30 @@ const linkLines = [
   'percent https://o.example/a%20b and spaces%20https://p.example',
   'double https://q.example/https://r.example'
 ]
-write(
-  'links.json',
-  linkLines.map((line) => {
-    const cols = 40
-    const t = new xterm.Headless(cols, 8, themeColors)
-    t.feed(line)
-    const d = t.dump()
-    const rows = d.lines.length
-    const byRow = []
-    for (let y = 1; y <= rows; y++) byRow.push(xterm.computeLinks(t, y, strictUrlRegex))
-    return { line, cols, links: byRow }
-  })
-)
-
+const osc = (uri, text) => `${ESC}]8;;${uri}${ESC}\\${text}${ESC}]8;;${ESC}\\`
+const oscLines = [
+  osc('https://example.com/docs', 'docs') + ' ' + osc('file:///tmp/x', 'file') + ' ' + osc('https://example.com/b', 'https://example.com/b'),
+  'x' + osc('https://a.example', 'ab') + osc('https://b.example', 'cd') + 'y',
+  `${ESC}]8;id=1;https://same.example${ESC}\\one${ESC}]8;;${ESC}\\ ${ESC}]8;id=1;https://same.example${ESC}\\two${ESC}]8;;${ESC}\\`,
+  'end ' + osc('https://last.example', 'z'),
+  osc('https://wrap.example/' + 'w'.repeat(30), 'a link that wraps onto the next line of the terminal') + ' after',
+  osc('mailto:someone@example.com', 'mail') + ' ' + osc('not a url', 'bad')
+]
+// The links each provider finds from every line of a 40-column terminal.
+function linkCase(line) {
+  const cols = 40
+  const t = new xterm.Headless(cols, 8, themeColors)
+  t.feed(line)
+  const rows = t.dump().lines.length
+  const web = []
+  const oscLinks = []
+  for (let y = 1; y <= rows; y++) {
+    web.push(xterm.computeLinks(t, y, strictUrlRegex))
+    oscLinks.push(xterm.oscLinks(t, y))
+  }
+  return { line, cols, links: web, osc: oscLinks }
+}
+write('links.json', [...linkLines, ...oscLines].map(linkCase))
 // ---------------------------------------------------------------------------
 // registry.json
 // ---------------------------------------------------------------------------

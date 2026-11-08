@@ -230,3 +230,56 @@ fn term_081_widths_match_the_unicode11_addon() {
         }
     }
 }
+
+/// TERM-065, TERM-068: the web-links addon's matches (wrapped lines
+/// included) and xterm's OSC 8 link provider.
+#[test]
+fn term_065_term_068_links_match_xterm() {
+    let mut failures = Vec::new();
+    for case in fixture("links.json").as_array().unwrap() {
+        let line = case["line"].as_str().unwrap();
+        let cols = case["cols"].as_u64().unwrap() as usize;
+        let mut t = Terminal::new(SessionKind::Claude, Platform::Mac, cols, 8);
+        t.feed(line);
+        let json = |links: Vec<nodus_terminal::links::Link>| -> Value {
+            links
+                .iter()
+                .map(|l| {
+                    serde_json::json!({
+                        "text": l.text,
+                        "range": { "start": { "x": l.start.x, "y": l.start.y }, "end": { "x": l.end.x, "y": l.end.y } }
+                    })
+                })
+                .collect()
+        };
+        for (i, expected) in case["links"].as_array().unwrap().iter().enumerate() {
+            let got = json(t.web_links(i + 1));
+            if &got != expected {
+                failures.push(format!("{line:?} line {}: web links {got}, xterm {expected}", i + 1));
+            }
+        }
+        for (i, expected) in case["osc"].as_array().unwrap().iter().enumerate() {
+            let got = json(t.osc8_links(i + 1));
+            if &got != expected {
+                failures.push(format!("{line:?} line {}: OSC 8 links {got}, xterm {expected}", i + 1));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// TERM-068: OSC 8 runs, http(s) only, ahead of web links.
+#[test]
+fn term_068_osc8_links() {
+    let mut t = Terminal::new(SessionKind::Claude, Platform::Mac, 40, 3);
+    t.feed("\x1b]8;;https://example.com/docs\x1b\\docs\x1b]8;;\x1b\\ \x1b]8;;file:///tmp/x\x1b\\file\x1b]8;;\x1b\\ \x1b]8;;https://example.com/b\x1b\\https://example.com/b\x1b]8;;\x1b\\");
+    let links = t.osc8_links(1);
+    let summary: Vec<_> = links.iter().map(|l| (l.text.as_str(), l.start.x, l.end.x)).collect();
+    assert_eq!(
+        summary,
+        vec![("https://example.com/docs", 1, 4), ("https://example.com/b", 11, 31)]
+    );
+    let at = t.link_at(nodus_terminal::links::LinkPoint { x: 15, y: 1 }).unwrap();
+    assert_eq!(at.kind, nodus_terminal::links::LinkKind::Osc8);
+    assert!(t.link_at(nodus_terminal::links::LinkPoint { x: 7, y: 1 }).is_none());
+}

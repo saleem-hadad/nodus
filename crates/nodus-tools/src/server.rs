@@ -347,3 +347,19 @@ pub(crate) fn js_string(value: Option<&Value>) -> String {
         Some(Value::Object(_)) => "[object Object]".into(),
     }
 }
+
+/// The server as the session host client calls it for each relayed `mcp`
+/// message (TOOL-014): it always has a reply, so the host never answers for it.
+pub struct McpRelay<H>(pub Arc<McpServer<H>>);
+
+impl<H: BoardToolHandlers + 'static> nodus_sessions::client::BoardTools for McpRelay<H> {
+    fn answer(
+        &self,
+        session_id: &str,
+        message: Value,
+    ) -> nodus_sessions::client::BoxFuture<Result<Option<Value>, String>> {
+        let server = Arc::clone(&self.0);
+        let session_id = session_id.to_owned();
+        Box::pin(async move { Ok(Some(server.answer(&session_id, &message).await)) })
+    }
+}

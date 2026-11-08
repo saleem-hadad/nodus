@@ -12,10 +12,12 @@ publish.workspace = true
 [dependencies]
 nodus-board.workspace = true
 nodus-domain.workspace = true
+nodus-sessions.workspace = true
 nodus-store.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
+nodus-host-proto.workspace = true
 nodus-transcripts.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "rt", "test-util"] }

@@ -33,4 +33,4 @@ pub use schema::{
     BOARD_MCP_CONFIG, BOARD_SERVER, BOARD_TOOL_RULES, COMMON_TOOL_NAMES, INSTRUCTIONS, PROTOCOL_VERSION,
     SESSION_TOOL_NAMES, VIEW_TOOL_NAMES,
 };
-pub use server::{BoardToolHandlers, BoxFuture, McpServer, ToolError};
+pub use server::{BoardToolHandlers, BoxFuture, McpRelay, McpServer, ToolError};

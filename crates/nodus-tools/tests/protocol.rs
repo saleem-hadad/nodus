@@ -627,3 +627,20 @@ async fn answers_as_0_9_4_does_on_macos_and_windows() {
         }
     }
 }
+
+#[test]
+fn the_config_names_the_hosts_path_and_session_header() {
+    let config: Value = serde_json::from_str(BOARD_MCP_CONFIG).unwrap();
+    let nodus = &config["mcpServers"]["nodus"];
+    assert!(nodus["url"].as_str().unwrap().ends_with(nodus_host_proto::MCP_PATH));
+    assert!(nodus["headers"].get(nodus_host_proto::MCP_SESSION_HEADER).is_some());
+}
+
+#[tokio::test]
+async fn relays_through_the_host_client_always_with_a_reply() {
+    // TOOL-014: the client sends back whatever the server answers.
+    use nodus_sessions::client::BoardTools;
+    let relay = nodus_tools::McpRelay(std::sync::Arc::new(server(Mock::default())));
+    let reply = relay.answer("s1", json!({ "id": 9, "method": "ping" })).await;
+    assert_eq!(reply, Ok(Some(json!({ "jsonrpc": "2.0", "id": 9, "result": {} }))));
+}

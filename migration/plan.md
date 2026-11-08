@@ -137,7 +137,7 @@ One file per domain in `migration/features/`. Each lists every behavior with an 
 | 01-platform-shell.md | app lifecycle, menu, env, store, settings, preload/IPC plumbing | ✅ 141 | ☐ |
 | 02-session-host-status.md | host, host protocol, pty client, hooks status machine, agents, usage, notifications | ✅ 225 | 210/225 |
 | 03-sessions-transcripts.md | session create/open/send/kill, claude args, discovery, board merge, search, summarize, naming, geometry | ✅ 205 | 194/205 |
-| 04-board-tools-views.md | board tools MCP, notes placement, views (main + renderer), view page, ink storage | ✅ 222 | ☐ |
+| 04-board-tools-views.md | board tools MCP, notes placement, views (main + renderer), view page, ink storage | ✅ 222 | 168/222 |
 | 05-actions-voice-git.md | actions rail, voice prompts, git status/diff/log and their UI | ✅ 183 | ☐ |
 | 06-updater-release.md | updater, packaging, signing, CI, release, smoke test, 0.9.4 → Rust handoff | ✅ 132 | 73/132 |
 | 07-capture.md | floating capture: panel window, double tap, screen context, guess, submit | ✅ 177 | ☐ |
@@ -180,7 +180,7 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | parity-harness | `rust/parity-harness` | golden screenshots of 0.9.4 (`migration/parity/`) | 🟡 running |
 | gpui-fork | `rust/gpui-fork` | `third_party/gpui/`: backdrop blur, transforms, group opacity, frame capture (D13) | ✅ merged: Metal + wgpu verified at 60 fps; DirectX 11 HLSL unverified (CI step `continue-on-error` until green) |
 | ui-shell | `rust/ui-shell` | nodus-core skeleton (P4a); nodus-ui theme, controls, title bar, menus, settings, projects grid, rail (P5); test driver (D11) | 🟡 running |
-| views-tools | `rust/views-tools` | nodus-views, nodus-tools, nodus-board notes and ink | 🟡 running |
+| views-tools | `rust/views-tools` | nodus-views, nodus-tools, nodus-board notes and ink | ✅ merged: NOTE 16, INK 12, TOOL 40 (004…013/015 by host), VIEW 100; 54 VIEW UI-only to the UI tracks |
 | actions-voice-git | `rust/actions-voice-git` | nodus-actions, nodus-voice (incl. the recorder), nodus-git | 🟡 running |
 | capture | `rust/capture` | nodus-capture backend: double tap, key hook, screen context, guess, submit | 🟡 running |
 | terminal | `rust/terminal` | nodus-terminal (GPUI-free): alacritty model, xterm key encoder, query answers, widths, registry | 🟡 running |
@@ -201,6 +201,9 @@ Follow-ups a merge left for when the tracks meet in `nodus-core` (P4). Strike th
 - `nodus-transcripts` reads only the ISO timestamps Claude Code writes; one with no offset is UTC, where Node reads local time (same as the agents note above).
 - The DirectX 11 effect shaders have never been compiled (fxc runs only in Windows release builds). The `effects` example's CI step on `windows-latest` is `continue-on-error`; make it required once it's green.
 - `Window::render_to_image()` doesn't include native views (traffic lights, webviews), and wgpu returns an error; parity shots of views need the snapshot path.
+- Views need a webview for every view, on screen or not, or `update_view`'s page checks time out (the UI track keeps them alive off screen).
+- `update_view` now fails before applying anything when writing `index.html` fails; 0.9.4 applied the title and the rest first. Deliberate, invisible unless the disk is full.
+- View command output is decoded whole, not per pipe chunk, so a character split across chunks can differ from 0.9.4 (it was garbled there).
 - Six host behaviors are implemented but have no test of their own: HOST-033, 043, 090, 098, the 4 s hard exit in HOST-064 and the 20 s relay timeout in HOST-086. Add tests in P4 and tick them.
 - The 0.9.4 `pty.ts` → Rust host check was run by hand under vitest and not committed (it has to live in `src/main`); repeat it before cutover.
 - The status machine and the host client both rely on `process_started` / `process_exited` being called exactly where pty.ts tracks and untracks a session.
@@ -253,6 +256,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-09: views-tools merged (2c4bf9d): nodus-tools MCP server, `McpRelay`, nodus-views (files, page, commands, brains, schedules), notes placement and ink; MCP answers and view pages byte-identical to 0.9.4; 687 tests.
 - 2026-11-09: gpui-fork merged (9ea68bd): vendored gpui-pre 0.3.11 with effect layers. `.backdrop_blur(px).backdrop_saturate(s)`, `.rotate/.scale/.translate/.transform_origin`, `.group_opacity`, `Window::render_to_image()`; the Metal compiler crash was passing `Background` by value into multi-stop gradient code. Docs in `third_party/gpui/PATCHES.md`.
 - 2026-11-09: host merged (f0b6df8): wire protocol, PTYs as node-pty, hook server, MCP relay, `Nodus host`, the app's client; wire-compatible with the 0.9.4 Node host in both directions; 558 tests. Every running agent stopped at a usage limit again; resumed on a new account.
 - 2026-11-08: platform-updater merged (6d4dc2b): safeStorage-compatible secrets (OSCrypt parameters checked against Electron 44.5.1), notifications, Dock badge, links, permissions, nodus-updater; 446 tests.

@@ -1422,117 +1422,117 @@ Port notes: Rust tests need fakes for the session API, status, env (`/bin/sh -c`
 
 One line per behavior ID, in the order above. Tick only when the Rust build matches the Electron app and the behavior's ported tests pass.
 
-- [ ] TOOL-001 The MCP server's name is nodus
-- [ ] TOOL-002 BOARD_MCP_CONFIG (passed as --mcp-config to every claude process when the host's welcome said mcp: true; argv owned by 03) is exactly the string…
-- [ ] TOOL-003 BOARD_TOOL_RULES (passed after --allowedTools) is exactly, in order: mcp__nodus__create_note, mcp__nodus__update_note, mcp__nodus__list_notes, mcp__nodus__list_projects…
-- [ ] TOOL-004 The host serves the MCP endpoint on its hook HTTP server (127.0.0.1, hook port) at path /mcp (MCP_PATH)
-- [ ] TOOL-005 A request is authorized only if its Authorization header matches ^Bearer (\S+)$ and the token equals the host's hook token (constant-time compare, length must match)…
-- [ ] TOOL-006 Authorized, known session, method DELETE → 204 empty
-- [ ] TOOL-007 The POST body is accumulated as text
-- [ ] TOOL-008 A body that isn't valid JSON → 200, Content-Type: application/json, body {"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"Parse error"}}
-- [ ] TOOL-009 The parsed body may be one message or an array (batch)
-- [ ] TOOL-010 Each request is relayed to the app: the newest connected app client (last added to the host's client set; only clients that said hello with the host's PROTOCOL are in…
-- [ ] TOOL-011 No client, timeout, or a reply of undefined → the host's own answer, with APP_CLOSED = Nodus isn’t open, so the board can’t be reached right now.: for tools/call →…
-- [ ] TOOL-012 All requests of a batch are relayed concurrently
-- [ ] TOOL-013 An exception while serving /mcp → logged mcp request failed, 500 if headers weren't sent yet, then the response ends
-- [ ] TOOL-014 App side: on a host mcp message the app calls answerMcp(sessionId, message) asynchronously (after a microtask), awaits it, logs a rejection as…
-- [ ] TOOL-015 Because the server lives in the host, a session keeps its tools across app restarts
-- [ ] TOOL-016 Every response has jsonrpc: "2.0" and id echoed from the request (undefined id → key omitted)
-- [ ] TOOL-017 initialize → result {protocolVersion, capabilities: {tools: {}}, serverInfo: {name: "nodus", version: <app version, e.g
-- [ ] TOOL-018 ping → result {}
-- [ ] TOOL-019 tools/list → result {tools: [...]}: the 6 common tools then the 4 view tools (order in Data & formats) for every session
-- [ ] TOOL-020 Any other method → error: {code: -32601, message: "Unknown method <method>"} (e.g. Unknown method resources/list)
-- [ ] TOOL-021 tools/call answers only once the tool's handler finished (view tools wait for the page check, VIEW-108)
-- [ ] TOOL-022 tools/call arguments = params.arguments when it is a non-null object (arrays included), else {}
-- [ ] TOOL-023 A successful tool call's result is {content: [{type: "text", text: JSON.stringify(value, null, 2)}]} (2-space pretty JSON, no isError key)
-- [ ] TOOL-024 A failing tool call's result is {content: [{type: "text", text: <error message>}], isError: true} (a JSON-RPC result, never a JSON-RPC error)
-- [ ] TOOL-025 Checks run in this order before dispatch: handlers not configured → The board is not available
-- [ ] TOOL-026 Note patches take text only when it is a string and color only when it is one of FOLDER_COLORS (blue, purple, pink, red, orange, yellow, green, graphite)
-- [ ] TOOL-027 The note tools work on the caller's own board when project is undefined (absent)
-- [ ] TOOL-028 Project lookup (findProject): ref must be a string non-empty after trim, else project must be a project’s id or name, from list_projects
-- [ ] TOOL-029 create_note → createNote(target, caller, patch, away) (NOTE-*), then ev:board-changed(target)
-- [ ] TOOL-030 sessionTitle(projectId, sessionId): a view's brain → its view's title, or A view if empty/missing
-- [ ] TOOL-031 update_note: note_id must be a string, else note_id is required (checked before the project is resolved)
-- [ ] TOOL-032 list_notes → listNotes(target, caller) (NOTE-016)
-- [ ] TOOL-033 list_projects → every project in state.projects order as {id, name, folder: repoPath, archived?: true, thisSessionsBoard?…
-- [ ] TOOL-034 create_project: path must be a string non-empty after trim, else path is required
-- [ ] TOOL-035 list_sessions (runs only) → sessionList(project, caller, include_archived === true): the board's cards except the caller and views' brains, archived ones only when…
-- [ ] TOOL-036 archive_sessions (runs only): session_ids keeps only string items (non-array → [])
-- [ ] TOOL-037 archive_self errors, checked in order: node missing → This session is no longer on the board
-- [ ] TOOL-038 On the next status done for a remembered session (status hook path in ipc.ts, after finishRun), it is forgotten and, if its node still exists and isn't archived…
-- [ ] TOOL-039 list_views, get_view, create_view, update_view call the views handlers (VIEW-102–VIEW-114) with the caller's own project
-- [ ] TOOL-040 Claude cannot delete notes or views
-- [ ] NOTE-001 Note text is text.trim() then its first 20000 UTF-16 code units (NOTE_MAX_CHARS)
-- [ ] NOTE-002 fitNote(text): lines = text.split('\n')
-- [ ] NOTE-003 A short note stays square at 216 × 216: w is stored only when ≠ 216, h only when ≠ 216 (otherwise the keys are absent)
-- [ ] NOTE-004 Colour defaults to yellow
-- [ ] NOTE-005 Obstacles for placement: active cards (not archived, no runOf, no viewOf) at cardSize, free notes (no sessionId, i.e. not stickers) at noteSize, and every view at…
-- [ ] NOTE-006 Preferred spot, first that applies: (1) under the newest (createdAt) free note whose from is the writer: {x: last.x, y: last.y + noteSize(last).h + 32}
-- [ ] NOTE-007 The final position is findFreeSpot(preferred, obstacles, dock, size) (geometry, 03/09) with the fitted size
-- [ ] NOTE-008 A run, an archived card and a session on another project have no active card on the target board, so their first note goes beside the rightmost card (NOTE-006 (4))
-- [ ] NOTE-009 The note record: {id: <uuid v4>, text, color, x, y, w?, h?, from: <writer session id>, fromProject?: <writer's project id>, fromTitle?: <writer's title at write time>…
-- [ ] NOTE-010 Creating a note writes it into board.notes[id] and saves state.json
-- [ ] NOTE-011 updateNote finds the note only as an own property of the board's notes (ids like __proto__, constructor, toString, hasOwnProperty are not found), else There’s no note…
-- [ ] NOTE-012 updateNote with text !== undefined: the new text goes through NOTE-001; blank throws A note needs some text before anything changes (the colour is not applied either)
-- [ ] NOTE-013 updateNote sets color only when given (and valid, TOOL-026)
-- [ ] NOTE-014 An empty patch changes nothing but still saves and succeeds
-- [ ] NOTE-015 clampNoteSize(n) = Math.round(min(1200, max(120, n))), used by board:save-note (10) for user resizes
-- [ ] NOTE-016 listNotes(project, self): every note on the board (stickers included), oldest createdAt first, as {id, text, color, writtenByYou?…
-- [ ] INK-001 cleanInk(raw): a non-array gives []
-- [ ] INK-002 Only the last 2000 items (INK_MAX_STROKES) of the array are considered (raw.slice(-2000)), before any filtering
-- [ ] INK-003 An item that is falsy or not an object is dropped
-- [ ] INK-004 id must be a non-empty string of at most 64 UTF-16 units and not seen earlier in this pass (first occurrence wins)
-- [ ] INK-005 kind must be one of pen, arrow, text and color one of graphite, red, orange, green, blue, purple
-- [ ] INK-006 points must be an array whose every element is a finite number (no NaN, no strings)
-- [ ] INK-007 points needs length ≥ 2 and even
-- [ ] INK-008 A text stroke's text is trim()ed and cut to 500 UTF-16 units (INK_MAX_TEXT)
-- [ ] INK-009 Every kept point is rounded to one decimal: Math.round(n × 10) / 10 (JS rounding: halves go toward +∞)
-- [ ] INK-010 size: a finite number → Math.round(min(10, max(0.25, n)) × 100) / 100; anything else (missing, non-number) → 1
-- [ ] INK-011 Output objects are {id, kind, color, points, size} plus text only for text strokes, in that key order, in input order
-- [ ] INK-012 board:save-ink(projectId, strokes) replaces board.ink with cleanInk(strokes) and saves (the ink UI is 11's)
-- [ ] VIEW-001 View ids are lowercase UUID v4. Any id that ends up in a path must match ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$, else Not a view id is thrown
-- [ ] VIEW-002 A view's files live in <userData>/views/<viewId>/: index.html (the page exactly as Claude sent it, UTF-8) and runtime.json
-- [ ] VIEW-003 Reading index.html returns '' on any error (missing file, bad id)
-- [ ] VIEW-004 Writing index.html creates the folder recursively first
-- [ ] VIEW-005 Runtime (data, state, command results, errors, refreshedAt) is cached in memory per view
-- [ ] VIEW-006 Runtime saves are debounced per view: each save request restarts a 500 ms timer
-- [ ] VIEW-007 On quit (shutdown) every pending runtime is written immediately (failure logs [views] flush failed), timers cleared, and the 30 s ticker stopped
-- [ ] VIEW-008 Deleting a view's files cancels its pending runtime write, drops its cache and removes the folder recursively (force)
-- [ ] VIEW-009 clip(s, max): a non-string gives ''
-- [ ] VIEW-010 Limits: page ≤ 2 × 1024 × 1024 UTF-8 bytes
-- [ ] VIEW-011 clampEvery(value, min): a finite number > 0 → min(10080, max(min, Math.round(value))) (10080 = a week in minutes)
-- [ ] VIEW-012 normalizeCommands(raw, remembered = {}): non-array → commands must be a list of { name, run, every }
-- [ ] VIEW-013 normalizeRefresh(raw): null/undefined → undefined
-- [ ] VIEW-014 checkJson(value, max, what): JSON.stringify throws (cycle, BigInt) → <what> must be JSON
-- [ ] VIEW-015 checkHtml(html): not a string or blank after trim → html must be the page, as one HTML document
-- [ ] VIEW-016 findView(projectId, id): the id must be a string that is an own property of that board's views, else There’s no view with that id on this…
-- [ ] VIEW-017 A command is *waiting* when approved !== run && denied !== run
-- [ ] VIEW-018 The scheme is nodus-view (VIEW_SCHEME), registered before app ready as privileged {standard: true, secure: true}, and every request to it is answered by servePage(url)
-- [ ] VIEW-019 servePage: the URL's hostname is the view id and the pathname must be exactly / (query ignored, so ?v=<version> is fine)
-- [ ] VIEW-020 A served page is 200 with headers exactly: Content-Type: text/html
-- [ ] VIEW-021 The body is buildViewPage(index.html || EMPTY_PAGE, boot) where boot = {viewId, title, startsSessions, data, state, results} from the view's current title/startsSessions…
-- [ ] VIEW-022 buildViewPage inserts the injected block (VIEW-023) right after the first <head …> tag (/<head(\s[^>]*)?>/i, so <header> doesn't match)
-- [ ] VIEW-023 The injected block is the concatenation, with no separators: <meta charset="utf-8"> + <meta http-equiv="Content-Security-Policy" content="<VIEW_CSP>"> + <meta…
-- [ ] VIEW-024 scriptJson(value) = JSON.stringify(value) ?? 'null' with every < replaced by <, U+2028 by  , U+2029 by   (the six-character escapes)
-- [ ] VIEW-025 The CSP (VIEW_CSP, verbatim in Data & formats) allows inline scripts and styles only, images/media from data:/blob:, fonts from data:, and nothing else: no network, no…
-- [ ] VIEW-026 The injected theme (Data & formats) defines --nodus-* colours for light and, under prefers-color-scheme: dark, dark
+- [x] TOOL-001 The MCP server's name is nodus
+- [x] TOOL-002 BOARD_MCP_CONFIG (passed as --mcp-config to every claude process when the host's welcome said mcp: true; argv owned by 03) is exactly the string…
+- [x] TOOL-003 BOARD_TOOL_RULES (passed after --allowedTools) is exactly, in order: mcp__nodus__create_note, mcp__nodus__update_note, mcp__nodus__list_notes, mcp__nodus__list_projects…
+- [x] TOOL-004 The host serves the MCP endpoint on its hook HTTP server (127.0.0.1, hook port) at path /mcp (MCP_PATH)
+- [x] TOOL-005 A request is authorized only if its Authorization header matches ^Bearer (\S+)$ and the token equals the host's hook token (constant-time compare, length must match)…
+- [x] TOOL-006 Authorized, known session, method DELETE → 204 empty
+- [x] TOOL-007 The POST body is accumulated as text
+- [x] TOOL-008 A body that isn't valid JSON → 200, Content-Type: application/json, body {"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"Parse error"}}
+- [x] TOOL-009 The parsed body may be one message or an array (batch)
+- [x] TOOL-010 Each request is relayed to the app: the newest connected app client (last added to the host's client set; only clients that said hello with the host's PROTOCOL are in…
+- [x] TOOL-011 No client, timeout, or a reply of undefined → the host's own answer, with APP_CLOSED = Nodus isn’t open, so the board can’t be reached right now.: for tools/call →…
+- [x] TOOL-012 All requests of a batch are relayed concurrently
+- [x] TOOL-013 An exception while serving /mcp → logged mcp request failed, 500 if headers weren't sent yet, then the response ends
+- [x] TOOL-014 App side: on a host mcp message the app calls answerMcp(sessionId, message) asynchronously (after a microtask), awaits it, logs a rejection as…
+- [x] TOOL-015 Because the server lives in the host, a session keeps its tools across app restarts
+- [x] TOOL-016 Every response has jsonrpc: "2.0" and id echoed from the request (undefined id → key omitted)
+- [x] TOOL-017 initialize → result {protocolVersion, capabilities: {tools: {}}, serverInfo: {name: "nodus", version: <app version, e.g
+- [x] TOOL-018 ping → result {}
+- [x] TOOL-019 tools/list → result {tools: [...]}: the 6 common tools then the 4 view tools (order in Data & formats) for every session
+- [x] TOOL-020 Any other method → error: {code: -32601, message: "Unknown method <method>"} (e.g. Unknown method resources/list)
+- [x] TOOL-021 tools/call answers only once the tool's handler finished (view tools wait for the page check, VIEW-108)
+- [x] TOOL-022 tools/call arguments = params.arguments when it is a non-null object (arrays included), else {}
+- [x] TOOL-023 A successful tool call's result is {content: [{type: "text", text: JSON.stringify(value, null, 2)}]} (2-space pretty JSON, no isError key)
+- [x] TOOL-024 A failing tool call's result is {content: [{type: "text", text: <error message>}], isError: true} (a JSON-RPC result, never a JSON-RPC error)
+- [x] TOOL-025 Checks run in this order before dispatch: handlers not configured → The board is not available
+- [x] TOOL-026 Note patches take text only when it is a string and color only when it is one of FOLDER_COLORS (blue, purple, pink, red, orange, yellow, green, graphite)
+- [x] TOOL-027 The note tools work on the caller's own board when project is undefined (absent)
+- [x] TOOL-028 Project lookup (findProject): ref must be a string non-empty after trim, else project must be a project’s id or name, from list_projects
+- [x] TOOL-029 create_note → createNote(target, caller, patch, away) (NOTE-*), then ev:board-changed(target)
+- [x] TOOL-030 sessionTitle(projectId, sessionId): a view's brain → its view's title, or A view if empty/missing
+- [x] TOOL-031 update_note: note_id must be a string, else note_id is required (checked before the project is resolved)
+- [x] TOOL-032 list_notes → listNotes(target, caller) (NOTE-016)
+- [x] TOOL-033 list_projects → every project in state.projects order as {id, name, folder: repoPath, archived?: true, thisSessionsBoard?…
+- [x] TOOL-034 create_project: path must be a string non-empty after trim, else path is required
+- [x] TOOL-035 list_sessions (runs only) → sessionList(project, caller, include_archived === true): the board's cards except the caller and views' brains, archived ones only when…
+- [x] TOOL-036 archive_sessions (runs only): session_ids keeps only string items (non-array → [])
+- [x] TOOL-037 archive_self errors, checked in order: node missing → This session is no longer on the board
+- [x] TOOL-038 On the next status done for a remembered session (status hook path in ipc.ts, after finishRun), it is forgotten and, if its node still exists and isn't archived…
+- [x] TOOL-039 list_views, get_view, create_view, update_view call the views handlers (VIEW-102–VIEW-114) with the caller's own project
+- [x] TOOL-040 Claude cannot delete notes or views
+- [x] NOTE-001 Note text is text.trim() then its first 20000 UTF-16 code units (NOTE_MAX_CHARS)
+- [x] NOTE-002 fitNote(text): lines = text.split('\n')
+- [x] NOTE-003 A short note stays square at 216 × 216: w is stored only when ≠ 216, h only when ≠ 216 (otherwise the keys are absent)
+- [x] NOTE-004 Colour defaults to yellow
+- [x] NOTE-005 Obstacles for placement: active cards (not archived, no runOf, no viewOf) at cardSize, free notes (no sessionId, i.e. not stickers) at noteSize, and every view at…
+- [x] NOTE-006 Preferred spot, first that applies: (1) under the newest (createdAt) free note whose from is the writer: {x: last.x, y: last.y + noteSize(last).h + 32}
+- [x] NOTE-007 The final position is findFreeSpot(preferred, obstacles, dock, size) (geometry, 03/09) with the fitted size
+- [x] NOTE-008 A run, an archived card and a session on another project have no active card on the target board, so their first note goes beside the rightmost card (NOTE-006 (4))
+- [x] NOTE-009 The note record: {id: <uuid v4>, text, color, x, y, w?, h?, from: <writer session id>, fromProject?: <writer's project id>, fromTitle?: <writer's title at write time>…
+- [x] NOTE-010 Creating a note writes it into board.notes[id] and saves state.json
+- [x] NOTE-011 updateNote finds the note only as an own property of the board's notes (ids like __proto__, constructor, toString, hasOwnProperty are not found), else There’s no note…
+- [x] NOTE-012 updateNote with text !== undefined: the new text goes through NOTE-001; blank throws A note needs some text before anything changes (the colour is not applied either)
+- [x] NOTE-013 updateNote sets color only when given (and valid, TOOL-026)
+- [x] NOTE-014 An empty patch changes nothing but still saves and succeeds
+- [x] NOTE-015 clampNoteSize(n) = Math.round(min(1200, max(120, n))), used by board:save-note (10) for user resizes
+- [x] NOTE-016 listNotes(project, self): every note on the board (stickers included), oldest createdAt first, as {id, text, color, writtenByYou?…
+- [x] INK-001 cleanInk(raw): a non-array gives []
+- [x] INK-002 Only the last 2000 items (INK_MAX_STROKES) of the array are considered (raw.slice(-2000)), before any filtering
+- [x] INK-003 An item that is falsy or not an object is dropped
+- [x] INK-004 id must be a non-empty string of at most 64 UTF-16 units and not seen earlier in this pass (first occurrence wins)
+- [x] INK-005 kind must be one of pen, arrow, text and color one of graphite, red, orange, green, blue, purple
+- [x] INK-006 points must be an array whose every element is a finite number (no NaN, no strings)
+- [x] INK-007 points needs length ≥ 2 and even
+- [x] INK-008 A text stroke's text is trim()ed and cut to 500 UTF-16 units (INK_MAX_TEXT)
+- [x] INK-009 Every kept point is rounded to one decimal: Math.round(n × 10) / 10 (JS rounding: halves go toward +∞)
+- [x] INK-010 size: a finite number → Math.round(min(10, max(0.25, n)) × 100) / 100; anything else (missing, non-number) → 1
+- [x] INK-011 Output objects are {id, kind, color, points, size} plus text only for text strokes, in that key order, in input order
+- [x] INK-012 board:save-ink(projectId, strokes) replaces board.ink with cleanInk(strokes) and saves (the ink UI is 11's)
+- [x] VIEW-001 View ids are lowercase UUID v4. Any id that ends up in a path must match ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$, else Not a view id is thrown
+- [x] VIEW-002 A view's files live in <userData>/views/<viewId>/: index.html (the page exactly as Claude sent it, UTF-8) and runtime.json
+- [x] VIEW-003 Reading index.html returns '' on any error (missing file, bad id)
+- [x] VIEW-004 Writing index.html creates the folder recursively first
+- [x] VIEW-005 Runtime (data, state, command results, errors, refreshedAt) is cached in memory per view
+- [x] VIEW-006 Runtime saves are debounced per view: each save request restarts a 500 ms timer
+- [x] VIEW-007 On quit (shutdown) every pending runtime is written immediately (failure logs [views] flush failed), timers cleared, and the 30 s ticker stopped
+- [x] VIEW-008 Deleting a view's files cancels its pending runtime write, drops its cache and removes the folder recursively (force)
+- [x] VIEW-009 clip(s, max): a non-string gives ''
+- [x] VIEW-010 Limits: page ≤ 2 × 1024 × 1024 UTF-8 bytes
+- [x] VIEW-011 clampEvery(value, min): a finite number > 0 → min(10080, max(min, Math.round(value))) (10080 = a week in minutes)
+- [x] VIEW-012 normalizeCommands(raw, remembered = {}): non-array → commands must be a list of { name, run, every }
+- [x] VIEW-013 normalizeRefresh(raw): null/undefined → undefined
+- [x] VIEW-014 checkJson(value, max, what): JSON.stringify throws (cycle, BigInt) → <what> must be JSON
+- [x] VIEW-015 checkHtml(html): not a string or blank after trim → html must be the page, as one HTML document
+- [x] VIEW-016 findView(projectId, id): the id must be a string that is an own property of that board's views, else There’s no view with that id on this…
+- [x] VIEW-017 A command is *waiting* when approved !== run && denied !== run
+- [x] VIEW-018 The scheme is nodus-view (VIEW_SCHEME), registered before app ready as privileged {standard: true, secure: true}, and every request to it is answered by servePage(url)
+- [x] VIEW-019 servePage: the URL's hostname is the view id and the pathname must be exactly / (query ignored, so ?v=<version> is fine)
+- [x] VIEW-020 A served page is 200 with headers exactly: Content-Type: text/html
+- [x] VIEW-021 The body is buildViewPage(index.html || EMPTY_PAGE, boot) where boot = {viewId, title, startsSessions, data, state, results} from the view's current title/startsSessions…
+- [x] VIEW-022 buildViewPage inserts the injected block (VIEW-023) right after the first <head …> tag (/<head(\s[^>]*)?>/i, so <header> doesn't match)
+- [x] VIEW-023 The injected block is the concatenation, with no separators: <meta charset="utf-8"> + <meta http-equiv="Content-Security-Policy" content="<VIEW_CSP>"> + <meta…
+- [x] VIEW-024 scriptJson(value) = JSON.stringify(value) ?? 'null' with every < replaced by <, U+2028 by  , U+2029 by   (the six-character escapes)
+- [x] VIEW-025 The CSP (VIEW_CSP, verbatim in Data & formats) allows inline scripts and styles only, images/media from data:/blob:, fonts from data:, and nothing else: no network, no…
+- [x] VIEW-026 The injected theme (Data & formats) defines --nodus-* colours for light and, under prefers-color-scheme: dark, dark
 - [ ] VIEW-027 A view's page shows in a frame with sandbox="allow-scripts"…
 - [ ] VIEW-028 A frame may only navigate to a nodus-view:// URL, and once it shows a view page, only to that same view id
 - [ ] VIEW-029 Each mounted frame registers with the relay under its window: {projectId, viewId, version}
 - [ ] VIEW-030 The card renders its frame only when version > 0 and a board project is open
-- [ ] VIEW-031 window.nodus has viewId, title, canStartSessions (Boolean(boot.startsSessions)), data, state, results (an object, boot.results || {}), and methods on, setState, run…
-- [ ] VIEW-032 A call posts {id: ++seq, method, args: args || {}, nodus: 1} to parent with target origin '*' (seq starts at 0 so the first id is 1) and returns a Promise
-- [ ] VIEW-033 Incoming messages are accepted only when e.source === parent and e.data.nodus === 1; a message with a truthy id is a reply (VIEW-032) and nothing else
-- [ ] VIEW-034 On an event message: data → sets current data and nodus.data
-- [ ] VIEW-035 nodus.on(event, fn) adds fn and returns an unsubscribe function
-- [ ] VIEW-036 nodus.setState(s) sets current state and nodus.state immediately, then calls setState with {state: s}
-- [ ] VIEW-037 Method argument shapes: run(name) → {name}
-- [ ] VIEW-038 Errors are reported to the board as {error: <text>, nodus: 1} where text = err.stack || err.message when either exists, else String(err), cut to 2000 chars
-- [ ] VIEW-039 On window load the page posts {loaded: true, nodus: 1}
-- [ ] VIEW-040 A click (capture phase, on document) whose target is inside an a[href]: an href attribute starting with # is left alone
-- [ ] VIEW-041 Wheel routing (listener on window, non-passive): ignored if defaultPrevented or both deltas are 0. A ctrlKey wheel (pinch) always goes to the board
-- [ ] VIEW-042 scrolls(el, dx, dy): walks from the target up to (not including) <html>, element nodes only: an element scrolls when its computed overflowY (for dy) / overflowX (for dx)…
-- [ ] VIEW-043 A wheel that goes to the board is preventDefault()ed in the page and posted as {wheel: {dx, dy, mode, x, y, ctrl, shift, alt, meta}, nodus…
+- [x] VIEW-031 window.nodus has viewId, title, canStartSessions (Boolean(boot.startsSessions)), data, state, results (an object, boot.results || {}), and methods on, setState, run…
+- [x] VIEW-032 A call posts {id: ++seq, method, args: args || {}, nodus: 1} to parent with target origin '*' (seq starts at 0 so the first id is 1) and returns a Promise
+- [x] VIEW-033 Incoming messages are accepted only when e.source === parent and e.data.nodus === 1; a message with a truthy id is a reply (VIEW-032) and nothing else
+- [x] VIEW-034 On an event message: data → sets current data and nodus.data
+- [x] VIEW-035 nodus.on(event, fn) adds fn and returns an unsubscribe function
+- [x] VIEW-036 nodus.setState(s) sets current state and nodus.state immediately, then calls setState with {state: s}
+- [x] VIEW-037 Method argument shapes: run(name) → {name}
+- [x] VIEW-038 Errors are reported to the board as {error: <text>, nodus: 1} where text = err.stack || err.message when either exists, else String(err), cut to 2000 chars
+- [x] VIEW-039 On window load the page posts {loaded: true, nodus: 1}
+- [x] VIEW-040 A click (capture phase, on document) whose target is inside an a[href]: an href attribute starting with # is left alone
+- [x] VIEW-041 Wheel routing (listener on window, non-passive): ignored if defaultPrevented or both deltas are 0. A ctrlKey wheel (pinch) always goes to the board
+- [x] VIEW-042 scrolls(el, dx, dy): walks from the target up to (not including) <html>, element nodes only: an element scrolls when its computed overflowY (for dy) / overflowX (for dx)…
+- [x] VIEW-043 A wheel that goes to the board is preventDefault()ed in the page and posted as {wheel: {dx, dy, mode, x, y, ctrl, shift, alt, meta}, nodus…
 - [ ] VIEW-044 The board knows which view a message is from only by the frame window that sent it
 - [ ] VIEW-045 {error: string} → views.report(projectId, viewId, {error}) (fire-and-forget; main ignores reports for views that have gone)
 - [ ] VIEW-046 {loaded: truthy} → views.report(projectId, viewId, {loaded: <the version the frame was registered with>})
@@ -1549,68 +1549,68 @@ One line per behavior ID, in the order above. Tick only when the Rust build matc
 - [ ] VIEW-057 At most one start per view every 3000 ms (VIEW_START_GAP_MS, in-memory per board): sooner → This view just started a session
 - [ ] VIEW-058 The new session is an expanded card (720 × 480) placed with findSpotBeside({x: view.x, y: view.y…
 - [ ] VIEW-059 Main stores fromView only for a Claude session whose fromView is an own property of that board's views
-- [ ] VIEW-060 callView first resolves the view on that board (VIEW-016)
-- [ ] VIEW-061 The page's rate-limit and other per-view state are keyed by view id
-- [ ] VIEW-062 sessions → sessionList(project, null, false) (TOOL-035 shape: active cards, no brains)
-- [ ] VIEW-063 notes → every note, oldest first, as {id, text, color}
-- [ ] VIEW-064 views → every other view on the board, in board insertion order (not sorted), as {id, title, description, data} with data from that view's runtime
-- [ ] VIEW-065 view → {id, title, description, data} of findView(project, args.id) (may be the page's own view)
-- [ ] VIEW-066 git → waits for the login-shell env, then gitStatus(repoPath) (05)
-- [ ] VIEW-067 setState → checkJson(args.state, 262144, 'The state')
-- [ ] VIEW-068 run → runCommand(project, view, String(args.name ?? '')) (VIEW-073)
-- [ ] VIEW-069 ask: if the previous page ask for this view was less than 15000 ms ago → Asked too soon: a view can ask its brain once every 15 seconds
-- [ ] VIEW-070 openUrl: args.url must be a string matching /^https?:\/\//i, else Only http and https links open
-- [ ] VIEW-071 Any other method → nodus.<method> isn’t something a view can do
-- [ ] VIEW-072 openSession/startSession never reach main (the relay answers them)
-- [ ] VIEW-073 runCommand(project, view, name): unknown view → throws synchronously (VIEW-016)
-- [ ] VIEW-074 While a run of the same view + command name is going, another request gets the same promise (no second process)
-- [ ] VIEW-075 When the run finishes and the view still exists, its result is stored as runtime.results[name], a save is scheduled and ev:view(…, 'result', result) is sent
-- [ ] VIEW-076 A run waits for the login-shell env, then spawns the user's shell on the command…
-- [ ] VIEW-077 stdout/stderr chunks are decoded as UTF-8 per chunk and appended while the collected text is shorter than its cap (stdout 1048576, stderr 65536 chars)
-- [ ] VIEW-078 After 120000 ms (COMMAND_TIMEOUT_MS) the whole process tree is…
-- [ ] VIEW-079 A spawn that throws, or a child error event, resolves with code: null and error = the error message
-- [ ] VIEW-080 A result is {name, code, stdout, stderr, at, durationMs, error?}: code is the exit code (or null when killed by a signal / timed out / failed to start), at = finish time…
-- [ ] VIEW-081 approveCommand(project, view, name, allow): unknown command name → That command is gone
-- [ ] VIEW-082 Allowing a command runs it straight away (errors ignored)
-- [ ] VIEW-083 An answer is tied to the exact command line: any change asks again
-- [ ] VIEW-084 refreshView(project, view): if the view has a refresh, refreshedAt = now, schedule a save, and await askBrain(…, refresh.prompt…
-- [ ] VIEW-085 A ticker runs every 30000 ms, started once by configureViews at app start, while the app is open (whether or not any board is showing)
-- [ ] VIEW-086 Each tick visits every non-archived project's views
-- [ ] VIEW-087 A view with refresh is due when now − (runtime.refreshedAt ?? view.createdAt) ≥ refresh.every × 60000; refreshedAt = now and a save are done before asking
-- [ ] VIEW-088 A brain is a board node {sessionId: <uuid>, x: view.x, y: view.y, archived: false, title: "View: <view title>", createdByApp: true, viewOf: <view id>, autoMode: true…
-- [ ] VIEW-089 startBrain(project, view, prompt?): adds the node and sets view.sessionId, then spawns claude: fresh session (resume: false), initialPrompt…
-- [ ] VIEW-090 brainArgs(project, node) = ['--append-system-prompt', brainPrompt(view)] for a node whose viewOf view exists, else none
-- [ ] VIEW-091 Renaming a view (tool or user) also sets its brain node's title to View: <new title>
-- [ ] VIEW-092 ensureBrain(project, view) returns the brain's session id, starting an idle brain (no prompt) when the view has none (its node is missing)
-- [ ] VIEW-093 askBrain(project, view, prompt, origin): prompt clipped to 4000; empty → Say what the view’s brain should do
-- [ ] VIEW-094 Queued asks for a brain are joined as <queued>\n\n<new> and only the last 4000 characters are kept
-- [ ] VIEW-095 Typing into a brain: cancel its idle timer, write ESC[200~<text>ESC[201~ (bracketed paste, \x1b[200~…\x1b[201~), then 200 ms later write \r
-- [ ] VIEW-096 On every status change of a brain (brainStatus, called from the status machine): cancel its idle timer
-- [ ] VIEW-097 When the idle timer fires: if the brain is still done and nothing was typed into it for ≥ 5 minutes (time since the last user input recorded while idle, or ever), its…
-- [ ] VIEW-098 Any terminal input the user sends to a session (session:write) records "last input" for it only while it has an idle timer
-- [ ] VIEW-099 A brain is not drawn on the board and isn't a card anywhere: it is filtered out of the board's cards, list_sessions, nodus.sessions(), ⌘K search, notifications, and…
-- [ ] VIEW-100 views:create(projectId, {description, x, y}) waits for the login-shell env, checks the project exists (Unknown project <id>), then createView: description =…
+- [x] VIEW-060 callView first resolves the view on that board (VIEW-016)
+- [x] VIEW-061 The page's rate-limit and other per-view state are keyed by view id
+- [x] VIEW-062 sessions → sessionList(project, null, false) (TOOL-035 shape: active cards, no brains)
+- [x] VIEW-063 notes → every note, oldest first, as {id, text, color}
+- [x] VIEW-064 views → every other view on the board, in board insertion order (not sorted), as {id, title, description, data} with data from that view's runtime
+- [x] VIEW-065 view → {id, title, description, data} of findView(project, args.id) (may be the page's own view)
+- [x] VIEW-066 git → waits for the login-shell env, then gitStatus(repoPath) (05)
+- [x] VIEW-067 setState → checkJson(args.state, 262144, 'The state')
+- [x] VIEW-068 run → runCommand(project, view, String(args.name ?? '')) (VIEW-073)
+- [x] VIEW-069 ask: if the previous page ask for this view was less than 15000 ms ago → Asked too soon: a view can ask its brain once every 15 seconds
+- [x] VIEW-070 openUrl: args.url must be a string matching /^https?:\/\//i, else Only http and https links open
+- [x] VIEW-071 Any other method → nodus.<method> isn’t something a view can do
+- [x] VIEW-072 openSession/startSession never reach main (the relay answers them)
+- [x] VIEW-073 runCommand(project, view, name): unknown view → throws synchronously (VIEW-016)
+- [x] VIEW-074 While a run of the same view + command name is going, another request gets the same promise (no second process)
+- [x] VIEW-075 When the run finishes and the view still exists, its result is stored as runtime.results[name], a save is scheduled and ev:view(…, 'result', result) is sent
+- [x] VIEW-076 A run waits for the login-shell env, then spawns the user's shell on the command…
+- [x] VIEW-077 stdout/stderr chunks are decoded as UTF-8 per chunk and appended while the collected text is shorter than its cap (stdout 1048576, stderr 65536 chars)
+- [x] VIEW-078 After 120000 ms (COMMAND_TIMEOUT_MS) the whole process tree is…
+- [x] VIEW-079 A spawn that throws, or a child error event, resolves with code: null and error = the error message
+- [x] VIEW-080 A result is {name, code, stdout, stderr, at, durationMs, error?}: code is the exit code (or null when killed by a signal / timed out / failed to start), at = finish time…
+- [x] VIEW-081 approveCommand(project, view, name, allow): unknown command name → That command is gone
+- [x] VIEW-082 Allowing a command runs it straight away (errors ignored)
+- [x] VIEW-083 An answer is tied to the exact command line: any change asks again
+- [x] VIEW-084 refreshView(project, view): if the view has a refresh, refreshedAt = now, schedule a save, and await askBrain(…, refresh.prompt…
+- [x] VIEW-085 A ticker runs every 30000 ms, started once by configureViews at app start, while the app is open (whether or not any board is showing)
+- [x] VIEW-086 Each tick visits every non-archived project's views
+- [x] VIEW-087 A view with refresh is due when now − (runtime.refreshedAt ?? view.createdAt) ≥ refresh.every × 60000; refreshedAt = now and a save are done before asking
+- [x] VIEW-088 A brain is a board node {sessionId: <uuid>, x: view.x, y: view.y, archived: false, title: "View: <view title>", createdByApp: true, viewOf: <view id>, autoMode: true…
+- [x] VIEW-089 startBrain(project, view, prompt?): adds the node and sets view.sessionId, then spawns claude: fresh session (resume: false), initialPrompt…
+- [x] VIEW-090 brainArgs(project, node) = ['--append-system-prompt', brainPrompt(view)] for a node whose viewOf view exists, else none
+- [x] VIEW-091 Renaming a view (tool or user) also sets its brain node's title to View: <new title>
+- [x] VIEW-092 ensureBrain(project, view) returns the brain's session id, starting an idle brain (no prompt) when the view has none (its node is missing)
+- [x] VIEW-093 askBrain(project, view, prompt, origin): prompt clipped to 4000; empty → Say what the view’s brain should do
+- [x] VIEW-094 Queued asks for a brain are joined as <queued>\n\n<new> and only the last 4000 characters are kept
+- [x] VIEW-095 Typing into a brain: cancel its idle timer, write ESC[200~<text>ESC[201~ (bracketed paste, \x1b[200~…\x1b[201~), then 200 ms later write \r
+- [x] VIEW-096 On every status change of a brain (brainStatus, called from the status machine): cancel its idle timer
+- [x] VIEW-097 When the idle timer fires: if the brain is still done and nothing was typed into it for ≥ 5 minutes (time since the last user input recorded while idle, or ever), its…
+- [x] VIEW-098 Any terminal input the user sends to a session (session:write) records "last input" for it only while it has an idle timer
+- [x] VIEW-099 A brain is not drawn on the board and isn't a card anywhere: it is filtered out of the board's cards, list_sessions, nodus.sessions(), ⌘K search, notifications, and…
+- [x] VIEW-100 views:create(projectId, {description, x, y}) waits for the login-shell env, checks the project exists (Unknown project <id>), then createView: description =…
 - [ ] VIEW-101 The board's create (dialog, context menu, title-bar menu): preferred top-left = {at.x − 240, at.y − 180} for "here" or the viewport centre for a 480 × 360 view
-- [ ] VIEW-102 create_view checks, in order: title = clip(title, 80) empty → A view needs a title
-- [ ] VIEW-103 create_view placement (placeView): preferred = right of the caller's active card (x + cardSize.w + 32, same y), else right of the rightmost active card, else {dock.x +…
-- [ ] VIEW-104 Size from tools: clampViewSize({w: Number(width), h: Number(height)}): non-finite → undefined (default 480/360)
-- [ ] VIEW-105 The new view: {id: uuid, title, description: clip(description, 4000) || title, x, y, w?, h?, from: <caller>, commands?: (only if non-empty), refresh?, startsSessions?…
-- [ ] VIEW-106 Then: write index.html; runtime data = args.data
-- [ ] VIEW-107 A view put up by a tool has no brain until it first needs one (an ask, refresh, ⌨, Build)
-- [ ] VIEW-108 Page check (checkPage(view, since)): wait up to 3000 ms (LOAD_WAIT_MS) for a loaded report with version ≥ the view's version
-- [ ] VIEW-109 update_view resolves the view: view_id undefined → the caller's own view when the caller is a brain, else view_id is required: this session isn’t a view’s brain
-- [ ] VIEW-110 update_view validates everything before changing anything: html (when given) via checkHtml
-- [ ] VIEW-111 update_view then applies: non-empty title → rename (VIEW-091)
-- [ ] VIEW-112 update_view returns {view_id, version, waiting_for_approval: [...], ...check} where the page check (VIEW-108) runs only when html was given (else nothing extra)
-- [ ] VIEW-113 get_view (own view when view_id is undefined, VIEW-109 error otherwise as findView) returns {id, title, description, html: <index.html or ''>, data, state, commands…
-- [ ] VIEW-114 list_views returns every view oldest first as {id, title, description, yours?: true}, yours when the caller is the view's brain or put it up (from)
-- [ ] VIEW-115 A view starts sessions only after a tool sets start_sessions: true
-- [ ] VIEW-116 views:save(projectId, patch) (saveView): findView(patch.id)
-- [ ] VIEW-117 views:remove(projectId, viewId) (removeView): findView
-- [ ] VIEW-118 Removing a project deletes the files of all its views (brains stop with the project's sessions)
-- [ ] VIEW-119 views:report (fire-and-forget; any error, e.g. a view that has gone, is swallowed): a non-empty string error → appended as {message: error.slice(0, 2000), at: now}…
-- [ ] VIEW-120 views:refresh, views:ask (origin user, prompt String(prompt ?? '')), views:brain wait for the login-shell env first
-- [ ] VIEW-121 The "how a view works" guide (VIEW_GUIDE) is given to brains (in their system prompt) and to every session (in create_view's description)
+- [x] VIEW-102 create_view checks, in order: title = clip(title, 80) empty → A view needs a title
+- [x] VIEW-103 create_view placement (placeView): preferred = right of the caller's active card (x + cardSize.w + 32, same y), else right of the rightmost active card, else {dock.x +…
+- [x] VIEW-104 Size from tools: clampViewSize({w: Number(width), h: Number(height)}): non-finite → undefined (default 480/360)
+- [x] VIEW-105 The new view: {id: uuid, title, description: clip(description, 4000) || title, x, y, w?, h?, from: <caller>, commands?: (only if non-empty), refresh?, startsSessions?…
+- [x] VIEW-106 Then: write index.html; runtime data = args.data
+- [x] VIEW-107 A view put up by a tool has no brain until it first needs one (an ask, refresh, ⌨, Build)
+- [x] VIEW-108 Page check (checkPage(view, since)): wait up to 3000 ms (LOAD_WAIT_MS) for a loaded report with version ≥ the view's version
+- [x] VIEW-109 update_view resolves the view: view_id undefined → the caller's own view when the caller is a brain, else view_id is required: this session isn’t a view’s brain
+- [x] VIEW-110 update_view validates everything before changing anything: html (when given) via checkHtml
+- [x] VIEW-111 update_view then applies: non-empty title → rename (VIEW-091)
+- [x] VIEW-112 update_view returns {view_id, version, waiting_for_approval: [...], ...check} where the page check (VIEW-108) runs only when html was given (else nothing extra)
+- [x] VIEW-113 get_view (own view when view_id is undefined, VIEW-109 error otherwise as findView) returns {id, title, description, html: <index.html or ''>, data, state, commands…
+- [x] VIEW-114 list_views returns every view oldest first as {id, title, description, yours?: true}, yours when the caller is the view's brain or put it up (from)
+- [x] VIEW-115 A view starts sessions only after a tool sets start_sessions: true
+- [x] VIEW-116 views:save(projectId, patch) (saveView): findView(patch.id)
+- [x] VIEW-117 views:remove(projectId, viewId) (removeView): findView
+- [x] VIEW-118 Removing a project deletes the files of all its views (brains stop with the project's sessions)
+- [x] VIEW-119 views:report (fire-and-forget; any error, e.g. a view that has gone, is swallowed): a non-empty string error → appended as {message: error.slice(0, 2000), at: now}…
+- [x] VIEW-120 views:refresh, views:ask (origin user, prompt String(prompt ?? '')), views:brain wait for the login-shell env first
+- [x] VIEW-121 The "how a view works" guide (VIEW_GUIDE) is given to brains (in their system prompt) and to every session (in create_view's description)
 - [ ] VIEW-122 Board nodes: one per view, type: 'view', position (x, y), size viewSize(view) (480 × 360 default), zIndex: 0, dragHandle: '.view-head' (only the title bar drags)…
 - [ ] VIEW-123 While a view is being dragged/resized (or the board marks it busy) its node keeps the live position (and the live size while resizing) instead of the saved one
 - [ ] VIEW-124 The card's brain status = the brain card's status when its process is live, else done

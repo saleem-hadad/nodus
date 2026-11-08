@@ -31,6 +31,7 @@ pub mod app;
 pub mod board;
 pub mod capture;
 pub mod event;
+pub mod focus;
 pub mod git;
 pub mod js;
 pub mod json;

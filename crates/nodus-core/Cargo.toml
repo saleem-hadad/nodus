@@ -9,5 +9,21 @@ authors.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+[dependencies]
+indexmap.workspace = true
+nodus-domain.workspace = true
+nodus-platform.workspace = true
+nodus-store.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt"] }
+
 [lints]
 workspace = true

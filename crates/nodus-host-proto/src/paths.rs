@@ -72,7 +72,7 @@ fn host_paths_in(user_data: &Path, platform: Platform, tmpdir: &str) -> HostPath
         Platform::Windows => socket = format!(r"\\.\pipe\nodus-{}", hash()),
         // macOS caps socket paths at 104 bytes; the per-user temp folder is private too.
         Platform::Posix if socket.len() > 100 => {
-            socket = node_join(platform, tmpdir, &format!("nodus-{}.sock", hash()))
+            socket = node_join(platform, tmpdir, &format!("nodus-{}.sock", hash()));
         }
         Platform::Posix => {}
     }

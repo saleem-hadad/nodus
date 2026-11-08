@@ -868,7 +868,7 @@ async fn host_112_stop_all_gives_up_after_5_seconds_and_keeps_the_sessions() {
 // ---------------------------------------------------------------------------
 // The Rust host
 
-fn launcher(setup: &Setup) -> (HostClient, Arc<InProcess>) {
+fn in_process(setup: &Setup) -> (HostClient, Arc<InProcess>) {
     let launcher = Arc::new(InProcess::default());
     (setup.client(Arc::clone(&launcher) as Arc<dyn HostLauncher>), launcher)
 }
@@ -876,26 +876,34 @@ fn launcher(setup: &Setup) -> (HostClient, Arc<InProcess>) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn host_093_concurrent_connects_start_one_host() {
     let setup = Setup::new();
-    let (client, launcher) = launcher(&setup);
-    let a = tokio::spawn({
-        let client = client.clone();
-        async move { client.connect_host(true).await }
-    });
-    let b = tokio::spawn({
-        let client = client.clone();
-        async move { client.connect_host(false).await }
-    });
-    a.await.unwrap().unwrap();
-    b.await.unwrap().unwrap();
+    let (client, launcher) = in_process(&setup);
+    // Polled in order, so the first asks first; the second gets its attempt.
+    let (a, b) = tokio::join!(client.connect_host(true), client.connect_host(false));
+    a.unwrap();
+    b.unwrap();
     assert_eq!(launcher.started.load(Ordering::SeqCst), 1);
+    let deadline = Instant::now() + TIMEOUT;
+    while !launcher.logged().contains(&"app connected ".to_owned()) {
+        assert!(Instant::now() < deadline);
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
     assert_eq!(launcher.logged().iter().filter(|l| *l == "app connected ").count(), 1);
     client.stop_all().await;
+
+    // Whatever `start` the second caller passed: one that doesn't start a
+    // host, asked first, is the attempt everyone gets (spec 02, Edge cases).
+    let setup = Setup::new();
+    let (client, launcher) = in_process(&setup);
+    let (a, b) = tokio::join!(client.connect_host(false), client.connect_host(true));
+    a.unwrap();
+    b.unwrap();
+    assert_eq!(launcher.started.load(Ordering::SeqCst), 0);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_session_runs_in_the_rust_host_and_a_relaunched_app_adopts_it() {
     let setup = Setup::new();
-    let (client, launcher) = launcher(&setup);
+    let (client, launcher) = in_process(&setup);
     client
         .spawn_session(
             &opts("s1"),

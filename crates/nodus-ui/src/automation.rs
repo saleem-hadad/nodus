@@ -10,6 +10,9 @@
 //! {"cmd":"key","keystroke":"cmd-o"}                 a keystroke through GPUI
 //! {"cmd":"modifiers","meta":true}                   modifiers held (⌘ for the rail's numbers)
 //! {"cmd":"mouse","kind":"click","x":100,"y":200}    move | down | up | click | double | right
+//! {"cmd":"scroll","x":720,"y":400,"dy":-600}       a wheel scroll at a point
+//! {"cmd":"files","kind":"entered","x":700,"y":400,"paths":["/…"]}   entered | pending | submit | exited
+//! {"cmd":"emit","event":"updateStatus","payload":{"state":"ready","version":"0.9.5","current":"0.9.4"}}
 //! {"cmd":"wait","ms":300}
 //! {"cmd":"idle"}                                    until the window stops drawing
 //! {"cmd":"screenshot","path":"/…/scene.light.rust.png"}
@@ -25,8 +28,8 @@
 use std::time::Duration;
 
 use gpui::{
-    App, AsyncApp, Keystroke, Modifiers, ModifiersChangedEvent, MouseButton, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, PlatformInput, point, px, size,
+    App, AsyncApp, ExternalPaths, FileDropEvent, Keystroke, Modifiers, ModifiersChangedEvent, MouseButton,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, PlatformInput, ScrollDelta, ScrollEvent, TouchPhase, point, px, size,
 };
 use nodus_domain::{Event, GroupPatch, MenuCommand, ProjectPatch, SettingsPatch};
 use serde_json::{Value, json};
@@ -217,6 +220,63 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
                     window.dispatch_event(event, cx);
                 }
             })?;
+            Ok(Value::Null)
+        }
+        "scroll" => {
+            let position = point(px(num(command, "x")), px(num(command, "y")));
+            let delta = point(px(num(command, "dx")), px(num(command, "dy")));
+            with_window(cx, move |window, cx| {
+                window.dispatch_event(
+                    PlatformInput::Scroll(ScrollEvent {
+                        position,
+                        delta: ScrollDelta::Pixels(delta),
+                        modifiers: Modifiers::default(),
+                        touch_phase: TouchPhase::Moved,
+                        source: Default::default(),
+                    }),
+                    cx,
+                );
+            })?;
+            Ok(Value::Null)
+        }
+        "files" => {
+            // Files from the OS dragged over the window: entered, over, gone.
+            let kind = command
+                .get("kind")
+                .and_then(Value::as_str)
+                .unwrap_or("entered")
+                .to_owned();
+            let position = point(px(num(command, "x")), px(num(command, "y")));
+            let paths: Vec<std::path::PathBuf> = command
+                .get("paths")
+                .and_then(Value::as_array)
+                .map(|p| p.iter().filter_map(Value::as_str).map(Into::into).collect())
+                .unwrap_or_default();
+            with_window(cx, move |window, cx| {
+                let event = match kind.as_str() {
+                    "pending" => FileDropEvent::Pending { position },
+                    "exited" => FileDropEvent::Exited,
+                    "submit" => FileDropEvent::Submit { position },
+                    _ => FileDropEvent::Entered {
+                        position,
+                        paths: ExternalPaths(paths.into()),
+                    },
+                };
+                window.dispatch_event(PlatformInput::FileDrop(event), cx);
+            })?;
+            Ok(Value::Null)
+        }
+        "emit" => {
+            // An event as a domain would send it (the updater's status, until
+            // nodus-updater is wired in).
+            let what = command.get("event").and_then(Value::as_str).unwrap_or_default();
+            let payload = command.get("payload").cloned().unwrap_or(Value::Null);
+            let event = match what {
+                "updateStatus" => Event::UpdateStatus(serde_json::from_value(payload).map_err(|e| e.to_string())?),
+                "projectsChanged" => Event::ProjectsChanged,
+                other => return Err(format!("unknown event {other}")),
+            };
+            nodus.emit(event);
             Ok(Value::Null)
         }
         "wait" => {

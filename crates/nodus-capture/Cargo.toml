@@ -27,7 +27,7 @@ uuid.workspace = true
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2.workspace = true
 objc2-app-kit = { workspace = true, features = ["NSPasteboard"] }
-objc2-core-foundation = { workspace = true, features = ["CFCGTypes", "CFData", "CFMachPort", "CFRunLoop"] }
+objc2-core-foundation = { workspace = true, features = ["CFCGTypes", "CFData", "CFDate", "CFMachPort", "CFRunLoop"] }
 objc2-core-graphics = { workspace = true, features = ["CGEvent", "CGEventTypes"] }
 objc2-foundation = { workspace = true, features = ["NSArray", "NSData", "NSString"] }
 

@@ -9,6 +9,7 @@
 
 pub mod double_tap;
 pub mod guess;
+pub mod hook;
 pub mod screen;
 pub mod submit;
 pub mod targets;

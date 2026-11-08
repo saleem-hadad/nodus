@@ -33,7 +33,23 @@ Errors are `CommandError { channel, name, message }`; `ipc_message()` is 0.9.4's
 
 ## Status
 
-See the commits on the branch; the done/deferred lists below are kept current.
+| Component | State |
+| --- | --- |
+| nodus-core: app, settings, projects, groups, events | ✅ committed, tested |
+| theme tokens (light/dark), motion, fonts, platform helpers, format helpers | ✅ committed, tested |
+| button, switch, status dot, focus ring, tooltip, icons, folder icon (resvg), spaced text | ✅ committed |
+| context menu, modal, swatches, split button, usage stats, scroll area, text fields | ✅ committed |
+| title bar, running count, menus (mac + windows set), window, root, state | ✅ committed |
+| projects grid, folder item, group picker, remove dialog, toast, drop overlay | ✅ committed, first side-by-side done (projects-grid matches layout) |
+| project rail (edge reveal, pinned, ⌘ numbers, hints) | ✅ committed, not yet compared |
+| Settings dialog | ✅ committed, not yet compared |
+| test driver (NODUS_AUTOMATION) | ✅ committed; scene runner script lives in the agent's scratchpad (see "Next") |
+
+### Next
+
+1. Rebase on main; use `nodus_platform::shell::show_item_in_folder` instead of `nodus-core/src/os.rs`, and the host/board/status crates for stats where possible.
+2. Run every shell scene (projects-*, titlebar-*, settings*, rail-*) light and dark, compare with the goldens, fix differences.
+3. Port the store's board mutations (UI-053…UI-078) as pure functions once nodus-board's snapshot API is in.
 
 ### Deferred (needs another track's API)
 

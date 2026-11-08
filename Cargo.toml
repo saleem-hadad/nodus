@@ -2,6 +2,9 @@
 # it replaces it. See migration/plan.md for how the crates fit together.
 [workspace]
 members = ["crates/*"]
+# The patched GPUI under third_party/ builds as a dependency, not a member,
+# so it keeps upstream's formatting and lints (third_party/gpui/PATCHES.md).
+exclude = ["third_party"]
 resolver = "3"
 
 [workspace.package]
@@ -40,6 +43,9 @@ block2 = "0.6"
 cbc = { version = "0.1", features = ["alloc"] }
 dispatch2 = "0.3"
 getrandom = "0.3"
+# GPUI, gpui-component and their assets behind one facade (D1). Its GPUI is
+# the patched one under [patch.crates-io].
+gpui-kit = "=0.9.0"
 libc = "0.2"
 # Apple's frameworks; crates pick the classes they use.
 objc2 = "0.6"
@@ -81,6 +87,16 @@ uuid = { version = "1.29", features = ["serde", "v4"] }
 windows-sys = "0.61"
 # WinRT, for toasts.
 windows = { version = "0.62", default-features = false, features = ["std"] }
+
+# Our patched GPUI (D13): the gpui-pre crates we change, vendored with their
+# names and version kept, so gpui-kit and gpui-component resolve to them and
+# the graph holds one GPUI. What each patch does: third_party/gpui/PATCHES.md.
+[patch.crates-io]
+gpui-pre = { path = "third_party/gpui/gpui-pre" }
+gpui-pre-apple = { path = "third_party/gpui/gpui-pre-apple" }
+gpui-pre-macos = { path = "third_party/gpui/gpui-pre-macos" }
+gpui-pre-wgpu = { path = "third_party/gpui/gpui-pre-wgpu" }
+gpui-pre-windows = { path = "third_party/gpui/gpui-pre-windows" }
 
 [workspace.lints.rust]
 rust_2018_idioms = { level = "warn", priority = -1 }

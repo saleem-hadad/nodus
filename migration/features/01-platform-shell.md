@@ -913,7 +913,7 @@ Risks and unknowns:
 ## Parity checklist
 
 - [ ] PLAT-001 App name `Nodus` in OS and menus
-- [ ] PLAT-002 Windows AUMID `dev.saleem.nodus` at start
+- [x] PLAT-002 Windows AUMID `dev.saleem.nodus` at start
 - [ ] PLAT-003 Default userData folder per OS
 - [ ] PLAT-004 `NODUS_USER_DATA` override (non-empty, raw)
 - [ ] PLAT-005 userData string byte-identical to 0.9.4
@@ -987,7 +987,7 @@ Risks and unknowns:
 - [ ] PLAT-073 pickFolderColor least-used random
 - [ ] PLAT-074 projects:update rules + partial-mutation edge
 - [ ] PLAT-075 projects:remove effects
-- [ ] PLAT-076 projects:reveal
+- [x] PLAT-076 projects:reveal
 - [ ] PLAT-077 projects:stats
 - [ ] PLAT-078 projectsChanged only from create_project
 - [ ] PLAT-079 groups:list
@@ -1008,7 +1008,7 @@ Risks and unknowns:
 - [ ] PLAT-094 Atomic write via `.<pid>.tmp` + rename, 2-space JSON
 - [ ] PLAT-095 flush only when pending
 - [ ] PLAT-096 Initial env; Windows PATH fold
-- [ ] PLAT-097 macOS login-shell capture + parse
+- [x] PLAT-097 macOS login-shell capture + parse
 - [ ] PLAT-098 Windows: no capture
 - [ ] PLAT-099 Merge captured over process env
 - [ ] PLAT-100 Fallback PATH dirs appended
@@ -1016,7 +1016,7 @@ Risks and unknowns:
 - [ ] PLAT-102 macOS claude lookup
 - [ ] PLAT-103 Windows claude.exe / .cmd shim lookup
 - [ ] PLAT-104 exeBehindShim regex
-- [ ] PLAT-105 claude --version read
+- [x] PLAT-105 claude --version read
 - [ ] PLAT-106 Lookup once per launch
 - [ ] PLAT-107 spawnEnv strip + TERM/COLORTERM/LANG + extra
 - [ ] PLAT-108 envVar unstripped
@@ -1026,13 +1026,13 @@ Risks and unknowns:
 - [ ] PLAT-112 requireClaude messages
 - [ ] PLAT-113 gitBash lookup + memo
 - [ ] PLAT-114 app:info contract
-- [ ] PLAT-115 voiceKey = base64 safeStorage blob
-- [ ] PLAT-116 macOS v10 AES-128-CBC/PBKDF2 format
-- [ ] PLAT-117 Keychain `Nodus Safe Storage` / `Nodus Key`
-- [ ] PLAT-118 Windows v10 AES-256-GCM + Local State DPAPI key
-- [ ] PLAT-119 Encryption-unavailable messages
-- [ ] PLAT-120 Decrypt failure → no key (source still settings)
-- [ ] PLAT-121 Write the same secret format
+- [x] PLAT-115 voiceKey = base64 safeStorage blob
+- [x] PLAT-116 macOS v10 AES-128-CBC/PBKDF2 format
+- [x] PLAT-117 Keychain `Nodus Safe Storage` / `Nodus Key`
+- [x] PLAT-118 Windows v10 AES-256-GCM + Local State DPAPI key
+- [x] PLAT-119 Encryption-unavailable messages
+- [x] PLAT-120 Decrypt failure → no key (source still settings)
+- [x] PLAT-121 Write the same secret format
 - [ ] PLAT-122 Command/event contract per API tables
 - [ ] PLAT-123 Event routing (main vs panel), no queue
 - [ ] PLAT-124 `Error invoking remote method '…': …` format

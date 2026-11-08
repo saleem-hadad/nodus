@@ -694,81 +694,81 @@ No macOS test exists in TypeScript. Recommended Rust additions, marked as such s
 
 ## Parity checklist
 
-- [ ] UPD-001 Initial status `idle` with `current` = running version
-- [ ] UPD-002 Each state change replaces the status (+ `current`) and is sent on `ev:update-status` to the main window
-- [ ] UPD-003 An off reason sets `off` and skips clean-up, quit hook and timers
-- [ ] UPD-004 Other OS → `Updates are only built for macOS and Windows.`
-- [ ] UPD-005 Unpackaged → `Development builds don’t update themselves.` (after the platform check)
-- [ ] UPD-006 Packaged Windows is never off
-- [ ] UPD-007 macOS on only when the bundle and its parent folder are writable
-- [ ] UPD-008 Not writable, in Applications → `Your account can’t change apps in Applications, so Nodus can’t update itself.`
-- [ ] UPD-009 Not writable, elsewhere → `Move Nodus to your Applications folder so it can update itself.`
-- [ ] UPD-010 Clean-up starts at start-up; every check awaits it
-- [ ] UPD-011 macOS registers the swap on will-quit; Windows registers nothing
-- [ ] UPD-012 Auto check at 30 000 ms, then every 14 400 000 ms from start, only while `autoUpdate` is on at that tick
+- [x] UPD-001 Initial status `idle` with `current` = running version
+- [x] UPD-002 Each state change replaces the status (+ `current`) and is sent on `ev:update-status` to the main window
+- [x] UPD-003 An off reason sets `off` and skips clean-up, quit hook and timers
+- [x] UPD-004 Other OS → `Updates are only built for macOS and Windows.`
+- [x] UPD-005 Unpackaged → `Development builds don’t update themselves.` (after the platform check)
+- [x] UPD-006 Packaged Windows is never off
+- [x] UPD-007 macOS on only when the bundle and its parent folder are writable
+- [x] UPD-008 Not writable, in Applications → `Your account can’t change apps in Applications, so Nodus can’t update itself.`
+- [x] UPD-009 Not writable, elsewhere → `Move Nodus to your Applications folder so it can update itself.`
+- [x] UPD-010 Clean-up starts at start-up; every check awaits it
+- [x] UPD-011 macOS registers the swap on will-quit; Windows registers nothing
+- [x] UPD-012 Auto check at 30 000 ms, then every 14 400 000 ms from start, only while `autoUpdate` is on at that tick
 - [ ] UPD-013 `settings:update` with truthy `autoUpdate` runs a non-asked check
 - [ ] UPD-014 `autoUpdate` defaults to true (`!== false`)
-- [ ] UPD-015 `check()` is a no-op while busy, staged or off
-- [ ] UPD-016 Lookup: `checking`, GET LATEST_URL with Accept + `Nodus/<v>` UA, 20 s timeout, no token
-- [ ] UPD-017 Lookup throws/times out → `Couldn’t reach GitHub to check for updates.`
-- [ ] UPD-018 403/429 → `GitHub is limiting update checks right now. Try again later.`
-- [ ] UPD-019 Other non-2xx → `GitHub answered the update check with an error (<status>).`
-- [ ] UPD-020 Asset = first with exact name and `state: 'uploaded'`
-- [ ] UPD-021 Asset name per OS; arm64 when the build is arm64 or runs under ARM64 translation
-- [ ] UPD-022 Version = `/^v?(\d+\.\d+\.\d+)$/` capture of `tag_name`
-- [ ] UPD-023 No asset or bad tag → `latest`
-- [ ] UPD-024 SHA-256 from `digest` `/^sha256:([0-9a-f]{64})$/`, else null
-- [ ] UPD-025 `isNewer`: numeric major.minor.patch, `parseInt || 0`, equal = not newer
-- [ ] UPD-026 Not newer (equal/older) → `latest`, never a downgrade
-- [ ] UPD-027 Failed version on an automatic check → `Nodus <v> downloaded but couldn’t install itself.`, no download
-- [ ] UPD-028 An asked check retries a failed version
-- [ ] UPD-029 `check()` resolves after the lookup; the download continues while busy
-- [ ] UPD-030 Download GET with `Nodus/<v>` UA, redirects followed
-- [ ] UPD-031 60 s stall timer re-armed per chunk; no total limit
-- [ ] UPD-032 `downloading` 0 first, then `min(100, floor(received/size*100))` only on change
-- [ ] UPD-033 Non-OK/no body → `GitHub answered the download with an error (<status>).`
-- [ ] UPD-034 Size or SHA mismatch → `The update came through damaged. Try again later.`
-- [ ] UPD-035 Other download failure → `The update didn’t finish downloading. Check your connection.`
-- [ ] UPD-036 Unnamed preparation error → `The update couldn’t be prepared. Try again later.`; logs `[updater] update failed`
-- [ ] UPD-037 macOS paths `updates/<v>/`, `updates/Nodus-<v>.dmg`, `updates/<v>/Nodus.app`
-- [ ] UPD-038 macOS order: rm dir, mkdir, download, copy, verify, staged, `ready`
-- [ ] UPD-039 macOS downloads without a digest (size check only)
-- [ ] UPD-040 Mount with `hdiutil attach <dmg> -nobrowse -noautoopen -readonly -mountpoint <mkdtemp mount->`
-- [ ] UPD-041 First root `*.app` copied; none → `The update has no app in it.`
-- [ ] UPD-042 Copy with `ditto --noqtn`
-- [ ] UPD-043 Always `hdiutil detach -force` (failure only logged), then rmdir the mount
-- [ ] UPD-044 `codesign --verify --deep --strict` fails → `The new version’s signature didn’t check out.`
-- [ ] UPD-045 plutil id (new vs running) and short version vs tag → `The update isn’t the expected version of Nodus.`
-- [ ] UPD-046 Team from `codesign -dv` stderr; a teamed running copy needs the same team → `The update isn’t signed by the same developer.`
-- [ ] UPD-047 macOS failure removes `<v>/`; the DMG is always deleted
-- [ ] UPD-048 Windows installer path `updates\Nodus-Setup-<v>.exe`, `downloading` 0 first
-- [ ] UPD-049 Windows without digest → `GitHub had no checksum for the update, so it wasn’t downloaded.`
-- [ ] UPD-050 Existing installer with matching size + SHA is reused without downloading
-- [ ] UPD-051 Otherwise the installer is downloaded over the path
-- [ ] UPD-052 Windows success: staged installer, `ready`
-- [ ] UPD-053 Windows failure deletes the installer, `error`
-- [ ] UPD-054 `restartToUpdate()` with nothing staged does nothing
-- [ ] UPD-055 macOS Restart to Update sets relaunch and quits normally
-- [ ] UPD-056 macOS: any normal quit with a staged update installs it (reopens only via Restart)
-- [ ] UPD-057 will-quit spawns `/bin/sh -c SWAP_SCRIPT nodus-update` with the 8 args, detached, once per run
-- [ ] UPD-058 Arg 8 = `NODUS_USER_DATA` only when relaunching
-- [ ] UPD-059 Script ignores HUP/INT/TERM and waits for the PID (0.2 s poll)
-- [ ] UPD-060 Script swaps: rm old, mv app→old, mv new→app, rm old
-- [ ] UPD-061 New can't go in → restore old, write version to `failed`
-- [ ] UPD-062 Old can't move aside → write version to `failed`
-- [ ] UPD-063 Reopen with `open -n` (+ `--env NODUS_USER_DATA=…`) only when relaunching, swap or not
-- [ ] UPD-064 Windows install is not re-entrant (two clicks, one dialog, one installer)
-- [ ] UPD-065 Missing installer: no dialog, no stop, no quit, error path
-- [ ] UPD-066 Live sessions → question dialog (`Stop … to update?`, detail, `Stop and Update` / `Not Now`)
-- [ ] UPD-067 `Not Now` leaves sessions and `ready` as they were
-- [ ] UPD-068 `stopAll()` then spawn `--updated /S --force-run` detached, unref, quit (stop before spawn)
-- [ ] UPD-069 Start failure: log, drop staged, delete installer, `The installer didn’t start, so Nodus wasn’t updated. Try Check for Updates again.`
-- [ ] UPD-070 Windows never installs on quit
-- [ ] UPD-071 Clean-up reads `failed`; kept only when newer than running
-- [ ] UPD-072 Windows keeps only the newest newer `Nodus-Setup-x.y.z.exe`
-- [ ] UPD-073 macOS force-detaches leftover `mount-*` before deleting
-- [ ] UPD-074 Everything else deleted (rm -rf / fs.rm); errors logged `[updater] cleanup failed`
-- [ ] UPD-075 Missing `updates/` is fine
+- [x] UPD-015 `check()` is a no-op while busy, staged or off
+- [x] UPD-016 Lookup: `checking`, GET LATEST_URL with Accept + `Nodus/<v>` UA, 20 s timeout, no token
+- [x] UPD-017 Lookup throws/times out → `Couldn’t reach GitHub to check for updates.`
+- [x] UPD-018 403/429 → `GitHub is limiting update checks right now. Try again later.`
+- [x] UPD-019 Other non-2xx → `GitHub answered the update check with an error (<status>).`
+- [x] UPD-020 Asset = first with exact name and `state: 'uploaded'`
+- [x] UPD-021 Asset name per OS; arm64 when the build is arm64 or runs under ARM64 translation
+- [x] UPD-022 Version = `/^v?(\d+\.\d+\.\d+)$/` capture of `tag_name`
+- [x] UPD-023 No asset or bad tag → `latest`
+- [x] UPD-024 SHA-256 from `digest` `/^sha256:([0-9a-f]{64})$/`, else null
+- [x] UPD-025 `isNewer`: numeric major.minor.patch, `parseInt || 0`, equal = not newer
+- [x] UPD-026 Not newer (equal/older) → `latest`, never a downgrade
+- [x] UPD-027 Failed version on an automatic check → `Nodus <v> downloaded but couldn’t install itself.`, no download
+- [x] UPD-028 An asked check retries a failed version
+- [x] UPD-029 `check()` resolves after the lookup; the download continues while busy
+- [x] UPD-030 Download GET with `Nodus/<v>` UA, redirects followed
+- [x] UPD-031 60 s stall timer re-armed per chunk; no total limit
+- [x] UPD-032 `downloading` 0 first, then `min(100, floor(received/size*100))` only on change
+- [x] UPD-033 Non-OK/no body → `GitHub answered the download with an error (<status>).`
+- [x] UPD-034 Size or SHA mismatch → `The update came through damaged. Try again later.`
+- [x] UPD-035 Other download failure → `The update didn’t finish downloading. Check your connection.`
+- [x] UPD-036 Unnamed preparation error → `The update couldn’t be prepared. Try again later.`; logs `[updater] update failed`
+- [x] UPD-037 macOS paths `updates/<v>/`, `updates/Nodus-<v>.dmg`, `updates/<v>/Nodus.app`
+- [x] UPD-038 macOS order: rm dir, mkdir, download, copy, verify, staged, `ready`
+- [x] UPD-039 macOS downloads without a digest (size check only)
+- [x] UPD-040 Mount with `hdiutil attach <dmg> -nobrowse -noautoopen -readonly -mountpoint <mkdtemp mount->`
+- [x] UPD-041 First root `*.app` copied; none → `The update has no app in it.`
+- [x] UPD-042 Copy with `ditto --noqtn`
+- [x] UPD-043 Always `hdiutil detach -force` (failure only logged), then rmdir the mount
+- [x] UPD-044 `codesign --verify --deep --strict` fails → `The new version’s signature didn’t check out.`
+- [x] UPD-045 plutil id (new vs running) and short version vs tag → `The update isn’t the expected version of Nodus.`
+- [x] UPD-046 Team from `codesign -dv` stderr; a teamed running copy needs the same team → `The update isn’t signed by the same developer.`
+- [x] UPD-047 macOS failure removes `<v>/`; the DMG is always deleted
+- [x] UPD-048 Windows installer path `updates\Nodus-Setup-<v>.exe`, `downloading` 0 first
+- [x] UPD-049 Windows without digest → `GitHub had no checksum for the update, so it wasn’t downloaded.`
+- [x] UPD-050 Existing installer with matching size + SHA is reused without downloading
+- [x] UPD-051 Otherwise the installer is downloaded over the path
+- [x] UPD-052 Windows success: staged installer, `ready`
+- [x] UPD-053 Windows failure deletes the installer, `error`
+- [x] UPD-054 `restartToUpdate()` with nothing staged does nothing
+- [x] UPD-055 macOS Restart to Update sets relaunch and quits normally
+- [x] UPD-056 macOS: any normal quit with a staged update installs it (reopens only via Restart)
+- [x] UPD-057 will-quit spawns `/bin/sh -c SWAP_SCRIPT nodus-update` with the 8 args, detached, once per run
+- [x] UPD-058 Arg 8 = `NODUS_USER_DATA` only when relaunching
+- [x] UPD-059 Script ignores HUP/INT/TERM and waits for the PID (0.2 s poll)
+- [x] UPD-060 Script swaps: rm old, mv app→old, mv new→app, rm old
+- [x] UPD-061 New can't go in → restore old, write version to `failed`
+- [x] UPD-062 Old can't move aside → write version to `failed`
+- [x] UPD-063 Reopen with `open -n` (+ `--env NODUS_USER_DATA=…`) only when relaunching, swap or not
+- [x] UPD-064 Windows install is not re-entrant (two clicks, one dialog, one installer)
+- [x] UPD-065 Missing installer: no dialog, no stop, no quit, error path
+- [x] UPD-066 Live sessions → question dialog (`Stop … to update?`, detail, `Stop and Update` / `Not Now`)
+- [x] UPD-067 `Not Now` leaves sessions and `ready` as they were
+- [x] UPD-068 `stopAll()` then spawn `--updated /S --force-run` detached, unref, quit (stop before spawn)
+- [x] UPD-069 Start failure: log, drop staged, delete installer, `The installer didn’t start, so Nodus wasn’t updated. Try Check for Updates again.`
+- [x] UPD-070 Windows never installs on quit
+- [x] UPD-071 Clean-up reads `failed`; kept only when newer than running
+- [x] UPD-072 Windows keeps only the newest newer `Nodus-Setup-x.y.z.exe`
+- [x] UPD-073 macOS force-detaches leftover `mount-*` before deleting
+- [x] UPD-074 Everything else deleted (rm -rf / fs.rm); errors logged `[updater] cleanup failed`
+- [x] UPD-075 Missing `updates/` is fine
 - [ ] UPD-076 `updates:status` returns the status
 - [ ] UPD-077 `updates:check` runs `check(true)`, resolves after the lookup
 - [ ] UPD-078 `updates:install` runs `restartToUpdate()`

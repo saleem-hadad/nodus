@@ -139,7 +139,7 @@ One file per domain in `migration/features/`. Each lists every behavior with an 
 | 03-sessions-transcripts.md | session create/open/send/kill, claude args, discovery, board merge, search, summarize, naming, geometry | ✅ 205 | 194/205 |
 | 04-board-tools-views.md | board tools MCP, notes placement, views (main + renderer), view page, ink storage | ✅ 222 | ☐ |
 | 05-actions-voice-git.md | actions rail, voice prompts, git status/diff/log and their UI | ✅ 183 | ☐ |
-| 06-updater-release.md | updater, packaging, signing, CI, release, smoke test, 0.9.4 → Rust handoff | ✅ 132 | ☐ |
+| 06-updater-release.md | updater, packaging, signing, CI, release, smoke test, 0.9.4 → Rust handoff | ✅ 132 | 73/132 |
 | 07-capture.md | floating capture: panel window, double tap, screen context, guess, submit | ✅ 177 | ☐ |
 | 08-projects-shell-ui.md | App, title bar, settings, projects grid, project rail, tokens and global styles, menus, modals | ✅ 305 | ☐ |
 | 09-board-canvas.md | BoardView: pan/zoom, selection, drag, shortcuts, context menus, sections, archive, layout, edges | ✅ 177 | ☐ |
@@ -176,7 +176,7 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | host | `rust/host` | nodus-host-proto, nodus-host, nodus-sessions::client, `Nodus host` | 🟡 running |
 | status | `rust/status` | nodus-sessions hooks, agents, usage, notify, running | ✅ merged: HOST-132…219 (88), 0 deferred |
 | transcripts-board | `rust/transcripts-board` | nodus-transcripts, nodus-board, nodus-sessions::launch | ✅ merged: 194/205 SESS; 11 deferred to core (130, 131, 134, 135, 138, 146–148, 153, 164, 203) |
-| platform-updater | `rust/platform-updater` | nodus-platform process, secrets, notify, permissions; nodus-updater | 🟡 running |
+| platform-updater | `rust/platform-updater` | nodus-platform process, secrets, notify, permissions; nodus-updater | ✅ merged: UPD 73, PLAT 11, VOICE 2 (+ OS side of HOST-208…211/215, CAP-032/040/041/055/059); UPD-013/014/076…085 to core/UI |
 | parity-harness | `rust/parity-harness` | golden screenshots of 0.9.4 (`migration/parity/`) | 🟡 running |
 | gpui-fork | `rust/gpui-fork` | `third_party/gpui/`: backdrop blur, transforms, group opacity, frame capture (D13) | 🟡 running |
 | ui-shell | `rust/ui-shell` | nodus-core skeleton (P4a); nodus-ui theme, controls, title bar, menus, settings, projects grid, rail (P5); test driver (D11) | 🟡 running |
@@ -193,6 +193,9 @@ Follow-ups a merge left for when the tracks meet in `nodus-core` (P4). Strike th
 - `nodus-sessions::agents` turns a non-string `.meta.json` field into its `String()` form, where 0.9.4 passed the raw value on. Check what the agent viewer shows for one.
 - `nodus-board`'s `BoardSessions` and `Launcher` traits are called while the board holds the state, so their nodus-core implementations must not touch the `Store`. `kill` waits up to 4 s.
 - `nodus-sessions::launch::SpawnOptions` may duplicate a type the host client defines; keep one.
+- "Packaged" is the compile-time flag `NODUS_PACKAGED=1` (`nodus_platform::app::is_packaged`); P11's packaging must set it, or the updater, notifications and the Accessibility reset act as a dev build.
+- On Windows, reqwest uses the OS's TLS (SChannel) because ring can't be cross-checked from a Mac; elsewhere rustls. Confirm the Windows CI job builds and the update download works there.
+- Windows-only platform code (job objects, DPAPI, toasts, Explorer reveal, AppUserModelID) has passed clippy but first runs in the Windows CI job; watch its first results.
 - `nodus-transcripts::claude::spawn` uses tokio's `Command` directly; switch it to `nodus_platform::process` (31013c8).
 - `nodus-transcripts` reads only the ISO timestamps Claude Code writes; one with no offset is UTC, where Node reads local time (same as the agents note above).
 - The status machine and the host client both rely on `process_started` / `process_exited` being called exactly where pty.ts tracks and untracks a session.
@@ -222,6 +225,7 @@ Places where the code and the docs disagree, or where matching 0.9.4 exactly mea
 | 11 | Fuzzy matching can throw on titles with characters like `İ` (lowercasing changes the length), and a negative top score makes the archive stack show no results. | Same, unless the user rules them bugs |
 | 09 | "New section here" beside a card puts the section about 9,920 units below the click. | Same, unless the user rules it a bug |
 | 09 | The zoom pill's fit button jumps instead of gliding; on Windows Ctrl-click doesn't add to the selection; single-letter shortcuts don't work on non-Latin layouts. | Same |
+| 06 | When a GitHub lookup times out mid-body the updater says "Couldn't reach GitHub…"; and a non-JSON answer shows serde's parse message where 0.9.4 shows V8's `JSON.parse` message. Both are rare error paths. | Differs; match V8's message if the user asks |
 | 01 PLAT-086/088 | The TS store drops unknown top-level and settings keys, and overwrites a `state.json` that parses but doesn't fit on the next save. | Deliberately safer, invisible to users: unknown keys are kept, and a misfit file is moved aside to `state.json.unreadable-<ms>` |
 | 01 | A login shell that hangs ignores the SIGTERM Node sends at the 10 s timeout, so 0.9.4 never stops it. | Killed at 10 s |
 | 01, 07 CAP-174/175 | The hidden capture panel stops the Dock from reopening a closed window on macOS, and keeps the app running after its window closes on Windows (the docs say closing the window quits). | Same, unless the user rules them bugs |
@@ -244,6 +248,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-08: platform-updater merged (6d4dc2b): safeStorage-compatible secrets (OSCrypt parameters checked against Electron 44.5.1), notifications, Dock badge, links, permissions, nodus-updater; 446 tests.
 - 2026-11-08: `nodus_platform::process` cherry-picked to main from platform-updater (31013c8) so every track spawns through it; 338 tests. actions-voice-git started.
 - 2026-11-08: transcripts-board merged (eee039a): nodus-transcripts, nodus-board, nodus-sessions::launch; 317 workspace tests. Spec 03 fixed: Node's readdir is sorted on Unix.
 - 2026-11-08: status merged (3ae719c): status machine, hook settings, usage, agents, notify, running counts; 172 workspace tests. Checklists are ticked with `python3 migration/tick.py <IDs>`.

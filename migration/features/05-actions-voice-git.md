@@ -804,8 +804,8 @@ Risks:
 - [ ] VOICE-006 Key used
 - [ ] VOICE-007 Key confinement
 - [ ] VOICE-008 Key load/migration
-- [ ] VOICE-009 Mic check
-- [ ] VOICE-010 Mic settings link
+- [x] VOICE-009 Mic check
+- [x] VOICE-010 Mic settings link
 - [ ] VOICE-011 No key
 - [ ] VOICE-012 Hint words
 - [ ] VOICE-013 MIME and file name

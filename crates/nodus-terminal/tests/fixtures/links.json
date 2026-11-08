@@ -1,0 +1,896 @@
+[
+ {
+  "line": "see https://example.com/docs for more",
+  "cols": 40,
+  "links": [
+   [
+    {
+     "text": "https://example.com/docs",
+     "range": {
+      "start": {
+       "x": 5,
+       "y": 1
+      },
+      "end": {
+       "x": 28,
+       "y": 1
+      }
+     }
+    }
+   ],
+   [],
+   [],
+   [],
+   [],
+   [],
+   [],
+   []
+  ]
+ },
+ {
+  "line": "trailing punctuation https://a.example/x). and (https://b.example/y).",
+  "cols": 40,
+  "links": [
+   [
+    {
+     "text": "https://a.example/x",
+     "range": {
+      "start": {
+       "x": 22,
+       "y": 1
+      },
+      "end": {
+       "x": 0,
+       "y": 2
+      }
+     }
+    },
+    {
+     "text": "https://b.example/y",
+     "range": {
+      "start": {
+       "x": 9,
+       "y": 2
+      },
+      "end": {
+       "x": 27,
+       "y": 2
+      }
+     }
+    }
+   ],
+   [
+    {
+     "text": "https://a.example/x",
+     "range": {
+      "start": {
+       "x": 22,
+       "y": 1
+      },
+      "end": {
+       "x": 0,
+       "y": 2
+      }
+     }
+    },
+    {
+     "text": "https://b.example/y",
+     "range": {
+      "start": {
+       "x": 9,
+       "y": 2
+      },
+      "end": {
+       "x": 27,
+       "y": 2
+      }
+     }
+    }
+   ],
+   [],
+   [],
+   [],
+   [],
+   [],
+   []
+  ]
+ },
+ {
+  "line": "quoted \"https://c.example/path?q=1&r=2\" and 'http://d.example'",
+  "cols": 40,
+  "links": [
+   [
+    {
+     "text": "https://c.example/path?q=1&r=2",
+     "range": {
+      "start": {
+       "x": 9,
+       "y": 1
+      },
+      "end": {
+       "x": 38,
+       "y": 1
+      }
+     }
+    },
+    {
+     "text": "http://d.example",
+     "range": {
+      "start": {
+       "x": 6,
+       "y": 2
+      },
+      "end": {
+       "x": 21,
+       "y": 2
+      }
+     }
+    }
+   ],
+   [
+    {
+     "text": "https://c.example/path?q=1&r=2",
+     "range": {
+      "start": {
+       "x": 9,
+       "y": 1
+      },
+      "end": {
+       "x": 38,
+       "y": 1
+      }
+     }
+    },
+    {
+     "text": "http://d.example",
+     "range": {
+      "start": {
+       "x": 6,
+       "y": 2
+      },
+      "end": {
+       "x": 21,
+       "y": 2
+      }
+     }
+    }
+   ],
+   [],
+   [],
+   [],
+   [],
+   [],
+   []
+  ]
+ },
+ {
+  "line": "HTTPS://UPPER.EXAMPLE/Path and Https://mixed.example",
+  "cols": 40,
+  "links": [
+   [
+    {
+     "text": "HTTPS://UPPER.EXAMPLE/Path",
+     "range": {
+      "start": {
+       "x": 1,
+       "y": 1
+      },
+      "end": {
+       "x": 26,
+       "y": 1
+      }
+     }
+    }
+   ],
+   [
+    {
+     "text": "HTTPS://UPPER.EXAMPLE/Path",
+     "range": {
+      "start": {
+       "x": 1,
+       "y": 1
+      },
+      "end": {
+       "x": 26,
+       "y": 1
+      }
+     }
+    }
+   ],
+   [],
+   [],
+   [],
+   [],
+   [],
+   []
+  ]
+ },
+ {
+  "line": "user info https://user:pass@e.example:8080/p#frag",
+  "cols": 40,
+  "links": [
+   [
+    {
+     "text": "https://user:pass@e.example:8080/p#frag",
+     "range": {
+      "start": {
+       "x": 11,
+       "y": 1
+      },
+      "end": {
+       "x": 9,
+       "y": 2
+      }
+     }
+    }
+   ],
+   [
+    {
+     "text": "https://user:pass@e.example:8080/p#frag",
+     "range": {
+      "start": {
+       "x": 11,
+       "y": 1
+      },
+      "end": {
+       "x": 9,
+       "y": 2
+      }
+     }
+    }
+   ],
+   [],
+   [],
+   [],
+   [],
+   [],
+   []
+  ]
+ },
+ {
+  "line": "not a url: https:// nor ftp://f.example nor https://exa mple",
+  "cols": 40,
+  "links": [
+   [
+    {
+     "text": "https://exa",
+     "range": {
+      "start": {
+       "x": 5,
+       "y": 2
+      },
+      "end": {
+       "x": 15,
+       "y": 2
+      }
+     }
+    }
+   ],
+   [
+    {
+     "text": "https://exa",
+     "range": {
+      "start": {
+       "x": 5,
+       "y": 2
+      },
+      "end": {
+       "x": 15,
+       "y": 2
+      }
+     }
+    }
+   ],
+   [],
+   [],
+   [],
+   [],
+   [],
+   []
+  ]
+ },
+ {
+  "line": "ports and paths https://g.example:3000/a/b/c.html?x=y",
+  "cols": 40,
+  "links": [
+   [
+    {
+     "text": "https://g.example:3000/a/b/c.html?x=y",
+     "range": {
+      "start": {
+       "x": 17,
+       "y": 1
+      },
+      "end": {
+       "x": 13,
+       "y": 2
+      }
+     }
+    }
+   ],
+   [
+    {
+     "text": "https://g.example:3000/a/b/c.html?x=y",
+     "range": {
+      "start": {
+       "x": 17,
+       "y": 1
+      },
+      "end": {
+       "x": 13,
+       "y": 2
+      }
+     }
+    }
+   ],
+   [],
+   [],
+   [],
+   [],
+   [],
+   []
+  ]
+ },
+ {
+  "line": "brackets https://h.example/[x] and https://i.example/{y} and https://j.example/a|b",
+  "cols": 40,
+  "links": [
+   [
+    {
+     "text": "https://h.example/[x",
+     "range": {
+      "start": {
+       "x": 10,
+       "y": 1
+      },
+      "end": {
+       "x": 29,
+       "y": 1
+      }
+     }
+    },
+    {
+     "text": "https://i.example/",
+     "range": {
+      "start": {
+       "x": 36,
+       "y": 1
+      },
+      "end": {
+       "x": 13,
+       "y": 2
+      }
+     }
+    },
+    {
+     "text": "https://j.example/a",
+     "range": {
+      "start": {
+       "x": 22,
+       "y": 2
+      },
+      "end": {
+       "x": 0,
+       "y": 3
+      }
+     }
+    }
+   ],
+   [
+    {
+     "text": "https://h.example/[x",
+     "range": {
+      "start": {
+       "x": 10,
+       "y": 1
+      },
+      "end": {
+       "x": 29,
+       "y": 1
+      }
+     }
+    },
+    {
+     "text": "https://i.example/",
+     "range": {
+      "start": {
+       "x": 36,
+       "y": 1
+      },
+      "end": {
+       "x": 13,
+       "y": 2
+      }
+     }
+    },
+    {
+     "text": "https://j.example/a",
+     "range": {
+      "start": {
+       "x": 22,
+       "y": 2
+      },
+      "end": {
+       "x": 0,
+       "y": 3
+      }
+     }
+    }
+   ],
+   [
+    {
+     "text": "https://j.example/a",
+     "range": {
+      "start": {
+       "x": 22,
+       "y": 2
+      },
+      "end": {
+       "x": 0,
+       "y": 3
+      }
+     }
+    }
+   ],
+   [],
+   [],
+   [],
+   [],
+   []
+  ]
+ },
+ {
+  "line": "unicode https://ü.example/päth and https://k.example/日本",
+  "cols": 40,
+  "links": [
+   [
+    {
+     "text": "https://k.example/日本",
+     "range": {
+      "start": {
+       "x": 36,
+       "y": 1
+      },
+      "end": {
+       "x": 17,
+       "y": 2
+      }
+     }
+    }
+   ],
+   [
+    {
+     "text": "https://k.example/日本",
+     "range": {
+      "start": {
+       "x": 36,
+       "y": 1
+      },
+      "end": {
+       "x": 17,
+       "y": 2
+      }
+     }
+    }
+   ],
+   [],
+   [],
+   [],
+   [],
+   [],
+   []
+  ]
+ },
+ {
+  "line": "ends with comma https://l.example/a, then text",
+  "cols": 40,
+  "links": [
+   [
+    {
+     "text": "https://l.example/a",
+     "range": {
+      "start": {
+       "x": 17,
+       "y": 1
+      },
+      "end": {
+       "x": 35,
+       "y": 1
+      }
+     }
+    }
+   ],
+   [
+    {
+     "text": "https://l.example/a",
+     "range": {
+      "start": {
+       "x": 17,
+       "y": 1
+      },
+      "end": {
+       "x": 35,
+       "y": 1
+      }
+     }
+    }
+   ],
+   [],
+   [],
+   [],
+   [],
+   [],
+   []
+  ]
+ },
+ {
+  "line": "ipv6 http://[::1]:8000/x and localhost http://localhost:5173/",
+  "cols": 40,
+  "links": [
+   [
+    {
+     "text": "http://[::1]:8000/x",
+     "range": {
+      "start": {
+       "x": 6,
+       "y": 1
+      },
+      "end": {
+       "x": 24,
+       "y": 1
+      }
+     }
+    },
+    {
+     "text": "http://localhost:5173/",
+     "range": {
+      "start": {
+       "x": 40,
+       "y": 1
+      },
+      "end": {
+       "x": 21,
+       "y": 2
+      }
+     }
+    }
+   ],
+   [
+    {
+     "text": "http://[::1]:8000/x",
+     "range": {
+      "start": {
+       "x": 6,
+       "y": 1
+      },
+      "end": {
+       "x": 24,
+       "y": 1
+      }
+     }
+    },
+    {
+     "text": "http://localhost:5173/",
+     "range": {
+      "start": {
+       "x": 40,
+       "y": 1
+      },
+      "end": {
+       "x": 21,
+       "y": 2
+      }
+     }
+    }
+   ],
+   [],
+   [],
+   [],
+   [],
+   [],
+   []
+  ]
+ },
+ {
+  "line": "a very long url that wraps https://wrap.example/segment/segment/segment/segment/segment/segment/segment/segment/end and after",
+  "cols": 40,
+  "links": [
+   [
+    {
+     "text": "https://wrap.example/segment/segment/segment/segment/segment/segment/segment/segment/end",
+     "range": {
+      "start": {
+       "x": 28,
+       "y": 1
+      },
+      "end": {
+       "x": 35,
+       "y": 3
+      }
+     }
+    }
+   ],
+   [
+    {
+     "text": "https://wrap.example/segment/segment/segment/segment/segment/segment/segment/segment/end",
+     "range": {
+      "start": {
+       "x": 28,
+       "y": 1
+      },
+      "end": {
+       "x": 35,
+       "y": 3
+      }
+     }
+    }
+   ],
+   [
+    {
+     "text": "https://wrap.example/segment/segment/segment/segment/segment/segment/segment/segment/end",
+     "range": {
+      "start": {
+       "x": 28,
+       "y": 1
+      },
+      "end": {
+       "x": 35,
+       "y": 3
+      }
+     }
+    }
+   ],
+   [],
+   [],
+   [],
+   [],
+   []
+  ]
+ },
+ {
+  "line": "tilde https://m.example/~user/ and hash https://n.example/#/route",
+  "cols": 40,
+  "links": [
+   [
+    {
+     "text": "https://m.example/~user/",
+     "range": {
+      "start": {
+       "x": 7,
+       "y": 1
+      },
+      "end": {
+       "x": 30,
+       "y": 1
+      }
+     }
+    },
+    {
+     "text": "https://n.example/#/route",
+     "range": {
+      "start": {
+       "x": 1,
+       "y": 2
+      },
+      "end": {
+       "x": 25,
+       "y": 2
+      }
+     }
+    }
+   ],
+   [
+    {
+     "text": "https://m.example/~user/",
+     "range": {
+      "start": {
+       "x": 7,
+       "y": 1
+      },
+      "end": {
+       "x": 30,
+       "y": 1
+      }
+     }
+    },
+    {
+     "text": "https://n.example/#/route",
+     "range": {
+      "start": {
+       "x": 1,
+       "y": 2
+      },
+      "end": {
+       "x": 25,
+       "y": 2
+      }
+     }
+    }
+   ],
+   [],
+   [],
+   [],
+   [],
+   [],
+   []
+  ]
+ },
+ {
+  "line": "bad host https://-bad-.example/ and https://exa_mple.com/",
+  "cols": 40,
+  "links": [
+   [
+    {
+     "text": "https://-bad-.example/",
+     "range": {
+      "start": {
+       "x": 10,
+       "y": 1
+      },
+      "end": {
+       "x": 31,
+       "y": 1
+      }
+     }
+    },
+    {
+     "text": "https://exa_mple.com/",
+     "range": {
+      "start": {
+       "x": 37,
+       "y": 1
+      },
+      "end": {
+       "x": 17,
+       "y": 2
+      }
+     }
+    }
+   ],
+   [
+    {
+     "text": "https://-bad-.example/",
+     "range": {
+      "start": {
+       "x": 10,
+       "y": 1
+      },
+      "end": {
+       "x": 31,
+       "y": 1
+      }
+     }
+    },
+    {
+     "text": "https://exa_mple.com/",
+     "range": {
+      "start": {
+       "x": 37,
+       "y": 1
+      },
+      "end": {
+       "x": 17,
+       "y": 2
+      }
+     }
+    }
+   ],
+   [],
+   [],
+   [],
+   [],
+   [],
+   []
+  ]
+ },
+ {
+  "line": "percent https://o.example/a%20b and spaces%20https://p.example",
+  "cols": 40,
+  "links": [
+   [
+    {
+     "text": "https://o.example/a%20b",
+     "range": {
+      "start": {
+       "x": 9,
+       "y": 1
+      },
+      "end": {
+       "x": 31,
+       "y": 1
+      }
+     }
+    },
+    {
+     "text": "https://p.example",
+     "range": {
+      "start": {
+       "x": 6,
+       "y": 2
+      },
+      "end": {
+       "x": 22,
+       "y": 2
+      }
+     }
+    }
+   ],
+   [
+    {
+     "text": "https://o.example/a%20b",
+     "range": {
+      "start": {
+       "x": 9,
+       "y": 1
+      },
+      "end": {
+       "x": 31,
+       "y": 1
+      }
+     }
+    },
+    {
+     "text": "https://p.example",
+     "range": {
+      "start": {
+       "x": 6,
+       "y": 2
+      },
+      "end": {
+       "x": 22,
+       "y": 2
+      }
+     }
+    }
+   ],
+   [],
+   [],
+   [],
+   [],
+   [],
+   []
+  ]
+ },
+ {
+  "line": "double https://q.example/https://r.example",
+  "cols": 40,
+  "links": [
+   [
+    {
+     "text": "https://q.example/https://r.example",
+     "range": {
+      "start": {
+       "x": 8,
+       "y": 1
+      },
+      "end": {
+       "x": 2,
+       "y": 2
+      }
+     }
+    }
+   ],
+   [
+    {
+     "text": "https://q.example/https://r.example",
+     "range": {
+      "start": {
+       "x": 8,
+       "y": 1
+      },
+      "end": {
+       "x": 2,
+       "y": 2
+      }
+     }
+    }
+   ],
+   [],
+   [],
+   [],
+   [],
+   [],
+   []
+  ]
+ }
+]

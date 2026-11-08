@@ -1,0 +1,2155 @@
+[
+ {
+  "name": "first attach opens at the fitted size and replays",
+  "platform": "mac",
+  "steps": [
+   {
+    "op": "container",
+    "name": "modal",
+    "size": [
+     120,
+     40
+    ]
+   },
+   {
+    "op": "attach",
+    "id": 1,
+    "session": "s1",
+    "container": "modal"
+   },
+   {
+    "op": "check",
+    "session": "s1"
+   },
+   {
+    "op": "pty-data",
+    "session": "s1",
+    "data": "dropped while opening"
+   },
+   {
+    "op": "resolve-open",
+    "n": 0,
+    "replay": "replayed\r\n"
+   },
+   {
+    "op": "pty-data",
+    "session": "s1",
+    "data": "live"
+   },
+   {
+    "op": "pty-data",
+    "session": "s1",
+    "data": ""
+   },
+   {
+    "op": "check",
+    "session": "s1"
+   }
+  ],
+  "log": [
+   [
+    "step",
+    "container"
+   ],
+   [
+    "step",
+    "attach"
+   ],
+   [
+    "open",
+    "p1",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "step",
+    "check"
+   ],
+   [
+    "state",
+    "s1",
+    true,
+    false
+   ],
+   [
+    "step",
+    "pty-data"
+   ],
+   [
+    "step",
+    "resolve-open"
+   ],
+   [
+    "term-write",
+    "s1",
+    "replayed\r\n"
+   ],
+   [
+    "resize",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "attached",
+    1
+   ],
+   [
+    "step",
+    "pty-data"
+   ],
+   [
+    "term-write",
+    "s1",
+    "live"
+   ],
+   [
+    "step",
+    "pty-data"
+   ],
+   [
+    "step",
+    "check"
+   ],
+   [
+    "state",
+    "s1",
+    false,
+    true
+   ]
+  ]
+ },
+ {
+  "name": "exit while opening is written after the replay",
+  "platform": "mac",
+  "steps": [
+   {
+    "op": "container",
+    "name": "modal",
+    "size": [
+     120,
+     40
+    ]
+   },
+   {
+    "op": "attach",
+    "id": 1,
+    "session": "s1",
+    "container": "modal"
+   },
+   {
+    "op": "pty-exit",
+    "session": "s1"
+   },
+   {
+    "op": "resolve-open",
+    "n": 0,
+    "replay": "bye"
+   },
+   {
+    "op": "pty-data",
+    "session": "s1",
+    "data": "ignored after exit"
+   },
+   {
+    "op": "pty-exit",
+    "session": "s1"
+   },
+   {
+    "op": "check",
+    "session": "s1"
+   }
+  ],
+  "log": [
+   [
+    "step",
+    "container"
+   ],
+   [
+    "step",
+    "attach"
+   ],
+   [
+    "open",
+    "p1",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "step",
+    "pty-exit"
+   ],
+   [
+    "step",
+    "resolve-open"
+   ],
+   [
+    "term-write",
+    "s1",
+    "bye"
+   ],
+   [
+    "resize",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "term-write",
+    "s1",
+    "\r\n\u001b[2m[process exited · press Resume or reopen the card to continue]\u001b[0m\r\n"
+   ],
+   [
+    "attached",
+    1
+   ],
+   [
+    "step",
+    "pty-data"
+   ],
+   [
+    "step",
+    "pty-exit"
+   ],
+   [
+    "step",
+    "check"
+   ],
+   [
+    "state",
+    "s1",
+    true,
+    true
+   ]
+  ]
+ },
+ {
+  "name": "exit lines per kind and reattach resets",
+  "platform": "mac",
+  "steps": [
+   {
+    "op": "container",
+    "name": "card",
+    "size": [
+     100,
+     30
+    ]
+   },
+   {
+    "op": "attach",
+    "id": 1,
+    "session": "sh",
+    "container": "card",
+    "kind": "terminal"
+   },
+   {
+    "op": "resolve-open",
+    "n": 0,
+    "replay": "$ "
+   },
+   {
+    "op": "pty-exit",
+    "session": "sh"
+   },
+   {
+    "op": "input",
+    "session": "sh",
+    "data": "typed after exit"
+   },
+   {
+    "op": "check",
+    "session": "sh"
+   },
+   {
+    "op": "attach",
+    "id": 2,
+    "session": "sh",
+    "container": "card",
+    "kind": "terminal"
+   },
+   {
+    "op": "resolve-open",
+    "n": 1,
+    "replay": "$ again"
+   },
+   {
+    "op": "check",
+    "session": "sh"
+   },
+   {
+    "op": "attach",
+    "id": 3,
+    "session": "c1",
+    "container": "card"
+   },
+   {
+    "op": "resolve-open",
+    "n": 2,
+    "replay": ""
+   },
+   {
+    "op": "check",
+    "session": "c1"
+   },
+   {
+    "op": "pty-exit",
+    "session": "c1"
+   }
+  ],
+  "log": [
+   [
+    "step",
+    "container"
+   ],
+   [
+    "step",
+    "attach"
+   ],
+   [
+    "open",
+    "p1",
+    "sh",
+    100,
+    30
+   ],
+   [
+    "step",
+    "resolve-open"
+   ],
+   [
+    "term-write",
+    "sh",
+    "$ "
+   ],
+   [
+    "resize",
+    "sh",
+    100,
+    30
+   ],
+   [
+    "attached",
+    1
+   ],
+   [
+    "step",
+    "pty-exit"
+   ],
+   [
+    "term-write",
+    "sh",
+    "\r\n\u001b[2m[shell exited · press Restart or reopen the card for a new shell]\u001b[0m\r\n"
+   ],
+   [
+    "step",
+    "input"
+   ],
+   [
+    "step",
+    "check"
+   ],
+   [
+    "state",
+    "sh",
+    true,
+    true
+   ],
+   [
+    "step",
+    "attach"
+   ],
+   [
+    "term-reset",
+    "sh"
+   ],
+   [
+    "open",
+    "p1",
+    "sh",
+    100,
+    30
+   ],
+   [
+    "step",
+    "resolve-open"
+   ],
+   [
+    "term-write",
+    "sh",
+    "$ again"
+   ],
+   [
+    "resize",
+    "sh",
+    100,
+    30
+   ],
+   [
+    "attached",
+    2
+   ],
+   [
+    "step",
+    "check"
+   ],
+   [
+    "state",
+    "sh",
+    false,
+    true
+   ],
+   [
+    "step",
+    "attach"
+   ],
+   [
+    "open",
+    "p1",
+    "c1",
+    100,
+    30
+   ],
+   [
+    "step",
+    "resolve-open"
+   ],
+   [
+    "resize",
+    "c1",
+    100,
+    30
+   ],
+   [
+    "attached",
+    3
+   ],
+   [
+    "step",
+    "check"
+   ],
+   [
+    "state",
+    "c1",
+    false,
+    false
+   ],
+   [
+    "step",
+    "pty-exit"
+   ],
+   [
+    "term-write",
+    "c1",
+    "\r\n\u001b[2m[process exited · press Resume or reopen the card to continue]\u001b[0m\r\n"
+   ]
+  ]
+ },
+ {
+  "name": "open failure leaves it resumable",
+  "platform": "mac",
+  "steps": [
+   {
+    "op": "container",
+    "name": "modal",
+    "size": [
+     120,
+     40
+    ]
+   },
+   {
+    "op": "attach",
+    "id": 1,
+    "session": "s1",
+    "container": "modal"
+   },
+   {
+    "op": "reject-open",
+    "n": 0,
+    "message": "Error: no claude here"
+   },
+   {
+    "op": "check",
+    "session": "s1"
+   },
+   {
+    "op": "input",
+    "session": "s1",
+    "data": "x"
+   },
+   {
+    "op": "attach",
+    "id": 2,
+    "session": "s1",
+    "container": "modal"
+   },
+   {
+    "op": "resolve-open",
+    "n": 1,
+    "replay": "ok"
+   },
+   {
+    "op": "check",
+    "session": "s1"
+   }
+  ],
+  "log": [
+   [
+    "step",
+    "container"
+   ],
+   [
+    "step",
+    "attach"
+   ],
+   [
+    "open",
+    "p1",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "step",
+    "reject-open"
+   ],
+   [
+    "attach-failed",
+    1,
+    "Error: no claude here"
+   ],
+   [
+    "step",
+    "check"
+   ],
+   [
+    "state",
+    "s1",
+    true,
+    false
+   ],
+   [
+    "step",
+    "input"
+   ],
+   [
+    "step",
+    "attach"
+   ],
+   [
+    "term-reset",
+    "s1"
+   ],
+   [
+    "open",
+    "p1",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "step",
+    "resolve-open"
+   ],
+   [
+    "term-write",
+    "s1",
+    "ok"
+   ],
+   [
+    "resize",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "attached",
+    2
+   ],
+   [
+    "step",
+    "check"
+   ],
+   [
+    "state",
+    "s1",
+    false,
+    true
+   ]
+  ]
+ },
+ {
+  "name": "attaching while opening shares the open",
+  "platform": "mac",
+  "steps": [
+   {
+    "op": "container",
+    "name": "modal",
+    "size": [
+     120,
+     40
+    ]
+   },
+   {
+    "op": "container",
+    "name": "card",
+    "size": [
+     100,
+     30
+    ]
+   },
+   {
+    "op": "attach",
+    "id": 1,
+    "session": "s1",
+    "container": "modal"
+   },
+   {
+    "op": "input",
+    "session": "s1",
+    "data": "typed ahead"
+   },
+   {
+    "op": "attach",
+    "id": 2,
+    "session": "s1",
+    "container": "card"
+   },
+   {
+    "op": "resolve-open",
+    "n": 0,
+    "replay": "r"
+   },
+   {
+    "op": "check",
+    "session": "s1"
+   }
+  ],
+  "log": [
+   [
+    "step",
+    "container"
+   ],
+   [
+    "step",
+    "container"
+   ],
+   [
+    "step",
+    "attach"
+   ],
+   [
+    "open",
+    "p1",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "step",
+    "input"
+   ],
+   [
+    "write",
+    "s1",
+    "typed ahead"
+   ],
+   [
+    "step",
+    "attach"
+   ],
+   [
+    "step",
+    "resolve-open"
+   ],
+   [
+    "term-write",
+    "s1",
+    "r"
+   ],
+   [
+    "resize",
+    "s1",
+    100,
+    30
+   ],
+   [
+    "attached",
+    1
+   ],
+   [
+    "attached",
+    2
+   ],
+   [
+    "step",
+    "check"
+   ],
+   [
+    "state",
+    "s1",
+    false,
+    true
+   ]
+  ]
+ },
+ {
+  "name": "attach of a ready terminal moves, fits and resizes",
+  "platform": "mac",
+  "steps": [
+   {
+    "op": "container",
+    "name": "modal",
+    "size": [
+     120,
+     40
+    ]
+   },
+   {
+    "op": "container",
+    "name": "card",
+    "size": [
+     100,
+     30
+    ]
+   },
+   {
+    "op": "attach",
+    "id": 1,
+    "session": "s1",
+    "container": "modal"
+   },
+   {
+    "op": "resolve-open",
+    "n": 0,
+    "replay": "r"
+   },
+   {
+    "op": "attach",
+    "id": 2,
+    "session": "s1",
+    "container": "card"
+   },
+   {
+    "op": "detach",
+    "session": "s1",
+    "container": "modal"
+   },
+   {
+    "op": "detach",
+    "session": "s1",
+    "container": "card"
+   },
+   {
+    "op": "pty-data",
+    "session": "s1",
+    "data": "parked output"
+   },
+   {
+    "op": "container",
+    "name": "card",
+    "size": [
+     90,
+     20
+    ]
+   },
+   {
+    "op": "refit",
+    "session": "s1"
+   },
+   {
+    "op": "attach",
+    "id": 3,
+    "session": "s1",
+    "container": "card"
+   },
+   {
+    "op": "container",
+    "name": "card",
+    "size": [
+     80,
+     20
+    ]
+   },
+   {
+    "op": "refit",
+    "session": "s1"
+   },
+   {
+    "op": "detach",
+    "session": "s1"
+   },
+   {
+    "op": "focus",
+    "session": "s1"
+   }
+  ],
+  "log": [
+   [
+    "step",
+    "container"
+   ],
+   [
+    "step",
+    "container"
+   ],
+   [
+    "step",
+    "attach"
+   ],
+   [
+    "open",
+    "p1",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "step",
+    "resolve-open"
+   ],
+   [
+    "term-write",
+    "s1",
+    "r"
+   ],
+   [
+    "resize",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "attached",
+    1
+   ],
+   [
+    "step",
+    "attach"
+   ],
+   [
+    "resize",
+    "s1",
+    100,
+    30
+   ],
+   [
+    "resize",
+    "s1",
+    100,
+    30
+   ],
+   [
+    "attached",
+    2
+   ],
+   [
+    "step",
+    "detach"
+   ],
+   [
+    "step",
+    "detach"
+   ],
+   [
+    "term-blur",
+    "s1"
+   ],
+   [
+    "step",
+    "pty-data"
+   ],
+   [
+    "term-write",
+    "s1",
+    "parked output"
+   ],
+   [
+    "step",
+    "container"
+   ],
+   [
+    "step",
+    "refit"
+   ],
+   [
+    "step",
+    "attach"
+   ],
+   [
+    "resize",
+    "s1",
+    90,
+    20
+   ],
+   [
+    "resize",
+    "s1",
+    90,
+    20
+   ],
+   [
+    "attached",
+    3
+   ],
+   [
+    "step",
+    "container"
+   ],
+   [
+    "step",
+    "refit"
+   ],
+   [
+    "resize",
+    "s1",
+    80,
+    20
+   ],
+   [
+    "step",
+    "detach"
+   ],
+   [
+    "term-blur",
+    "s1"
+   ],
+   [
+    "step",
+    "focus"
+   ],
+   [
+    "term-focus",
+    "s1"
+   ]
+  ]
+ },
+ {
+  "name": "a container not laid out yet keeps the default size",
+  "platform": "mac",
+  "steps": [
+   {
+    "op": "container",
+    "name": "hidden",
+    "size": null
+   },
+   {
+    "op": "attach",
+    "id": 1,
+    "session": "s1",
+    "container": "hidden"
+   },
+   {
+    "op": "resolve-open",
+    "n": 0,
+    "replay": ""
+   }
+  ],
+  "log": [
+   [
+    "step",
+    "container"
+   ],
+   [
+    "step",
+    "attach"
+   ],
+   [
+    "open",
+    "p1",
+    "s1",
+    80,
+    24
+   ],
+   [
+    "step",
+    "resolve-open"
+   ],
+   [
+    "resize",
+    "s1",
+    80,
+    24
+   ],
+   [
+    "attached",
+    1
+   ]
+  ]
+ },
+ {
+  "name": "resize while opening is sent after the replay",
+  "platform": "mac",
+  "steps": [
+   {
+    "op": "container",
+    "name": "modal",
+    "size": [
+     120,
+     40
+    ]
+   },
+   {
+    "op": "attach",
+    "id": 1,
+    "session": "s1",
+    "container": "modal"
+   },
+   {
+    "op": "container",
+    "name": "modal",
+    "size": [
+     110,
+     35
+    ]
+   },
+   {
+    "op": "refit",
+    "session": "s1"
+   },
+   {
+    "op": "resolve-open",
+    "n": 0,
+    "replay": "r"
+   }
+  ],
+  "log": [
+   [
+    "step",
+    "container"
+   ],
+   [
+    "step",
+    "attach"
+   ],
+   [
+    "open",
+    "p1",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "step",
+    "container"
+   ],
+   [
+    "step",
+    "refit"
+   ],
+   [
+    "step",
+    "resolve-open"
+   ],
+   [
+    "term-write",
+    "s1",
+    "r"
+   ],
+   [
+    "resize",
+    "s1",
+    110,
+    35
+   ],
+   [
+    "attached",
+    1
+   ]
+  ]
+ },
+ {
+  "name": "dispose during open does nothing more",
+  "platform": "mac",
+  "steps": [
+   {
+    "op": "container",
+    "name": "modal",
+    "size": [
+     120,
+     40
+    ]
+   },
+   {
+    "op": "attach",
+    "id": 1,
+    "session": "s1",
+    "container": "modal"
+   },
+   {
+    "op": "type-in",
+    "session": "s1",
+    "text": "queued"
+   },
+   {
+    "op": "dispose",
+    "session": "s1"
+   },
+   {
+    "op": "resolve-open",
+    "n": 0,
+    "replay": "late"
+   },
+   {
+    "op": "check",
+    "session": "s1"
+   },
+   {
+    "op": "pty-data",
+    "session": "s1",
+    "data": "nobody"
+   },
+   {
+    "op": "pty-exit",
+    "session": "s1"
+   }
+  ],
+  "log": [
+   [
+    "step",
+    "container"
+   ],
+   [
+    "step",
+    "attach"
+   ],
+   [
+    "open",
+    "p1",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "step",
+    "type-in"
+   ],
+   [
+    "step",
+    "dispose"
+   ],
+   [
+    "term-dispose",
+    "s1"
+   ],
+   [
+    "step",
+    "resolve-open"
+   ],
+   [
+    "attached",
+    1
+   ],
+   [
+    "step",
+    "check"
+   ],
+   [
+    "state",
+    "s1",
+    true,
+    false
+   ],
+   [
+    "step",
+    "pty-data"
+   ],
+   [
+    "step",
+    "pty-exit"
+   ]
+  ]
+ },
+ {
+  "name": "type in at once when ready",
+  "platform": "mac",
+  "steps": [
+   {
+    "op": "container",
+    "name": "modal",
+    "size": [
+     120,
+     40
+    ]
+   },
+   {
+    "op": "attach",
+    "id": 1,
+    "session": "s1",
+    "container": "modal"
+   },
+   {
+    "op": "resolve-open",
+    "n": 0,
+    "replay": "\u001b[?2004h> "
+   },
+   {
+    "op": "type-in",
+    "session": "s1",
+    "text": "  hello there \n"
+   },
+   {
+    "op": "type-in",
+    "session": "s1",
+    "text": "two\nlines"
+   }
+  ],
+  "log": [
+   [
+    "step",
+    "container"
+   ],
+   [
+    "step",
+    "attach"
+   ],
+   [
+    "open",
+    "p1",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "step",
+    "resolve-open"
+   ],
+   [
+    "term-write",
+    "s1",
+    "\u001b[?2004h> "
+   ],
+   [
+    "resize",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "attached",
+    1
+   ],
+   [
+    "step",
+    "type-in"
+   ],
+   [
+    "term-paste",
+    "s1",
+    "hello there "
+   ],
+   [
+    "write",
+    "s1",
+    "\u001b[200~hello there \u001b[201~"
+   ],
+   [
+    "step",
+    "type-in"
+   ],
+   [
+    "term-paste",
+    "s1",
+    "two\nlines "
+   ],
+   [
+    "write",
+    "s1",
+    "\u001b[200~two\rlines \u001b[201~"
+   ]
+  ]
+ },
+ {
+  "name": "typed words wait for the open, then go after the replay",
+  "platform": "mac",
+  "steps": [
+   {
+    "op": "container",
+    "name": "modal",
+    "size": [
+     120,
+     40
+    ]
+   },
+   {
+    "op": "type-in",
+    "session": "s1",
+    "text": "first"
+   },
+   {
+    "op": "type-in",
+    "session": "s1",
+    "text": "second"
+   },
+   {
+    "op": "attach",
+    "id": 1,
+    "session": "s1",
+    "container": "modal"
+   },
+   {
+    "op": "resolve-open",
+    "n": 0,
+    "replay": "\u001b[?2004h> "
+   }
+  ],
+  "log": [
+   [
+    "step",
+    "container"
+   ],
+   [
+    "step",
+    "type-in"
+   ],
+   [
+    "step",
+    "type-in"
+   ],
+   [
+    "step",
+    "attach"
+   ],
+   [
+    "open",
+    "p1",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "step",
+    "resolve-open"
+   ],
+   [
+    "term-write",
+    "s1",
+    "\u001b[?2004h> "
+   ],
+   [
+    "resize",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "term-write",
+    "s1",
+    ""
+   ],
+   [
+    "term-paste",
+    "s1",
+    "first second "
+   ],
+   [
+    "write",
+    "s1",
+    "\u001b[200~first second \u001b[201~"
+   ],
+   [
+    "attached",
+    1
+   ]
+  ]
+ },
+ {
+  "name": "a starting session gets its words once it pastes bracketed",
+  "platform": "mac",
+  "steps": [
+   {
+    "op": "container",
+    "name": "modal",
+    "size": [
+     120,
+     40
+    ]
+   },
+   {
+    "op": "type-in",
+    "session": "s1",
+    "text": "hi",
+    "starting": true
+   },
+   {
+    "op": "attach",
+    "id": 1,
+    "session": "s1",
+    "container": "modal"
+   },
+   {
+    "op": "resolve-open",
+    "n": 0,
+    "replay": "starting up"
+   },
+   {
+    "op": "advance",
+    "ms": 5000
+   },
+   {
+    "op": "pty-data",
+    "session": "s1",
+    "data": "still loading"
+   },
+   {
+    "op": "type-in",
+    "session": "s1",
+    "text": "more"
+   },
+   {
+    "op": "pty-data",
+    "session": "s1",
+    "data": "\u001b[?2004h> "
+   },
+   {
+    "op": "advance",
+    "ms": 30000
+   }
+  ],
+  "log": [
+   [
+    "step",
+    "container"
+   ],
+   [
+    "step",
+    "type-in"
+   ],
+   [
+    "step",
+    "attach"
+   ],
+   [
+    "open",
+    "p1",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "step",
+    "resolve-open"
+   ],
+   [
+    "term-write",
+    "s1",
+    "starting up"
+   ],
+   [
+    "resize",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "attached",
+    1
+   ],
+   [
+    "step",
+    "advance"
+   ],
+   [
+    "step",
+    "pty-data"
+   ],
+   [
+    "term-write",
+    "s1",
+    "still loading"
+   ],
+   [
+    "step",
+    "type-in"
+   ],
+   [
+    "step",
+    "pty-data"
+   ],
+   [
+    "term-write",
+    "s1",
+    "\u001b[?2004h> "
+   ],
+   [
+    "term-paste",
+    "s1",
+    "hi more "
+   ],
+   [
+    "write",
+    "s1",
+    "\u001b[200~hi more \u001b[201~"
+   ],
+   [
+    "step",
+    "advance"
+   ]
+  ]
+ },
+ {
+  "name": "a starting session that never listens gets its words after 30 s",
+  "platform": "mac",
+  "steps": [
+   {
+    "op": "container",
+    "name": "modal",
+    "size": [
+     120,
+     40
+    ]
+   },
+   {
+    "op": "type-in",
+    "session": "s1",
+    "text": "late words",
+    "starting": true
+   },
+   {
+    "op": "attach",
+    "id": 1,
+    "session": "s1",
+    "container": "modal"
+   },
+   {
+    "op": "resolve-open",
+    "n": 0,
+    "replay": "no prompt"
+   },
+   {
+    "op": "advance",
+    "ms": 29999
+   },
+   {
+    "op": "advance",
+    "ms": 1
+   }
+  ],
+  "log": [
+   [
+    "step",
+    "container"
+   ],
+   [
+    "step",
+    "type-in"
+   ],
+   [
+    "step",
+    "attach"
+   ],
+   [
+    "open",
+    "p1",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "step",
+    "resolve-open"
+   ],
+   [
+    "term-write",
+    "s1",
+    "no prompt"
+   ],
+   [
+    "resize",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "attached",
+    1
+   ],
+   [
+    "step",
+    "advance"
+   ],
+   [
+    "step",
+    "advance"
+   ],
+   [
+    "term-paste",
+    "s1",
+    "late words "
+   ],
+   [
+    "write",
+    "s1",
+    "late words "
+   ]
+  ]
+ },
+ {
+  "name": "a starting session already listening gets them at once",
+  "platform": "mac",
+  "steps": [
+   {
+    "op": "container",
+    "name": "modal",
+    "size": [
+     120,
+     40
+    ]
+   },
+   {
+    "op": "type-in",
+    "session": "s1",
+    "text": "now",
+    "starting": true
+   },
+   {
+    "op": "attach",
+    "id": 1,
+    "session": "s1",
+    "container": "modal"
+   },
+   {
+    "op": "resolve-open",
+    "n": 0,
+    "replay": "\u001b[?2004h"
+   }
+  ],
+  "log": [
+   [
+    "step",
+    "container"
+   ],
+   [
+    "step",
+    "type-in"
+   ],
+   [
+    "step",
+    "attach"
+   ],
+   [
+    "open",
+    "p1",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "step",
+    "resolve-open"
+   ],
+   [
+    "term-write",
+    "s1",
+    "\u001b[?2004h"
+   ],
+   [
+    "resize",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "term-paste",
+    "s1",
+    "now "
+   ],
+   [
+    "write",
+    "s1",
+    "\u001b[200~now \u001b[201~"
+   ],
+   [
+    "attached",
+    1
+   ]
+  ]
+ },
+ {
+  "name": "words wait when the session exits first",
+  "platform": "mac",
+  "steps": [
+   {
+    "op": "container",
+    "name": "modal",
+    "size": [
+     120,
+     40
+    ]
+   },
+   {
+    "op": "type-in",
+    "session": "s1",
+    "text": "kept",
+    "starting": true
+   },
+   {
+    "op": "attach",
+    "id": 1,
+    "session": "s1",
+    "container": "modal"
+   },
+   {
+    "op": "resolve-open",
+    "n": 0,
+    "replay": "x"
+   },
+   {
+    "op": "pty-exit",
+    "session": "s1"
+   },
+   {
+    "op": "advance",
+    "ms": 30000
+   },
+   {
+    "op": "attach",
+    "id": 2,
+    "session": "s1",
+    "container": "modal"
+   },
+   {
+    "op": "resolve-open",
+    "n": 1,
+    "replay": "\u001b[?2004h"
+   },
+   {
+    "op": "advance",
+    "ms": 30000
+   }
+  ],
+  "log": [
+   [
+    "step",
+    "container"
+   ],
+   [
+    "step",
+    "type-in"
+   ],
+   [
+    "step",
+    "attach"
+   ],
+   [
+    "open",
+    "p1",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "step",
+    "resolve-open"
+   ],
+   [
+    "term-write",
+    "s1",
+    "x"
+   ],
+   [
+    "resize",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "attached",
+    1
+   ],
+   [
+    "step",
+    "pty-exit"
+   ],
+   [
+    "term-write",
+    "s1",
+    "\r\n\u001b[2m[process exited · press Resume or reopen the card to continue]\u001b[0m\r\n"
+   ],
+   [
+    "step",
+    "advance"
+   ],
+   [
+    "step",
+    "attach"
+   ],
+   [
+    "term-reset",
+    "s1"
+   ],
+   [
+    "open",
+    "p1",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "step",
+    "resolve-open"
+   ],
+   [
+    "term-write",
+    "s1",
+    "\u001b[?2004h"
+   ],
+   [
+    "resize",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "term-paste",
+    "s1",
+    "kept "
+   ],
+   [
+    "write",
+    "s1",
+    "\u001b[200~kept \u001b[201~"
+   ],
+   [
+    "attached",
+    2
+   ],
+   [
+    "step",
+    "advance"
+   ]
+  ]
+ },
+ {
+  "name": "output listeners",
+  "platform": "mac",
+  "steps": [
+   {
+    "op": "container",
+    "name": "modal",
+    "size": [
+     120,
+     40
+    ]
+   },
+   {
+    "op": "listen",
+    "session": "s1",
+    "id": "before"
+   },
+   {
+    "op": "attach",
+    "id": 1,
+    "session": "s1",
+    "container": "modal"
+   },
+   {
+    "op": "listen",
+    "session": "s1",
+    "id": "a"
+   },
+   {
+    "op": "resolve-open",
+    "n": 0,
+    "replay": ""
+   },
+   {
+    "op": "pty-data",
+    "session": "s1",
+    "data": "x"
+   },
+   {
+    "op": "unlisten",
+    "id": "a"
+   },
+   {
+    "op": "listen",
+    "session": "s1",
+    "id": "b"
+   },
+   {
+    "op": "pty-data",
+    "session": "s1",
+    "data": "y"
+   },
+   {
+    "op": "dispose",
+    "session": "s1"
+   },
+   {
+    "op": "attach",
+    "id": 2,
+    "session": "s1",
+    "container": "modal"
+   },
+   {
+    "op": "resolve-open",
+    "n": 1,
+    "replay": "z"
+   }
+  ],
+  "log": [
+   [
+    "step",
+    "container"
+   ],
+   [
+    "step",
+    "listen"
+   ],
+   [
+    "step",
+    "attach"
+   ],
+   [
+    "open",
+    "p1",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "step",
+    "listen"
+   ],
+   [
+    "step",
+    "resolve-open"
+   ],
+   [
+    "resize",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "attached",
+    1
+   ],
+   [
+    "step",
+    "pty-data"
+   ],
+   [
+    "term-write",
+    "s1",
+    "x"
+   ],
+   [
+    "output",
+    "a"
+   ],
+   [
+    "step",
+    "unlisten"
+   ],
+   [
+    "step",
+    "listen"
+   ],
+   [
+    "step",
+    "pty-data"
+   ],
+   [
+    "term-write",
+    "s1",
+    "y"
+   ],
+   [
+    "output",
+    "b"
+   ],
+   [
+    "step",
+    "dispose"
+   ],
+   [
+    "term-dispose",
+    "s1"
+   ],
+   [
+    "step",
+    "attach"
+   ],
+   [
+    "open",
+    "p1",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "step",
+    "resolve-open"
+   ],
+   [
+    "term-write",
+    "s1",
+    "z"
+   ],
+   [
+    "resize",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "attached",
+    2
+   ]
+  ]
+ },
+ {
+  "name": "dropped files paste quoted paths",
+  "platform": "mac",
+  "steps": [
+   {
+    "op": "container",
+    "name": "modal",
+    "size": [
+     120,
+     40
+    ]
+   },
+   {
+    "op": "attach",
+    "id": 1,
+    "session": "s1",
+    "container": "modal"
+   },
+   {
+    "op": "resolve-open",
+    "n": 0,
+    "replay": "\u001b[?2004h"
+   },
+   {
+    "op": "drop",
+    "session": "s1",
+    "paths": [
+     "/tmp/a.png",
+     "/tmp/it's here.txt",
+     ""
+    ]
+   }
+  ],
+  "log": [
+   [
+    "step",
+    "container"
+   ],
+   [
+    "step",
+    "attach"
+   ],
+   [
+    "open",
+    "p1",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "step",
+    "resolve-open"
+   ],
+   [
+    "term-write",
+    "s1",
+    "\u001b[?2004h"
+   ],
+   [
+    "resize",
+    "s1",
+    120,
+    40
+   ],
+   [
+    "attached",
+    1
+   ],
+   [
+    "step",
+    "drop"
+   ],
+   [
+    "term-paste",
+    "s1",
+    "/tmp/a.png '/tmp/it'\\''s here.txt' "
+   ],
+   [
+    "write",
+    "s1",
+    "\u001b[200~/tmp/a.png '/tmp/it'\\''s here.txt' \u001b[201~"
+   ],
+   [
+    "term-focus",
+    "s1"
+   ]
+  ]
+ },
+ {
+  "name": "unknown sessions are ignored",
+  "platform": "mac",
+  "steps": [
+   {
+    "op": "pty-data",
+    "session": "nope",
+    "data": "x"
+   },
+   {
+    "op": "pty-exit",
+    "session": "nope"
+   },
+   {
+    "op": "detach",
+    "session": "nope"
+   },
+   {
+    "op": "dispose",
+    "session": "nope"
+   },
+   {
+    "op": "focus",
+    "session": "nope"
+   },
+   {
+    "op": "check",
+    "session": "nope"
+   }
+  ],
+  "log": [
+   [
+    "step",
+    "pty-data"
+   ],
+   [
+    "step",
+    "pty-exit"
+   ],
+   [
+    "step",
+    "detach"
+   ],
+   [
+    "step",
+    "dispose"
+   ],
+   [
+    "step",
+    "focus"
+   ],
+   [
+    "step",
+    "check"
+   ],
+   [
+    "state",
+    "nope",
+    true,
+    false
+   ]
+  ]
+ }
+]

@@ -450,6 +450,14 @@ impl Terminal {
         self.term.mode().contains(TermMode::SHOW_CURSOR) && self.xterm.cursor_initialized
     }
 
+    /// The cursor as xterm keeps it (`buffer.x`, `buffer.y`): `x` is one past
+    /// the last column while a wrap is pending.
+    pub fn xterm_cursor(&self) -> (usize, usize) {
+        let grid = self.term.grid();
+        let x = grid.cursor.point.column.0 + usize::from(grid.cursor.input_needs_wrap);
+        (x, grid.cursor.point.line.0.max(0) as usize)
+    }
+
     /// The cursor's cell in grid lines (0 = top of the screen).
     pub fn cursor_point(&self) -> (i32, usize) {
         let p = self.term.grid().cursor.point;

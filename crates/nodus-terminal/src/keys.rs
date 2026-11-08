@@ -97,9 +97,10 @@ impl KeyEvent {
 }
 
 /// The key code Chromium gives a `keydown` (`KeyboardEvent.keyCode`): named
-/// keys by name, letters by the letter typed (or the physical key on
-/// non-Latin layouts), digits by the physical key, punctuation by the US
-/// symbol it is, else by the physical key; 0 when unknown.
+/// keys by name, Latin letters by the letter typed (so AZERTY's A is 65),
+/// anything else by the physical key (non-Latin layouts, ⌥ and AltGr
+/// characters, digits, punctuation), and a US symbol by its key when the
+/// physical key isn't known; 0 when nothing fits.
 pub fn key_code(key: &str, code: &str) -> u32 {
     if let Some(n) = named_key_code(key) {
         return n;
@@ -111,18 +112,17 @@ pub fn key_code(key: &str, code: &str) -> u32 {
         return 229;
     }
     let mut chars = key.chars();
-    if let (Some(c), None) = (chars.next(), chars.next()) {
-        if c.is_ascii_alphabetic() {
-            return c.to_ascii_uppercase() as u32;
-        }
-        if let Some(d) = code.strip_prefix("Digit").filter(|d| d.len() == 1) {
-            return 48 + u32::from(d.as_bytes()[0] - b'0');
-        }
-        if let Some(n) = us_symbol_key_code(c) {
-            return n;
-        }
+    let single = match (chars.next(), chars.next()) {
+        (Some(c), None) => Some(c),
+        _ => None,
+    };
+    if let Some(c) = single.filter(char::is_ascii_alphabetic) {
+        return c.to_ascii_uppercase() as u32;
     }
-    physical_key_code(code)
+    match physical_key_code(code) {
+        0 => single.and_then(us_symbol_key_code).unwrap_or(0),
+        n => n,
+    }
 }
 
 fn named_key_code(key: &str) -> Option<u32> {

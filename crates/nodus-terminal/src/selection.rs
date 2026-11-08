@@ -299,6 +299,15 @@ impl Terminal {
         self.row_cells(line).get(col).map(cell_content).unwrap_or_default()
     }
 
+    /// A cell as xterm reads it (`getChars`, `getWidth`): its characters
+    /// (`""` when empty) and width (0 for the right half of a wide one).
+    pub fn cell(&self, line: i32, col: usize) -> (String, usize) {
+        if !self.line_in_buffer(line) {
+            return (String::new(), 1);
+        }
+        self.cell_at(line, col)
+    }
+
     fn code_point_at(&self, line: i32, col: usize) -> u32 {
         self.cell_at(line, col).0.chars().next().map_or(0, |c| c as u32)
     }

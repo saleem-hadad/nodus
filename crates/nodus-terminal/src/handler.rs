@@ -483,9 +483,15 @@ impl Handler for XtermHandler<'_> {
         match mode {
             // `scrollOnEraseInDisplay: false`: erase the screen where it is,
             // instead of scrolling it into the scrollback as alacritty does.
-            ClearMode::All if !self.mode().contains(TermMode::ALT_SCREEN) => {
+            ClearMode::All => self.term.grid_mut().reset_region(..),
+            ClearMode::Above => {
+                let line = self.term.grid().cursor.point.line;
                 self.term.clear_screen(ClearMode::Above);
-                self.term.clear_screen(ClearMode::Below);
+                // alacritty leaves the top line when the cursor is on the
+                // second; xterm erases every line above the cursor.
+                if line.0 == 1 {
+                    self.term.grid_mut().reset_region(..line);
+                }
             }
             mode => self.term.clear_screen(mode),
         }

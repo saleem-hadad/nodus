@@ -113,10 +113,10 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
         "resize" => {
             let (w, h) = (num(command, "width"), num(command, "height"));
             with_window(cx, move |window, _| {
-                window.resize(size(px(w), px(h)));
                 // A screen smaller than the shot keeps a titled window inside it.
                 #[cfg(target_os = "macos")]
-                crate::mac::force_content_size(window, f64::from(w), f64::from(h));
+                crate::mac::make_borderless(window);
+                window.resize(size(px(w), px(h)));
             })?;
             Ok(Value::Null)
         }

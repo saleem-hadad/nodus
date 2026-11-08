@@ -277,8 +277,10 @@ pub fn title_bar(state: &Entity<AppState>, actions: Vec<AnyElement>, window: &mu
             }
         })
         .map(|d| crate::components::frosted::frosted(d, t.titlebar_surface, 24., 1.6))
-        .border_b(px(0.5))
-        .border_color(t.border)
+        // The hairline is drawn over the bar's bottom rather than taking
+        // layout room, so the controls centre on the whole 52px and land on
+        // the device pixels Chromium snaps them to.
+        .child(div().absolute().left_0().right_0().bottom_0().h(px(0.5)).bg(t.border))
         // UI-014: the empty bar moves the window; a double-click does the
         // OS's title-bar action.
         .on_mouse_down(MouseButton::Left, |e, window, _| {

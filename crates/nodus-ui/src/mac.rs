@@ -201,21 +201,15 @@ pub fn ignore_real_mouse(window: &Window) {
     }
 }
 
-/// Gives the window a content size the screen may be too small for (the
-/// automation driver's 1440×900 shots): a borderless window isn't kept
-/// inside the screen, and its content still fills it all.
-pub fn force_content_size(window: &Window, width: f64, height: f64) {
+/// Takes the window's title bar off (the automation driver's 1440×900 shots,
+/// on a screen that may be smaller): AppKit keeps a titled window inside the
+/// screen, but not a borderless one. Its content still fills it all.
+pub fn make_borderless(window: &Window) {
     let Some(w) = ns_window(window) else { return };
-    // SAFETY: plain NSWindow frame and style calls on the main thread.
+    // SAFETY: a plain NSWindow style change on the main thread.
     unsafe {
-        let frame = w.frame();
         // NSWindowStyleMaskBorderless | NSWindowStyleMaskResizable.
         let _: () = msg_send![&*w, setStyleMask: 8usize];
-        let rect = objc2_foundation::NSRect::new(
-            objc2_foundation::NSPoint::new(frame.origin.x, frame.origin.y + frame.size.height - height),
-            objc2_foundation::NSSize::new(width, height),
-        );
-        let _: () = msg_send![&*w, setFrame: rect, display: Bool::YES];
     }
 }
 

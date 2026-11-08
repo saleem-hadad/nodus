@@ -1,0 +1,51 @@
+{
+  "projects": [
+    {
+      "id": "1f0e5a3c-6b2d-4c8e-9a7f-0d1e2f3a4b5c",
+      "name": "shop",
+      "repoPath": "/Users/example/Code/shop",
+      "color": "blue",
+      "createdAt": 1780000000000,
+      "actions": [
+        {
+          "id": "a1b2c3d4-0000-4000-8000-000000000003",
+          "name": "Lint",
+          "icon": "sparkles",
+          "description": "Lint the code",
+          "prompt": "Run the linter and fix what it finds.",
+          "allowedTools": [
+            "Bash(pnpm lint)"
+          ],
+          "createdAt": 1780000100000
+        }
+      ]
+    }
+  ],
+  "boards": {
+    "1f0e5a3c-6b2d-4c8e-9a7f-0d1e2f3a4b5c": {
+      "nodes": {
+        "00000001-aaaa-4bbb-8ccc-dddddddddddd": {
+          "sessionId": "00000001-aaaa-4bbb-8ccc-dddddddddddd",
+          "x": 40,
+          "y": 32,
+          "archived": true,
+          "createdAt": 1780000200000
+        }
+      },
+      "archive": {
+        "x": 0,
+        "y": 0,
+        "w": 1928,
+        "h": 320
+      }
+    }
+  },
+  "settings": {
+    "theme": "sepia",
+    "expandNewSessions": false,
+    "autoUpdate": "yes",
+    "notify": false,
+    "pinProjectRail": 1
+  },
+  "voiceKey": ""
+}

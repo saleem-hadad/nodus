@@ -1,0 +1,77 @@
+{
+  "projects": [
+    {
+      "id": "3b2c4d5e-6f70-4b8c-9dae-1f2a3b4c5d6e",
+      "name": "notes",
+      "repoPath": "/Users/example/notes",
+      "color": "yellow",
+      "createdAt": 1790000200000,
+      "emoji": "📝"
+    }
+  ],
+  "groups": [],
+  "boards": {
+    "3b2c4d5e-6f70-4b8c-9dae-1f2a3b4c5d6e": {
+      "nodes": {
+        "00000008-aaaa-4bbb-8ccc-dddddddddddd": {
+          "sessionId": "00000008-aaaa-4bbb-8ccc-dddddddddddd",
+          "x": 0,
+          "y": 0,
+          "archived": false,
+          "createdByApp": true,
+          "createdAt": 1800000000000,
+          "pinnedAt": 1800000000001,
+          "model": {
+            "name": "Opus 9",
+            "effort": "max"
+          }
+        }
+      },
+      "archive": {
+        "x": 0,
+        "y": 0,
+        "w": 1928,
+        "h": 320
+      },
+      "hidden": [],
+      "sections": {},
+      "notes": {
+        "5e6f7081-92a3-4b4c-8d5e-6f708192a3b4": {
+          "id": "5e6f7081-92a3-4b4c-8d5e-6f708192a3b4",
+          "text": "Later",
+          "color": "yellow",
+          "x": 1,
+          "y": 2,
+          "createdAt": 1800000000002,
+          "reminder": 1800003600000
+        }
+      },
+      "views": {},
+      "layers": [
+        {
+          "id": "layer-1",
+          "name": "Sketches"
+        }
+      ]
+    }
+  },
+  "settings": {
+    "theme": "dark",
+    "autoUpdate": true,
+    "notify": false,
+    "dockBadge": true,
+    "pinProjectRail": true,
+    "focusFeature": true,
+    "focusMode": false,
+    "capture": true,
+    "sound": "chime"
+  },
+  "voiceKey": "djEwAAAAAAAAAAAAAAAAAAAAAAAA",
+  "workspaces": [
+    {
+      "id": "w1",
+      "name": "Home"
+    }
+  ],
+  "schema": 7
+}

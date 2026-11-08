@@ -1,0 +1,300 @@
+{
+  "projects": [
+    {
+      "id": "1f0e5a3c-6b2d-4c8e-9a7f-0d1e2f3a4b5c",
+      "name": "shop",
+      "repoPath": "/Users/example/Code/shop",
+      "color": "blue",
+      "createdAt": 1790000000000,
+      "openedAt": 1790100000000,
+      "groupId": "9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+      "actions": [
+        {
+          "id": "a1b2c3d4-0000-4000-8000-000000000001",
+          "name": "Run the tests",
+          "icon": "test-tube",
+          "description": "Run the test suite and fix what fails",
+          "prompt": "Run the tests. Fix any that fail, then say what you changed.",
+          "createdAt": 1790000500000
+        }
+      ],
+      "focused": true
+    },
+    {
+      "id": "2a1b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+      "name": "infra",
+      "repoPath": "/Users/example/Code/infra",
+      "color": "graphite",
+      "createdAt": 1790000100000,
+      "openedAt": 1790050000000.5,
+      "archived": true
+    },
+    {
+      "id": "3b2c4d5e-6f70-4b8c-9dae-1f2a3b4c5d6e",
+      "name": "notes",
+      "repoPath": "/Users/example/notes",
+      "color": "yellow",
+      "createdAt": 1790000200000
+    }
+  ],
+  "groups": [
+    {
+      "id": "9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+      "name": "Work",
+      "createdAt": 1790000050000,
+      "collapsed": false
+    }
+  ],
+  "boards": {
+    "1f0e5a3c-6b2d-4c8e-9a7f-0d1e2f3a4b5c": {
+      "nodes": {
+        "00000001-aaaa-4bbb-8ccc-dddddddddddd": {
+          "sessionId": "00000001-aaaa-4bbb-8ccc-dddddddddddd",
+          "x": 420,
+          "y": -180,
+          "archived": false,
+          "title": "Checkout flow",
+          "createdByApp": true,
+          "expanded": true,
+          "autoMode": true,
+          "createdAt": 1790000600000,
+          "w": 720,
+          "h": 480,
+          "sectionId": "4d5e6f70-8192-4a3b-9c4d-5e6f708192a3"
+        },
+        "00000002-aaaa-4bbb-8ccc-dddddddddddd": {
+          "sessionId": "00000002-aaaa-4bbb-8ccc-dddddddddddd",
+          "kind": "terminal",
+          "x": 1180.5,
+          "y": -180,
+          "archived": false,
+          "createdByApp": true,
+          "createdAt": 1790000700000
+        },
+        "00000003-aaaa-4bbb-8ccc-dddddddddddd": {
+          "sessionId": "00000003-aaaa-4bbb-8ccc-dddddddddddd",
+          "x": 40,
+          "y": 372,
+          "archived": true,
+          "createdAt": 1789990000000.7812
+        },
+        "00000004-aaaa-4bbb-8ccc-dddddddddddd": {
+          "sessionId": "00000004-aaaa-4bbb-8ccc-dddddddddddd",
+          "x": 352,
+          "y": 372,
+          "archived": true,
+          "title": "Merged context",
+          "parents": [
+            "00000003-aaaa-4bbb-8ccc-dddddddddddd",
+            "00000001-aaaa-4bbb-8ccc-dddddddddddd"
+          ],
+          "createdByApp": true,
+          "createdAt": 1790000800000,
+          "archivedAt": 1790000900000
+        },
+        "00000005-aaaa-4bbb-8ccc-dddddddddddd": {
+          "sessionId": "00000005-aaaa-4bbb-8ccc-dddddddddddd",
+          "x": -600,
+          "y": 40,
+          "archived": false,
+          "title": "Build status",
+          "createdByApp": true,
+          "viewOf": "708192a3-b4c5-4d6e-8f70-8192a3b4c5d6",
+          "autoMode": true,
+          "createdAt": 1790001000000
+        },
+        "00000006-aaaa-4bbb-8ccc-dddddddddddd": {
+          "sessionId": "00000006-aaaa-4bbb-8ccc-dddddddddddd",
+          "x": -600,
+          "y": 600,
+          "archived": false,
+          "title": "Run the tests",
+          "createdByApp": true,
+          "runOf": "a1b2c3d4-0000-4000-8000-000000000001",
+          "autoMode": true,
+          "fromView": "708192a3-b4c5-4d6e-8f70-8192a3b4c5d6",
+          "createdAt": 1790001100000
+        }
+      },
+      "archive": {
+        "x": 0,
+        "y": 320,
+        "w": 1928,
+        "h": 640
+      },
+      "hidden": [
+        "00000007-aaaa-4bbb-8ccc-dddddddddddd"
+      ],
+      "sections": {
+        "4d5e6f70-8192-4a3b-9c4d-5e6f708192a3": {
+          "id": "4d5e6f70-8192-4a3b-9c4d-5e6f708192a3",
+          "name": "Checkout",
+          "color": "green",
+          "x": 380,
+          "y": -240,
+          "createdAt": 1790000650000
+        }
+      },
+      "notes": {
+        "5e6f7081-92a3-4b4c-8d5e-6f708192a3b4": {
+          "id": "5e6f7081-92a3-4b4c-8d5e-6f708192a3b4",
+          "text": "Ask about the refund edge case",
+          "color": "yellow",
+          "x": 380,
+          "y": 340,
+          "sessionId": "00000001-aaaa-4bbb-8ccc-dddddddddddd",
+          "createdAt": 1790000610000
+        },
+        "6f708192-a3b4-4c5d-9e6f-708192a3b4c5": {
+          "id": "6f708192-a3b4-4c5d-9e6f-708192a3b4c5",
+          "text": "The staging deploy needs\nthe new env var",
+          "color": "pink",
+          "x": 1500,
+          "y": -180,
+          "w": 320,
+          "h": 200,
+          "from": "00000009-aaaa-4bbb-8ccc-dddddddddddd",
+          "fromProject": "2a1b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+          "fromTitle": "Deploy pipeline",
+          "createdAt": 1790000620000
+        }
+      },
+      "views": {
+        "708192a3-b4c5-4d6e-8f70-8192a3b4c5d6": {
+          "id": "708192a3-b4c5-4d6e-8f70-8192a3b4c5d6",
+          "title": "Build status",
+          "description": "Show the last ten CI runs with their status",
+          "x": -600,
+          "y": 40,
+          "version": 3,
+          "createdAt": 1790001000000,
+          "updatedAt": 1790001200000,
+          "sessionId": "00000005-aaaa-4bbb-8ccc-dddddddddddd",
+          "commands": [
+            {
+              "name": "runs",
+              "run": "gh run list --limit 10 --json status,name",
+              "every": 5,
+              "approved": "gh run list --limit 10 --json status,name"
+            },
+            {
+              "name": "clean",
+              "run": "rm -rf dist",
+              "denied": "rm -rf dist"
+            }
+          ],
+          "refresh": {
+            "every": 30,
+            "prompt": "Check the deploys and update the page."
+          },
+          "w": 480,
+          "h": 360,
+          "startsSessions": true,
+          "allowedRuns": [
+            "gh run list --limit 10 --json status,name"
+          ],
+          "deniedRuns": [
+            "rm -rf dist"
+          ]
+        }
+      },
+      "viewport": {
+        "x": -273.4262580407277,
+        "y": 325.7206949380824,
+        "zoom": 0.5857424799943102
+      },
+      "ink": [
+        {
+          "id": "ink-1",
+          "kind": "pen",
+          "color": "graphite",
+          "points": [
+            10,
+            10,
+            12.5,
+            14.25,
+            20,
+            22
+          ],
+          "size": 1
+        },
+        {
+          "id": "ink-2",
+          "kind": "arrow",
+          "color": "red",
+          "points": [
+            100,
+            100,
+            260,
+            40
+          ],
+          "size": 1.5
+        },
+        {
+          "id": "ink-3",
+          "kind": "text",
+          "color": "blue",
+          "points": [
+            300,
+            300
+          ],
+          "size": 0.75,
+          "text": "Ship this first"
+        }
+      ]
+    },
+    "2a1b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d": {
+      "nodes": {},
+      "archive": {
+        "x": 0,
+        "y": 0,
+        "w": 1928,
+        "h": 320
+      },
+      "hidden": [],
+      "sections": {},
+      "notes": {},
+      "views": {}
+    }
+  },
+  "settings": {
+    "theme": "dark",
+    "autoUpdate": true,
+    "notify": false,
+    "dockBadge": true,
+    "pinProjectRail": true,
+    "focusFeature": true,
+    "focusMode": false,
+    "capture": true
+  },
+  "actions": [
+    {
+      "id": "a1b2c3d4-0000-4000-8000-000000000002",
+      "name": "Commit",
+      "icon": "git-commit-horizontal",
+      "description": "Commit what changed with a good message",
+      "prompt": "Commit the changes with a clear message.",
+      "global": true,
+      "createdAt": 1790000550000
+    }
+  ],
+  "voiceKey": "djEwAAAAAAAAAAAAAAAAAAAAAAAA",
+  "captures": [
+    {
+      "id": "c0000000-0000-4000-8000-000000000002",
+      "kind": "note",
+      "projectId": "1f0e5a3c-6b2d-4c8e-9a7f-0d1e2f3a4b5c",
+      "title": "Ask about the refund edge case",
+      "createdAt": 1790000610000,
+      "noteId": "5e6f7081-92a3-4b4c-8d5e-6f708192a3b4"
+    },
+    {
+      "id": "c0000000-0000-4000-8000-000000000001",
+      "kind": "session",
+      "projectId": "1f0e5a3c-6b2d-4c8e-9a7f-0d1e2f3a4b5c",
+      "title": "Checkout flow",
+      "createdAt": 1790000600000,
+      "sessionId": "00000001-aaaa-4bbb-8ccc-dddddddddddd"
+    }
+  ]
+}

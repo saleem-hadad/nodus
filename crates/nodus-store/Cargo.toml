@@ -1,0 +1,24 @@
+[package]
+name = "nodus-store"
+description = "The app's data folder and state.json: where it lives, loading, migrating and saving it"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+indexmap.workspace = true
+nodus-domain.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

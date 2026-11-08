@@ -10,6 +10,7 @@
 pub mod double_tap;
 pub mod guess;
 pub mod screen;
+pub mod targets;
 pub mod text;
 
 pub use double_tap::{DoubleTap, GAP_MS, SHIFT_KEYS, TAP_MS};

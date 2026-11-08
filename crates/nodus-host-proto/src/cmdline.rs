@@ -3,15 +3,7 @@
 //! the Microsoft C runtime split them back up, and puts the program in front
 //! the way node-pty 1.1.0 does. (HOST-051, Data & formats §13)
 
-/// JavaScript's `\s`: the characters a regex without the `u` flag counts as
-/// whitespace.
-fn is_js_space(c: char) -> bool {
-    matches!(
-        c,
-        '\t' | '\n' | '\u{b}' | '\u{c}' | '\r' | ' ' | '\u{a0}' | '\u{1680}' | '\u{2000}'
-            ..='\u{200a}' | '\u{2028}' | '\u{2029}' | '\u{202f}' | '\u{205f}' | '\u{3000}' | '\u{feff}'
-    )
-}
+use nodus_domain::js::is_space;
 
 /// Joins a program's arguments into a Windows command line, quoted the way
 /// programs built with the Microsoft C runtime split it back up; node-pty puts
@@ -23,7 +15,8 @@ pub fn windows_command_line<S: AsRef<str>>(args: &[S]) -> String {
 }
 
 fn quote(arg: &str) -> String {
-    if !arg.is_empty() && !arg.chars().any(|c| c == '"' || is_js_space(c)) {
+    // /[\s"]/, with JavaScript's \s.
+    if !arg.is_empty() && !arg.chars().any(|c| c == '"' || is_space(c)) {
         return arg.to_owned();
     }
     // Backslashes only need doubling before a quote, including the closing one:

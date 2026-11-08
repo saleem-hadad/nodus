@@ -226,16 +226,8 @@ fn latin1(bytes: &[u8]) -> String {
 fn bearer(headers: &HeaderMap) -> Option<String> {
     let value = latin1(headers.get("authorization")?.as_bytes());
     let token = value.strip_prefix("Bearer ")?;
-    (!token.is_empty() && !token.chars().any(is_js_space)).then(|| token.to_owned())
-}
-
-/// JavaScript's `\s`.
-fn is_js_space(c: char) -> bool {
-    matches!(
-        c,
-        '\t' | '\n' | '\u{b}' | '\u{c}' | '\r' | ' ' | '\u{a0}' | '\u{1680}' | '\u{2000}'
-            ..='\u{200a}' | '\u{2028}' | '\u{2029}' | '\u{202f}' | '\u{205f}' | '\u{3000}' | '\u{feff}'
-    )
+    // \S, with JavaScript's \s.
+    (!token.is_empty() && !token.chars().any(nodus_domain::js::is_space)).then(|| token.to_owned())
 }
 
 /// `URLSearchParams`: name and value pairs, `+` as a space, percent escapes

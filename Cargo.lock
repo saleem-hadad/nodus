@@ -166,6 +166,17 @@ dependencies = [
 [[package]]
 name = "nodus-sessions"
 version = "0.9.4"
+dependencies = [
+ "indexmap",
+ "nodus-domain",
+ "nodus-platform",
+ "nodus-store",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
 
 [[package]]
 name = "nodus-store"

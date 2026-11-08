@@ -1,0 +1,18 @@
+{
+  "config": {
+    "NODUS_PORT": "4000",
+    "NODUS_TOKEN": "synthetic-token",
+    "NODUS_SESSION": "session-1",
+    "NODUS_HOOK_CONFIG": "/tmp/example/hook.curlrc"
+  },
+  "url": {
+    "NODUS_PORT": "4000",
+    "NODUS_TOKEN": "synthetic-token",
+    "NODUS_SESSION": "session-1"
+  },
+  "none": {
+    "NODUS_PORT": "0",
+    "NODUS_TOKEN": "",
+    "NODUS_SESSION": "session-1"
+  }
+}

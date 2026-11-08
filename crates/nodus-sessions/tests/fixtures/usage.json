@@ -1,0 +1,678 @@
+[
+  {
+    "payload": {
+      "model": {
+        "display_name": "Model A"
+      },
+      "context_window": {
+        "current_usage": {
+          "input_tokens": 1000,
+          "cache_creation_input_tokens": 500,
+          "cache_read_input_tokens": 1500
+        },
+        "context_window_size": 200000
+      },
+      "cost": {
+        "total_cost_usd": 0.1234,
+        "total_duration_ms": 5000
+      }
+    },
+    "usage": {
+      "model": "Model A",
+      "contextPercent": 1.5,
+      "contextTokens": 3000,
+      "contextSize": 200000,
+      "costUsd": 0.1234,
+      "durationMs": 5000,
+      "at": 1000
+    }
+  },
+  {
+    "payload": {
+      "model": {
+        "display_name": "Model A"
+      },
+      "context_window": {
+        "used_percentage": 42,
+        "context_window_size": 200000
+      },
+      "cost": {
+        "total_cost_usd": 0.1234,
+        "total_duration_ms": 5000
+      }
+    },
+    "usage": {
+      "model": "Model A",
+      "contextPercent": 42,
+      "contextSize": 200000,
+      "costUsd": 0.1234,
+      "durationMs": 5000,
+      "at": 1001
+    }
+  },
+  {
+    "payload": {
+      "model": {
+        "display_name": "Model A"
+      },
+      "context_window": {
+        "current_usage": null,
+        "context_window_size": 200000
+      },
+      "cost": {
+        "total_cost_usd": 0.1234,
+        "total_duration_ms": 5000
+      }
+    },
+    "usage": {
+      "model": "Model A",
+      "contextSize": 200000,
+      "costUsd": 0.1234,
+      "durationMs": 5000,
+      "at": 1002
+    }
+  },
+  {
+    "payload": {
+      "model": {
+        "display_name": "Model A"
+      },
+      "context_window": {
+        "current_usage": [],
+        "context_window_size": 200000
+      },
+      "cost": {
+        "total_cost_usd": 0.1234,
+        "total_duration_ms": 5000
+      }
+    },
+    "usage": {
+      "model": "Model A",
+      "contextPercent": 0,
+      "contextTokens": 0,
+      "contextSize": 200000,
+      "costUsd": 0.1234,
+      "durationMs": 5000,
+      "at": 1003
+    }
+  },
+  {
+    "payload": {
+      "model": {
+        "display_name": "Model A"
+      },
+      "context_window": {
+        "current_usage": {
+          "input_tokens": "5",
+          "cache_read_input_tokens": 7
+        },
+        "context_window_size": 0
+      },
+      "cost": {
+        "total_cost_usd": 0.1234,
+        "total_duration_ms": 5000
+      }
+    },
+    "usage": {
+      "model": "Model A",
+      "contextTokens": 7,
+      "contextSize": 0,
+      "costUsd": 0.1234,
+      "durationMs": 5000,
+      "at": 1004
+    }
+  },
+  {
+    "payload": {
+      "model": {
+        "display_name": "Model A"
+      },
+      "context_window": {
+        "current_usage": {
+          "input_tokens": 1
+        },
+        "context_window_size": 3
+      },
+      "cost": {
+        "total_cost_usd": 0.1234,
+        "total_duration_ms": 5000
+      }
+    },
+    "usage": {
+      "model": "Model A",
+      "contextPercent": 33.33333333333333,
+      "contextTokens": 1,
+      "contextSize": 3,
+      "costUsd": 0.1234,
+      "durationMs": 5000,
+      "at": 1005
+    }
+  },
+  {
+    "payload": {
+      "model": {
+        "display_name": "Model A"
+      },
+      "context_window": {
+        "current_usage": {
+          "input_tokens": 2
+        },
+        "context_window_size": 3,
+        "used_percentage": null
+      },
+      "cost": {
+        "total_cost_usd": 0.1234,
+        "total_duration_ms": 5000
+      }
+    },
+    "usage": {
+      "model": "Model A",
+      "contextPercent": 66.66666666666666,
+      "contextTokens": 2,
+      "contextSize": 3,
+      "costUsd": 0.1234,
+      "durationMs": 5000,
+      "at": 1006
+    }
+  },
+  {
+    "payload": {
+      "model": {
+        "display_name": "Model A"
+      },
+      "context_window": {
+        "used_percentage": 0,
+        "context_window_size": "200000"
+      },
+      "cost": {
+        "total_cost_usd": 0.1234,
+        "total_duration_ms": 5000
+      }
+    },
+    "usage": {
+      "model": "Model A",
+      "contextPercent": 0,
+      "costUsd": 0.1234,
+      "durationMs": 5000,
+      "at": 1007
+    }
+  },
+  {
+    "payload": {
+      "model": {
+        "display_name": "Model A"
+      },
+      "context_window": null,
+      "cost": {
+        "total_cost_usd": 0.1234,
+        "total_duration_ms": 5000
+      }
+    },
+    "usage": {
+      "model": "Model A",
+      "costUsd": 0.1234,
+      "durationMs": 5000,
+      "at": 1008
+    }
+  },
+  {
+    "payload": {
+      "model": {
+        "display_name": "Model A"
+      },
+      "context_window": "big",
+      "cost": {
+        "total_cost_usd": 0.1234,
+        "total_duration_ms": 5000
+      }
+    },
+    "usage": {
+      "model": "Model A",
+      "costUsd": 0.1234,
+      "durationMs": 5000,
+      "at": 1009
+    }
+  },
+  {
+    "payload": {
+      "model": null,
+      "context_window": {
+        "current_usage": {
+          "input_tokens": 1000,
+          "cache_creation_input_tokens": 500,
+          "cache_read_input_tokens": 1500
+        },
+        "context_window_size": 200000
+      },
+      "cost": {
+        "total_cost_usd": 0.1234,
+        "total_duration_ms": 5000
+      }
+    },
+    "usage": {
+      "contextPercent": 1.5,
+      "contextTokens": 3000,
+      "contextSize": 200000,
+      "costUsd": 0.1234,
+      "durationMs": 5000,
+      "at": 1010
+    }
+  },
+  {
+    "payload": {
+      "model": "Model A",
+      "context_window": {
+        "current_usage": {
+          "input_tokens": 1000,
+          "cache_creation_input_tokens": 500,
+          "cache_read_input_tokens": 1500
+        },
+        "context_window_size": 200000
+      },
+      "cost": {
+        "total_cost_usd": 0.1234,
+        "total_duration_ms": 5000
+      }
+    },
+    "usage": {
+      "contextPercent": 1.5,
+      "contextTokens": 3000,
+      "contextSize": 200000,
+      "costUsd": 0.1234,
+      "durationMs": 5000,
+      "at": 1011
+    }
+  },
+  {
+    "payload": {
+      "model": {
+        "display_name": "",
+        "id": "model-id"
+      },
+      "context_window": {
+        "current_usage": {
+          "input_tokens": 1000,
+          "cache_creation_input_tokens": 500,
+          "cache_read_input_tokens": 1500
+        },
+        "context_window_size": 200000
+      },
+      "cost": {
+        "total_cost_usd": 0.1234,
+        "total_duration_ms": 5000
+      }
+    },
+    "usage": {
+      "model": "model-id",
+      "contextPercent": 1.5,
+      "contextTokens": 3000,
+      "contextSize": 200000,
+      "costUsd": 0.1234,
+      "durationMs": 5000,
+      "at": 1012
+    }
+  },
+  {
+    "payload": {
+      "model": {
+        "display_name": 5
+      },
+      "context_window": {
+        "current_usage": {
+          "input_tokens": 1000,
+          "cache_creation_input_tokens": 500,
+          "cache_read_input_tokens": 1500
+        },
+        "context_window_size": 200000
+      },
+      "cost": {
+        "total_cost_usd": 0.1234,
+        "total_duration_ms": 5000
+      }
+    },
+    "usage": {
+      "model": "5",
+      "contextPercent": 1.5,
+      "contextTokens": 3000,
+      "contextSize": 200000,
+      "costUsd": 0.1234,
+      "durationMs": 5000,
+      "at": 1013
+    }
+  },
+  {
+    "payload": {
+      "model": {
+        "display_name": 0,
+        "id": false
+      },
+      "context_window": {
+        "current_usage": {
+          "input_tokens": 1000,
+          "cache_creation_input_tokens": 500,
+          "cache_read_input_tokens": 1500
+        },
+        "context_window_size": 200000
+      },
+      "cost": {
+        "total_cost_usd": 0.1234,
+        "total_duration_ms": 5000
+      }
+    },
+    "usage": {
+      "contextPercent": 1.5,
+      "contextTokens": 3000,
+      "contextSize": 200000,
+      "costUsd": 0.1234,
+      "durationMs": 5000,
+      "at": 1014
+    }
+  },
+  {
+    "payload": {
+      "model": {
+        "display_name": true
+      },
+      "context_window": {
+        "current_usage": {
+          "input_tokens": 1000,
+          "cache_creation_input_tokens": 500,
+          "cache_read_input_tokens": 1500
+        },
+        "context_window_size": 200000
+      },
+      "cost": {
+        "total_cost_usd": 0.1234,
+        "total_duration_ms": 5000
+      }
+    },
+    "usage": {
+      "model": "true",
+      "contextPercent": 1.5,
+      "contextTokens": 3000,
+      "contextSize": 200000,
+      "costUsd": 0.1234,
+      "durationMs": 5000,
+      "at": 1015
+    }
+  },
+  {
+    "payload": {
+      "model": {
+        "display_name": {
+          "name": "x"
+        }
+      },
+      "context_window": {
+        "current_usage": {
+          "input_tokens": 1000,
+          "cache_creation_input_tokens": 500,
+          "cache_read_input_tokens": 1500
+        },
+        "context_window_size": 200000
+      },
+      "cost": {
+        "total_cost_usd": 0.1234,
+        "total_duration_ms": 5000
+      }
+    },
+    "usage": {
+      "model": "[object Object]",
+      "contextPercent": 1.5,
+      "contextTokens": 3000,
+      "contextSize": 200000,
+      "costUsd": 0.1234,
+      "durationMs": 5000,
+      "at": 1016
+    }
+  },
+  {
+    "payload": {
+      "model": {
+        "display_name": [
+          "a",
+          null,
+          [
+            "b",
+            "c"
+          ]
+        ]
+      },
+      "context_window": {
+        "current_usage": {
+          "input_tokens": 1000,
+          "cache_creation_input_tokens": 500,
+          "cache_read_input_tokens": 1500
+        },
+        "context_window_size": 200000
+      },
+      "cost": {
+        "total_cost_usd": 0.1234,
+        "total_duration_ms": 5000
+      }
+    },
+    "usage": {
+      "model": "a,,b,c",
+      "contextPercent": 1.5,
+      "contextTokens": 3000,
+      "contextSize": 200000,
+      "costUsd": 0.1234,
+      "durationMs": 5000,
+      "at": 1017
+    }
+  },
+  {
+    "payload": {
+      "model": {
+        "display_name": []
+      },
+      "context_window": {
+        "current_usage": {
+          "input_tokens": 1000,
+          "cache_creation_input_tokens": 500,
+          "cache_read_input_tokens": 1500
+        },
+        "context_window_size": 200000
+      },
+      "cost": {
+        "total_cost_usd": 0.1234,
+        "total_duration_ms": 5000
+      }
+    },
+    "usage": {
+      "contextPercent": 1.5,
+      "contextTokens": 3000,
+      "contextSize": 200000,
+      "costUsd": 0.1234,
+      "durationMs": 5000,
+      "at": 1018
+    }
+  },
+  {
+    "payload": {
+      "model": {
+        "id": 1.5e+21
+      },
+      "context_window": {
+        "current_usage": {
+          "input_tokens": 1000,
+          "cache_creation_input_tokens": 500,
+          "cache_read_input_tokens": 1500
+        },
+        "context_window_size": 200000
+      },
+      "cost": {
+        "total_cost_usd": 0.1234,
+        "total_duration_ms": 5000
+      }
+    },
+    "usage": {
+      "model": "1.5e+21",
+      "contextPercent": 1.5,
+      "contextTokens": 3000,
+      "contextSize": 200000,
+      "costUsd": 0.1234,
+      "durationMs": 5000,
+      "at": 1019
+    }
+  },
+  {
+    "payload": {
+      "model": {
+        "id": 0.000001234
+      },
+      "context_window": {
+        "current_usage": {
+          "input_tokens": 1000,
+          "cache_creation_input_tokens": 500,
+          "cache_read_input_tokens": 1500
+        },
+        "context_window_size": 200000
+      },
+      "cost": {
+        "total_cost_usd": 0.1234,
+        "total_duration_ms": 5000
+      }
+    },
+    "usage": {
+      "model": "0.000001234",
+      "contextPercent": 1.5,
+      "contextTokens": 3000,
+      "contextSize": 200000,
+      "costUsd": 0.1234,
+      "durationMs": 5000,
+      "at": 1020
+    }
+  },
+  {
+    "payload": {
+      "model": {
+        "display_name": "Model A"
+      },
+      "context_window": {
+        "current_usage": {
+          "input_tokens": 1000,
+          "cache_creation_input_tokens": 500,
+          "cache_read_input_tokens": 1500
+        },
+        "context_window_size": 200000
+      },
+      "cost": null
+    },
+    "usage": {
+      "model": "Model A",
+      "contextPercent": 1.5,
+      "contextTokens": 3000,
+      "contextSize": 200000,
+      "at": 1021
+    }
+  },
+  {
+    "payload": {
+      "model": {
+        "display_name": "Model A"
+      },
+      "context_window": {
+        "current_usage": {
+          "input_tokens": 1000,
+          "cache_creation_input_tokens": 500,
+          "cache_read_input_tokens": 1500
+        },
+        "context_window_size": 200000
+      },
+      "cost": {
+        "total_cost_usd": "0.5"
+      }
+    },
+    "usage": {
+      "model": "Model A",
+      "contextPercent": 1.5,
+      "contextTokens": 3000,
+      "contextSize": 200000,
+      "at": 1022
+    }
+  },
+  {
+    "payload": {
+      "model": {
+        "display_name": "Model A"
+      },
+      "context_window": {
+        "current_usage": {
+          "input_tokens": 1000,
+          "cache_creation_input_tokens": 500,
+          "cache_read_input_tokens": 1500
+        },
+        "context_window_size": 200000
+      },
+      "cost": {
+        "total_cost_usd": 0,
+        "total_duration_ms": 0
+      }
+    },
+    "usage": {
+      "model": "Model A",
+      "contextPercent": 1.5,
+      "contextTokens": 3000,
+      "contextSize": 200000,
+      "costUsd": 0,
+      "durationMs": 0,
+      "at": 1023
+    }
+  },
+  {
+    "payload": {
+      "model": {
+        "display_name": "Model A"
+      },
+      "context_window": {
+        "current_usage": {
+          "input_tokens": 1000,
+          "cache_creation_input_tokens": 500,
+          "cache_read_input_tokens": 1500
+        },
+        "context_window_size": 200000
+      },
+      "cost": {
+        "total_cost_usd": 1e-7,
+        "total_duration_ms": 123.456
+      }
+    },
+    "usage": {
+      "model": "Model A",
+      "contextPercent": 1.5,
+      "contextTokens": 3000,
+      "contextSize": 200000,
+      "costUsd": 1e-7,
+      "durationMs": 123.456,
+      "at": 1024
+    }
+  },
+  {
+    "payload": {},
+    "usage": {
+      "at": 1025
+    }
+  },
+  {
+    "payload": {
+      "model": {
+        "display_name": "Model A"
+      },
+      "context_window": {
+        "current_usage": {
+          "input_tokens": 1e+300,
+          "cache_read_input_tokens": 1e+300
+        },
+        "context_window_size": 1e+300
+      }
+    },
+    "usage": {
+      "model": "Model A",
+      "contextPercent": 200,
+      "contextTokens": 2e+300,
+      "contextSize": 1e+300,
+      "at": 1026
+    }
+  }
+]

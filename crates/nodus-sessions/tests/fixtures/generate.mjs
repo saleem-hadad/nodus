@@ -1,0 +1,546 @@
+// Writes the fixtures beside this file from the TypeScript itself, so the Rust
+// tests check the port against what 0.9.4 does rather than against a reading
+// of it. Every port, token, path and id here is made up.
+//
+// Run from the repo root with Node 22:
+//
+//   node --experimental-strip-types crates/nodus-sessions/tests/fixtures/generate.mjs
+//
+// It copies src/main/hooks.ts, hostProtocol.ts, discovery.ts and agents.ts to
+// a temporary folder, swapping only the imports that need Electron (gitBash,
+// isLive) for stubs, and drives them with a fake clock.
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+
+const here = path.dirname(fileURLToPath(import.meta.url))
+const root = path.resolve(here, '../../../..')
+const work = fs.mkdtempSync(path.join(os.tmpdir(), 'nodus-fixtures-'))
+// agents.ts finds ~/.claude/projects from the home folder when it loads.
+const home = path.join(work, 'home')
+fs.mkdirSync(home)
+process.env.HOME = home
+process.env.USERPROFILE = home
+
+function copy(name, replacements = []) {
+  let source = fs.readFileSync(path.join(root, 'src/main', `${name}.ts`), 'utf8')
+  for (const [from, to] of replacements) {
+    if (!source.includes(from)) throw new Error(`${name}.ts no longer has: ${from}`)
+    source = source.replace(from, to)
+  }
+  fs.writeFileSync(path.join(work, `${name}.mts`), source)
+}
+
+copy('hostProtocol')
+copy('hooks', [
+  [`import { gitBash } from './env'`, `const gitBash = () => globalThis.__gitBash ?? null`],
+  [`from './hostProtocol'`, `from './hostProtocol.mts'`]
+])
+copy('discovery')
+copy('agents', [
+  [`from './discovery'`, `from './discovery.mts'`],
+  [`from './hooks'`, `from './hooks.mts'`],
+  [`import { isLive } from './pty'`, `const isLive = (id: string) => globalThis.__live.has(id)`]
+])
+
+globalThis.__live = new Set()
+const hooks = await import(pathToFileURL(path.join(work, 'hooks.mts')).href)
+const agents = await import(pathToFileURL(path.join(work, 'agents.mts')).href)
+
+// A fake clock and timers, as vi.useFakeTimers gives the TypeScript's tests.
+const START = 1_700_000_000_000
+let now = START
+let nextTimer = 1
+const timers = new Map()
+globalThis.setTimeout = (fn, ms) => {
+  const id = nextTimer++
+  timers.set(id, { id, at: now + ms, fn })
+  return id
+}
+globalThis.clearTimeout = (id) => timers.delete(id)
+Date.now = () => now
+function advance(ms) {
+  const end = now + ms
+  for (;;) {
+    let due
+    for (const t of timers.values()) {
+      if (t.at <= end && (!due || t.at < due.at || (t.at === due.at && t.id < due.id))) due = t
+    }
+    if (!due) break
+    timers.delete(due.id)
+    now = due.at
+    due.fn()
+  }
+  now = end
+}
+
+const write = (name, value) => fs.writeFileSync(path.join(here, name), value)
+const writeJson = (name, value) => write(name, JSON.stringify(value, null, 2) + '\n')
+
+// ---------------------------------------------------------------------------
+// The --settings JSON and the hook environment
+
+const platform = process.platform
+const settings = {}
+const env = {}
+hooks.setHookEndpoint(4000, 'synthetic-token', '/tmp/example/hook.curlrc')
+settings.config = hooks.hookSettings()
+env.config = hooks.hookEnv('session-1')
+hooks.setHookEndpoint(4000, 'synthetic-token')
+settings.url = hooks.hookSettings()
+env.url = hooks.hookEnv('session-1')
+Object.defineProperty(process, 'platform', { value: 'win32' })
+globalThis.__gitBash = null
+hooks.setHookEndpoint(4000, 'synthetic-token', 'C:\\Users\\example\\hook.curlrc')
+settings.powershell = hooks.hookSettings()
+hooks.setHookEndpoint(4000, 'synthetic-token')
+settings.powershellWithoutConfig = hooks.hookSettings()
+// Windows with Git Bash writes POSIX hooks.
+globalThis.__gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
+hooks.setHookEndpoint(4000, 'synthetic-token', 'C:\\Users\\example\\hook.curlrc')
+settings.gitBash = hooks.hookSettings()
+Object.defineProperty(process, 'platform', { value: platform })
+globalThis.__gitBash = null
+hooks.setHookEndpoint(0, '')
+env.none = hooks.hookEnv('session-1')
+
+write('hook-settings-config.json', settings.config)
+write('hook-settings-url.json', settings.url)
+write('hook-settings-powershell.json', settings.powershell)
+if (settings.powershellWithoutConfig !== settings.powershell) throw new Error('PowerShell settings depend on the config')
+if (settings.gitBash !== settings.config) throw new Error('Git Bash settings differ from POSIX ones')
+writeJson('hook-env.json', env)
+
+// ---------------------------------------------------------------------------
+// The status machine, step by step
+
+let events = []
+let pending = false
+hooks.configureStatus({
+  onChange: (id, status, live) => events.push(['status', id, status, live]),
+  onAgentChange: (id, agentId, status) => events.push(['agent', id, agentId, status]),
+  onUsage: (id, usage) => events.push(['usage', id, usage]),
+  isLive: (id) => globalThis.__live.has(id),
+  hasPendingWork: (file) => {
+    events.push(['pendingWork', file])
+    return pending
+  }
+})
+
+/** Runs one step; the Rust test runs the same ones. */
+function step(s) {
+  if ('start' in s) {
+    globalThis.__live.add(s.start)
+    hooks.markProcess(s.start, true, s.initial)
+  } else if ('exit' in s) {
+    globalThis.__live.delete(s.exit)
+    hooks.markProcess(s.exit, false)
+  } else if ('hook' in s) {
+    if ('at' in s) hooks.receiveHook(s.hook, s.session, s.payload, s.at)
+    else hooks.receiveHook(s.hook, s.session, s.payload)
+  } else if ('input' in s) {
+    if ('at' in s) hooks.noteUserInput(s.session, s.input, s.at)
+    else hooks.noteUserInput(s.session, s.input)
+  } else if ('advance' in s) {
+    advance(s.advance)
+  } else if ('forget' in s) {
+    hooks.forgetStatus(s.forget)
+  } else if ('settle' in s) {
+    hooks.settleAgent(s.settle[0], s.settle[1])
+  } else if ('hold' in s) {
+    hooks.holdAgent(s.hold[0], s.hold[1])
+  } else if ('pending' in s) {
+    pending = s.pending
+  } else if ('status' in s) {
+    events.push(['getStatus', s.status, hooks.getStatus(s.status)])
+  } else if ('agent' in s) {
+    events.push(['getAgentHook', s.agent[0], s.agent[1], hooks.getAgentHook(s.agent[0], s.agent[1]) ?? null])
+  } else if ('usage' in s) {
+    events.push(['getUsage', s.usage, hooks.getUsage(s.usage) ?? null])
+  } else {
+    throw new Error(`unknown step ${JSON.stringify(s)}`)
+  }
+}
+
+const report = (extra = {}) => ({
+  model: { display_name: 'Model A' },
+  context_window: {
+    current_usage: { input_tokens: 1000, cache_creation_input_tokens: 500, cache_read_input_tokens: 1500 },
+    context_window_size: 200000
+  },
+  cost: { total_cost_usd: 0.1234, total_duration_ms: 5000 },
+  ...extra
+})
+
+const scenarios = {
+  'a turn, start to stop': [
+    { start: 's1' },
+    { status: 's1' },
+    { hook: 'UserPromptSubmit', session: 's1', payload: {} },
+    { hook: 'PreToolUse', session: 's1', payload: { tool_name: 'Bash' } },
+    { hook: 'PostToolUse', session: 's1', payload: {} },
+    { hook: 'Stop', session: 's1', payload: {} },
+    { status: 's1' }
+  ],
+  'a process that starts working': [
+    { start: 's1', initial: 'working' },
+    { hook: 'SessionStart', session: 's1', payload: {} },
+    { status: 's1' },
+    { hook: 'Stop', session: 's1', payload: {} },
+    { hook: 'SessionStart', session: 's1', payload: { source: 'resume' } },
+    { status: 's1' },
+    { start: 's1', initial: 'waiting' },
+    { hook: 'SessionStart', session: 's1', payload: {} }
+  ],
+  'permission and questions': [
+    { start: 's1' },
+    { hook: 'PermissionRequest', session: 's1', payload: {} },
+    { hook: 'PostToolUse', session: 's1', payload: {} },
+    { hook: 'PreToolUse', session: 's1', payload: { tool_name: 'AskUserQuestion' } },
+    { hook: 'PostToolUse', session: 's1', payload: {} },
+    { hook: 'Notification', session: 's1', payload: { notification_type: 'permission_prompt' } },
+    { hook: 'PostToolUse', session: 's1', payload: {} },
+    { hook: 'Notification', session: 's1', payload: { notification_type: 'elicitation_dialog' } },
+    { hook: 'PostToolUse', session: 's1', payload: {} },
+    { hook: 'Notification', session: 's1', payload: { message: 'Claude needs your PERMISSION to use Bash' } },
+    { hook: 'Stop', session: 's1', payload: {} },
+    { hook: 'Notification', session: 's1', payload: { notification_type: 'idle_prompt', message: 'Claude is waiting' } },
+    { hook: 'Notification', session: 's1', payload: { notification_type: 42, message: null } },
+    { hook: 'Notification', session: 's1', payload: { message: 'Permiſſion' } },
+    { hook: 'Notification', session: 's1', payload: { message: ['need', 'permission'] } },
+    { hook: 'Notification', session: 's1', payload: { notification_type: ['permission_prompt'] } },
+    { status: 's1' },
+    { hook: 'PreToolUse', session: 's1', payload: { tool_name: 'askuserquestion' } },
+    { status: 's1' }
+  ],
+  'session ends': [
+    { start: 's1' },
+    { hook: 'UserPromptSubmit', session: 's1', payload: {} },
+    { hook: 'SessionEnd', session: 's1', payload: { reason: 'clear' } },
+    { hook: 'UserPromptSubmit', session: 's1', payload: {} },
+    { hook: 'SessionEnd', session: 's1', payload: { reason: 'logout' } },
+    { status: 's1' },
+    { hook: 'UserPromptSubmit', session: 's1', payload: {} },
+    { status: 's1' },
+    { exit: 's1' },
+    { status: 's1' }
+  ],
+  'unknown events and empty payloads': [
+    { start: 's1' },
+    { hook: 'SomethingNew', session: 's1', payload: {} },
+    { hook: 'UserPromptSubmit', session: 's1', payload: null },
+    { hook: 'PreToolUse', session: 's1', payload: 7 },
+    { hook: 'Stop', session: 's1', payload: 'text' },
+    { hook: 'stop', session: 's1', payload: {} },
+    { status: 's1' }
+  ],
+  'keys while waiting': [
+    { start: 's1' },
+    { hook: 'PermissionRequest', session: 's1', payload: {} },
+    { input: '0', session: 's1' },
+    { input: 'yes', session: 's1' },
+    { input: '\r\r', session: 's1' },
+    { input: '\x1b[A', session: 's1' },
+    { status: 's1' },
+    { input: '1', session: 's1' },
+    { hook: 'PermissionRequest', session: 's1', payload: {} },
+    { input: '9', session: 's1' },
+    { hook: 'PreToolUse', session: 's1', payload: { tool_name: 'AskUserQuestion' } },
+    { input: '\r', session: 's1' },
+    { status: 's1' },
+    { hook: 'Stop', session: 's1', payload: {} },
+    { input: '\r', session: 's1' },
+    { status: 's1' }
+  ],
+  'interrupts': [
+    { start: 's1' },
+    { hook: 'UserPromptSubmit', session: 's1', payload: {} },
+    { input: '\x1b', session: 's1' },
+    { advance: 1199 },
+    { status: 's1' },
+    { advance: 1 },
+    { status: 's1' },
+    { hook: 'UserPromptSubmit', session: 's1', payload: {} },
+    { input: '\x03', session: 's1' },
+    { advance: 100 },
+    { hook: 'PostToolUse', session: 's1', payload: {} },
+    { advance: 1200 },
+    { status: 's1' },
+    { input: '\x1b', session: 's1' },
+    { advance: 600 },
+    { input: '\x1b', session: 's1' },
+    { advance: 600 },
+    { status: 's1' },
+    { advance: 600 },
+    { status: 's1' },
+    { hook: 'PermissionRequest', session: 's1', payload: {} },
+    { input: '\x03', session: 's1' },
+    { advance: 1200 },
+    { status: 's1' },
+    { input: '\x1b', session: 's1' },
+    { advance: 1200 },
+    { status: 's1' }
+  ],
+  'a hook at the same moment as the interrupt': [
+    { start: 's1' },
+    { hook: 'UserPromptSubmit', session: 's1', payload: {} },
+    { input: '\x1b', session: 's1' },
+    { hook: 'PostToolUse', session: 's1', payload: {} },
+    { advance: 1200 },
+    { status: 's1' }
+  ],
+  'an agent hook after the interrupt': [
+    { start: 's1' },
+    { hook: 'UserPromptSubmit', session: 's1', payload: {} },
+    { input: '\x1b', session: 's1' },
+    { advance: 10 },
+    { hook: 'PostToolUse', session: 's1', payload: { agent_id: 'a1' } },
+    { advance: 1200 },
+    { status: 's1' }
+  ],
+  'the process ends before the interrupt timer': [
+    { start: 's1' },
+    { hook: 'UserPromptSubmit', session: 's1', payload: {} },
+    { input: '\x1b', session: 's1' },
+    { exit: 's1' },
+    { start: 's1', initial: 'working' },
+    { advance: 1500 },
+    { status: 's1' }
+  ],
+  'forgotten while the interrupt timer runs': [
+    { start: 's1' },
+    { hook: 'UserPromptSubmit', session: 's1', payload: {} },
+    { input: '\x1b', session: 's1' },
+    { forget: 's1' },
+    { advance: 1500 },
+    { status: 's1' },
+    { usage: 's1' }
+  ],
+  'agents keep the card working': [
+    { start: 's1' },
+    { hook: 'UserPromptSubmit', session: 's1', payload: {} },
+    { hook: 'SubagentStart', session: 's1', payload: { agent_id: 'a1' } },
+    { hook: 'SubagentStart', session: 's1', payload: { agent_id: 'a2', agent_type: 'Explore' } },
+    { hook: 'Stop', session: 's1', payload: {} },
+    { status: 's1' },
+    { hook: 'PreToolUse', session: 's1', payload: { agent_id: 'a1', tool_name: 'Bash' } },
+    { hook: 'SubagentStop', session: 's1', payload: { agent_id: 'a1' } },
+    { hook: 'SubagentStop', session: 's1', payload: { agent_id: 'a2', agent_transcript_path: 7 } },
+    { status: 's1' },
+    { agent: ['s1', 'a1'] },
+    { agent: ['s1', 'missing'] }
+  ],
+  'agents woken by background work': [
+    { start: 's1' },
+    { pending: true },
+    { hook: 'SubagentStart', session: 's1', payload: { agent_id: 'a1' } },
+    { hook: 'SubagentStop', session: 's1', payload: { agent_id: 'a1', agent_transcript_path: '/tmp/example/agent.jsonl' } },
+    { status: 's1' },
+    { pending: false },
+    { hook: 'SubagentStop', session: 's1', payload: { agent_id: 'a1', agent_transcript_path: '/tmp/example/agent.jsonl' } },
+    { status: 's1' },
+    { hook: 'SubagentStop', session: 's1', payload: { agent_transcript_path: '/tmp/example/agent.jsonl' } },
+    { hook: 'SubagentStart', session: 's1', payload: {} },
+    { hook: 'SubagentStart', session: 's1', payload: { agent_id: '' } },
+    { status: 's1' }
+  ],
+  'agents that wait, and answers': [
+    { start: 's1' },
+    { hook: 'UserPromptSubmit', session: 's1', payload: {} },
+    { hook: 'SubagentStart', session: 's1', payload: { agent_id: 'a1' } },
+    { advance: 5 },
+    { hook: 'SubagentStart', session: 's1', payload: { agent_id: 'a2' } },
+    { hook: 'PermissionRequest', session: 's1', payload: { agent_id: 'a2' } },
+    { advance: 5 },
+    { hook: 'PreToolUse', session: 's1', payload: { agent_id: 'a1', tool_name: 'AskUserQuestion' } },
+    { status: 's1' },
+    { hook: 'Notification', session: 's1', payload: { notification_type: 'permission_prompt' } },
+    { status: 's1' },
+    { input: 'x', session: 's1' },
+    { input: '\x1b', session: 's1' },
+    { agent: ['s1', 'a2'] },
+    { input: '\r', session: 's1' },
+    { agent: ['s1', 'a1'] },
+    { status: 's1' },
+    { hook: 'Notification', session: 's1', payload: { agent_id: 'a1', message: 'idle' } },
+    { hook: 'Notification', session: 's1', payload: { agent_id: 'a1', notification_type: 'permission_prompt' } },
+    { hook: 'Stop', session: 's1', payload: { agent_id: 'a1' } },
+    { hook: 'SessionStart', session: 's1', payload: { agent_id: 'a1' } },
+    { hook: 'SessionEnd', session: 's1', payload: { agent_id: 'a1' } },
+    { hook: 'PermissionRequest', session: 's1', payload: {} },
+    { input: '2', session: 's1' },
+    { status: 's1' },
+    { agent: ['s1', 'a1'] },
+    { hook: 'UserPromptSubmit', session: 's1', payload: { agent_id: 'a1' } },
+    { advance: 30 },
+    { input: '\x03', session: 's1' },
+    { advance: 1200 },
+    { status: 's1' }
+  ],
+  'agents waiting at the same moment': [
+    { start: 's1' },
+    { hook: 'PermissionRequest', session: 's1', payload: { agent_id: 'b' } },
+    { hook: 'PermissionRequest', session: 's1', payload: { agent_id: 'a' } },
+    { input: '\r', session: 's1' },
+    { agent: ['s1', 'b'] },
+    { agent: ['s1', 'a'] },
+    { hook: 'PermissionRequest', session: 's1', payload: { agent_id: 'a' } },
+    { advance: 7 },
+    { hook: 'PermissionRequest', session: 's1', payload: { agent_id: 'a' } },
+    { agent: ['s1', 'a'] }
+  ],
+  'settling and holding agents': [
+    { start: 's1' },
+    { settle: ['s1', 'a1'] },
+    { hold: ['s1', 'a1'] },
+    { hook: 'SubagentStart', session: 's1', payload: { agent_id: 'a1' } },
+    { advance: 3 },
+    { hold: ['s1', 'a1'] },
+    { settle: ['s1', 'a1'] },
+    { agent: ['s1', 'a1'] },
+    { settle: ['s1', 'a1'] },
+    { advance: 3 },
+    { hold: ['s1', 'a1'] },
+    { agent: ['s1', 'a1'] },
+    { status: 's1' },
+    { exit: 's1' },
+    { agent: ['s1', 'a1'] },
+    { hold: ['s1', 'a1'] }
+  ],
+  'sessions the app is not running': [
+    { hook: 'UserPromptSubmit', session: 'ghost', payload: {} },
+    { hook: 'PermissionRequest', session: 'ghost', payload: {} },
+    { status: 'ghost' },
+    { start: 'ghost' },
+    { status: 'ghost' },
+    { hook: 'SubagentStart', session: 'other', payload: { agent_id: 'a1' } },
+    { input: '\r', session: 'other' },
+    { status: 'other' }
+  ],
+  'replayed history after a relaunch': [
+    { start: 's1', initial: 'working' },
+    { hook: 'UserPromptSubmit', session: 's1', payload: {}, at: START - 60000 },
+    { hook: 'PreToolUse', session: 's1', payload: { tool_name: 'Bash' }, at: START - 50000 },
+    { input: '\x1b', session: 's1', at: START - 40000 },
+    { hook: 'PostToolUse', session: 's1', payload: {}, at: START - 39000 },
+    { hook: 'SubagentStart', session: 's1', payload: { agent_id: 'a1' }, at: START - 30000 },
+    { hook: 'PermissionRequest', session: 's1', payload: { agent_id: 'a1' }, at: START - 20000 },
+    { input: '\r', session: 's1', at: START - 10000 },
+    { agent: ['s1', 'a1'] },
+    { hook: 'StatusLine', session: 's1', payload: report(), at: START - 5000 },
+    { advance: 1200 },
+    { status: 's1' },
+    { start: 's2', initial: 'done' },
+    { hook: 'UserPromptSubmit', session: 's2', payload: {}, at: START - 9000 },
+    { input: '\x03', session: 's2', at: START - 8000 },
+    { status: 's2' },
+    { advance: 1199 },
+    { status: 's2' },
+    { advance: 1 },
+    { status: 's2' }
+  ],
+  'usage from the status line': [
+    { start: 's1' },
+    { hook: 'StatusLine', session: 's1', payload: report(), at: 1000 },
+    { hook: 'StatusLine', session: 's1', payload: report({ cost: { total_cost_usd: 0.1234, total_duration_ms: 9000 } }), at: 2000 },
+    { usage: 's1' },
+    { hook: 'StatusLine', session: 's1', payload: report({ cost: { total_cost_usd: 0.1249, total_duration_ms: 9000 } }), at: 3000 },
+    { hook: 'StatusLine', session: 's1', payload: report({ cost: { total_cost_usd: 0.125, total_duration_ms: 9000 } }), at: 4000 },
+    { hook: 'StatusLine', session: 's1', payload: report({ model: { id: 'model-b' } }), at: 5000 },
+    { hook: 'StatusLine', session: 's1', payload: report({ context_window: { used_percentage: 42, context_window_size: 200000 } }), at: 6000 },
+    { hook: 'StatusLine', session: 's1', payload: report({ context_window: { used_percentage: 42, context_window_size: 200000 } }), at: 7000 },
+    { advance: 10000 },
+    { exit: 's1' },
+    { usage: 's1' },
+    { advance: 5000 },
+    { start: 's1' },
+    { hook: 'StatusLine', session: 's1', payload: report({ context_window: { used_percentage: 42, context_window_size: 200000 } }) },
+    { advance: 2500 },
+    { exit: 's1' },
+    { forget: 's1' },
+    { usage: 's1' },
+    { start: 's1' },
+    { exit: 's1' }
+  ],
+  'usage without a duration': [
+    { start: 's1' },
+    { hook: 'StatusLine', session: 's1', payload: { model: { display_name: 'Model A' } } },
+    { advance: 1000 },
+    { exit: 's1' },
+    { start: 's1' },
+    { hook: 'StatusLine', session: 's1', payload: { model: { display_name: 'Model A' } } },
+    { hook: 'StatusLine', session: 's1', payload: null },
+    { hook: 'StatusLine', session: 's1', payload: null }
+  ],
+  'usage for a session the app is not running': [
+    { hook: 'StatusLine', session: 'ghost', payload: report(), at: 1000 },
+    { usage: 'ghost' },
+    { start: 'ghost' },
+    { exit: 'ghost' }
+  ]
+}
+
+const scenarioFixture = []
+for (const [name, steps] of Object.entries(scenarios)) {
+  // Each scenario starts from nothing.
+  events = []
+  for (const id of ['s1', 's2', 'ghost', 'other']) {
+    hooks.markProcess(id, false)
+    hooks.forgetStatus(id)
+    globalThis.__live.delete(id)
+  }
+  advance(10_000)
+  now = START
+  pending = false
+  events = []
+  for (const s of steps) step(s)
+  scenarioFixture.push({ name, steps, events })
+}
+writeJson('status-scenarios.json', { start: START, scenarios: scenarioFixture })
+
+// ---------------------------------------------------------------------------
+// Status line reports as usage
+
+const usagePayloads = [
+  report(),
+  report({ context_window: { used_percentage: 42, context_window_size: 200000 } }),
+  report({ context_window: { current_usage: null, context_window_size: 200000 } }),
+  report({ context_window: { current_usage: [], context_window_size: 200000 } }),
+  report({ context_window: { current_usage: { input_tokens: '5', cache_read_input_tokens: 7 }, context_window_size: 0 } }),
+  report({ context_window: { current_usage: { input_tokens: 1 }, context_window_size: 3 } }),
+  report({ context_window: { current_usage: { input_tokens: 2 }, context_window_size: 3, used_percentage: null } }),
+  report({ context_window: { used_percentage: 0, context_window_size: '200000' } }),
+  report({ context_window: null }),
+  report({ context_window: 'big' }),
+  report({ model: null }),
+  report({ model: 'Model A' }),
+  report({ model: { display_name: '', id: 'model-id' } }),
+  report({ model: { display_name: 5 } }),
+  report({ model: { display_name: 0, id: false } }),
+  report({ model: { display_name: true } }),
+  report({ model: { display_name: { name: 'x' } } }),
+  report({ model: { display_name: ['a', null, ['b', 'c']] } }),
+  report({ model: { display_name: [] } }),
+  report({ model: { id: 1.5e21 } }),
+  report({ model: { id: 0.000001234 } }),
+  report({ cost: null }),
+  report({ cost: { total_cost_usd: '0.5' } }),
+  report({ cost: { total_cost_usd: 0, total_duration_ms: 0 } }),
+  report({ cost: { total_cost_usd: 1e-7, total_duration_ms: 123.456 } }),
+  {},
+  { model: { display_name: 'Model A' }, context_window: { current_usage: { input_tokens: 1e300, cache_read_input_tokens: 1e300 }, context_window_size: 1e300 } }
+]
+const usageFixture = []
+hooks.configureStatus({
+  onChange: () => {},
+  onAgentChange: () => {},
+  onUsage: (_id, usage) => usageFixture.push({ payload: usagePayloads[usageFixture.length], usage }),
+  isLive: () => true,
+  hasPendingWork: () => false
+})
+usagePayloads.forEach((payload, i) => hooks.receiveHook('StatusLine', `usage-${i}`, payload, 1000 + i))
+writeJson('usage.json', usageFixture)
+
+fs.rmSync(work, { recursive: true, force: true })
+console.log(`fixtures written to ${path.relative(process.cwd(), here)}`)

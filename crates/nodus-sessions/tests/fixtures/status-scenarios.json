@@ -1,0 +1,2804 @@
+{
+  "start": 1700000000000,
+  "scenarios": [
+    {
+      "name": "a turn, start to stop",
+      "steps": [
+        {
+          "start": "s1"
+        },
+        {
+          "status": "s1"
+        },
+        {
+          "hook": "UserPromptSubmit",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "hook": "PreToolUse",
+          "session": "s1",
+          "payload": {
+            "tool_name": "Bash"
+          }
+        },
+        {
+          "hook": "PostToolUse",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "hook": "Stop",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "status": "s1"
+        }
+      ],
+      "events": [
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "getStatus",
+          "s1",
+          "done"
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "getStatus",
+          "s1",
+          "done"
+        ]
+      ]
+    },
+    {
+      "name": "a process that starts working",
+      "steps": [
+        {
+          "start": "s1",
+          "initial": "working"
+        },
+        {
+          "hook": "SessionStart",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "status": "s1"
+        },
+        {
+          "hook": "Stop",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "hook": "SessionStart",
+          "session": "s1",
+          "payload": {
+            "source": "resume"
+          }
+        },
+        {
+          "status": "s1"
+        },
+        {
+          "start": "s1",
+          "initial": "waiting"
+        },
+        {
+          "hook": "SessionStart",
+          "session": "s1",
+          "payload": {}
+        }
+      ],
+      "events": [
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "getStatus",
+          "s1",
+          "working"
+        ],
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "getStatus",
+          "s1",
+          "done"
+        ],
+        [
+          "status",
+          "s1",
+          "waiting",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ]
+      ]
+    },
+    {
+      "name": "permission and questions",
+      "steps": [
+        {
+          "start": "s1"
+        },
+        {
+          "hook": "PermissionRequest",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "hook": "PostToolUse",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "hook": "PreToolUse",
+          "session": "s1",
+          "payload": {
+            "tool_name": "AskUserQuestion"
+          }
+        },
+        {
+          "hook": "PostToolUse",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "hook": "Notification",
+          "session": "s1",
+          "payload": {
+            "notification_type": "permission_prompt"
+          }
+        },
+        {
+          "hook": "PostToolUse",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "hook": "Notification",
+          "session": "s1",
+          "payload": {
+            "notification_type": "elicitation_dialog"
+          }
+        },
+        {
+          "hook": "PostToolUse",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "hook": "Notification",
+          "session": "s1",
+          "payload": {
+            "message": "Claude needs your PERMISSION to use Bash"
+          }
+        },
+        {
+          "hook": "Stop",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "hook": "Notification",
+          "session": "s1",
+          "payload": {
+            "notification_type": "idle_prompt",
+            "message": "Claude is waiting"
+          }
+        },
+        {
+          "hook": "Notification",
+          "session": "s1",
+          "payload": {
+            "notification_type": 42,
+            "message": null
+          }
+        },
+        {
+          "hook": "Notification",
+          "session": "s1",
+          "payload": {
+            "message": "Permiſſion"
+          }
+        },
+        {
+          "hook": "Notification",
+          "session": "s1",
+          "payload": {
+            "message": [
+              "need",
+              "permission"
+            ]
+          }
+        },
+        {
+          "hook": "Notification",
+          "session": "s1",
+          "payload": {
+            "notification_type": [
+              "permission_prompt"
+            ]
+          }
+        },
+        {
+          "status": "s1"
+        },
+        {
+          "hook": "PreToolUse",
+          "session": "s1",
+          "payload": {
+            "tool_name": "askuserquestion"
+          }
+        },
+        {
+          "status": "s1"
+        }
+      ],
+      "events": [
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "waiting",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "waiting",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "waiting",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "waiting",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "waiting",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "waiting",
+          true
+        ],
+        [
+          "getStatus",
+          "s1",
+          "waiting"
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "getStatus",
+          "s1",
+          "working"
+        ]
+      ]
+    },
+    {
+      "name": "session ends",
+      "steps": [
+        {
+          "start": "s1"
+        },
+        {
+          "hook": "UserPromptSubmit",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "hook": "SessionEnd",
+          "session": "s1",
+          "payload": {
+            "reason": "clear"
+          }
+        },
+        {
+          "hook": "UserPromptSubmit",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "hook": "SessionEnd",
+          "session": "s1",
+          "payload": {
+            "reason": "logout"
+          }
+        },
+        {
+          "status": "s1"
+        },
+        {
+          "hook": "UserPromptSubmit",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "status": "s1"
+        },
+        {
+          "exit": "s1"
+        },
+        {
+          "status": "s1"
+        }
+      ],
+      "events": [
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "done",
+          false
+        ],
+        [
+          "getStatus",
+          "s1",
+          "done"
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "getStatus",
+          "s1",
+          "working"
+        ],
+        [
+          "status",
+          "s1",
+          "done",
+          false
+        ],
+        [
+          "getStatus",
+          "s1",
+          "done"
+        ]
+      ]
+    },
+    {
+      "name": "unknown events and empty payloads",
+      "steps": [
+        {
+          "start": "s1"
+        },
+        {
+          "hook": "SomethingNew",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "hook": "UserPromptSubmit",
+          "session": "s1",
+          "payload": null
+        },
+        {
+          "hook": "PreToolUse",
+          "session": "s1",
+          "payload": 7
+        },
+        {
+          "hook": "Stop",
+          "session": "s1",
+          "payload": "text"
+        },
+        {
+          "hook": "stop",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "status": "s1"
+        }
+      ],
+      "events": [
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "getStatus",
+          "s1",
+          "done"
+        ]
+      ]
+    },
+    {
+      "name": "keys while waiting",
+      "steps": [
+        {
+          "start": "s1"
+        },
+        {
+          "hook": "PermissionRequest",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "input": "0",
+          "session": "s1"
+        },
+        {
+          "input": "yes",
+          "session": "s1"
+        },
+        {
+          "input": "\r\r",
+          "session": "s1"
+        },
+        {
+          "input": "\u001b[A",
+          "session": "s1"
+        },
+        {
+          "status": "s1"
+        },
+        {
+          "input": "1",
+          "session": "s1"
+        },
+        {
+          "hook": "PermissionRequest",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "input": "9",
+          "session": "s1"
+        },
+        {
+          "hook": "PreToolUse",
+          "session": "s1",
+          "payload": {
+            "tool_name": "AskUserQuestion"
+          }
+        },
+        {
+          "input": "\r",
+          "session": "s1"
+        },
+        {
+          "status": "s1"
+        },
+        {
+          "hook": "Stop",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "input": "\r",
+          "session": "s1"
+        },
+        {
+          "status": "s1"
+        }
+      ],
+      "events": [
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "waiting",
+          true
+        ],
+        [
+          "getStatus",
+          "s1",
+          "waiting"
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "waiting",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "waiting",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "getStatus",
+          "s1",
+          "working"
+        ],
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "getStatus",
+          "s1",
+          "done"
+        ]
+      ]
+    },
+    {
+      "name": "interrupts",
+      "steps": [
+        {
+          "start": "s1"
+        },
+        {
+          "hook": "UserPromptSubmit",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "input": "\u001b",
+          "session": "s1"
+        },
+        {
+          "advance": 1199
+        },
+        {
+          "status": "s1"
+        },
+        {
+          "advance": 1
+        },
+        {
+          "status": "s1"
+        },
+        {
+          "hook": "UserPromptSubmit",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "input": "\u0003",
+          "session": "s1"
+        },
+        {
+          "advance": 100
+        },
+        {
+          "hook": "PostToolUse",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "advance": 1200
+        },
+        {
+          "status": "s1"
+        },
+        {
+          "input": "\u001b",
+          "session": "s1"
+        },
+        {
+          "advance": 600
+        },
+        {
+          "input": "\u001b",
+          "session": "s1"
+        },
+        {
+          "advance": 600
+        },
+        {
+          "status": "s1"
+        },
+        {
+          "advance": 600
+        },
+        {
+          "status": "s1"
+        },
+        {
+          "hook": "PermissionRequest",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "input": "\u0003",
+          "session": "s1"
+        },
+        {
+          "advance": 1200
+        },
+        {
+          "status": "s1"
+        },
+        {
+          "input": "\u001b",
+          "session": "s1"
+        },
+        {
+          "advance": 1200
+        },
+        {
+          "status": "s1"
+        }
+      ],
+      "events": [
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "getStatus",
+          "s1",
+          "working"
+        ],
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "getStatus",
+          "s1",
+          "done"
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "getStatus",
+          "s1",
+          "working"
+        ],
+        [
+          "getStatus",
+          "s1",
+          "working"
+        ],
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "getStatus",
+          "s1",
+          "done"
+        ],
+        [
+          "status",
+          "s1",
+          "waiting",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "getStatus",
+          "s1",
+          "done"
+        ],
+        [
+          "getStatus",
+          "s1",
+          "done"
+        ]
+      ]
+    },
+    {
+      "name": "a hook at the same moment as the interrupt",
+      "steps": [
+        {
+          "start": "s1"
+        },
+        {
+          "hook": "UserPromptSubmit",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "input": "\u001b",
+          "session": "s1"
+        },
+        {
+          "hook": "PostToolUse",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "advance": 1200
+        },
+        {
+          "status": "s1"
+        }
+      ],
+      "events": [
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "getStatus",
+          "s1",
+          "done"
+        ]
+      ]
+    },
+    {
+      "name": "an agent hook after the interrupt",
+      "steps": [
+        {
+          "start": "s1"
+        },
+        {
+          "hook": "UserPromptSubmit",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "input": "\u001b",
+          "session": "s1"
+        },
+        {
+          "advance": 10
+        },
+        {
+          "hook": "PostToolUse",
+          "session": "s1",
+          "payload": {
+            "agent_id": "a1"
+          }
+        },
+        {
+          "advance": 1200
+        },
+        {
+          "status": "s1"
+        }
+      ],
+      "events": [
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "agent",
+          "s1",
+          "a1",
+          "working"
+        ],
+        [
+          "getStatus",
+          "s1",
+          "working"
+        ]
+      ]
+    },
+    {
+      "name": "the process ends before the interrupt timer",
+      "steps": [
+        {
+          "start": "s1"
+        },
+        {
+          "hook": "UserPromptSubmit",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "input": "\u001b",
+          "session": "s1"
+        },
+        {
+          "exit": "s1"
+        },
+        {
+          "start": "s1",
+          "initial": "working"
+        },
+        {
+          "advance": 1500
+        },
+        {
+          "status": "s1"
+        }
+      ],
+      "events": [
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "done",
+          false
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "getStatus",
+          "s1",
+          "working"
+        ]
+      ]
+    },
+    {
+      "name": "forgotten while the interrupt timer runs",
+      "steps": [
+        {
+          "start": "s1"
+        },
+        {
+          "hook": "UserPromptSubmit",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "input": "\u001b",
+          "session": "s1"
+        },
+        {
+          "forget": "s1"
+        },
+        {
+          "advance": 1500
+        },
+        {
+          "status": "s1"
+        },
+        {
+          "usage": "s1"
+        }
+      ],
+      "events": [
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "getStatus",
+          "s1",
+          "done"
+        ],
+        [
+          "getUsage",
+          "s1",
+          null
+        ]
+      ]
+    },
+    {
+      "name": "agents keep the card working",
+      "steps": [
+        {
+          "start": "s1"
+        },
+        {
+          "hook": "UserPromptSubmit",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "hook": "SubagentStart",
+          "session": "s1",
+          "payload": {
+            "agent_id": "a1"
+          }
+        },
+        {
+          "hook": "SubagentStart",
+          "session": "s1",
+          "payload": {
+            "agent_id": "a2",
+            "agent_type": "Explore"
+          }
+        },
+        {
+          "hook": "Stop",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "status": "s1"
+        },
+        {
+          "hook": "PreToolUse",
+          "session": "s1",
+          "payload": {
+            "agent_id": "a1",
+            "tool_name": "Bash"
+          }
+        },
+        {
+          "hook": "SubagentStop",
+          "session": "s1",
+          "payload": {
+            "agent_id": "a1"
+          }
+        },
+        {
+          "hook": "SubagentStop",
+          "session": "s1",
+          "payload": {
+            "agent_id": "a2",
+            "agent_transcript_path": 7
+          }
+        },
+        {
+          "status": "s1"
+        },
+        {
+          "agent": [
+            "s1",
+            "a1"
+          ]
+        },
+        {
+          "agent": [
+            "s1",
+            "missing"
+          ]
+        }
+      ],
+      "events": [
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "agent",
+          "s1",
+          "a1",
+          "working"
+        ],
+        [
+          "agent",
+          "s1",
+          "a2",
+          "working"
+        ],
+        [
+          "getStatus",
+          "s1",
+          "working"
+        ],
+        [
+          "agent",
+          "s1",
+          "a1",
+          "done"
+        ],
+        [
+          "agent",
+          "s1",
+          "a2",
+          "done"
+        ],
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "getStatus",
+          "s1",
+          "done"
+        ],
+        [
+          "getAgentHook",
+          "s1",
+          "a1",
+          {
+            "status": "done",
+            "at": 1700000000000,
+            "since": 1700000000000
+          }
+        ],
+        [
+          "getAgentHook",
+          "s1",
+          "missing",
+          null
+        ]
+      ]
+    },
+    {
+      "name": "agents woken by background work",
+      "steps": [
+        {
+          "start": "s1"
+        },
+        {
+          "pending": true
+        },
+        {
+          "hook": "SubagentStart",
+          "session": "s1",
+          "payload": {
+            "agent_id": "a1"
+          }
+        },
+        {
+          "hook": "SubagentStop",
+          "session": "s1",
+          "payload": {
+            "agent_id": "a1",
+            "agent_transcript_path": "/tmp/example/agent.jsonl"
+          }
+        },
+        {
+          "status": "s1"
+        },
+        {
+          "pending": false
+        },
+        {
+          "hook": "SubagentStop",
+          "session": "s1",
+          "payload": {
+            "agent_id": "a1",
+            "agent_transcript_path": "/tmp/example/agent.jsonl"
+          }
+        },
+        {
+          "status": "s1"
+        },
+        {
+          "hook": "SubagentStop",
+          "session": "s1",
+          "payload": {
+            "agent_transcript_path": "/tmp/example/agent.jsonl"
+          }
+        },
+        {
+          "hook": "SubagentStart",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "hook": "SubagentStart",
+          "session": "s1",
+          "payload": {
+            "agent_id": ""
+          }
+        },
+        {
+          "status": "s1"
+        }
+      ],
+      "events": [
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "agent",
+          "s1",
+          "a1",
+          "working"
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "pendingWork",
+          "/tmp/example/agent.jsonl"
+        ],
+        [
+          "getStatus",
+          "s1",
+          "working"
+        ],
+        [
+          "pendingWork",
+          "/tmp/example/agent.jsonl"
+        ],
+        [
+          "agent",
+          "s1",
+          "a1",
+          "done"
+        ],
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "getStatus",
+          "s1",
+          "done"
+        ],
+        [
+          "getStatus",
+          "s1",
+          "done"
+        ]
+      ]
+    },
+    {
+      "name": "agents that wait, and answers",
+      "steps": [
+        {
+          "start": "s1"
+        },
+        {
+          "hook": "UserPromptSubmit",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "hook": "SubagentStart",
+          "session": "s1",
+          "payload": {
+            "agent_id": "a1"
+          }
+        },
+        {
+          "advance": 5
+        },
+        {
+          "hook": "SubagentStart",
+          "session": "s1",
+          "payload": {
+            "agent_id": "a2"
+          }
+        },
+        {
+          "hook": "PermissionRequest",
+          "session": "s1",
+          "payload": {
+            "agent_id": "a2"
+          }
+        },
+        {
+          "advance": 5
+        },
+        {
+          "hook": "PreToolUse",
+          "session": "s1",
+          "payload": {
+            "agent_id": "a1",
+            "tool_name": "AskUserQuestion"
+          }
+        },
+        {
+          "status": "s1"
+        },
+        {
+          "hook": "Notification",
+          "session": "s1",
+          "payload": {
+            "notification_type": "permission_prompt"
+          }
+        },
+        {
+          "status": "s1"
+        },
+        {
+          "input": "x",
+          "session": "s1"
+        },
+        {
+          "input": "\u001b",
+          "session": "s1"
+        },
+        {
+          "agent": [
+            "s1",
+            "a2"
+          ]
+        },
+        {
+          "input": "\r",
+          "session": "s1"
+        },
+        {
+          "agent": [
+            "s1",
+            "a1"
+          ]
+        },
+        {
+          "status": "s1"
+        },
+        {
+          "hook": "Notification",
+          "session": "s1",
+          "payload": {
+            "agent_id": "a1",
+            "message": "idle"
+          }
+        },
+        {
+          "hook": "Notification",
+          "session": "s1",
+          "payload": {
+            "agent_id": "a1",
+            "notification_type": "permission_prompt"
+          }
+        },
+        {
+          "hook": "Stop",
+          "session": "s1",
+          "payload": {
+            "agent_id": "a1"
+          }
+        },
+        {
+          "hook": "SessionStart",
+          "session": "s1",
+          "payload": {
+            "agent_id": "a1"
+          }
+        },
+        {
+          "hook": "SessionEnd",
+          "session": "s1",
+          "payload": {
+            "agent_id": "a1"
+          }
+        },
+        {
+          "hook": "PermissionRequest",
+          "session": "s1",
+          "payload": {}
+        },
+        {
+          "input": "2",
+          "session": "s1"
+        },
+        {
+          "status": "s1"
+        },
+        {
+          "agent": [
+            "s1",
+            "a1"
+          ]
+        },
+        {
+          "hook": "UserPromptSubmit",
+          "session": "s1",
+          "payload": {
+            "agent_id": "a1"
+          }
+        },
+        {
+          "advance": 30
+        },
+        {
+          "input": "\u0003",
+          "session": "s1"
+        },
+        {
+          "advance": 1200
+        },
+        {
+          "status": "s1"
+        }
+      ],
+      "events": [
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "agent",
+          "s1",
+          "a1",
+          "working"
+        ],
+        [
+          "agent",
+          "s1",
+          "a2",
+          "working"
+        ],
+        [
+          "agent",
+          "s1",
+          "a2",
+          "waiting"
+        ],
+        [
+          "status",
+          "s1",
+          "waiting",
+          true
+        ],
+        [
+          "agent",
+          "s1",
+          "a1",
+          "waiting"
+        ],
+        [
+          "getStatus",
+          "s1",
+          "waiting"
+        ],
+        [
+          "getStatus",
+          "s1",
+          "waiting"
+        ],
+        [
+          "agent",
+          "s1",
+          "a2",
+          "working"
+        ],
+        [
+          "getAgentHook",
+          "s1",
+          "a2",
+          {
+            "status": "working",
+            "at": 1700000000010,
+            "since": 1700000000010
+          }
+        ],
+        [
+          "agent",
+          "s1",
+          "a1",
+          "working"
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "getAgentHook",
+          "s1",
+          "a1",
+          {
+            "status": "working",
+            "at": 1700000000010,
+            "since": 1700000000010
+          }
+        ],
+        [
+          "getStatus",
+          "s1",
+          "working"
+        ],
+        [
+          "agent",
+          "s1",
+          "a1",
+          "waiting"
+        ],
+        [
+          "status",
+          "s1",
+          "waiting",
+          true
+        ],
+        [
+          "getStatus",
+          "s1",
+          "waiting"
+        ],
+        [
+          "getAgentHook",
+          "s1",
+          "a1",
+          {
+            "status": "waiting",
+            "at": 1700000000010,
+            "since": 1700000000010
+          }
+        ],
+        [
+          "agent",
+          "s1",
+          "a1",
+          "working"
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "getStatus",
+          "s1",
+          "working"
+        ]
+      ]
+    },
+    {
+      "name": "agents waiting at the same moment",
+      "steps": [
+        {
+          "start": "s1"
+        },
+        {
+          "hook": "PermissionRequest",
+          "session": "s1",
+          "payload": {
+            "agent_id": "b"
+          }
+        },
+        {
+          "hook": "PermissionRequest",
+          "session": "s1",
+          "payload": {
+            "agent_id": "a"
+          }
+        },
+        {
+          "input": "\r",
+          "session": "s1"
+        },
+        {
+          "agent": [
+            "s1",
+            "b"
+          ]
+        },
+        {
+          "agent": [
+            "s1",
+            "a"
+          ]
+        },
+        {
+          "hook": "PermissionRequest",
+          "session": "s1",
+          "payload": {
+            "agent_id": "a"
+          }
+        },
+        {
+          "advance": 7
+        },
+        {
+          "hook": "PermissionRequest",
+          "session": "s1",
+          "payload": {
+            "agent_id": "a"
+          }
+        },
+        {
+          "agent": [
+            "s1",
+            "a"
+          ]
+        }
+      ],
+      "events": [
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "agent",
+          "s1",
+          "b",
+          "waiting"
+        ],
+        [
+          "status",
+          "s1",
+          "waiting",
+          true
+        ],
+        [
+          "agent",
+          "s1",
+          "a",
+          "waiting"
+        ],
+        [
+          "agent",
+          "s1",
+          "b",
+          "working"
+        ],
+        [
+          "getAgentHook",
+          "s1",
+          "b",
+          {
+            "status": "working",
+            "at": 1700000000000,
+            "since": 1700000000000
+          }
+        ],
+        [
+          "getAgentHook",
+          "s1",
+          "a",
+          {
+            "status": "waiting",
+            "at": 1700000000000,
+            "since": 1700000000000
+          }
+        ],
+        [
+          "getAgentHook",
+          "s1",
+          "a",
+          {
+            "status": "waiting",
+            "at": 1700000000007,
+            "since": 1700000000000
+          }
+        ]
+      ]
+    },
+    {
+      "name": "settling and holding agents",
+      "steps": [
+        {
+          "start": "s1"
+        },
+        {
+          "settle": [
+            "s1",
+            "a1"
+          ]
+        },
+        {
+          "hold": [
+            "s1",
+            "a1"
+          ]
+        },
+        {
+          "hook": "SubagentStart",
+          "session": "s1",
+          "payload": {
+            "agent_id": "a1"
+          }
+        },
+        {
+          "advance": 3
+        },
+        {
+          "hold": [
+            "s1",
+            "a1"
+          ]
+        },
+        {
+          "settle": [
+            "s1",
+            "a1"
+          ]
+        },
+        {
+          "agent": [
+            "s1",
+            "a1"
+          ]
+        },
+        {
+          "settle": [
+            "s1",
+            "a1"
+          ]
+        },
+        {
+          "advance": 3
+        },
+        {
+          "hold": [
+            "s1",
+            "a1"
+          ]
+        },
+        {
+          "agent": [
+            "s1",
+            "a1"
+          ]
+        },
+        {
+          "status": "s1"
+        },
+        {
+          "exit": "s1"
+        },
+        {
+          "agent": [
+            "s1",
+            "a1"
+          ]
+        },
+        {
+          "hold": [
+            "s1",
+            "a1"
+          ]
+        }
+      ],
+      "events": [
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "agent",
+          "s1",
+          "a1",
+          "working"
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "agent",
+          "s1",
+          "a1",
+          "done"
+        ],
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "getAgentHook",
+          "s1",
+          "a1",
+          {
+            "status": "done",
+            "at": 1700000000003,
+            "since": 1700000000003
+          }
+        ],
+        [
+          "agent",
+          "s1",
+          "a1",
+          "working"
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "getAgentHook",
+          "s1",
+          "a1",
+          {
+            "status": "working",
+            "at": 1700000000006,
+            "since": 1700000000006
+          }
+        ],
+        [
+          "getStatus",
+          "s1",
+          "working"
+        ],
+        [
+          "status",
+          "s1",
+          "done",
+          false
+        ],
+        [
+          "getAgentHook",
+          "s1",
+          "a1",
+          null
+        ]
+      ]
+    },
+    {
+      "name": "sessions the app is not running",
+      "steps": [
+        {
+          "hook": "UserPromptSubmit",
+          "session": "ghost",
+          "payload": {}
+        },
+        {
+          "hook": "PermissionRequest",
+          "session": "ghost",
+          "payload": {}
+        },
+        {
+          "status": "ghost"
+        },
+        {
+          "start": "ghost"
+        },
+        {
+          "status": "ghost"
+        },
+        {
+          "hook": "SubagentStart",
+          "session": "other",
+          "payload": {
+            "agent_id": "a1"
+          }
+        },
+        {
+          "input": "\r",
+          "session": "other"
+        },
+        {
+          "status": "other"
+        }
+      ],
+      "events": [
+        [
+          "status",
+          "ghost",
+          "done",
+          false
+        ],
+        [
+          "getStatus",
+          "ghost",
+          "done"
+        ],
+        [
+          "status",
+          "ghost",
+          "done",
+          true
+        ],
+        [
+          "getStatus",
+          "ghost",
+          "done"
+        ],
+        [
+          "agent",
+          "other",
+          "a1",
+          "working"
+        ],
+        [
+          "status",
+          "other",
+          "done",
+          false
+        ],
+        [
+          "getStatus",
+          "other",
+          "done"
+        ]
+      ]
+    },
+    {
+      "name": "replayed history after a relaunch",
+      "steps": [
+        {
+          "start": "s1",
+          "initial": "working"
+        },
+        {
+          "hook": "UserPromptSubmit",
+          "session": "s1",
+          "payload": {},
+          "at": 1699999940000
+        },
+        {
+          "hook": "PreToolUse",
+          "session": "s1",
+          "payload": {
+            "tool_name": "Bash"
+          },
+          "at": 1699999950000
+        },
+        {
+          "input": "\u001b",
+          "session": "s1",
+          "at": 1699999960000
+        },
+        {
+          "hook": "PostToolUse",
+          "session": "s1",
+          "payload": {},
+          "at": 1699999961000
+        },
+        {
+          "hook": "SubagentStart",
+          "session": "s1",
+          "payload": {
+            "agent_id": "a1"
+          },
+          "at": 1699999970000
+        },
+        {
+          "hook": "PermissionRequest",
+          "session": "s1",
+          "payload": {
+            "agent_id": "a1"
+          },
+          "at": 1699999980000
+        },
+        {
+          "input": "\r",
+          "session": "s1",
+          "at": 1699999990000
+        },
+        {
+          "agent": [
+            "s1",
+            "a1"
+          ]
+        },
+        {
+          "hook": "StatusLine",
+          "session": "s1",
+          "payload": {
+            "model": {
+              "display_name": "Model A"
+            },
+            "context_window": {
+              "current_usage": {
+                "input_tokens": 1000,
+                "cache_creation_input_tokens": 500,
+                "cache_read_input_tokens": 1500
+              },
+              "context_window_size": 200000
+            },
+            "cost": {
+              "total_cost_usd": 0.1234,
+              "total_duration_ms": 5000
+            }
+          },
+          "at": 1699999995000
+        },
+        {
+          "advance": 1200
+        },
+        {
+          "status": "s1"
+        },
+        {
+          "start": "s2",
+          "initial": "done"
+        },
+        {
+          "hook": "UserPromptSubmit",
+          "session": "s2",
+          "payload": {},
+          "at": 1699999991000
+        },
+        {
+          "input": "\u0003",
+          "session": "s2",
+          "at": 1699999992000
+        },
+        {
+          "status": "s2"
+        },
+        {
+          "advance": 1199
+        },
+        {
+          "status": "s2"
+        },
+        {
+          "advance": 1
+        },
+        {
+          "status": "s2"
+        }
+      ],
+      "events": [
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "agent",
+          "s1",
+          "a1",
+          "working"
+        ],
+        [
+          "agent",
+          "s1",
+          "a1",
+          "waiting"
+        ],
+        [
+          "status",
+          "s1",
+          "waiting",
+          true
+        ],
+        [
+          "agent",
+          "s1",
+          "a1",
+          "working"
+        ],
+        [
+          "status",
+          "s1",
+          "working",
+          true
+        ],
+        [
+          "getAgentHook",
+          "s1",
+          "a1",
+          {
+            "status": "working",
+            "at": 1699999990000,
+            "since": 1699999990000
+          }
+        ],
+        [
+          "usage",
+          "s1",
+          {
+            "model": "Model A",
+            "contextPercent": 1.5,
+            "contextTokens": 3000,
+            "contextSize": 200000,
+            "costUsd": 0.1234,
+            "durationMs": 5000,
+            "at": 1699999995000
+          }
+        ],
+        [
+          "getStatus",
+          "s1",
+          "working"
+        ],
+        [
+          "status",
+          "s2",
+          "done",
+          true
+        ],
+        [
+          "status",
+          "s2",
+          "working",
+          true
+        ],
+        [
+          "getStatus",
+          "s2",
+          "working"
+        ],
+        [
+          "getStatus",
+          "s2",
+          "working"
+        ],
+        [
+          "status",
+          "s2",
+          "done",
+          true
+        ],
+        [
+          "getStatus",
+          "s2",
+          "done"
+        ]
+      ]
+    },
+    {
+      "name": "usage from the status line",
+      "steps": [
+        {
+          "start": "s1"
+        },
+        {
+          "hook": "StatusLine",
+          "session": "s1",
+          "payload": {
+            "model": {
+              "display_name": "Model A"
+            },
+            "context_window": {
+              "current_usage": {
+                "input_tokens": 1000,
+                "cache_creation_input_tokens": 500,
+                "cache_read_input_tokens": 1500
+              },
+              "context_window_size": 200000
+            },
+            "cost": {
+              "total_cost_usd": 0.1234,
+              "total_duration_ms": 5000
+            }
+          },
+          "at": 1000
+        },
+        {
+          "hook": "StatusLine",
+          "session": "s1",
+          "payload": {
+            "model": {
+              "display_name": "Model A"
+            },
+            "context_window": {
+              "current_usage": {
+                "input_tokens": 1000,
+                "cache_creation_input_tokens": 500,
+                "cache_read_input_tokens": 1500
+              },
+              "context_window_size": 200000
+            },
+            "cost": {
+              "total_cost_usd": 0.1234,
+              "total_duration_ms": 9000
+            }
+          },
+          "at": 2000
+        },
+        {
+          "usage": "s1"
+        },
+        {
+          "hook": "StatusLine",
+          "session": "s1",
+          "payload": {
+            "model": {
+              "display_name": "Model A"
+            },
+            "context_window": {
+              "current_usage": {
+                "input_tokens": 1000,
+                "cache_creation_input_tokens": 500,
+                "cache_read_input_tokens": 1500
+              },
+              "context_window_size": 200000
+            },
+            "cost": {
+              "total_cost_usd": 0.1249,
+              "total_duration_ms": 9000
+            }
+          },
+          "at": 3000
+        },
+        {
+          "hook": "StatusLine",
+          "session": "s1",
+          "payload": {
+            "model": {
+              "display_name": "Model A"
+            },
+            "context_window": {
+              "current_usage": {
+                "input_tokens": 1000,
+                "cache_creation_input_tokens": 500,
+                "cache_read_input_tokens": 1500
+              },
+              "context_window_size": 200000
+            },
+            "cost": {
+              "total_cost_usd": 0.125,
+              "total_duration_ms": 9000
+            }
+          },
+          "at": 4000
+        },
+        {
+          "hook": "StatusLine",
+          "session": "s1",
+          "payload": {
+            "model": {
+              "id": "model-b"
+            },
+            "context_window": {
+              "current_usage": {
+                "input_tokens": 1000,
+                "cache_creation_input_tokens": 500,
+                "cache_read_input_tokens": 1500
+              },
+              "context_window_size": 200000
+            },
+            "cost": {
+              "total_cost_usd": 0.1234,
+              "total_duration_ms": 5000
+            }
+          },
+          "at": 5000
+        },
+        {
+          "hook": "StatusLine",
+          "session": "s1",
+          "payload": {
+            "model": {
+              "display_name": "Model A"
+            },
+            "context_window": {
+              "used_percentage": 42,
+              "context_window_size": 200000
+            },
+            "cost": {
+              "total_cost_usd": 0.1234,
+              "total_duration_ms": 5000
+            }
+          },
+          "at": 6000
+        },
+        {
+          "hook": "StatusLine",
+          "session": "s1",
+          "payload": {
+            "model": {
+              "display_name": "Model A"
+            },
+            "context_window": {
+              "used_percentage": 42,
+              "context_window_size": 200000
+            },
+            "cost": {
+              "total_cost_usd": 0.1234,
+              "total_duration_ms": 5000
+            }
+          },
+          "at": 7000
+        },
+        {
+          "advance": 10000
+        },
+        {
+          "exit": "s1"
+        },
+        {
+          "usage": "s1"
+        },
+        {
+          "advance": 5000
+        },
+        {
+          "start": "s1"
+        },
+        {
+          "hook": "StatusLine",
+          "session": "s1",
+          "payload": {
+            "model": {
+              "display_name": "Model A"
+            },
+            "context_window": {
+              "used_percentage": 42,
+              "context_window_size": 200000
+            },
+            "cost": {
+              "total_cost_usd": 0.1234,
+              "total_duration_ms": 5000
+            }
+          }
+        },
+        {
+          "advance": 2500
+        },
+        {
+          "exit": "s1"
+        },
+        {
+          "forget": "s1"
+        },
+        {
+          "usage": "s1"
+        },
+        {
+          "start": "s1"
+        },
+        {
+          "exit": "s1"
+        }
+      ],
+      "events": [
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "usage",
+          "s1",
+          {
+            "model": "Model A",
+            "contextPercent": 1.5,
+            "contextTokens": 3000,
+            "contextSize": 200000,
+            "costUsd": 0.1234,
+            "durationMs": 5000,
+            "at": 1000
+          }
+        ],
+        [
+          "getUsage",
+          "s1",
+          {
+            "model": "Model A",
+            "contextPercent": 1.5,
+            "contextTokens": 3000,
+            "contextSize": 200000,
+            "costUsd": 0.1234,
+            "durationMs": 9000,
+            "at": 2000
+          }
+        ],
+        [
+          "usage",
+          "s1",
+          {
+            "model": "Model A",
+            "contextPercent": 1.5,
+            "contextTokens": 3000,
+            "contextSize": 200000,
+            "costUsd": 0.125,
+            "durationMs": 9000,
+            "at": 4000
+          }
+        ],
+        [
+          "usage",
+          "s1",
+          {
+            "model": "model-b",
+            "contextPercent": 1.5,
+            "contextTokens": 3000,
+            "contextSize": 200000,
+            "costUsd": 0.1234,
+            "durationMs": 5000,
+            "at": 5000
+          }
+        ],
+        [
+          "usage",
+          "s1",
+          {
+            "model": "Model A",
+            "contextPercent": 42,
+            "contextSize": 200000,
+            "costUsd": 0.1234,
+            "durationMs": 5000,
+            "at": 6000
+          }
+        ],
+        [
+          "status",
+          "s1",
+          "done",
+          false
+        ],
+        [
+          "usage",
+          "s1",
+          {
+            "model": "Model A",
+            "contextPercent": 42,
+            "contextSize": 200000,
+            "costUsd": 0.1234,
+            "durationMs": 1700000008000,
+            "at": 1700000010000
+          }
+        ],
+        [
+          "getUsage",
+          "s1",
+          {
+            "model": "Model A",
+            "contextPercent": 42,
+            "contextSize": 200000,
+            "costUsd": 0.1234,
+            "durationMs": 1700000008000,
+            "at": 1700000010000
+          }
+        ],
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "usage",
+          "s1",
+          {
+            "model": "Model A",
+            "contextPercent": 42,
+            "contextSize": 200000,
+            "costUsd": 0.1234,
+            "durationMs": 1700000008000,
+            "at": 1700000015000
+          }
+        ],
+        [
+          "usage",
+          "s1",
+          {
+            "model": "Model A",
+            "contextPercent": 42,
+            "contextSize": 200000,
+            "costUsd": 0.1234,
+            "durationMs": 5000,
+            "at": 1700000015000
+          }
+        ],
+        [
+          "status",
+          "s1",
+          "done",
+          false
+        ],
+        [
+          "usage",
+          "s1",
+          {
+            "model": "Model A",
+            "contextPercent": 42,
+            "contextSize": 200000,
+            "costUsd": 0.1234,
+            "durationMs": 7500,
+            "at": 1700000017500
+          }
+        ],
+        [
+          "getUsage",
+          "s1",
+          null
+        ],
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "status",
+          "s1",
+          "done",
+          false
+        ]
+      ]
+    },
+    {
+      "name": "usage without a duration",
+      "steps": [
+        {
+          "start": "s1"
+        },
+        {
+          "hook": "StatusLine",
+          "session": "s1",
+          "payload": {
+            "model": {
+              "display_name": "Model A"
+            }
+          }
+        },
+        {
+          "advance": 1000
+        },
+        {
+          "exit": "s1"
+        },
+        {
+          "start": "s1"
+        },
+        {
+          "hook": "StatusLine",
+          "session": "s1",
+          "payload": {
+            "model": {
+              "display_name": "Model A"
+            }
+          }
+        },
+        {
+          "hook": "StatusLine",
+          "session": "s1",
+          "payload": null
+        },
+        {
+          "hook": "StatusLine",
+          "session": "s1",
+          "payload": null
+        }
+      ],
+      "events": [
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "usage",
+          "s1",
+          {
+            "model": "Model A",
+            "at": 1700000000000
+          }
+        ],
+        [
+          "status",
+          "s1",
+          "done",
+          false
+        ],
+        [
+          "usage",
+          "s1",
+          {
+            "model": "Model A",
+            "at": 1700000001000
+          }
+        ],
+        [
+          "status",
+          "s1",
+          "done",
+          true
+        ],
+        [
+          "usage",
+          "s1",
+          {
+            "model": "Model A",
+            "at": 1700000001000
+          }
+        ],
+        [
+          "usage",
+          "s1",
+          {
+            "model": "Model A",
+            "at": 1700000001000
+          }
+        ],
+        [
+          "usage",
+          "s1",
+          {
+            "at": 1700000001000
+          }
+        ]
+      ]
+    },
+    {
+      "name": "usage for a session the app is not running",
+      "steps": [
+        {
+          "hook": "StatusLine",
+          "session": "ghost",
+          "payload": {
+            "model": {
+              "display_name": "Model A"
+            },
+            "context_window": {
+              "current_usage": {
+                "input_tokens": 1000,
+                "cache_creation_input_tokens": 500,
+                "cache_read_input_tokens": 1500
+              },
+              "context_window_size": 200000
+            },
+            "cost": {
+              "total_cost_usd": 0.1234,
+              "total_duration_ms": 5000
+            }
+          },
+          "at": 1000
+        },
+        {
+          "usage": "ghost"
+        },
+        {
+          "start": "ghost"
+        },
+        {
+          "exit": "ghost"
+        }
+      ],
+      "events": [
+        [
+          "usage",
+          "ghost",
+          {
+            "model": "Model A",
+            "contextPercent": 1.5,
+            "contextTokens": 3000,
+            "contextSize": 200000,
+            "costUsd": 0.1234,
+            "durationMs": 5000,
+            "at": 1000
+          }
+        ],
+        [
+          "getUsage",
+          "ghost",
+          {
+            "model": "Model A",
+            "contextPercent": 1.5,
+            "contextTokens": 3000,
+            "contextSize": 200000,
+            "costUsd": 0.1234,
+            "durationMs": 5000,
+            "at": 1000
+          }
+        ],
+        [
+          "status",
+          "ghost",
+          "done",
+          true
+        ],
+        [
+          "usage",
+          "ghost",
+          {
+            "model": "Model A",
+            "contextPercent": 1.5,
+            "contextTokens": 3000,
+            "contextSize": 200000,
+            "costUsd": 0.1234,
+            "durationMs": 5000,
+            "at": 1700000000000
+          }
+        ],
+        [
+          "status",
+          "ghost",
+          "done",
+          false
+        ],
+        [
+          "usage",
+          "ghost",
+          {
+            "model": "Model A",
+            "contextPercent": 1.5,
+            "contextTokens": 3000,
+            "contextSize": 200000,
+            "costUsd": 0.1234,
+            "durationMs": 5000,
+            "at": 1700000000000
+          }
+        ]
+      ]
+    }
+  ]
+}

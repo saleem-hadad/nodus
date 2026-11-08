@@ -792,6 +792,14 @@ dependencies = [
 [[package]]
 name = "nodus"
 version = "0.9.4"
+dependencies = [
+ "nodus-domain",
+ "nodus-host",
+ "nodus-host-proto",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
 
 [[package]]
 name = "nodus-actions"

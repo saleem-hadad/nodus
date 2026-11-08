@@ -36,6 +36,7 @@ windows-sys = { workspace = true, features = [
 
 [dev-dependencies]
 tempfile.workspace = true
+tokio = { workspace = true, features = ["net", "test-util"] }
 
 [lints]
 workspace = true

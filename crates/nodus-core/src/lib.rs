@@ -3,8 +3,9 @@
 //! app sends on its `ev:*` channels. The UI talks to the rest of the app only
 //! through this, and a headless Nodus can serve the same API.
 //!
-//! Ports `src/main/ipc.ts`, `src/shared/api.ts` and `src/preload/index.ts`,
-//! and when to notify from `src/main/notify.ts`.
+//! Ports `src/main/ipc.ts`, `src/shared/api.ts`, `src/preload/index.ts`, the
+//! startup and quit order of `src/main/index.ts`, and the glue between the
+//! main process's modules.
 //!
 //! # Shape
 //!
@@ -15,33 +16,76 @@
 //! window.api.settings.update(patch)      nodus.settings().update(patch).await
 //! window.api.projects.add(repoPath?)     nodus.projects().add(repo_path).await
 //! window.api.groups.create(name)         nodus.groups().create(name).await
+//! window.api.board.load(projectId)       nodus.board().load(project_id).await
+//! window.api.sessions.write(id, data)    nodus.sessions().write(id, data)
+//! window.api.views.call(p, v, m, args)   nodus.views().call(p, v, m, &args).await
+//! window.api.updates.check()             nodus.updates().check().await
 //! window.api.takeOpenRequest()           nodus.app().take_open_request().await
 //! window.api.on.menu(cb)                 nodus.subscribe() → Event::Menu(..)
 //! ```
 //!
 //! A command that fails gives a [`CommandError`] with 0.9.4's message. Events
 //! go to every [`Nodus::subscribe`]r; domains emit them through
-//! [`Nodus::sink`]. What only a window can do (the folder picker) is asked of
-//! the [`Dialogs`] the app was started with.
+//! [`Nodus::sink`]. What only a window can do (the folder picker, the
+//! questions at launch and before an update, bringing the window up,
+//! quitting) is asked of the [`Dialogs`] and the [`AppShell`] the app was
+//! started with.
+//!
+//! # Lifecycle
+//!
+//! As `src/main/index.ts` runs it (PLAT-010, PLAT-032):
+//!
+//! 1. [`Nodus::start`]: state.json, settings applied, the login shell read in
+//!    the background, every domain set up, the updater started.
+//! 2. [`Nodus::launch`]`.await`: the sessions a running session host has are
+//!    adopted, then notifications armed. The window opens after this.
+//! 3. [`Nodus::shutdown`] on every normal quit; [`MenuApi::quit_and_stop_sessions`]
+//!    stops the sessions first.
 
 mod app;
+mod board;
 mod error;
 mod groups;
+mod menu;
 mod nodus;
+mod notifications;
 mod projects;
 mod realpath;
+mod sessions;
 mod settings;
+mod shell;
+mod updates;
+mod views;
+mod wiring;
 
 pub use app::AppApi;
+pub use board::BoardApi;
 pub use error::{CommandError, CommandResult};
 pub use groups::GroupsApi;
-pub use nodus::{Dialogs, EnvSource, Nodus, NodusConfig, PickFolder, SettingsHook};
+pub use menu::MenuApi;
+pub use nodus::{Dialogs, EnvSource, Nodus, NodusConfig, PickFolder, QuitAtOnce, SettingsHook};
+pub use notifications::Notifications;
 pub use projects::ProjectsApi;
+pub use sessions::SessionsApi;
 pub use settings::SettingsApi;
+pub use shell::{AppShell, BoxFuture, Headless, ReplaceChoice};
+pub use updates::{RestartOutcome, StopSessionsQuestion, UpdatesApi};
+pub use views::ViewsApi;
 
+/// The board's stop rules, for the window's Stop (SESS-149…152).
+pub use nodus_board::{StopConfirmation, stop_confirmation, stoppable};
 /// The types the API takes and gives, for callers that don't depend on
 /// `nodus-domain` themselves.
 pub use nodus_domain as domain;
+/// How a session host is started, for a caller that starts its own.
+pub use nodus_sessions::client::{HostLauncher, ProcessLauncher};
+/// What a custom notifier implements, and the ids its clicks come back with.
+pub use nodus_sessions::notify::{Notification, NotificationId, Notifier};
+/// A view's page, as the frame's custom protocol answers it.
+pub use nodus_views::PageResponse;
+
+/// The app's version (`app.getVersion()`).
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg(test)]
 mod tests {
@@ -52,11 +96,9 @@ mod tests {
     pub(crate) fn nodus() -> (tempfile::TempDir, Nodus) {
         let dir = tempfile::tempdir().unwrap();
         let nodus = Nodus::start(NodusConfig {
-            user_data: dir.path().join("userData"),
             env: EnvSource::Given(nodus_platform::Env::from_process()),
-            dialogs: None,
-            runtime: tokio::runtime::Handle::current(),
             home: dir.path().join("home"),
+            ..NodusConfig::new(dir.path().join("userData"), tokio::runtime::Handle::current())
         })
         .unwrap();
         (dir, nodus)

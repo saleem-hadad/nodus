@@ -4,7 +4,6 @@
 use nodus_domain::{AppInfo, Event, MenuCommand, OpenCardRequest};
 
 use crate::Nodus;
-use crate::nodus::lock;
 
 /// `window.api.appInfo`, `takeOpenRequest` and `menuCommand`.
 ///
@@ -29,7 +28,7 @@ impl AppApi<'_> {
     /// `app:take-open-request`: the card a notification clicked while no
     /// window was there asked to open, once; none after that (UI-044).
     pub async fn take_open_request(&self) -> Option<OpenCardRequest> {
-        lock(&self.nodus.inner.open_request).take()
+        self.nodus.take_open_request()
     }
 
     /// `app:menu-command`: sends a menu command to the window, as if its menu

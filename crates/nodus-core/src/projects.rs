@@ -135,12 +135,12 @@ impl ProjectsApi<'_> {
         })
     }
 
-    /// `projects:remove` (PLAT-075): the project and its board leave state.json.
-    /// Its groups, captures and transcripts on disk stay. Its transcript
-    /// watcher stops; stopping its processes (02) and deleting its views'
-    /// folders (04) come with those wirings.
+    /// `projects:remove` (PLAT-075): its processes are stopped, its
+    /// transcripts no longer watched and its views' folders deleted, then the
+    /// project and its board leave state.json. Its groups, captures and
+    /// transcripts on disk stay.
     pub async fn remove(&self, id: &str) {
-        self.nodus.inner.board.watcher().unwatch_project(id);
+        self.nodus.project_removing(id);
         self.nodus.inner.store.update(|state| {
             state.projects.retain(|p| p.id != id);
             state.boards.shift_remove(id);

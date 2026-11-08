@@ -14,18 +14,24 @@ indexmap.workspace = true
 nodus-board.workspace = true
 nodus-domain.workspace = true
 nodus-platform.workspace = true
+nodus-sessions.workspace = true
 nodus-store.workspace = true
+nodus-tools.workspace = true
 nodus-transcripts.workspace = true
+nodus-updater.workspace = true
+nodus-views.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["sync"] }
 tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+nodus-host.workspace = true
+nodus-host-proto.workspace = true
 tempfile.workspace = true
-tokio = { workspace = true, features = ["macros", "rt"] }
+tokio = { workspace = true, features = ["macros", "net", "rt", "rt-multi-thread", "test-util"] }
 
 [lints]
 workspace = true

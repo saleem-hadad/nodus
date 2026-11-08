@@ -439,7 +439,7 @@ impl HostClient {
     /// exited or after 4 s, whichever comes first, and at once for a session
     /// that isn't live (HOST-124). The request goes out when this is called,
     /// whether or not the future is awaited.
-    pub fn kill(&self, session_id: &str) -> impl Future<Output = ()> + Send + 'static {
+    pub fn kill(&self, session_id: &str) -> impl Future<Output = ()> + Send + 'static + use<> {
         let exited = {
             let mut state = self.inner.lock();
             if state.running.contains_key(session_id) {

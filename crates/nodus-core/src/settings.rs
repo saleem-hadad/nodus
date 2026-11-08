@@ -42,8 +42,8 @@ impl SettingsApi<'_> {
             state.settings.clone()
         });
         self.nodus.apply_settings(&settings);
-        // PLAT-065 step 4, a background update check when `autoUpdate` is
-        // turned on, comes with nodus-updater (spec 06).
+        // PLAT-065 step 4, UPD-013: turning automatic updates on checks now.
+        self.nodus.settings_updated(&patch);
         settings
     }
 }

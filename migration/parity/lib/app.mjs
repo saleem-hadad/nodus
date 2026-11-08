@@ -11,7 +11,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { _electron as electron } from 'playwright-core'
 import { NOW, USAGE, projectId, sessionId } from '../seed/world.mjs'
-import { changedBox, readPng } from './pixels.mjs'
+import { changedBox, countChanged, readPng } from './pixels.mjs'
 
 export const WIDTH = 1440
 export const HEIGHT = 900
@@ -259,6 +259,8 @@ export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 // Screenshots
 
 const SHOT = { caret: 'hide', scale: 'device' }
+/** Frames differing in this many pixels or fewer count as the same (GPU noise). */
+const NOISE_PX = 32
 
 /**
  * Holds every infinite animation (status dots breathing and pulsing, spinners)
@@ -306,7 +308,16 @@ export async function capture(page, file, { clip, omitBackground = false, settle
       stable = true
       break
     }
-    changing = changedBox(readPng(last), readPng(next))
+    // The GPU now and then flips a stray pixel or two from one frame to the next; that's settled.
+    const [a, b] = [readPng(last), readPng(next)]
+    if (countChanged(a, b) <= NOISE_PX) {
+      stable = true
+      last = next
+      break
+    }
+    changing = changedBox(a, b)
+    // PARITY_KEEP_UNSTABLE=1 keeps the last two frames of a shot that never settled, to see what moves.
+    if (process.env.PARITY_KEEP_UNSTABLE && i === tries - 1) fs.writeFileSync(file.replace(/\.png$/, '.unstable.png'), last)
     last = next
   }
   fs.mkdirSync(path.dirname(file), { recursive: true })

@@ -29,6 +29,15 @@ export function comparePng(a, b, { threshold = 0.1, diffImage = false } = {}) {
   }
 }
 
+/** How many pixels aren't byte-identical. */
+export function countChanged(A, B) {
+  let n = 0
+  for (let i = 0; i < A.data.length; i += 4) {
+    if (A.data[i] !== B.data[i] || A.data[i + 1] !== B.data[i + 1] || A.data[i + 2] !== B.data[i + 2] || A.data[i + 3] !== B.data[i + 3]) n++
+  }
+  return n
+}
+
 /** The smallest box holding every pixel that isn't byte-identical, in device pixels. */
 export function changedBox(A, B) {
   let x0 = Infinity

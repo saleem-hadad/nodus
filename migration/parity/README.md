@@ -57,7 +57,7 @@ Every scene, in both apps, must be rendered under the same conditions:
 | Terminals | xterm.js with its default WebGL renderer, as users see it: SF Mono 13 px, the theme colours in `src/renderer/src/terminal/registry.ts`. |
 | Fonts | The system UI font (SF Pro on macOS, `-apple-system`) and SF Mono for terminals and code, as the app's CSS asks for. Nothing is bundled, so shots are only comparable when taken on macOS with the same system fonts; regenerate the goldens after a macOS update before comparing. |
 | Pointer | Wherever a scene leaves it; scenes that don't hover anything park it over the title bar's empty middle (720, 26). |
-| Settling | A shot is taken once fonts are loaded, finite animations have ended and infinite ones are paused, and two shots 150 ms apart are byte-identical. The receipt scenes are taken within 1.5 s, as the receipt goes after 2.6 s. |
+| Settling | A shot is taken once fonts are loaded, finite animations have ended and infinite ones are paused, and two shots 150 ms apart are byte-identical, or differ in at most 32 stray pixels (the GPU now and then flips a few anti-aliased pixels under a blurred backdrop between frames). The receipt scenes are taken within 1.5 s, as the receipt goes after 2.6 s. |
 
 ## The world
 

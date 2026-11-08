@@ -161,7 +161,18 @@ async function main() {
     }
     console.log(differ ? `\n${differ} shot(s) differ.` : '\nEvery shot matches.')
   } else {
-    fs.writeFileSync(path.join(dir, 'report.json'), JSON.stringify(results.map(({ file, ...r }) => r), null, 2))
+    // Shots taken before and not retaken keep their entries.
+    const file = path.join(dir, 'report.json')
+    let report = []
+    try {
+      report = JSON.parse(fs.readFileSync(file, 'utf8'))
+    } catch {}
+    const key = (r) => `${r.scene}.${r.theme}`
+    const fresh = new Map(results.map(({ file, ...r }) => [key(r), r]))
+    report = [...report.filter((r) => !fresh.has(key(r))), ...fresh.values()]
+    const order = new Map(SCENES.map((s, i) => [s.id, i]))
+    report.sort((a, b) => (order.get(a.scene) ?? 1e9) - (order.get(b.scene) ?? 1e9) || a.theme.localeCompare(b.theme))
+    fs.writeFileSync(file, JSON.stringify(report, null, 2))
   }
   const failed = results.filter((r) => r.error || !r.stable)
   if (failed.length) {

@@ -201,6 +201,24 @@ pub fn ignore_real_mouse(window: &Window) {
     }
 }
 
+/// Gives the window a content size the screen may be too small for (the
+/// automation driver's 1440×900 shots): a borderless window isn't kept
+/// inside the screen, and its content still fills it all.
+pub fn force_content_size(window: &Window, width: f64, height: f64) {
+    let Some(w) = ns_window(window) else { return };
+    // SAFETY: plain NSWindow frame and style calls on the main thread.
+    unsafe {
+        let frame = w.frame();
+        // NSWindowStyleMaskBorderless | NSWindowStyleMaskResizable.
+        let _: () = msg_send![&*w, setStyleMask: 8usize];
+        let rect = objc2_foundation::NSRect::new(
+            objc2_foundation::NSPoint::new(frame.origin.x, frame.origin.y + frame.size.height - height),
+            objc2_foundation::NSSize::new(width, height),
+        );
+        let _: () = msg_send![&*w, setFrame: rect, display: Bool::YES];
+    }
+}
+
 /// `process.getSystemVersion()`: `major.minor.patch`.
 pub fn os_version() -> String {
     let v = objc2_foundation::NSProcessInfo::processInfo().operatingSystemVersion();

@@ -151,7 +151,9 @@ mod tests {
                 &format!("printf '%s' '{MARK_START}SLOW=yes'; printf '\\000{MARK_END}'; exec sleep 30"),
             );
             let started = Instant::now();
-            let env = run(&shell, Duration::from_millis(500)).await.unwrap();
+            // Long enough for the shell to start and print on a busy machine, well
+            // short of the 10 s the real timeout allows.
+            let env = run(&shell, Duration::from_secs(2)).await.unwrap();
             assert_eq!(env["SLOW"], "yes");
             assert!(started.elapsed() < Duration::from_secs(10));
         }

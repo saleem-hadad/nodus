@@ -155,9 +155,9 @@ Tracks after P1 run in parallel where the dependency column allows.
 | --- | --- | --- | --- |
 | P0 | Feature specs and this plan; UI stack spike (S1) | — | ✅ 2,266 behaviors specced; S1 done |
 | P1 | Workspace, Rust CI job (macOS + Windows), `nodus-domain`, `nodus-store` (round-trips a real state.json), `nodus-platform` env | P0 | ✅ merged (93 tests) |
-| P2 | Session host: `nodus-host-proto`, `nodus-host`, `nodus-sessions` client; wire tests against the Node host both ways | P1 | ☐ |
+| P2 | Session host: `nodus-host-proto`, `nodus-host`, `nodus-sessions` client; wire tests against the Node host both ways | P1 | ✅ merged (host, status) |
 | P3 | Data domains: transcripts, board, git, search, summarize, naming, status machine, agents | P1 | ☐ |
-| P4 | `nodus-core`: every command and event in api.ts, tested headless | P2, P3 | ☐ |
+| P4 | `nodus-core`: every command and event in api.ts, tested headless | P2, P3 | 🟡 skeleton merged (a9d528f); track core running |
 | P5 | UI foundation: app shell, theme tokens (light/dark), title bar, menus, settings, projects grid, project rail | P1, S1 | ☐ |
 | P6 | Board canvas: pan/zoom/select/drag, cards, sections, archive, notes, edges, controls, context menus, shortcuts | P4, P5 | ☐ |
 | P7 | Terminal: element, modal, expanded cards, transcript preview, agent viewer | P2, P5 | ☐ |
@@ -183,6 +183,7 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | views-tools | `rust/views-tools` | nodus-views, nodus-tools, nodus-board notes and ink | ✅ merged: NOTE 16, INK 12, TOOL 40 (004…013/015 by host), VIEW 100; 54 VIEW UI-only to the UI tracks |
 | actions-voice-git | `rust/actions-voice-git` | nodus-actions, nodus-voice (incl. the recorder), nodus-git | 🟡 running |
 | capture | `rust/capture` | nodus-capture backend: double tap, key hook, screen context, guess, submit | 🟡 running |
+| core | `rust/core` | P4: wire every merged domain into nodus-core (sessions, board, views, updates, events, startup/quit), deferred core IDs, debts, headless end-to-end tests | 🟡 running |
 | terminal | `rust/terminal` | nodus-terminal (GPUI-free): alacritty model, xterm key encoder, query answers, widths, registry | 🟡 running |
 
 ### Integration debts
@@ -256,6 +257,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-09: ui-shell's core skeleton cherry-picked to main (a9d528f) so track core (P4) could start; 715 tests.
 - 2026-11-09: views-tools merged (2c4bf9d): nodus-tools MCP server, `McpRelay`, nodus-views (files, page, commands, brains, schedules), notes placement and ink; MCP answers and view pages byte-identical to 0.9.4; 687 tests.
 - 2026-11-09: gpui-fork merged (9ea68bd): vendored gpui-pre 0.3.11 with effect layers. `.backdrop_blur(px).backdrop_saturate(s)`, `.rotate/.scale/.translate/.transform_origin`, `.group_opacity`, `Window::render_to_image()`; the Metal compiler crash was passing `Background` by value into multi-stop gradient code. Docs in `third_party/gpui/PATCHES.md`.
 - 2026-11-09: host merged (f0b6df8): wire protocol, PTYs as node-pty, hook server, MCP relay, `Nodus host`, the app's client; wire-compatible with the 0.9.4 Node host in both directions; 558 tests. Every running agent stopped at a usage limit again; resumed on a new account.

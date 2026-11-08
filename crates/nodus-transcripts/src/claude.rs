@@ -98,7 +98,8 @@ pub(crate) fn failure(parsed: Option<&Value>, finished: &Finished) -> String {
     }
 }
 
-#[cfg(test)]
+// A shell script stands in for `claude`, so these tests run on macOS and Linux.
+#[cfg(all(test, unix))]
 pub(crate) mod stand_in {
     //! A stand-in `claude` for tests: it logs its arguments and prints what
     //! it's told to. The real one is never run.
@@ -108,7 +109,6 @@ pub(crate) mod stand_in {
     /// Writes an executable script that logs its arguments to
     /// `<dir>/argv.<pid>.log` (each ended by NUL), so calls running at once
     /// don't mix, and its working folder to `<dir>/cwd.log`, then runs `body`.
-    #[cfg(unix)]
     pub fn write(dir: &Path, body: &str) -> PathBuf {
         use std::os::unix::fs::PermissionsExt;
         let script = dir.join("claude");

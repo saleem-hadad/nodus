@@ -12,7 +12,10 @@
 
 - [x] nodus-transcripts
 - [x] nodus-board
-- [ ] nodus-sessions::launch
+- [x] nodus-sessions::launch
+
+All three checked with `cargo fmt --all --check`, `cargo clippy --workspace --all-targets` (macOS and
+`x86_64-pc-windows-msvc`, `-D warnings`) and `cargo test --workspace`.
 
 ## Done (implemented and tested)
 
@@ -24,9 +27,32 @@ SESS-149…152, SESS-154 (`Board::on_done`: finish the run, then archive if aske
 SESS-165, SESS-166, SESS-173…175, SESS-196…202, SESS-204. geometry.test.ts and stopSessions.test.ts are ported
 (`geometry.rs`, `stop.rs`).
 
+nodus-sessions::launch: SESS-119, SESS-121…129, SESS-132, SESS-133 (where the brain's arguments go; `brainPrompt`
+is 04's), SESS-136, SESS-137, SESS-139, SESS-144 (`bracketed_paste`, `SEND_RETURN_DELAY`), SESS-145 (`for_send`).
+
+SESS-205 needs no code of its own (a `/clear` session is imported by SESS-073).
+
+**194 of 205 done; 11 deferred.**
+
 ## Deferred
 
-(none yet)
+Each is wiring nodus-core does with another track's module; the pieces from this track are listed.
+
+- SESS-130 One process per session: the host client's `spawnSession` (02, host track).
+- SESS-131 Host first: the host client connects before `launch::command_for` (02, host track).
+- SESS-134 Brain launches: views-tools builds brain nodes and calls `launch::command_for` with
+  `PermissionMode::Auto` and `brainArgs`; the argv is tested here (`tells_a_views_brain_about_its_view_every_time`).
+- SESS-135 Open a live session: host client resize and snapshot (02); `launch::for_open` covers the stopped case.
+- SESS-138 Write: core runs `launch::is_takeover` → `Board::claim_run`, views' `brainInput`, host write.
+- SESS-146 Shared with capture: core hands capture (07) the same `Board::create_session`, `send_to_session`,
+  `session_title`.
+- SESS-147 Resize, SESS-148 Kill: the host client (02); `BoardSessions::kill` is the contract.
+- SESS-153 Stop waits: core kills `stoppable` cards in parallel and waits for all.
+- SESS-164 Agents list: the status track's `readAgents` (02).
+- SESS-203 Events without a window: core / UI drop events with no window.
+
+Partly core: SESS-071 step 1 (capture's `boardOpened` before `Board::load`) and SESS-154's order around
+`Board::on_done` (emit `Status`, notifications, `on_done`, then `brainStatus`).
 
 ## What nodus-core implements
 

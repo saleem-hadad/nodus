@@ -7,11 +7,11 @@ mod common;
 
 use common::*;
 use nodus_board::BoardError;
+use nodus_domain::ProjectAction;
 use nodus_domain::{
     ActionRunResult, CreateSessionOptions, Event, InkColor, InkKind, InkStroke, NodePatch, Rect, SessionKind,
     SessionStatus, SummarizePhase, SummarizeProgress, Viewport,
 };
-use nodus_domain::ProjectAction;
 use serde_json::{Map, json};
 
 fn action(id: &str, name: &str) -> ProjectAction {

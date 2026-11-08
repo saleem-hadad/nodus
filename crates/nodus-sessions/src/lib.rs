@@ -6,11 +6,13 @@
 //! drive (working, waiting, done); the subagents a session started; and the
 //! model, context and cost its status line reports.
 //!
-//! Ports `src/main/pty.ts`, `src/main/hooks.ts` and `src/main/agents.ts`.
+//! Ports `src/main/pty.ts`, `src/main/hooks.ts`, `src/main/agents.ts` and the
+//! command lines `src/main/ipc.ts` and `pty.ts` start sessions with.
 
 pub mod agents;
 pub mod hooks;
 mod jsvalue;
+pub mod launch;
 pub mod notify;
 pub mod running;
 pub mod usage;

@@ -36,9 +36,9 @@ Everything here is UI-free and lands in `nodus-sessions`, `nodus-transcripts` an
 - **SESS-002 · Real repo path** — `realRepoPath(p)` resolves `p` with Node `fs.realpathSync` semantics (symlinks resolved component by component; the case of non-symlink components is kept as given; no `\\?\` prefix on Windows). If resolving fails, `p` is returned unchanged.
 - **SESS-003 · Path encoding** — `encodeRepoPath(p)` = `realRepoPath(p)` with every UTF-16 code unit that is not `[a-zA-Z0-9]` replaced by `-` (regex `/[^a-zA-Z0-9]/g`). A character outside the BMP (two UTF-16 units) becomes `--`; a non-ASCII BMP character becomes one `-`. Example: `/work/my.repo` → `-work-my-repo`.
 - **SESS-004 · Transcript path** — `transcriptPath(repoPath, id)` = `<transcript folder>/<id>.jsonl`.
-- **SESS-005 · Session files** — Listing a project's sessions reads the transcript folder (non-recursive) and keeps only names matching `/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jsonl$/i`; the session id is the name without `.jsonl`, case preserved. Order is the OS directory order (unsorted). An unreadable or missing folder yields an empty list.
+- **SESS-005 · Session files** — Listing a project's sessions reads the transcript folder (non-recursive) and keeps only names matching `/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jsonl$/i`; the session id is the name without `.jsonl`, case preserved. Order: sorted byte by byte on macOS and Linux (Node's `readdir` goes through libuv's `scandir`, which sorts names with `strcmp`), and in NTFS order on Windows. An unreadable or missing folder yields an empty list.
 - **SESS-006 · Subagents folder** — `subagentsDir(repoPath, id)` = `<transcript folder>/<id>/subagents`.
-- **SESS-007 · Agent files** — Listing a session's agents reads its subagents folder and keeps names matching `/^agent-([\w-]+)\.jsonl$/` (`\w` = ASCII `[A-Za-z0-9_]`), giving `{ agentId, file, metaFile: "<dir>/agent-<agentId>.meta.json" }` in OS directory order. Unreadable or missing folder → empty list.
+- **SESS-007 · Agent files** — Listing a session's agents reads its subagents folder and keeps names matching `/^agent-([\w-]+)\.jsonl$/` (`\w` = ASCII `[A-Za-z0-9_]`), giving `{ agentId, file, metaFile: "<dir>/agent-<agentId>.meta.json" }` in directory order (sorted byte by byte on macOS and Linux (Node's `readdir` goes through libuv's `scandir`, which sorts names with `strcmp`), and in NTFS order on Windows). Unreadable or missing folder → empty list.
 - **SESS-008 · Agent id shape** — `AGENT_ID` = `/^[\w-]+$/` with ASCII `\w`; it gates any agent or session id that ends up in a path for the agent viewer.
 - **SESS-009 · Agents signature** — For the watcher, a session's subagents fingerprint is `` `${entryCount}:${totalBytes}:${latestMtimeMs}` `` over every entry of its subagents folder (any file, `.meta.json` included). Entries whose stat fails still count in `entryCount` but add no bytes/mtime. An unreadable folder gives `''`.
 
@@ -99,7 +99,7 @@ Everything here is UI-free and lands in `nodus-sessions`, `nodus-transcripts` an
 - **SESS-047 · Time fallback** — `createdAt`/`updatedAt` fall back to the file's mtime in ms (which may be fractional) when no line had a timestamp. `transcriptPath` is the file.
 - **SESS-048 · Eligible** — A session is eligible for import when its sidechain flag is not `true`, it has at least one prompt, and `hasAssistant`.
 - **SESS-049 · Has content** — `hasContent` = at least one prompt, or a custom title, or an AI title. Cards only carry `meta` when `hasContent`.
-- **SESS-050 · Scan** — `scanRepo(repoPath)` returns, in directory order, every session file whose metadata could be read, keyed by session id, with `{ meta, eligible, hasContent, lastPromptAt }`.
+- **SESS-050 · Scan** — `scanRepo(repoPath)` returns, in directory order (see SESS-005), every session file whose metadata could be read, keyed by session id, with `{ meta, eligible, hasContent, lastPromptAt }`.
 - **SESS-051 · Meta signature** — `metaSignature(meta)` = `[title, messageCount, updatedAt, gitBranch, lastAssistantText?.length].join('|')` (missing values become empty strings).
 - **SESS-052 · Empty session** — `isEmptySession(meta)` is true when there is no meta, or it has neither `firstPrompt` nor `lastAssistantText` (nothing typed, slash commands aside, and no reply).
 
@@ -772,208 +772,208 @@ Cross-domain dependencies: 01 (store `getBoard`/`getProject`/`save`, env `spawnE
 
 ## Parity checklist
 
-- [ ] SESS-001 Transcript folder
-- [ ] SESS-002 Real repo path
-- [ ] SESS-003 Path encoding
-- [ ] SESS-004 Transcript path
-- [ ] SESS-005 Session files
-- [ ] SESS-006 Subagents folder
-- [ ] SESS-007 Agent files
-- [ ] SESS-008 Agent id shape
-- [ ] SESS-009 Agents signature
-- [ ] SESS-010 Byte range read
-- [ ] SESS-011 Skip partial first line
-- [ ] SESS-012 Complete lines only
-- [ ] SESS-013 Line parsing
-- [ ] SESS-014 Meta lines
-- [ ] SESS-015 Origin
-- [ ] SESS-016 Content shapes
-- [ ] SESS-017 Empty
-- [ ] SESS-018 Slash commands
-- [ ] SESS-019 Noise prefixes
-- [ ] SESS-020 Reminders stripped
-- [ ] SESS-021 Prompt summary
-- [ ] SESS-022 Prompt full
-- [ ] SESS-023 Truncate
-- [ ] SESS-024 String reply
-- [ ] SESS-025 Block reply
-- [ ] SESS-026 Tool display name
-- [ ] SESS-027 Tool call summary
-- [ ] SESS-028 Timestamps
-- [ ] SESS-029 Created/updated
-- [ ] SESS-030 Branch
-- [ ] SESS-031 Custom title
-- [ ] SESS-032 AI title
-- [ ] SESS-033 Legacy summary title
-- [ ] SESS-034 Sidechain flag
-- [ ] SESS-035 Prompts
-- [ ] SESS-036 Replies
-- [ ] SESS-037 Sidechain lines counted
-- [ ] SESS-038 Other records
-- [ ] SESS-039 Cache hit
-- [ ] SESS-040 Append-only growth
-- [ ] SESS-041 Fresh parse
-- [ ] SESS-042 Large files
-- [ ] SESS-043 Unreadable file
-- [ ] SESS-044 Title precedence
-- [ ] SESS-045 Preview fields
-- [ ] SESS-046 Message count
-- [ ] SESS-047 Time fallback
-- [ ] SESS-048 Eligible
-- [ ] SESS-049 Has content
-- [ ] SESS-050 Scan
-- [ ] SESS-051 Meta signature
-- [ ] SESS-052 Empty session
-- [ ] SESS-053 Missing file
-- [ ] SESS-054 Tail only
-- [ ] SESS-055 Sidechain
-- [ ] SESS-056 User messages
-- [ ] SESS-057 Task notifications
-- [ ] SESS-058 Assistant turns
-- [ ] SESS-059 Agent steps
-- [ ] SESS-060 Tools
-- [ ] SESS-061 Timestamps default
-- [ ] SESS-062 Message cap
-- [ ] SESS-063 One watch per project
-- [ ] SESS-064 Baseline
-- [ ] SESS-065 Recursive watch
-- [ ] SESS-066 Throttle
-- [ ] SESS-067 Change test
-- [ ] SESS-068 Folder not there yet
-- [ ] SESS-069 Watch error
-- [ ] SESS-070 Lifetime
-- [ ] SESS-071 Load order
-- [ ] SESS-072 Forget deleted transcripts
-- [ ] SESS-073 What gets imported
-- [ ] SESS-074 Import placement
-- [ ] SESS-075 Archive grows
-- [ ] SESS-076 Section cleanup
-- [ ] SESS-077 Sticker cleanup
-- [ ] SESS-078 Opened time
-- [ ] SESS-079 Cards
-- [ ] SESS-080 Card shape
-- [ ] SESS-081 Snapshot
-- [ ] SESS-082 Archive constants
-- [ ] SESS-083 Columns and slots
-- [ ] SESS-084 Slot of a card
-- [ ] SESS-085 Growing
-- [ ] SESS-086 Archiving outside the board
-- [ ] SESS-087 Empty session test
-- [ ] SESS-088 Dropping
-- [ ] SESS-089 Unsticking notes
-- [ ] SESS-090 Unknown nodes
-- [ ] SESS-091 Empty sessions are dropped
-- [ ] SESS-092 Position
-- [ ] SESS-093 Title
-- [ ] SESS-094 Archived flag
-- [ ] SESS-095 Section
-- [ ] SESS-096 Expanded
-- [ ] SESS-097 Size
-- [ ] SESS-098 Archived cards fold
-- [ ] SESS-099 Save and notify
-- [ ] SESS-100 Save section
-- [ ] SESS-101 Remove section
-- [ ] SESS-102 Name section sources
-- [ ] SESS-103 Save note
-- [ ] SESS-104 Remove notes
-- [ ] SESS-105 Save ink
-- [ ] SESS-106 Archive rect and viewport
-- [ ] SESS-107 Remove a card
-- [ ] SESS-108 Hidden is forever
-- [ ] SESS-109 Naming call
-- [ ] SESS-110 Naming prompt
-- [ ] SESS-111 Clip
-- [ ] SESS-112 Clean name
-- [ ] SESS-113 Naming result
-- [ ] SESS-114 Create start
-- [ ] SESS-115 Action lookup
-- [ ] SESS-116 New node
-- [ ] SESS-117 Action title
-- [ ] SESS-118 Node before process
-- [ ] SESS-119 Create launch options
-- [ ] SESS-120 Create result
-- [ ] SESS-121 Claude argv
-- [ ] SESS-122 Permission mode
-- [ ] SESS-123 Board tools gate
-- [ ] SESS-124 Prompt after `--`
-- [ ] SESS-125 Name only at creation
-- [ ] SESS-126 Claude env
-- [ ] SESS-127 Terminal shell
-- [ ] SESS-128 Process placement
-- [ ] SESS-129 Initial status
+- [x] SESS-001 Transcript folder
+- [x] SESS-002 Real repo path
+- [x] SESS-003 Path encoding
+- [x] SESS-004 Transcript path
+- [x] SESS-005 Session files
+- [x] SESS-006 Subagents folder
+- [x] SESS-007 Agent files
+- [x] SESS-008 Agent id shape
+- [x] SESS-009 Agents signature
+- [x] SESS-010 Byte range read
+- [x] SESS-011 Skip partial first line
+- [x] SESS-012 Complete lines only
+- [x] SESS-013 Line parsing
+- [x] SESS-014 Meta lines
+- [x] SESS-015 Origin
+- [x] SESS-016 Content shapes
+- [x] SESS-017 Empty
+- [x] SESS-018 Slash commands
+- [x] SESS-019 Noise prefixes
+- [x] SESS-020 Reminders stripped
+- [x] SESS-021 Prompt summary
+- [x] SESS-022 Prompt full
+- [x] SESS-023 Truncate
+- [x] SESS-024 String reply
+- [x] SESS-025 Block reply
+- [x] SESS-026 Tool display name
+- [x] SESS-027 Tool call summary
+- [x] SESS-028 Timestamps
+- [x] SESS-029 Created/updated
+- [x] SESS-030 Branch
+- [x] SESS-031 Custom title
+- [x] SESS-032 AI title
+- [x] SESS-033 Legacy summary title
+- [x] SESS-034 Sidechain flag
+- [x] SESS-035 Prompts
+- [x] SESS-036 Replies
+- [x] SESS-037 Sidechain lines counted
+- [x] SESS-038 Other records
+- [x] SESS-039 Cache hit
+- [x] SESS-040 Append-only growth
+- [x] SESS-041 Fresh parse
+- [x] SESS-042 Large files
+- [x] SESS-043 Unreadable file
+- [x] SESS-044 Title precedence
+- [x] SESS-045 Preview fields
+- [x] SESS-046 Message count
+- [x] SESS-047 Time fallback
+- [x] SESS-048 Eligible
+- [x] SESS-049 Has content
+- [x] SESS-050 Scan
+- [x] SESS-051 Meta signature
+- [x] SESS-052 Empty session
+- [x] SESS-053 Missing file
+- [x] SESS-054 Tail only
+- [x] SESS-055 Sidechain
+- [x] SESS-056 User messages
+- [x] SESS-057 Task notifications
+- [x] SESS-058 Assistant turns
+- [x] SESS-059 Agent steps
+- [x] SESS-060 Tools
+- [x] SESS-061 Timestamps default
+- [x] SESS-062 Message cap
+- [x] SESS-063 One watch per project
+- [x] SESS-064 Baseline
+- [x] SESS-065 Recursive watch
+- [x] SESS-066 Throttle
+- [x] SESS-067 Change test
+- [x] SESS-068 Folder not there yet
+- [x] SESS-069 Watch error
+- [x] SESS-070 Lifetime
+- [x] SESS-071 Load order
+- [x] SESS-072 Forget deleted transcripts
+- [x] SESS-073 What gets imported
+- [x] SESS-074 Import placement
+- [x] SESS-075 Archive grows
+- [x] SESS-076 Section cleanup
+- [x] SESS-077 Sticker cleanup
+- [x] SESS-078 Opened time
+- [x] SESS-079 Cards
+- [x] SESS-080 Card shape
+- [x] SESS-081 Snapshot
+- [x] SESS-082 Archive constants
+- [x] SESS-083 Columns and slots
+- [x] SESS-084 Slot of a card
+- [x] SESS-085 Growing
+- [x] SESS-086 Archiving outside the board
+- [x] SESS-087 Empty session test
+- [x] SESS-088 Dropping
+- [x] SESS-089 Unsticking notes
+- [x] SESS-090 Unknown nodes
+- [x] SESS-091 Empty sessions are dropped
+- [x] SESS-092 Position
+- [x] SESS-093 Title
+- [x] SESS-094 Archived flag
+- [x] SESS-095 Section
+- [x] SESS-096 Expanded
+- [x] SESS-097 Size
+- [x] SESS-098 Archived cards fold
+- [x] SESS-099 Save and notify
+- [x] SESS-100 Save section
+- [x] SESS-101 Remove section
+- [x] SESS-102 Name section sources
+- [x] SESS-103 Save note
+- [x] SESS-104 Remove notes
+- [x] SESS-105 Save ink
+- [x] SESS-106 Archive rect and viewport
+- [x] SESS-107 Remove a card
+- [x] SESS-108 Hidden is forever
+- [x] SESS-109 Naming call
+- [x] SESS-110 Naming prompt
+- [x] SESS-111 Clip
+- [x] SESS-112 Clean name
+- [x] SESS-113 Naming result
+- [x] SESS-114 Create start
+- [x] SESS-115 Action lookup
+- [x] SESS-116 New node
+- [x] SESS-117 Action title
+- [x] SESS-118 Node before process
+- [x] SESS-119 Create launch options
+- [x] SESS-120 Create result
+- [x] SESS-121 Claude argv
+- [x] SESS-122 Permission mode
+- [x] SESS-123 Board tools gate
+- [x] SESS-124 Prompt after `--`
+- [x] SESS-125 Name only at creation
+- [x] SESS-126 Claude env
+- [x] SESS-127 Terminal shell
+- [x] SESS-128 Process placement
+- [x] SESS-129 Initial status
 - [ ] SESS-130 One process per session
 - [ ] SESS-131 Host first
-- [ ] SESS-132 Action run args
-- [ ] SESS-133 Brain args
+- [x] SESS-132 Action run args
+- [x] SESS-133 Brain args
 - [ ] SESS-134 Brain launches
 - [ ] SESS-135 Open a live session
-- [ ] SESS-136 Open a stopped session
-- [ ] SESS-137 Reopened runs
+- [x] SESS-136 Open a stopped session
+- [x] SESS-137 Reopened runs
 - [ ] SESS-138 Write
-- [ ] SESS-139 Takeover test
-- [ ] SESS-140 Claiming a run
-- [ ] SESS-141 Blank prompt
-- [ ] SESS-142 Must be on the board
-- [ ] SESS-143 Waiting sessions
-- [ ] SESS-144 Live send
-- [ ] SESS-145 Resume to send
+- [x] SESS-139 Takeover test
+- [x] SESS-140 Claiming a run
+- [x] SESS-141 Blank prompt
+- [x] SESS-142 Must be on the board
+- [x] SESS-143 Waiting sessions
+- [x] SESS-144 Live send
+- [x] SESS-145 Resume to send
 - [ ] SESS-146 Shared with capture
 - [ ] SESS-147 Resize
 - [ ] SESS-148 Kill
-- [ ] SESS-149 Stoppable
-- [ ] SESS-150 Stop without asking
-- [ ] SESS-151 Stop confirmation title
-- [ ] SESS-152 Stop confirmation message
+- [x] SESS-149 Stoppable
+- [x] SESS-150 Stop without asking
+- [x] SESS-151 Stop confirmation title
+- [x] SESS-152 Stop confirmation message
 - [ ] SESS-153 Stop waits
-- [ ] SESS-154 On done
-- [ ] SESS-155 Finishing a run
-- [ ] SESS-156 Stale runs
-- [ ] SESS-157 Archive when done
-- [ ] SESS-158 Session title
-- [ ] SESS-159 Session list
-- [ ] SESS-160 Project stats
-- [ ] SESS-161 Has transcript
-- [ ] SESS-162 Session transcript
-- [ ] SESS-163 Agent transcript
+- [x] SESS-154 On done
+- [x] SESS-155 Finishing a run
+- [x] SESS-156 Stale runs
+- [x] SESS-157 Archive when done
+- [x] SESS-158 Session title
+- [x] SESS-159 Session list
+- [x] SESS-160 Project stats
+- [x] SESS-161 Has transcript
+- [x] SESS-162 Session transcript
+- [x] SESS-163 Agent transcript
 - [ ] SESS-164 Agents list
-- [ ] SESS-165 No conversation
-- [ ] SESS-166 Summary titles
-- [ ] SESS-167 Focus
-- [ ] SESS-168 Queued first
-- [ ] SESS-169 Three at a time
-- [ ] SESS-170 Fork command
-- [ ] SESS-171 Fork timeout
-- [ ] SESS-172 Fork result
-- [ ] SESS-173 Results order
-- [ ] SESS-174 No claude
-- [ ] SESS-175 Search targets
-- [ ] SESS-176 Query terms
-- [ ] SESS-177 Term pattern
-- [ ] SESS-178 Match ranges
-- [ ] SESS-179 Empty query
-- [ ] SESS-180 Phrase
-- [ ] SESS-181 Repo roots
-- [ ] SESS-182 Files searched
-- [ ] SESS-183 Yield
-- [ ] SESS-184 Searchable documents
-- [ ] SESS-185 Tool documents
-- [ ] SESS-186 Tool output left out
-- [ ] SESS-187 Search index cache
-- [ ] SESS-188 Title coverage
-- [ ] SESS-189 Document score
-- [ ] SESS-190 Every word required
-- [ ] SESS-191 Hit statistics
-- [ ] SESS-192 Snippets
-- [ ] SESS-193 Snippet window
-- [ ] SESS-194 Session ranking
-- [ ] SESS-195 Title-only hit
-- [ ] SESS-196 Size constants
-- [ ] SESS-197 Card size
-- [ ] SESS-198 Note and view sizes
-- [ ] SESS-199 Dock rects
-- [ ] SESS-200 Intersects
-- [ ] SESS-201 Free spot
-- [ ] SESS-202 Spot beside
+- [x] SESS-165 No conversation
+- [x] SESS-166 Summary titles
+- [x] SESS-167 Focus
+- [x] SESS-168 Queued first
+- [x] SESS-169 Three at a time
+- [x] SESS-170 Fork command
+- [x] SESS-171 Fork timeout
+- [x] SESS-172 Fork result
+- [x] SESS-173 Results order
+- [x] SESS-174 No claude
+- [x] SESS-175 Search targets
+- [x] SESS-176 Query terms
+- [x] SESS-177 Term pattern
+- [x] SESS-178 Match ranges
+- [x] SESS-179 Empty query
+- [x] SESS-180 Phrase
+- [x] SESS-181 Repo roots
+- [x] SESS-182 Files searched
+- [x] SESS-183 Yield
+- [x] SESS-184 Searchable documents
+- [x] SESS-185 Tool documents
+- [x] SESS-186 Tool output left out
+- [x] SESS-187 Search index cache
+- [x] SESS-188 Title coverage
+- [x] SESS-189 Document score
+- [x] SESS-190 Every word required
+- [x] SESS-191 Hit statistics
+- [x] SESS-192 Snippets
+- [x] SESS-193 Snippet window
+- [x] SESS-194 Session ranking
+- [x] SESS-195 Title-only hit
+- [x] SESS-196 Size constants
+- [x] SESS-197 Card size
+- [x] SESS-198 Note and view sizes
+- [x] SESS-199 Dock rects
+- [x] SESS-200 Intersects
+- [x] SESS-201 Free spot
+- [x] SESS-202 Spot beside
 - [ ] SESS-203 Events without a window
-- [ ] SESS-204 Unknown project ids
-- [ ] SESS-205 Known limitations kept
+- [x] SESS-204 Unknown project ids
+- [x] SESS-205 Known limitations kept

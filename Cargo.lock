@@ -3926,7 +3926,7 @@ dependencies = [
  "nodus-store",
  "serde_json",
  "tempfile",
- "thiserror",
+ "thiserror 2.0.21",
  "tokio",
  "uuid",
 ]
@@ -4207,6 +4207,18 @@ dependencies = [
 [[package]]
 name = "nodus-voice"
 version = "0.9.4"
+dependencies = [
+ "nodus-domain",
+ "nodus-git",
+ "nodus-platform",
+ "nodus-store",
+ "reqwest",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+]
 
 [[package]]
 name = "nohash-hasher"
@@ -5731,6 +5743,7 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "futures-core",
+ "futures-util",
  "http",
  "http-body",
  "http-body-util",
@@ -5740,6 +5753,7 @@ dependencies = [
  "hyper-util",
  "js-sys",
  "log",
+ "mime_guess",
  "native-tls",
  "percent-encoding",
  "pin-project-lite",

@@ -14,21 +14,23 @@ const NOW: f64 = 1_800_000_000_000.0;
 
 /// What the fake handlers were asked, in order.
 #[derive(Debug, Clone, PartialEq)]
-enum Call {
+pub(crate) enum Call {
     Create(String, CreateSessionOptions),
     Send(String, String, String),
     View(String, String, Point),
+    OpenCard(OpenCardRequest),
+    OpenSettings,
 }
 
 #[derive(Default)]
-struct Handlers {
+pub(crate) struct Handlers {
     calls: Mutex<Vec<Call>>,
-    window: Option<(f64, f64)>,
-    fail: Option<String>,
+    pub window: Option<(f64, f64)>,
+    pub fail: Option<String>,
 }
 
 impl Handlers {
-    fn calls(&self) -> Vec<Call> {
+    pub(crate) fn calls(&self) -> Vec<Call> {
         self.calls.lock().unwrap().clone()
     }
 
@@ -63,20 +65,24 @@ impl CaptureHandlers for Handlers {
         self.answer(Call::View(project_id.into(), description.into(), at), "new-view".into())
     }
 
-    fn open_card(&self, _request: OpenCardRequest) {}
+    fn open_card(&self, request: OpenCardRequest) {
+        self.calls.lock().unwrap().push(Call::OpenCard(request));
+    }
 
-    fn open_settings(&self) {}
+    fn open_settings(&self) {
+        self.calls.lock().unwrap().push(Call::OpenSettings);
+    }
 }
 
 /// A store over a state.json holding `raw`, in its own folder.
-fn store_with(dir: &Path, raw: &Value) -> Store {
+pub(crate) fn store_with(dir: &Path, raw: &Value) -> Store {
     let user_data = dir.join("userdata");
     std::fs::create_dir_all(&user_data).unwrap();
     std::fs::write(user_data.join("state.json"), raw.to_string()).unwrap();
     Store::open(&user_data).unwrap()
 }
 
-fn seeded() -> Value {
+pub(crate) fn seeded() -> Value {
     json!({
         "projects": [project("p", "store", json!({}))],
         "boards": { "p": board(&[

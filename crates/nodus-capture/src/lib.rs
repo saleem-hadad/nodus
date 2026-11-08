@@ -11,10 +11,16 @@ pub mod double_tap;
 pub mod guess;
 pub mod hook;
 pub mod screen;
+pub mod service;
 pub mod submit;
 pub mod targets;
 pub mod text;
 
 pub use double_tap::{DoubleTap, GAP_MS, SHIFT_KEYS, TAP_MS};
 pub use guess::{ClaudeEnv, GuessInput, Guesser};
+pub use hook::{HookEvent, KeyHook, RunningHook, SystemHook};
+pub use screen::{Clipboard, FrontApp, Screenshot, SystemClipboard};
+pub use service::{Capture, CaptureDeps, PanelWindow, Permissions, Screen, SystemPermissions, SystemScreen};
+pub use submit::{CaptureHandlers, SubmitError};
+pub use targets::CaptureSessions;
 pub use text::{TITLE_MAX, capture_kind, describe_attachments, fence, title_from, with_screen};

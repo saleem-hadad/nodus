@@ -135,7 +135,7 @@ One file per domain in `migration/features/`. Each lists every behavior with an 
 | File | Covers (Electron sources) | Spec | Ported |
 | --- | --- | --- | --- |
 | 01-platform-shell.md | app lifecycle, menu, env, store, settings, preload/IPC plumbing | ✅ 141 | ☐ |
-| 02-session-host-status.md | host, host protocol, pty client, hooks status machine, agents, usage, notifications | ✅ 225 | ☐ |
+| 02-session-host-status.md | host, host protocol, pty client, hooks status machine, agents, usage, notifications | ✅ 225 | 88/225 |
 | 03-sessions-transcripts.md | session create/open/send/kill, claude args, discovery, board merge, search, summarize, naming, geometry | ✅ 205 | ☐ |
 | 04-board-tools-views.md | board tools MCP, notes placement, views (main + renderer), view page, ink storage | ✅ 222 | ☐ |
 | 05-actions-voice-git.md | actions rail, voice prompts, git status/diff/log and their UI | ✅ 183 | ☐ |
@@ -174,7 +174,7 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | Track | Branch | Scope | Status |
 | --- | --- | --- | --- |
 | host | `rust/host` | nodus-host-proto, nodus-host, nodus-sessions::client, `Nodus host` | 🟡 running |
-| status | `rust/status` | nodus-sessions hooks, agents, usage, notify, running | 🟡 running |
+| status | `rust/status` | nodus-sessions hooks, agents, usage, notify, running | ✅ merged: HOST-132…219 (88), 0 deferred |
 | transcripts-board | `rust/transcripts-board` | nodus-transcripts, nodus-board, nodus-sessions::launch | 🟡 running |
 | platform-updater | `rust/platform-updater` | nodus-platform process, secrets, notify, permissions; nodus-updater | 🟡 running |
 | parity-harness | `rust/parity-harness` | golden screenshots of 0.9.4 (`migration/parity/`) | 🟡 running |
@@ -231,6 +231,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-08: status merged (3ae719c): status machine, hook settings, usage, agents, notify, running counts; 172 workspace tests. Checklists are ticked with `python3 migration/tick.py <IDs>`.
 - 2026-11-08: S1 done (D1–D3, D13 adopted). gpui-fork and ui-shell started.
 - 2026-11-08: Every agent stopped at an account usage limit; the account was switched. host, status, transcripts-board and platform-updater restarted fresh (nothing was committed yet); S1 and parity-harness resumed with their work.
 - 2026-11-08: P1 merged from `rust/p1-foundations`: workspace with 19 crates, nodus-domain (38 tests), nodus-store (28), nodus-platform env (27), Rust CI on macOS and Windows.

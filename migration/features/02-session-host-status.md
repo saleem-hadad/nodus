@@ -902,94 +902,94 @@ Risks:
 - [ ] HOST-129 Claude command (shared with 03)
 - [ ] HOST-130 Claude environment
 - [ ] HOST-131 Terminal command
-- [ ] HOST-132 Three statuses
-- [ ] HOST-133 Combined status
-- [ ] HOST-134 Only changes
-- [ ] HOST-135 Process start
-- [ ] HOST-136 Process end
-- [ ] HOST-137 Forget
-- [ ] HOST-138 Known events
-- [ ] HOST-139 Agent hooks
-- [ ] HOST-140 Last hook time
-- [ ] HOST-141 Working
-- [ ] HOST-142 Tool use
-- [ ] HOST-143 Permission
-- [ ] HOST-144 Notification
-- [ ] HOST-145 About permission
-- [ ] HOST-146 Stop
-- [ ] HOST-147 SessionStart
-- [ ] HOST-148 SessionEnd
-- [ ] HOST-149 Subagent events without an agent
-- [ ] HOST-150 Agent stop
-- [ ] HOST-151 Agent waiting
-- [ ] HOST-152 Agent working
-- [ ] HOST-153 Agent record
-- [ ] HOST-154 Agent events
-- [ ] HOST-155 Longest waiting
-- [ ] HOST-156 Settle
-- [ ] HOST-157 Hold
-- [ ] HOST-158 Hook times
-- [ ] HOST-159 Untracked sessions
-- [ ] HOST-160 When keys count
-- [ ] HOST-161 What a key is
-- [ ] HOST-162 Answering an agent
-- [ ] HOST-163 Interrupt
-- [ ] HOST-164 Answering the main thread
-- [ ] HOST-165 Replayed interrupt
-- [ ] HOST-166 Usage report
-- [ ] HOST-167 Model
-- [ ] HOST-168 Context tokens
-- [ ] HOST-169 Context size and share
-- [ ] HOST-170 Cost and time
-- [ ] HOST-171 Usage dedupe
-- [ ] HOST-172 Pause and resume
-- [ ] HOST-173 Usage kept
-- [ ] HOST-174 Endpoint
-- [ ] HOST-175 Settings per process
-- [ ] HOST-176 Hook environment
-- [ ] HOST-177 POSIX hooks with a config
-- [ ] HOST-178 POSIX hooks for an older host
-- [ ] HOST-179 PowerShell hooks
-- [ ] HOST-180 Settings JSON
-- [ ] HOST-181 Settings cache
-- [ ] HOST-182 Silent hooks
-- [ ] HOST-183 Agent files
-- [ ] HOST-184 Meta file
-- [ ] HOST-185 Incremental parse
-- [ ] HOST-186 Times
-- [ ] HOST-187 Background tasks
-- [ ] HOST-188 New prompt
-- [ ] HOST-189 Pending work
-- [ ] HOST-190 Steps
-- [ ] HOST-191 Reply line
-- [ ] HOST-192 End time
-- [ ] HOST-193 Status: not live
-- [ ] HOST-194 Status: unheard
-- [ ] HOST-195 Status: woken later
-- [ ] HOST-196 Status: ended without a stop
-- [ ] HOST-197 Agent info
-- [ ] HOST-198 Agents list
-- [ ] HOST-199 Agents on cards
-- [ ] HOST-200 Agent transcript ids
-- [ ] HOST-201 Agents refresh
-- [ ] HOST-202 Notice rules
-- [ ] HOST-203 Previous status
-- [ ] HOST-204 Withdraw
-- [ ] HOST-205 Gates
-- [ ] HOST-206 Armed after catch-up
-- [ ] HOST-207 Which sessions
-- [ ] HOST-208 Content
-- [ ] HOST-209 One per session
-- [ ] HOST-210 Unsupported
-- [ ] HOST-211 Click
-- [ ] HOST-212 Open a card
-- [ ] HOST-213 Take the open request
-- [ ] HOST-214 Waiting count
-- [ ] HOST-215 Dock badge
-- [ ] HOST-216 Running counts
-- [ ] HOST-217 Working and waiting counts
-- [ ] HOST-218 Running total
-- [ ] HOST-219 By project
+- [x] HOST-132 Three statuses
+- [x] HOST-133 Combined status
+- [x] HOST-134 Only changes
+- [x] HOST-135 Process start
+- [x] HOST-136 Process end
+- [x] HOST-137 Forget
+- [x] HOST-138 Known events
+- [x] HOST-139 Agent hooks
+- [x] HOST-140 Last hook time
+- [x] HOST-141 Working
+- [x] HOST-142 Tool use
+- [x] HOST-143 Permission
+- [x] HOST-144 Notification
+- [x] HOST-145 About permission
+- [x] HOST-146 Stop
+- [x] HOST-147 SessionStart
+- [x] HOST-148 SessionEnd
+- [x] HOST-149 Subagent events without an agent
+- [x] HOST-150 Agent stop
+- [x] HOST-151 Agent waiting
+- [x] HOST-152 Agent working
+- [x] HOST-153 Agent record
+- [x] HOST-154 Agent events
+- [x] HOST-155 Longest waiting
+- [x] HOST-156 Settle
+- [x] HOST-157 Hold
+- [x] HOST-158 Hook times
+- [x] HOST-159 Untracked sessions
+- [x] HOST-160 When keys count
+- [x] HOST-161 What a key is
+- [x] HOST-162 Answering an agent
+- [x] HOST-163 Interrupt
+- [x] HOST-164 Answering the main thread
+- [x] HOST-165 Replayed interrupt
+- [x] HOST-166 Usage report
+- [x] HOST-167 Model
+- [x] HOST-168 Context tokens
+- [x] HOST-169 Context size and share
+- [x] HOST-170 Cost and time
+- [x] HOST-171 Usage dedupe
+- [x] HOST-172 Pause and resume
+- [x] HOST-173 Usage kept
+- [x] HOST-174 Endpoint
+- [x] HOST-175 Settings per process
+- [x] HOST-176 Hook environment
+- [x] HOST-177 POSIX hooks with a config
+- [x] HOST-178 POSIX hooks for an older host
+- [x] HOST-179 PowerShell hooks
+- [x] HOST-180 Settings JSON
+- [x] HOST-181 Settings cache
+- [x] HOST-182 Silent hooks
+- [x] HOST-183 Agent files
+- [x] HOST-184 Meta file
+- [x] HOST-185 Incremental parse
+- [x] HOST-186 Times
+- [x] HOST-187 Background tasks
+- [x] HOST-188 New prompt
+- [x] HOST-189 Pending work
+- [x] HOST-190 Steps
+- [x] HOST-191 Reply line
+- [x] HOST-192 End time
+- [x] HOST-193 Status: not live
+- [x] HOST-194 Status: unheard
+- [x] HOST-195 Status: woken later
+- [x] HOST-196 Status: ended without a stop
+- [x] HOST-197 Agent info
+- [x] HOST-198 Agents list
+- [x] HOST-199 Agents on cards
+- [x] HOST-200 Agent transcript ids
+- [x] HOST-201 Agents refresh
+- [x] HOST-202 Notice rules
+- [x] HOST-203 Previous status
+- [x] HOST-204 Withdraw
+- [x] HOST-205 Gates
+- [x] HOST-206 Armed after catch-up
+- [x] HOST-207 Which sessions
+- [x] HOST-208 Content
+- [x] HOST-209 One per session
+- [x] HOST-210 Unsupported
+- [x] HOST-211 Click
+- [x] HOST-212 Open a card
+- [x] HOST-213 Take the open request
+- [x] HOST-214 Waiting count
+- [x] HOST-215 Dock badge
+- [x] HOST-216 Running counts
+- [x] HOST-217 Working and waiting counts
+- [x] HOST-218 Running total
+- [x] HOST-219 By project
 - [ ] HOST-220 Status side effects
 - [ ] HOST-221 Launch order
 - [ ] HOST-222 Open

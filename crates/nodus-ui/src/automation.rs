@@ -22,7 +22,6 @@
 //! are the patched GPUI's `Window::render_to_image`: the content only, as
 //! the goldens are.
 
-use std::io::{BufRead, BufReader, Write};
 use std::time::Duration;
 
 use gpui::{
@@ -68,6 +67,7 @@ pub fn start(cx: &mut App) {
 fn listen(path: &std::ffi::OsStr, tx: &tokio::sync::mpsc::UnboundedSender<(Value, Reply)>) {
     #[cfg(unix)]
     {
+        use std::io::{BufRead, BufReader, Write};
         let _ = std::fs::remove_file(path);
         let Ok(listener) = std::os::unix::net::UnixListener::bind(path) else {
             return;

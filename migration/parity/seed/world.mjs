@@ -248,7 +248,9 @@ export const BOARDS = {
       { key: 'sf-coupons', x: 400, y: 380 },
       { key: 'sf-search-plan', x: 752, y: 380, parents: ['sf-cart', 'sf-coupons'] },
       { key: 'sf-terminal', kind: 'terminal', x: 1072, y: 380 },
-      { key: 'sf-run-tests', x: 400, y: 900, runOf: 'run-tests', autoMode: true }
+      // A run leaves the board (with a toast) once it isn't running, so it's
+      // only seeded for scenes that start it (withRun in seed/index.mjs).
+      { key: 'sf-run-tests', x: 400, y: 900, runOf: 'run-tests', autoMode: true, extra: 'run' }
     ],
     sections: [{ key: 'checkout', name: 'Checkout', color: 'orange', x: 728, y: -12, createdAt: ago(2 * HOUR) }],
     notes: [

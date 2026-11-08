@@ -141,7 +141,8 @@ function draw() {
   if (turn.steps.length) {
     for (const step of turn.steps.slice(-4)) {
       if (step.tool) rows.push(...toolLine(step))
-      else for (const [i, l] of wrap(step.text, width - 2, '  ').entries()) rows.push(i === 0 ? `${'⏺'} ${l}` : l)
+      // Claude Code renders markdown; the stand-in just drops its marks.
+      else for (const [i, l] of wrap(step.text.replace(/\*\*|__|`|^#+ /gm, ''), width - 2, '  ').entries()) rows.push(i === 0 ? `${'⏺'} ${l}` : l)
       rows.push('')
     }
   } else if (turn.prompt) {

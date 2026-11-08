@@ -396,7 +396,42 @@ export const DEFAULT_SETTINGS = {
   pinProjectRail: false,
   focusFeature: false,
   focusMode: false,
-  capture: true
+  // Off, so the global key hook never starts: on a machine that trusts the
+  // launching process with Accessibility, it would listen to the real keyboard.
+  // The capture panel looks the same with the shortcut off as ready; Settings
+  // scenes turn it on with the permission stubbed (scenes/projects.mjs).
+  capture: false
+}
+
+/** Adds the seeded nodes marked `extra` (the Run tests action run) to their boards. */
+export function withExtra(name) {
+  return (state) => {
+    for (const [key, b] of Object.entries(BOARDS)) {
+      for (const n of b.nodes) {
+        if (n.extra === name) state.boards[projectId(key)].nodes[sessionId(n.key)] = boardNode(n)
+      }
+    }
+  }
+}
+
+function boardNode(n) {
+  const sid = sessionId(n.key)
+  const spec = SESSIONS.find((s) => s.key === n.key)
+  return {
+    sessionId: sid,
+    ...(n.kind ? { kind: n.kind } : {}),
+    x: n.x,
+    y: n.y,
+    archived: false,
+    ...(n.parents ? { parents: n.parents.map(sessionId) } : {}),
+    createdByApp: true,
+    ...(n.section ? { sectionId: sectionId(n.section) } : {}),
+    ...(n.expanded ? { expanded: true } : {}),
+    ...(n.runOf ? { runOf: uuid(`action:${n.runOf}`) } : {}),
+    ...(n.viewOf ? { viewOf: viewId(n.viewOf) } : {}),
+    ...(n.autoMode || n.viewOf ? { autoMode: true } : {}),
+    createdAt: spec ? NOW - spec.at - 10 * MIN : ago(3 * HOUR)
+  }
 }
 
 function buildState(work, repos, theme) {
@@ -430,25 +465,7 @@ function buildState(work, repos, theme) {
   const boards = {}
   for (const [key, b] of Object.entries(BOARDS)) {
     const nodes = {}
-    for (const n of b.nodes) {
-      const sid = sessionId(n.key)
-      const spec = SESSIONS.find((s) => s.key === n.key)
-      nodes[sid] = {
-        sessionId: sid,
-        ...(n.kind ? { kind: n.kind } : {}),
-        x: n.x,
-        y: n.y,
-        archived: false,
-        ...(n.parents ? { parents: n.parents.map(sessionId) } : {}),
-        createdByApp: true,
-        ...(n.section ? { sectionId: sectionId(n.section) } : {}),
-        ...(n.expanded ? { expanded: true } : {}),
-        ...(n.runOf ? { runOf: uuid(`action:${n.runOf}`) } : {}),
-        ...(n.viewOf ? { viewOf: viewId(n.viewOf) } : {}),
-        ...(n.autoMode || n.viewOf ? { autoMode: true } : {}),
-        createdAt: spec ? NOW - spec.at - 10 * MIN : ago(3 * HOUR)
-      }
-    }
+    for (const n of b.nodes) if (!n.extra) nodes[sessionId(n.key)] = boardNode(n)
     const sections = Object.fromEntries(
       (b.sections ?? []).map((s) => [sectionId(s.key), { id: sectionId(s.key), name: s.name, color: s.color, x: s.x, y: s.y, createdAt: s.createdAt }])
     )
@@ -499,7 +516,8 @@ function buildState(work, repos, theme) {
       views,
       ink: (b.ink ?? []).map(inkStroke),
       viewport: b.viewport,
-      hidden: []
+      // An extra (an action run) left out of the board would otherwise be imported into the archive.
+      hidden: b.nodes.filter((n) => n.extra).map((n) => sessionId(n.key))
     }
   }
   const captures = CAPTURES.map((c) => ({
@@ -537,7 +555,7 @@ function writeViews(userData) {
  * Writes a fresh world into `work` (removing what was there) and returns where
  * things are. `mutate(state, world)` lets a scene change state.json first.
  */
-export function seed(work, { theme = 'light', mutate } = {}) {
+export function seed(work, { theme = 'light', mutate, responses } = {}) {
   for (const dir of ['bin', 'home', 'repos', 'remotes', 'userData']) fs.rmSync(path.join(work, dir), { recursive: true, force: true })
   fs.mkdirSync(path.join(work, 'userData'), { recursive: true })
   fs.mkdirSync(path.join(work, 'home'), { recursive: true })
@@ -550,6 +568,6 @@ export function seed(work, { theme = 'light', mutate } = {}) {
   mutate?.(state, world)
   fs.writeFileSync(path.join(work, 'userData', 'state.json'), JSON.stringify(state, null, 2))
   writeViews(world.userData)
-  fs.writeFileSync(path.join(work, 'responses.json'), JSON.stringify(RESPONSES, null, 2))
+  fs.writeFileSync(path.join(work, 'responses.json'), JSON.stringify({ ...RESPONSES, ...responses }, null, 2))
   return world
 }

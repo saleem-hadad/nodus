@@ -12,22 +12,47 @@ export const card = (key) => node(sessionId(key))
 /**
  * Brings storefront's board to life: its sessions running in every status
  * (sf-skeleton working with two agents working and one done, sf-tax waiting
- * on a permission, sf-cart done but running, the Run tests action working,
+ * on a permission, sf-cart done but running (with usage reported),
  * the terminal card's shell running), then opens the board.
  */
 export async function storefront(app, { open = true } = {}) {
   await app.page.waitForSelector('.pv-item')
-  await app.liven('storefront', ['sf-skeleton', 'sf-tax', 'sf-cart', 'sf-run-tests', 'sf-terminal'])
+  await app.liven('storefront', ['sf-skeleton', 'sf-tax', 'sf-cart', 'sf-terminal'])
   await app.status('sf-skeleton', 'working')
   await app.status('sf-skeleton', 'working', agentIdOf('sf-a1'))
   await app.status('sf-skeleton', 'working', agentIdOf('sf-a2'))
   await app.status('sf-tax', 'waiting')
-  await app.status('sf-run-tests', 'working')
   await app.usage('sf-cart')
   if (open) {
     await app.openProject('storefront')
     await app.page.waitForSelector(card('sf-skeleton'))
   }
+}
+
+/** Replaces a main-process IPC handler with one that returns `value` (or throws `error`). */
+export async function stub(app, channel, { value, error }) {
+  await app.electron.evaluate(
+    ({ ipcMain }, { channel, value, error }) => {
+      ipcMain.removeHandler(channel)
+      ipcMain.handle(channel, async () => {
+        if (error) throw new Error(error)
+        return value
+      })
+    },
+    { channel, value, error }
+  )
+}
+
+/**
+ * Turns floating capture on as a user who hasn't allowed Accessibility yet:
+ * the permission reads as not given, so the global key hook never starts
+ * (whatever the machine running the harness has allowed).
+ */
+export async function captureOn(app) {
+  await app.electron.evaluate(({ systemPreferences }) => {
+    systemPreferences.isTrustedAccessibilityClient = () => false
+  })
+  await app.page.evaluate(() => window.api.settings.update({ capture: true }))
 }
 
 /** Opens a project's board with nothing running. */

@@ -281,7 +281,7 @@ export async function freezeAnimations(page) {
  * finite animations run out, infinite ones held at their first keyframe, and
  * two shots in a row the same.
  */
-export async function capture(page, file, { clip, settleMs = 300, tries = 12 } = {}) {
+export async function capture(page, file, { clip, omitBackground = false, settleMs = 300, tries = 12 } = {}) {
   await page.evaluate(() => document.fonts.ready)
   await page
     .waitForFunction(
@@ -295,13 +295,13 @@ export async function capture(page, file, { clip, settleMs = 300, tries = 12 } =
     .catch(() => {})
   await sleep(settleMs)
   await freezeAnimations(page)
-  let last = await page.screenshot({ ...SHOT, clip })
+  let last = await page.screenshot({ ...SHOT, clip, omitBackground })
   let stable = false
   let changing = null
   for (let i = 0; i < tries; i++) {
     await sleep(150)
     await freezeAnimations(page)
-    const next = await page.screenshot({ ...SHOT, clip })
+    const next = await page.screenshot({ ...SHOT, clip, omitBackground })
     if (next.equals(last)) {
       stable = true
       break

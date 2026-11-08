@@ -96,14 +96,14 @@ function lock(work) {
 }
 
 async function shoot(scene, theme, opts, dir) {
-  const world = seed(opts.work, { theme, mutate: scene.seed })
+  const world = seed(opts.work, { theme, mutate: scene.seed, responses: scene.responses })
   const app = new App({ appDir: opts.app, buildDir: opts.buildDir, world, theme, chromiumSandbox: opts.chromiumSandbox })
   const file = path.join(dir, `${scene.id}.${theme}.png`)
   const started = Date.now()
   try {
     await app.launch()
-    const target = (await scene.run({ app, page: app.page, theme })) ?? {}
-    const result = await capture(target.page ?? app.page, file, { clip: target.clip })
+    const { page = app.page, ...shot } = (await scene.run({ app, page: app.page, theme })) ?? {}
+    const result = await capture(page, file, shot)
     return { scene: scene.id, theme, file, ms: Date.now() - started, ...result }
   } finally {
     await app.close()

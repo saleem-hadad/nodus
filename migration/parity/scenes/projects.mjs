@@ -1,5 +1,5 @@
 // The projects grid, the title bar, Settings and the project rail.
-import { board, projectId, rest, seeds, sleep, storefront } from './helpers.mjs'
+import { board, captureOn, projectId, rest, seeds, sleep, storefront, stub } from './helpers.mjs'
 
 const area = 'Projects grid, title bar, Settings, project rail'
 
@@ -11,21 +11,8 @@ const focusOn = (state) => {
   state.settings.focusMode = true
 }
 
-/** Replaces a main-process IPC handler with one that returns `value` (or throws `error`). */
-async function stub(app, channel, { value, error }) {
-  await app.electron.evaluate(
-    ({ ipcMain }, { channel, value, error }) => {
-      ipcMain.removeHandler(channel)
-      ipcMain.handle(channel, async () => {
-        if (error) throw new Error(error)
-        return value
-      })
-    },
-    { channel, value, error }
-  )
-}
-
 async function openSettings(app) {
+  await captureOn(app)
   await app.menuCommand('settings')
   await app.page.waitForSelector('.settings-dialog input[name=theme]:checked')
   // The voice key field is disabled until its source is read.
@@ -37,7 +24,7 @@ export default [
     id: 'projects-empty',
     area,
     title: 'First run: no projects yet',
-    specs: ['UI-183', 'UI-184', 'UI-185', 'UI-186', 'UI-089'],
+    specs: ['UI-183', 'UI-184', 'UI-185', 'UI-186'],
     steps: ['Seed no projects, groups or boards.', 'Launch.'],
     seed: (state) => {
       state.projects = []
@@ -54,9 +41,9 @@ export default [
     id: 'projects-grid',
     area,
     title: 'Populated grid: ungrouped projects with live badges, Infra repos group, collapsed Experiments group, archived section, running count',
-    specs: ['UI-187', 'UI-190', 'UI-191', 'UI-193', 'UI-233', 'UI-234', 'UI-099'],
+    specs: ['UI-188', 'UI-189', 'UI-191', 'UI-193', 'UI-233', 'UI-234', 'UI-236', 'UI-104'],
     steps: [
-      'Start storefront’s sessions: sf-skeleton working (two agents working), sf-tax waiting, sf-cart done, the Run tests action working, the terminal card’s shell.',
+      'Start storefront’s sessions: sf-skeleton working (two agents working), sf-tax waiting, sf-cart done but running, the terminal card’s shell.',
       'Stay on the projects grid; wait for the badges.'
     ],
     async run({ app, page }) {
@@ -69,7 +56,7 @@ export default [
     id: 'projects-focus',
     area,
     title: 'Focus mode on: projects in focus, a waiting project shown dimmed, the hidden-count note, the title bar switch',
-    specs: ['UI-195', 'UI-198', 'UI-199', 'UI-201', 'UI-096', 'UI-097'],
+    specs: ['UI-195', 'UI-196', 'UI-198', 'UI-200', 'UI-201', 'UI-096'],
     steps: [
       'Seed settings.focusFeature and focusMode on (storefront, docs-site and infra are in focus).',
       'Start design-system’s dsys-tokens and make it wait on a permission (so design-system shows, dimmed).',
@@ -100,7 +87,7 @@ export default [
     id: 'projects-selected',
     area,
     title: 'A selected folder',
-    specs: ['UI-202'],
+    specs: ['UI-202', 'UI-206'],
     steps: ['Click storefront’s folder once.', 'Move the pointer away.'],
     async run({ page }) {
       await page.click(folder('storefront'))
@@ -124,7 +111,7 @@ export default [
     id: 'projects-context-menu',
     area,
     title: 'A project’s context menu',
-    specs: ['UI-216', 'UI-221'],
+    specs: ['UI-216', 'UI-217', 'UI-158', 'UI-167'],
     steps: ['Right-click storefront’s folder.'],
     async run({ page }) {
       await page.click(folder('storefront'), { button: 'right' })
@@ -135,7 +122,7 @@ export default [
     id: 'projects-context-menu-focus',
     area,
     title: 'A project’s context menu with focus offered (Add to Focus)',
-    specs: ['UI-216', 'UI-195'],
+    specs: ['UI-216', 'UI-201'],
     steps: ['Seed settings.focusFeature on (focus mode off).', 'Right-click mobile-app’s folder.'],
     seed: (state) => {
       state.settings.focusFeature = true
@@ -149,7 +136,7 @@ export default [
     id: 'projects-group-menu',
     area,
     title: 'A group header’s context menu',
-    specs: ['UI-237'],
+    specs: ['UI-221', 'UI-158'],
     steps: ['Right-click the Infra repos header.'],
     async run({ page }) {
       await page.click('header.pv-group-header >> nth=0', { button: 'right' })
@@ -160,7 +147,7 @@ export default [
     id: 'projects-group-picker',
     area,
     title: 'Move to Group… dialog',
-    specs: ['UI-241', 'UI-243'],
+    specs: ['UI-241', 'UI-243', 'UI-153'],
     steps: ['Right-click infra’s folder.', 'Choose Move to Group…'],
     async run({ page }) {
       await page.click(folder('infra'), { button: 'right' })
@@ -173,7 +160,7 @@ export default [
     id: 'projects-remove-confirm',
     area,
     title: 'Remove project confirmation',
-    specs: ['UI-247', 'UI-248'],
+    specs: ['UI-247', 'UI-008', 'UI-153'],
     steps: ['Right-click storefront’s folder.', 'Choose Remove from Nodus…'],
     async run({ page }) {
       await page.click(folder('storefront'), { button: 'right' })
@@ -216,7 +203,7 @@ export default [
     id: 'titlebar-running',
     area,
     title: 'The title bar’s running count, pointed at',
-    specs: ['UI-099', 'UI-102'],
+    specs: ['UI-095', 'UI-104', 'UI-105'],
     steps: ['Start storefront’s sessions (as in projects-grid).', 'Point at "N running" in the title bar.'],
     async run({ app, page }) {
       await storefront(app, { open: false })
@@ -228,7 +215,7 @@ export default [
     id: 'titlebar-update',
     area,
     title: 'Restart to Update in the title bar (an update downloaded)',
-    specs: ['UI-105', 'UI-106', 'PLAT-130'],
+    specs: ['UI-106', 'UI-107'],
     steps: ['Report the update state as ready (0.9.5 downloaded): the status handler and an ev:update-status event.'],
     async run({ app, page }) {
       await page.waitForSelector('.pv-item')
@@ -237,7 +224,7 @@ export default [
       await app.electron.evaluate(({ BrowserWindow }, status) => {
         for (const w of BrowserWindow.getAllWindows()) w.webContents.send('ev:update-status', status)
       }, status)
-      await page.waitForSelector('#titlebar-actions .btn-primary')
+      await page.waitForSelector('button.btn-primary:has-text("Restart to Update")')
       await rest(page)
     }
   },
@@ -245,7 +232,7 @@ export default [
     id: 'settings',
     area,
     title: 'Settings, top: Appearance, Focus, Floating capture (Accessibility not allowed yet)',
-    specs: ['UI-116', 'UI-117', 'UI-124', 'UI-139', 'PLAT-047'],
+    specs: ['UI-116', 'UI-117', 'UI-125', 'UI-126', 'UI-129', 'UI-130', 'UI-131', 'UI-133'],
     steps: ['Open Settings (the menu’s Settings command).'],
     async run({ app, page }) {
       await page.waitForSelector('.pv-item')
@@ -258,7 +245,7 @@ export default [
     id: 'settings-bottom',
     area,
     title: 'Settings, scrolled to the end: Notifications, Voice prompts (no key), Updates (up to date)',
-    specs: ['UI-143', 'UI-148', 'UI-149'],
+    specs: ['UI-136', 'UI-137', 'UI-139', 'UI-143', 'UI-147', 'UI-148', 'UI-150'],
     steps: ['Report updates as up to date (0.9.4).', 'Open Settings.', 'Scroll its body to the end.'],
     async run({ app, page }) {
       await page.waitForSelector('.pv-item')
@@ -275,7 +262,7 @@ export default [
     id: 'settings-ready',
     area,
     title: 'Settings with the double tap ready, a saved xAI key, and an update downloading',
-    specs: ['UI-139', 'UI-148', 'UI-149'],
+    specs: ['UI-135', 'UI-140', 'UI-143', 'UI-148', 'UI-149'],
     steps: [
       'Report the capture shortcut as ready, the voice key as saved in Settings, and an update downloading (42%).',
       'Open Settings; scroll so Floating capture through Updates show.'
@@ -311,7 +298,7 @@ export default [
     id: 'rail-pinned',
     area,
     title: 'The project rail pinned beside the board',
-    specs: ['UI-270', 'UI-271'],
+    specs: ['UI-027', 'UI-270', 'UI-271'],
     steps: ['Seed settings.pinProjectRail on.', 'Open storefront’s board.'],
     seed: (state) => {
       state.settings.pinProjectRail = true
@@ -326,7 +313,7 @@ export default [
     id: 'rail-numbers',
     area,
     title: 'Holding ⌘: the rail’s number hints',
-    specs: ['UI-275'],
+    specs: ['UI-275', 'UI-276'],
     steps: ['Seed settings.pinProjectRail on.', 'Open storefront’s board.', 'Hold ⌘ (Meta) for half a second.'],
     seed: (state) => {
       state.settings.pinProjectRail = true

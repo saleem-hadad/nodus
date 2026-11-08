@@ -18,6 +18,7 @@
 //! - `EFFECTS_STRESS=1`: six blurred panels and twenty rotated notes.
 //! - `EFFECTS_OFF=1`: the same scene with every effect off, to compare frame
 //!   times against.
+//! - `EFFECTS_STRICT=1`: exit with status 1 when a check fails (CI).
 #![allow(clippy::print_stdout, reason = "an example reports on stdout")]
 
 use gpui_kit::*;
@@ -375,6 +376,7 @@ fn main() {
         .map_or_else(|| std::env::temp_dir().join("effects.png"), PathBuf::from);
     let stress = env_flag("EFFECTS_STRESS");
     let off = env_flag("EFFECTS_OFF");
+    let strict = env_flag("EFFECTS_STRICT");
 
     application().run(move |cx: &mut App| {
         let stats = Rc::new(RefCell::new(Stats::default()));
@@ -426,6 +428,7 @@ fn main() {
             // 150) turns 3 to 7 degrees clockwise about its centre, so its
             // right edge swings out past x = 240 near the top, and its top
             // edge drops below y = 150 on the right.
+            let mut failures = 0;
             let mut hit_checks = Vec::new();
             for (label, position, expect) in [
                 ("inside the turned note, outside its box", point(px(241.5), px(175.)), !off),
@@ -445,9 +448,11 @@ fn main() {
                 });
                 cx.background_executor().timer(Duration::from_millis(80)).await;
                 let hovered = *note_hovered.borrow();
+                let pass = moved.is_ok() && hovered == expect;
+                failures += usize::from(!pass);
                 hit_checks.push(format!(
                     "{label}: hovered={hovered} {}",
-                    if moved.is_ok() && hovered == expect { "pass" } else { "FAIL" }
+                    if pass { "pass" } else { "FAIL" }
                 ));
             }
             for check in &hit_checks {
@@ -462,17 +467,31 @@ fn main() {
             match image {
                 Ok(Ok(image)) => {
                     let (width, height) = image.dimensions();
+                    // A frame that drew anything has more than one colour.
+                    let first = image.get_pixel(0, 0);
+                    let drew = image.pixels().any(|pixel| pixel != first);
+                    failures += usize::from(!drew || width == 0);
                     match image.save(&capture_path) {
                         Ok(()) => println!(
-                            "EFFECTS CAPTURE {width}x{height} in {:.1} ms -> {}",
+                            "EFFECTS CAPTURE {width}x{height} in {:.1} ms -> {}{}",
                             took.as_secs_f64() * 1000.,
-                            capture_path.display()
+                            capture_path.display(),
+                            if drew { "" } else { " FAIL: one colour" }
                         ),
-                        Err(error) => println!("EFFECTS CAPTURE FAIL saving: {error}"),
+                        Err(error) => {
+                            failures += 1;
+                            println!("EFFECTS CAPTURE FAIL saving: {error}");
+                        }
                     }
                 }
-                Ok(Err(error)) => println!("EFFECTS CAPTURE FAIL: {error:#}"),
-                Err(error) => println!("EFFECTS CAPTURE FAIL: {error:#}"),
+                Ok(Err(error)) => {
+                    failures += 1;
+                    println!("EFFECTS CAPTURE FAIL: {error:#}");
+                }
+                Err(error) => {
+                    failures += 1;
+                    println!("EFFECTS CAPTURE FAIL: {error:#}");
+                }
             }
 
             // Frame times over the rest of the run, after a warm-up.
@@ -503,6 +522,10 @@ fn main() {
                         frames.len()
                     );
                 }
+            }
+            if strict && failures > 0 {
+                println!("EFFECTS FAILED {failures} checks");
+                std::process::exit(1);
             }
             cx.update(|cx| cx.quit());
         })

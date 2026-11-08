@@ -36,3 +36,16 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+
+      # The patched GPUI (third_party/gpui/PATCHES.md) on a real renderer:
+      # backdrop blur, transforms, group opacity, hit testing through a
+      # rotation and a window capture. On Windows the release build compiles
+      # the HLSL with fxc, and the window draws through DirectX 11 on the
+      # runner's adapter (WARP when there is no GPU). Informational until it
+      # has been seen green on both runners.
+      - name: Effects example
+        run: cargo run -p nodus-ui --example effects --release
+        continue-on-error: true
+        env:
+          EFFECTS_SECONDS: "4"
+          EFFECTS_STRICT: "1"

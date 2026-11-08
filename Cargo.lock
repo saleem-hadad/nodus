@@ -4029,6 +4029,15 @@ version = "0.9.4"
 [[package]]
 name = "nodus-tools"
 version = "0.9.4"
+dependencies = [
+ "nodus-board",
+ "nodus-domain",
+ "nodus-store",
+ "nodus-transcripts",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
 
 [[package]]
 name = "nodus-transcripts"

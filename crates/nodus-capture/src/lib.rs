@@ -10,6 +10,7 @@
 pub mod double_tap;
 pub mod guess;
 pub mod hook;
+pub mod page;
 pub mod screen;
 pub mod service;
 pub mod submit;

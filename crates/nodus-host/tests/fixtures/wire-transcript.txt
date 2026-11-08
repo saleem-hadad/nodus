@@ -1,0 +1,71 @@
+A← {"type":"welcome","protocol":1,"hookPort":"<port>","hookToken":"<token>","sessions":[],"mcp":true,"hookAuthHeader":true}
+A← {"type":"spawned","id":1}
+A← {"type":"data","sessionId":"s1","data":"ready\r\n"}
+A← {"type":"data","sessionId":"s1","data":"hello\r\ngot hello\r\n"}
+A← {"type":"exit","sessionId":"s1","exitCode":4}
+A← {"type":"spawned","id":2}
+A← {"type":"data","sessionId":"s2","data":"live\r\n"}
+A← {"type":"spawned","id":3}
+A← {"type":"spawned","id":4,"error":"args as a string is not supported on unix."}
+A← {"type":"data","sessionId":"s2","data":"1"}
+A← {"type":"data","sessionId":"s2","data":"\r\n"}
+HTTP POST /hook?evt=UserPromptSubmit&sid=s2 → 204
+A← {"type":"hook","sessionId":"s2","event":"UserPromptSubmit","payload":{"session_id":"s2","prompt":"ppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp","n":1,"ok":true,"tool_input":{"command":"ls"},"z":null}}
+HTTP POST /hook?evt=StatusLine&sid=s2&token=<token> → 204
+A← {"type":"hook","sessionId":"s2","event":"StatusLine","payload":{"model":{"display_name":"Model"},"cost":{"total_cost_usd":0.5}}}
+HTTP POST /hook?evt=Stop&sid=s2 → 404
+HTTP POST /hook?evt=Stop&sid=s2&token=wrong → 404
+HTTP GET /hook?evt=Stop&sid=s2 → 404
+HTTP POST /hooks?evt=Stop&sid=s2 → 404
+HTTP POST /hook?evt=Stop&sid=nobody → 204
+HTTP POST /hook?sid=s2 → 204
+HTTP POST /hook?evt=&sid=s2 → 204
+HTTP POST /hook?evt=Notification&sid=s2 → 204
+A← {"type":"hook","sessionId":"s2","event":"Notification","payload":{}}
+HTTP POST /hook?evt=Odd%20One&sid=s2 → 204
+A← {"type":"hook","sessionId":"s2","event":"Odd One","payload":{}}
+HTTP POST /hook?evt=Stop&sid=s2 → 204
+HTTP POST /hook?evt=StatusLine&sid=s2 → 204
+A← {"type":"hook","sessionId":"s2","event":"StatusLine","payload":[1,"two"]}
+HTTP POST /hook?evt=Odd&sid=s2 → 204
+A← {"type":"hook","sessionId":"s2","event":"Odd","payload":"ab"}
+B← {"type":"welcome","protocol":1,"hookPort":"<port>","hookToken":"<token>","sessions":[{"sessionId":"s2","projectId":"p1","initial":"done","buffer":"live\r\n1\r\n","history":[{"input":"1","at":"<at>"},{"input":"\r","at":"<at>"},{"hook":"UserPromptSubmit","payload":{"session_id":"s2","n":1,"ok":true},"at":"<at>"},{"hook":"Notification","payload":{},"at":"<at>"},{"hook":"Odd One","payload":{},"at":"<at>"},{"hook":"Odd","payload":{"0":"a","1":"b"},"at":"<at>"}],"statusLine":{"payload":[1,"two"],"at":"<at>"}}],"mcp":true,"hookAuthHeader":true}
+HTTP POST /mcp → 401
+HTTP POST /mcp?token=<token> → 401
+HTTP POST /mcp → 401
+HTTP POST /mcp → 401
+HTTP DELETE /mcp → 204
+HTTP GET /mcp → 405 allow=POST
+HTTP POST /mcp → 200 content-type=application/json {"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"Parse error"}}
+HTTP POST /mcp → 202
+HTTP POST /mcp → 202
+B← {"type":"mcp","id":1,"sessionId":"s2","message":{"jsonrpc":"2.0","id":7,"method":"tools/list"}}
+HTTP POST /mcp → 200 content-type=application/json {"jsonrpc":"2.0","id":7,"result":{"tools":[]}}
+B← {"type":"mcp","id":2,"sessionId":"s2","message":{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{}}}
+B← {"type":"mcp","id":3,"sessionId":"s2","message":{"jsonrpc":"2.0","id":"nine","method":"ping"}}
+HTTP POST /mcp → 200 content-type=application/json [{"jsonrpc":"2.0","id":8,"result":{"content":[{"type":"text","text":"Nodus isn’t open, so the board can’t be reached right now."}],"isError":true}},{"jsonrpc":"2.0","id":"nine","result":{}}]
+B← {"type":"mcp","id":4,"sessionId":"s2","message":{"jsonrpc":"2.0","id":10,"method":"tools/call"}}
+HTTP POST /mcp → 200 content-type=application/json {"jsonrpc":"2.0","id":10,"result":{"content":[{"type":"text","text":"Nodus isn’t open, so the board can’t be reached right now."}],"isError":true}}
+A← {"type":"mcp","id":5,"sessionId":"s2","message":{"jsonrpc":"2.0","id":11,"method":"resources/list"}}
+HTTP POST /mcp → 200 content-type=application/json {"jsonrpc":"2.0","id":11,"error":{"code":-32603,"message":"Nodus isn’t open, so the board can’t be reached right now."}}
+C← {"type":"welcome","protocol":1,"hookPort":"<port>","hookToken":"<token>","sessions":[{"sessionId":"s2","projectId":"p1","initial":"done","buffer":"live\r\n1\r\n","history":[{"input":"1","at":"<at>"},{"input":"\r","at":"<at>"},{"hook":"UserPromptSubmit","payload":{"session_id":"s2","n":1,"ok":true},"at":"<at>"},{"hook":"Notification","payload":{},"at":"<at>"},{"hook":"Odd One","payload":{},"at":"<at>"},{"hook":"Odd","payload":{"0":"a","1":"b"},"at":"<at>"}],"statusLine":{"payload":[1,"two"],"at":"<at>"}}],"mcp":true,"hookAuthHeader":true}
+A← {"type":"exit","sessionId":"s2","exitCode":0}
+A← {"type":"spawned","id":5}
+A← {"type":"exit","sessionId":"s4","exitCode":0}
+A← (closed)
+C← (closed)
+EXIT 0
+LOG listening <socket> hooks on <port>
+LOG app connected 
+LOG spawned s1 /bin/sh
+LOG exited s1 4
+LOG spawned s2 /bin/sh
+LOG uncaught TypeError: Cannot convert undefined or null to object
+LOG app connected 
+LOG app disconnected
+LOG app connected (protocol 0)
+LOG exited s2 0
+LOG spawned s4 /bin/sleep
+LOG stopping every session
+LOG exited s4 0
+LOG idle, exiting

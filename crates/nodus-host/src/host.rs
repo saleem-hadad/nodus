@@ -12,7 +12,8 @@ use indexmap::IndexMap;
 use nodus_domain::SessionStatus;
 use nodus_domain::js::utf16_len;
 use nodus_host_proto::{
-    HistoryEntry, HostMessage, HostSession, MessageReader, PROTOCOL, StatusLine, Welcome, encode, is_status_key,
+    HistoryEntry, HostMessage, HostSession, MessageReader, PROTOCOL, ReplayBuffer, StatusLine, Welcome, encode,
+    is_status_key,
 };
 use serde_json::{Map, Value};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -22,8 +23,6 @@ use crate::log::Logger;
 use crate::pty::{Pty, PtyEvent, PtyOptions};
 use crate::transport::Duplex;
 
-/// Output kept per session for replay, in UTF-16 code units.
-pub(crate) const BUFFER_LIMIT: usize = 2 * 1024 * 1024;
 pub(crate) const HISTORY_LIMIT: usize = 1000;
 pub(crate) const KILL_GRACE: Duration = Duration::from_millis(3000);
 /// A host nobody connects to, started by an app that then crashed, gives up after this.
@@ -49,9 +48,8 @@ struct Session {
     project_id: String,
     initial: SessionStatus,
     pty: Pty,
-    chunks: VecDeque<String>,
-    /// The chunks' total length in UTF-16 code units.
-    size: usize,
+    /// Recent output, for replay. (HOST-056)
+    output: ReplayBuffer,
     history: VecDeque<HistoryEntry>,
     status_line: Option<StatusLine>,
     kill_timer: Option<tokio::task::JoinHandle<()>>,
@@ -60,6 +58,14 @@ struct Session {
 struct Relay {
     client: u64,
     settle: oneshot::Sender<Option<Value>>,
+}
+
+/// A request relayed to an app, waiting for its answer.
+pub(crate) struct PendingRelay {
+    relay: u64,
+    answer: oneshot::Receiver<Option<Value>>,
+    /// 20 s from when it was sent.
+    deadline: tokio::time::Instant,
 }
 
 #[derive(Default)]
@@ -290,7 +296,7 @@ impl Host {
                 session_id: session_id.clone(),
                 project_id: s.project_id.clone(),
                 initial: s.initial,
-                buffer: s.chunks.iter().map(String::as_str).collect(),
+                buffer: s.output.joined(),
                 history: s.history.iter().cloned().collect(),
                 status_line: s.status_line.clone(),
             })
@@ -418,8 +424,7 @@ impl Host {
                 project_id: request.project_id,
                 initial: request.initial,
                 pty,
-                chunks: VecDeque::new(),
-                size: 0,
+                output: ReplayBuffer::new(),
                 history: VecDeque::new(),
                 status_line: None,
                 kill_timer: None,
@@ -454,12 +459,7 @@ impl Host {
             };
             match event {
                 PtyEvent::Data(data) => {
-                    s.size += utf16_len(&data);
-                    s.chunks.push_back(data.clone());
-                    while s.size > BUFFER_LIMIT && s.chunks.len() > 1 {
-                        let dropped = s.chunks.pop_front().expect("more than one chunk");
-                        s.size -= utf16_len(&dropped);
-                    }
+                    s.output.push(data.clone());
                     self.broadcast(
                         &state,
                         &HostMessage::Data {
@@ -580,29 +580,41 @@ impl Host {
         );
     }
 
-    /// Passes a board tools request to the newest app; None when no app
-    /// answers it. (HOST-085–087)
-    pub(crate) async fn relay(&self, session_id: &str, message: Value) -> Option<Value> {
-        let (relay, answer) = {
-            let mut state = self.lock();
-            // There's only ever one app; the newest connection is the live one.
-            let (&client, writer) = state.clients.last()?;
-            let writer = writer.clone();
-            let relay = state.next_relay;
-            state.next_relay += 1;
-            let (settle, answer) = oneshot::channel();
-            state.relays.insert(relay, Relay { client, settle });
-            self.send_to(
-                &writer,
-                &HostMessage::Mcp {
-                    id: relay as f64,
-                    session_id: session_id.to_owned(),
-                    message,
-                },
-            );
-            (relay, answer)
-        };
-        match tokio::time::timeout(crate::http::RELAY_TIMEOUT, answer).await {
+    /// Passes a board tools request to the newest app, at once, so a batch's
+    /// requests reach it in order; None when no app is connected. (HOST-085, HOST-087)
+    pub(crate) fn start_relay(&self, session_id: &str, message: Value) -> Option<PendingRelay> {
+        let mut state = self.lock();
+        // There's only ever one app; the newest connection is the live one.
+        let (&client, writer) = state.clients.last()?;
+        let writer = writer.clone();
+        let relay = state.next_relay;
+        state.next_relay += 1;
+        let (settle, answer) = oneshot::channel();
+        state.relays.insert(relay, Relay { client, settle });
+        self.send_to(
+            &writer,
+            &HostMessage::Mcp {
+                id: relay as f64,
+                session_id: session_id.to_owned(),
+                message,
+            },
+        );
+        Some(PendingRelay {
+            relay,
+            answer,
+            deadline: tokio::time::Instant::now() + crate::http::RELAY_TIMEOUT,
+        })
+    }
+
+    /// The app's answer to a relayed request: its reply, or None when it had
+    /// none, went away, or took longer than 20 s. (HOST-086)
+    pub(crate) async fn finish_relay(&self, pending: PendingRelay) -> Option<Value> {
+        let PendingRelay {
+            relay,
+            answer,
+            deadline,
+        } = pending;
+        match tokio::time::timeout_at(deadline, answer).await {
             Ok(Ok(reply)) => reply,
             Ok(Err(_)) => None,
             Err(_) => {
@@ -671,9 +683,14 @@ fn js_string(value: Option<&Value>) -> String {
 }
 
 fn record(s: &mut Session, entry: HistoryEntry) {
-    s.history.push_back(entry);
-    while s.history.len() > HISTORY_LIMIT {
-        s.history.pop_front();
+    push_capped(&mut s.history, entry);
+}
+
+/// HOST-066: at most 1000 entries, the oldest dropped first.
+fn push_capped(history: &mut VecDeque<HistoryEntry>, entry: HistoryEntry) {
+    history.push_back(entry);
+    while history.len() > HISTORY_LIMIT {
+        history.pop_front();
     }
 }
 
@@ -845,6 +862,35 @@ mod tests {
         assert_eq!(js_string(Some(&json!(null))), "null");
         assert_eq!(js_string(Some(&json!([1, null, "a"]))), "1,,a");
         assert_eq!(js_string(Some(&json!({}))), "[object Object]");
+    }
+
+    #[test]
+    fn host_066_keeps_the_newest_1000_history_entries() {
+        let mut history = VecDeque::new();
+        for i in 0..1005 {
+            push_capped(
+                &mut history,
+                HistoryEntry::Input {
+                    input: "\r".into(),
+                    at: Some(f64::from(i)),
+                },
+            );
+        }
+        assert_eq!(history.len(), 1000);
+        assert_eq!(
+            history.front(),
+            Some(&HistoryEntry::Input {
+                input: "\r".into(),
+                at: Some(5.0)
+            })
+        );
+        assert_eq!(
+            history.back(),
+            Some(&HistoryEntry::Input {
+                input: "\r".into(),
+                at: Some(1004.0)
+            })
+        );
     }
 
     #[test]

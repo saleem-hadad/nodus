@@ -43,7 +43,7 @@ impl Logger {
         let logger = Self::to(move |line| {
             kept.lock()
                 .unwrap_or_else(PoisonError::into_inner)
-                .push(line.to_owned())
+                .push(line.to_owned());
         });
         (logger, lines)
     }

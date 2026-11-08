@@ -9,11 +9,13 @@
 //! off a socket ([`reader`]), where the host's files live and who may use
 //! them ([`paths`]), and how a Windows command line is quoted ([`cmdline`]).
 
+pub mod buffer;
 pub mod cmdline;
 pub mod message;
 pub mod paths;
 pub mod reader;
 
+pub use buffer::{BUFFER_LIMIT, ReplayBuffer};
 pub use cmdline::{windows_command_line, windows_spawn_command_line};
 pub use message::{
     ClientMessage, EnvMap, HistoryEntry, HostMessage, HostSession, SpawnRequest, StatusLine, Welcome, encode,

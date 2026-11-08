@@ -168,18 +168,17 @@ async fn serve_mcp(host: &Host, req: Request<Incoming>) -> Result<Reply, String>
     if requests.is_empty() {
         return Ok(empty(StatusCode::ACCEPTED));
     }
-    // Relayed together, answered in order.
+    // Relayed together, in order, and answered in order.
     let relays: Vec<_> = requests
         .iter()
-        .map(|request| {
-            let host = host.arc();
-            let (session_id, request) = (session_id.clone(), request.clone());
-            tokio::spawn(async move { host.relay(&session_id, request).await })
-        })
+        .map(|request| host.start_relay(&session_id, request.clone()))
         .collect();
     let mut answers = Vec::with_capacity(relays.len());
     for (request, relay) in requests.iter().zip(relays) {
-        let reply = relay.await.map_err(|err| format!("Error: {err}"))?;
+        let reply = match relay {
+            Some(pending) => host.finish_relay(pending).await,
+            None => None,
+        };
         answers.push(match reply {
             Some(reply) if !reply.is_null() => reply,
             _ => unanswered(request),

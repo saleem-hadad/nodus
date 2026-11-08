@@ -60,6 +60,7 @@ Any finding blocks the push until the commit is rewritten without it. A secret t
 | D4 | **PTYs: `portable-pty`**. Async runtime: `tokio`. HTTP (hook server, MCP relay): `axum`/`hyper`. | Proposed |
 | D5 | **One binary.** `Nodus` runs the app; `Nodus host …` runs the session host (no Dock icon, outlives the app), as the Electron app runs its own binary as Node for `host.js`. | Proposed |
 | D6 | **Secrets:** read the 0.9.4 `safeStorage` ciphertext so a saved xAI key survives the upgrade. macOS: Chromium OSCrypt, password in the Keychain item service `Nodus Safe Storage`, account `Nodus Key`; the Rust app is signed with the same Team ID and bundle id so the Keychain doesn't prompt. Windows: AES-256-GCM with a key kept in `Local State` and protected by DPAPI. Exact parameters per spec 01. | Proposed |
+| D8 | **The UI is pixel-for-pixel the same (user, 2026-11-08).** Golden screenshots of 0.9.4 for every screen and state, light and dark, from synthetic seeded state, live in `migration/parity/`. Every Rust UI slice renders the same scenes and is compared side by side and with a perceptual diff before it merges. Same fonts (system UI font, SF Mono / Cascadia), same metrics. | Adopted |
 | D7 | **Branches:** each track works on a `rust/<track>` branch in its own worktree, and merges to `main` when `cargo test` and `pnpm typecheck/test/build` both pass. | Adopted |
 
 ## Architecture
@@ -110,7 +111,7 @@ One file per domain in `migration/features/`. Each lists every behavior with an 
 | 06-updater-release.md | updater, packaging, signing, CI, release, smoke test, 0.9.4 → Rust handoff | ⏳ | ☐ |
 | 07-capture.md | floating capture: panel window, double tap, screen context, guess, submit | ✅ 177 | ☐ |
 | 08-projects-shell-ui.md | App, title bar, settings, projects grid, project rail, tokens and global styles, menus, modals | ⏳ | ☐ |
-| 09-board-canvas.md | BoardView: pan/zoom, selection, drag, shortcuts, context menus, sections, archive, layout, edges | ⏳ | ☐ |
+| 09-board-canvas.md | BoardView: pan/zoom, selection, drag, shortcuts, context menus, sections, archive, layout, edges | ✅ 177 | ☐ |
 | 10-board-cards-notes.md | session cards, expanded cards, agent deck, archive stack, notes and the pad | ✅ 203 | ☐ |
 | 11-board-overlays.md | prompt bar (sidekick), ⌘K search, merge dialog, ink layer, selection bar | ✅ 111 | ☐ |
 | 12-terminal-ui.md | terminal registry, modal, transcript preview, agent viewer, xterm behavior | ✅ 185 | ☐ |
@@ -158,6 +159,8 @@ Places where the code and the docs disagree, or where matching 0.9.4 exactly mea
 | 02 | The host decodes an MCP request body chunk by chunk, so a multibyte character split across chunks is corrupted. | Fixed: data corruption isn't a behavior anyone relies on |
 | 02 | A malformed `spawn` message's error is unclear in the code. | Decide in P2 from the Node host's actual reply |
 | 11 | Fuzzy matching can throw on titles with characters like `İ` (lowercasing changes the length), and a negative top score makes the archive stack show no results. | Same, unless the user rules them bugs |
+| 09 | "New section here" beside a card puts the section about 9,920 units below the click. | Same, unless the user rules it a bug |
+| 09 | The zoom pill's fit button jumps instead of gliding; on Windows Ctrl-click doesn't add to the selection; single-letter shortcuts don't work on non-Latin layouts. | Same |
 | 01, 07 CAP-174/175 | The hidden capture panel stops the Dock from reopening a closed window on macOS, and keeps the app running after its window closes on Windows (the docs say closing the window quits). | Same, unless the user rules them bugs |
 
 ## Decisions for the user
@@ -170,7 +173,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 | 01 | Page zoom (⌘+ / ⌘- / ⌘0), saved in Chromium's `Preferences`. | Same shortcuts scale the whole UI, read the saved zoom once on first launch and keep it in `state.json` after. |
 | 01, 07, 11 | `localStorage` keys in Chromium's LevelDB: the capture draft, its attachments, sent-text history, the "clipboard already offered" marker, the ink colour. | Read them once from `Local Storage/leveldb` on first launch and move them into `state.json`. |
 | 01 | Spellcheck underlines in text fields. | Native spellcheck where the OS offers it (NSSpellChecker on macOS). |
-| 12 | Terminals on a zoomed board are a scaled bitmap, so their text goes soft. | Draw at the zoomed size, sharp, with the same columns and rows. |
+| 12 | Terminals on a zoomed board are a scaled bitmap, so their text goes soft. | Match 0.9.4: draw at 1× and scale the texture, same columns and rows. (Sharp text only if the user asks.) |
 
 **U1 · Sessions running in a 0.9.4 host at the update (specs 02, 06).** A running Node host starts every new session through node-pty's `spawn-helper` inside the installed bundle, and may load other files from `app.asar`. Once the Rust app replaces the bundle, new sessions on that host fail with `posix_spawnp failed.` (On Windows, 0.9.4 already stops sessions before an update.) Options: (a) the first Rust release counts as a protocol change, so the existing, documented flow asks to stop those sessions and they resume from their cards; (b) ship a compatible `spawn-helper` at the old path so the Rust app adopts the Node host until it exits. **Default: (a)**, since it's behavior users already know and it ships no Node leftovers.
 

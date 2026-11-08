@@ -3914,6 +3914,19 @@ version = "0.9.4"
 [[package]]
 name = "nodus-core"
 version = "0.9.4"
+dependencies = [
+ "indexmap",
+ "nodus-domain",
+ "nodus-platform",
+ "nodus-store",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "uuid",
+]
 
 [[package]]
 name = "nodus-domain"

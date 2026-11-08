@@ -36,6 +36,9 @@ nodus-updater = { path = "crates/nodus-updater" }
 nodus-views = { path = "crates/nodus-views" }
 nodus-voice = { path = "crates/nodus-voice" }
 
+# The terminal grid and VT parser (decision D2); exact, since nodus-terminal
+# reaches into its grid to keep xterm.js's character widths.
+alacritty_terminal = { version = "=0.26.0", default-features = false }
 aes = "0.8"
 aes-gcm = "0.10"
 anyhow = "1.0.104"
@@ -96,6 +99,10 @@ tempfile = "3.27"
 thiserror = "2.0"
 tokio = { version = "1.54", features = ["io-util", "macros", "process", "rt", "rt-multi-thread", "sync", "time"] }
 tracing = "0.1.44"
+# The widths alacritty_terminal gives characters (the same crate it uses).
+unicode-width = "0.2"
+# WHATWG URL parsing, as `new URL()` does.
+url = "2.5"
 uuid = { version = "1.29", features = ["serde", "v4"] }
 # Windows APIs without WinRT: job objects, DPAPI, the shell. Crates pick features.
 windows-sys = "0.61"

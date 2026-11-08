@@ -3919,6 +3919,17 @@ dependencies = [
 [[package]]
 name = "nodus-actions"
 version = "0.9.4"
+dependencies = [
+ "nodus-domain",
+ "nodus-platform",
+ "nodus-sessions",
+ "nodus-store",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "uuid",
+]
 
 [[package]]
 name = "nodus-board"

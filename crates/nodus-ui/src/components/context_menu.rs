@@ -236,7 +236,8 @@ impl Render for MenuLayer {
             .shadow(t.lg())
             .text_size(TEXT_MD)
             .font_weight(FontWeight::NORMAL)
-            .opacity(opacity)
+            .scale(0.98 + 0.02 * opacity)
+            .group_opacity(opacity)
             // UI-166: no other menu over a menu.
             .on_mouse_down(gpui::MouseButton::Right, |_, _, cx| cx.stop_propagation())
             // UI-160: a press anywhere else closes it; a press on the button

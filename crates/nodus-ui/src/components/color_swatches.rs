@@ -43,7 +43,6 @@ pub fn color_swatches(
                 DUR_FAST,
                 motion::ease_out,
             );
-            let size = 16.0 * scale;
             let name = color.as_str();
             let title = format!("{}{}", name[..1].to_uppercase(), &name[1..]);
             let on_pick = on_pick.clone();
@@ -64,7 +63,8 @@ pub fn color_swatches(
                 .child(
                     div()
                         .id(("swatch", color as usize))
-                        .size(px(size))
+                        .size(px(16.))
+                        .scale(scale)
                         .flex_none()
                         .flex()
                         .items_center()
@@ -84,7 +84,7 @@ pub fn color_swatches(
                             });
                         })
                         .on_click(move |_, window, cx| on_pick(color, window, cx))
-                        .when(current, |d| d.child(icon(Icon::Check, 10. * scale, 3.5, hard::WHITE))),
+                        .when(current, |d| d.child(icon(Icon::Check, 10., 3.5, hard::WHITE))),
                 )
         }))
         .into_any_element()

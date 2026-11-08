@@ -29,6 +29,8 @@ pub struct FolderItem<'a> {
     pub rename: Option<AnyElement>,
     /// Popping in: 0 → 1 (UI-230), or 1.
     pub pop: f32,
+    /// The pointer is pressed on it (UI-231).
+    pub pressed: bool,
 }
 
 /// The subtitle (UI-233): a blank line while stats load, else the counts.
@@ -94,7 +96,6 @@ impl FolderItem<'_> {
             DUR_FAST,
             motion::ease,
         );
-        let folder_size = 112.0 * (0.6 + 0.4 * self.pop);
         let label_color = if self.selected {
             t.text_on_accent
         } else if faded {
@@ -103,7 +104,7 @@ impl FolderItem<'_> {
             t.text_primary
         };
 
-        let mut folder = folder_icon(folder_size, Some(p.color)).glyph(project_glyph(&p.name));
+        let mut folder = folder_icon(112.0, Some(p.color)).glyph(project_glyph(&p.name));
         if faded {
             folder = folder.saturate(0.4);
         }
@@ -146,10 +147,13 @@ impl FolderItem<'_> {
             .px(px(4.))
             .pb(px(6.))
             .rounded(RADIUS_MD)
-            .opacity(self.pop)
+            .when(self.pop < 1.0, |d| {
+                d.scale(0.6 + 0.4 * self.pop).group_opacity(self.pop)
+            })
             .child(
                 div()
                     .relative()
+                    .when(self.pressed, |d| d.scale(0.97))
                     .w(px(124.))
                     .h(px(116.))
                     .flex()
@@ -157,7 +161,7 @@ impl FolderItem<'_> {
                     .justify_center()
                     .rounded(RADIUS_MD)
                     .bg(box_bg)
-                    .child(div().relative().top(px(lift)).opacity(opacity).child(folder))
+                    .child(div().translate(px(0.), px(lift)).opacity(opacity).child(folder))
                     .when(self.focused, |d| {
                         d.child(
                             div()

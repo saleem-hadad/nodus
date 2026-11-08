@@ -622,7 +622,10 @@ impl ProjectsView {
                     .child(rename_frame(input(field, px(16.9), true), t))
                     .into_any_element()
             });
+        // CSS :active: from a primary press until its release, wherever.
+        let down = window.use_keyed_state((id.clone(), 3usize), cx, |_, _| false);
         let item = FolderItem {
+            pressed: *down.read(cx),
             project,
             stats: stats.as_ref(),
             selected,
@@ -667,10 +670,32 @@ impl ProjectsView {
                 pressed.update(cx, |p, _| p.hover(*h));
             })
             // UI-202: a primary press selects.
-            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                cx.stop_propagation();
-                let id = select_id.clone();
-                state.update(cx, |s, cx| s.select(Some(id), cx));
+            .on_mouse_down(MouseButton::Left, {
+                let down = down.clone();
+                move |_, _, cx| {
+                    cx.stop_propagation();
+                    down.update(cx, |d, cx| {
+                        *d = true;
+                        cx.notify();
+                    });
+                    let id = select_id.clone();
+                    state.update(cx, |s, cx| s.select(Some(id), cx));
+                }
+            })
+            .on_mouse_up(MouseButton::Left, {
+                let down = down.clone();
+                move |_, _, cx| {
+                    down.update(cx, |d, cx| {
+                        *d = false;
+                        cx.notify();
+                    });
+                }
+            })
+            .on_mouse_up_out(MouseButton::Left, move |_, _, cx| {
+                down.update(cx, |d, cx| {
+                    *d = false;
+                    cx.notify();
+                });
             })
             // UI-207: a double-click opens.
             .on_click({
@@ -1383,7 +1408,8 @@ impl Render for ProjectsView {
             let rise = enter(window, cx, ("pv-toast", seq as usize), DUR_MED, motion::ease_out);
             div()
                 .absolute()
-                .bottom(px(24. - 8. * (1. - rise)))
+                .bottom(px(24.))
+                .translate(px(0.), px(8. * (1. - rise)))
                 .left_0()
                 .right_0()
                 .flex()

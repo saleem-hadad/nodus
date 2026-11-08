@@ -340,7 +340,8 @@ impl ProjectRail {
                 .font_weight(FontWeight::SEMIBOLD)
                 .font_features(fonts::tabular())
                 .text_color(t.text_primary)
-                .opacity(pop)
+                .scale(0.7 + 0.3 * pop)
+                .group_opacity(pop)
                 .child(n.to_string())
         });
         div()
@@ -465,38 +466,43 @@ impl ProjectRail {
         let top = hint.center - TITLEBAR_H;
         Some(
             deferred(
-                div().absolute().left(left - px(3. * (1. - slide))).top(top).child(
-                    div()
-                        .relative()
-                        .top(px(-height / 2.))
-                        .flex()
-                        .flex_col()
-                        .max_w(px(260.))
-                        .px(px(9.))
-                        .py(px(5.))
-                        .rounded(RADIUS_SM)
-                        .bg(t.bg_elevated)
-                        .shadow(t.md())
-                        .opacity(slide)
-                        .child(
-                            div()
-                                .text_size(TEXT_SM)
-                                .line_height(px(16.8))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(t.text_primary)
-                                .truncate()
-                                .child(name),
-                        )
-                        .when_some(detail, |d, detail| {
-                            d.child(
+                div()
+                    .absolute()
+                    .left(left)
+                    .translate(px(-3. * (1. - slide)), px(0.))
+                    .top(top)
+                    .child(
+                        div()
+                            .relative()
+                            .top(px(-height / 2.))
+                            .flex()
+                            .flex_col()
+                            .max_w(px(260.))
+                            .px(px(9.))
+                            .py(px(5.))
+                            .rounded(RADIUS_SM)
+                            .bg(t.bg_elevated)
+                            .shadow(t.md())
+                            .opacity(slide)
+                            .child(
                                 div()
-                                    .text_size(TEXT_XS)
-                                    .line_height(px(15.4))
-                                    .text_color(t.text_secondary)
-                                    .child(detail),
+                                    .text_size(TEXT_SM)
+                                    .line_height(px(16.8))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(t.text_primary)
+                                    .truncate()
+                                    .child(name),
                             )
-                        }),
-                ),
+                            .when_some(detail, |d, detail| {
+                                d.child(
+                                    div()
+                                        .text_size(TEXT_XS)
+                                        .line_height(px(15.4))
+                                        .text_color(t.text_secondary)
+                                        .child(detail),
+                                )
+                            }),
+                    ),
             )
             .with_priority(60)
             .into_any_element(),
@@ -654,7 +660,8 @@ impl Render for ProjectRail {
                         .border_color(t.separator)
                         .bg(t.bg_window)
                 } else {
-                    d.left(RAIL_INSET - px(60. * (1. - slide)))
+                    d.left(RAIL_INSET)
+                        .translate(px(-60. * (1. - slide)), px(0.))
                         .top_0()
                         .bottom_0()
                         .my_auto()
@@ -663,7 +670,7 @@ impl Render for ProjectRail {
                         .rounded(RADIUS_LG)
                         .map(|d| frosted(d, t.rail_surface, 24., 1.8))
                         .shadow(t.lg())
-                        .opacity(fade)
+                        .group_opacity(fade)
                 }
             })
             .when(shown, |d| {

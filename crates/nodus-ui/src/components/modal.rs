@@ -57,7 +57,7 @@ impl Modal {
             .items_center()
             .justify_center()
             .map(|d| frosted(d, t.modal_backdrop, 3., 1.))
-            .opacity(progress)
+            .group_opacity(progress)
             // UI-156: a press on the backdrop itself, not inside the panel.
             .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                 if close_on_backdrop {
@@ -68,7 +68,9 @@ impl Modal {
                 div()
                     .id((self.id.clone(), "panel"))
                     .relative()
-                    .top(px(8. * (1. - progress)))
+                    .translate(px(0.), px(8. * (1. - progress)))
+                    .scale(0.985 + 0.015 * progress)
+                    .group_opacity(progress)
                     .flex()
                     .flex_col()
                     .w(self.width)

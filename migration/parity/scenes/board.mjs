@@ -194,7 +194,10 @@ export default [
       await storefront(app)
       // The pad's top sheet, under the archive stack.
       const pad = at(172, 546)
-      await page.mouse.move(pad.x, pad.y)
+      await page.waitForSelector('.note.is-draft')
+      await page.mouse.move(pad.x + 40, pad.y + 40)
+      await page.mouse.move(pad.x, pad.y, { steps: 4 })
+      await page.waitForSelector('.react-flow__node-note:hover .note.is-draft')
       await sleep(200)
     }
   },

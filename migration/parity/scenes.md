@@ -102,7 +102,7 @@ Each scene starts from the same seeded world (`seed/`, `README.md` § The world)
 | Scene | Shows | Specs | Steps |
 | --- | --- | --- | --- |
 | `actions-rail` | The actions rail slid out, an action pointed at | ACT-046, ACT-047, ACT-049, ACT-054, ACT-055, ACT-058 | 1. As board-populated.<br>2. Move the pointer to the window’s right edge, then onto Open a PR. |
-| `actions-run` | An action running, fanned out beside the rail | ACT-056, ACT-057, ACT-063, ACT-064, ACT-065 | 1. As board-populated.<br>2. Slide the actions rail out and click Run tests (its run starts on the action’s prompt, so it reads as working).<br>3. Point at + below it. |
+| `actions-run` | An action running, fanned out beside the rail | ACT-056, ACT-057, ACT-063, ACT-064, ACT-065 | 1. As board-populated.<br>2. Slide the actions rail out and click Run tests (its run starts on the action’s prompt, so it reads as working).<br>3. Move the pointer away until the rail hides, then slide it out again and point at the running action. |
 | `actions-new` | New action: describing it | ACT-061, ACT-067, ACT-068, ACT-069, ACT-070, ACT-071 | 1. As board-populated.<br>2. Slide the actions rail out and click +.<br>3. Type what the button should do. |
 | `actions-drafting` | New action: Claude drafting it | ACT-072 | 1. As actions-new, with the stand-in slow to answer.<br>2. Click Draft with Claude. |
 | `actions-review` | New action: reviewing Claude’s draft | ACT-074, ACT-076, ACT-077 | 1. As actions-drafting, with the stand-in answering at once (Check bundle size, gauge icon). |

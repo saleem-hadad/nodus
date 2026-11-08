@@ -144,13 +144,21 @@ export default [
     area: actions,
     title: 'An action running, fanned out beside the rail',
     specs: ['ACT-056', 'ACT-057', 'ACT-063', 'ACT-064', 'ACT-065'],
-    steps: ['As board-populated.', 'Slide the actions rail out and click Run tests (its run starts on the action’s prompt, so it reads as working).', 'Point at + below it.'],
+    steps: [
+      'As board-populated.',
+      'Slide the actions rail out and click Run tests (its run starts on the action’s prompt, so it reads as working).',
+      'Move the pointer away until the rail hides, then slide it out again and point at the running action.'
+    ],
     async run({ app, page }) {
       await storefront(app)
       await actionsRail(page)
       await page.click('.rail.is-right button.rail-item[aria-label="Run tests"]')
+      await page.waitForSelector('.rail.is-right .rail-item.is-running')
+      await rest(page)
+      await page.waitForSelector('.rail.is-right:not(.is-open)')
+      await actionsRail(page)
+      await page.hover('.rail.is-right .rail-item.is-running')
       await page.waitForSelector('.action-fan .fan-card')
-      await page.hover('.rail.is-right .rail-add')
       await sleep(600)
     }
   },

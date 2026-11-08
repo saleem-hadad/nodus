@@ -3912,6 +3912,27 @@ dependencies = [
 [[package]]
 name = "nodus-capture"
 version = "0.9.4"
+dependencies = [
+ "image",
+ "indexmap",
+ "nodus-board",
+ "nodus-domain",
+ "nodus-platform",
+ "nodus-store",
+ "objc2 0.6.5",
+ "objc2-app-kit 0.3.2",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+ "objc2-foundation 0.3.2",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "uuid",
+ "windows-sys 0.61.2",
+]
 
 [[package]]
 name = "nodus-core"

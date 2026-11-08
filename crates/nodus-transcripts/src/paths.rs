@@ -117,8 +117,14 @@ pub fn subagents_dir(home: &Path, repo_path: &str, session_id: &str) -> PathBuf 
 /// A session's subagent transcripts, in the order the folder lists them
 /// (SESS-007).
 pub fn list_agent_files(home: &Path, repo_path: &str, session_id: &str) -> Vec<AgentFile> {
-    let dir = subagents_dir(home, repo_path, session_id);
-    let Ok(names) = read_dir_names(&dir) else {
+    list_agent_files_in(&subagents_dir(home, repo_path, session_id))
+}
+
+/// The subagent transcripts in a session's `subagents` folder: every
+/// `agent-<id>.jsonl` with an id of `[\w-]+`, in the order the folder lists
+/// them; none when it can't be read (SESS-007, HOST-183).
+pub fn list_agent_files_in(dir: &Path) -> Vec<AgentFile> {
+    let Ok(names) = read_dir_names(dir) else {
         return Vec::new();
     };
     names

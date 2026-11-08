@@ -38,8 +38,8 @@ pub use parse::{
     prompt_full, time_of, tool_name, truncate, user_text,
 };
 pub use paths::{
-    AgentFile, SessionFile, agents_signature, encode_repo_path, is_agent_id, list_agent_files, list_session_files,
-    real_repo_path, subagents_dir, transcript_dir, transcript_path,
+    AgentFile, SessionFile, agents_signature, encode_repo_path, is_agent_id, list_agent_files, list_agent_files_in,
+    list_session_files, real_repo_path, subagents_dir, transcript_dir, transcript_path,
 };
 pub use preview::{ReadError, read_transcript};
 pub use search::{SearchIndex, SearchTarget, match_ranges, query_terms, terms_pattern};

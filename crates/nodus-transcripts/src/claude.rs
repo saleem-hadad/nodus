@@ -2,11 +2,11 @@
 //! one, and reading its answer.
 
 use std::path::Path;
-use std::process::Stdio;
 use std::time::Duration;
 
 use nodus_domain::js;
 use nodus_platform::env::EnvMap;
+use nodus_platform::process::{Command, Signal};
 use serde_json::Value;
 
 use crate::nodeerr::spawn_message;
@@ -26,9 +26,11 @@ pub(crate) enum RunError {
     TimedOut,
 }
 
-/// Runs `claude` with stdin ignored (or `claude -p` waits for piped input)
+/// Runs `claude` with stdin closed (or `claude -p` waits for piped input)
 /// and its output collected; past `timeout` it's killed (SIGKILL, or
-/// TerminateProcess on Windows).
+/// TerminateProcess on Windows), with whatever it started. Started through
+/// `nodus_platform::process`, so no console window opens on Windows and it
+/// goes when the caller gives up on it.
 pub(crate) async fn run(
     claude: &Path,
     args: &[String],
@@ -36,35 +38,23 @@ pub(crate) async fn run(
     env: &EnvMap,
     timeout: Duration,
 ) -> Result<Finished, RunError> {
-    let child = spawn(claude, args, cwd, env).map_err(|err| RunError::Spawn(spawn_message(&err, claude)))?;
-    match tokio::time::timeout(timeout, child.wait_with_output()).await {
-        Ok(Ok(output)) => Ok(Finished {
-            code: output.status.code(),
-            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-        }),
-        Ok(Err(err)) => Err(RunError::Spawn(err.to_string())),
-        // Dropping the child kills it.
-        Err(_) => Err(RunError::TimedOut),
-    }
-}
-
-/// The one place these children are started, until `nodus_platform` has a
-/// process module: no console window on Windows, and killed when dropped.
-fn spawn(program: &Path, args: &[String], cwd: &Path, env: &EnvMap) -> std::io::Result<tokio::process::Child> {
-    let mut command = tokio::process::Command::new(program);
-    command
+    let output = Command::new(claude)
         .args(args)
-        .current_dir(cwd)
-        .env_clear()
-        .envs(env)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    #[cfg(windows)]
-    command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-    command.spawn()
+        .cwd(cwd)
+        .env(env.clone())
+        .timeout(timeout)
+        .kill_signal(Signal::KILL)
+        .output()
+        .await
+        .map_err(|err| RunError::Spawn(spawn_message(&err.source, claude)))?;
+    if output.timed_out {
+        return Err(RunError::TimedOut);
+    }
+    Ok(Finished {
+        code: output.code(),
+        stdout: output.stdout_text(),
+        stderr: output.stderr_text(),
+    })
 }
 
 /// `JSON.parse(stdout.trim())`, when it parses.

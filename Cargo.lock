@@ -4135,6 +4135,7 @@ dependencies = [
  "nodus-host-proto",
  "nodus-platform",
  "nodus-store",
+ "nodus-transcripts",
  "regex",
  "serde_json",
  "tempfile",

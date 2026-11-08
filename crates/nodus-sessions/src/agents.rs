@@ -13,38 +13,29 @@
 //! Nothing here watches the files (HOST-201): the project watcher notices
 //! them changing and the board reloads, which reads agents again.
 //!
-//! Ports `src/main/agents.ts`. It needs a few of discovery.ts's line helpers
-//! (the private ones at the bottom), which the transcripts crate owns; they
-//! can move to it once both are in.
+//! Ports `src/main/agents.ts`. The line helpers it shares with discovery.ts
+//! (`readLines`, `assistantParts`, `describeToolUse`, `messageText`,
+//! `isTaskNotification`, `timeOf`, `truncate`) are nodus-transcripts'.
 
 use std::collections::{HashMap, HashSet};
-use std::fs::{self, File, Metadata};
-use std::io::{Read, Seek, SeekFrom};
+use std::fs::{self, File};
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use std::time::UNIX_EPOCH;
 
-use nodus_domain::{AgentInfo, SessionCard, SessionKind, SessionStatus, ToolCall, js};
+use nodus_domain::{AgentInfo, SessionCard, SessionKind, SessionStatus};
+use nodus_transcripts::paths::mtime_ms;
+use nodus_transcripts::{
+    Json, assistant_parts, describe_tool_use, is_task_notification, message_text, read_lines, time_of, truncate,
+};
 use serde_json::Value;
 
 use crate::hooks::{Clock, StatusMachine};
-use crate::jsvalue::{collapse_spaces, get, is_space, path as json_path, str_of, string, trim, trim_end, truthy};
+use crate::jsvalue::{get, is_space, path as json_path, str_of, string, trim, truthy};
+
+pub use nodus_transcripts::{AgentFile, is_agent_id};
 
 /// Read in chunks this big, so a long agent transcript doesn't need one huge buffer.
 const CHUNK_BYTES: u64 = 4 * 1024 * 1024;
-
-/// The tool a background agent calls to deliver its report; its message is the agent's last word.
-const HANDBACK_TOOL: &str = "SubagentHandback";
-
-/// A subagent's files (discovery.ts's `AgentFile`).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AgentFile {
-    pub agent_id: String,
-    /// `agent-<id>.jsonl`, its transcript.
-    pub file: PathBuf,
-    /// `agent-<id>.meta.json`: the agent's type and description, rewritten when it ends.
-    pub meta_file: PathBuf,
-}
 
 /// HOST-183: the agents in a session's `subagents` folder, as 03's
 /// `listAgentFiles` lists them given the folder: every `agent-<id>.jsonl`
@@ -52,32 +43,7 @@ pub struct AgentFile {
 /// macOS, as the file system lists them on Windows). None when the folder
 /// can't be read.
 pub fn list_agent_files(subagents_dir: &Path) -> Vec<AgentFile> {
-    let Ok(entries) = fs::read_dir(subagents_dir) else {
-        return Vec::new();
-    };
-    let mut names: Vec<String> = entries
-        .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
-        .collect();
-    if cfg!(unix) {
-        // libuv's scandir sorts with strcmp.
-        names.sort_unstable();
-    }
-    names
-        .into_iter()
-        .filter_map(|name| {
-            let id = name.strip_prefix("agent-")?.strip_suffix(".jsonl")?;
-            is_agent_id(id).then(|| AgentFile {
-                agent_id: id.to_owned(),
-                file: subagents_dir.join(&name),
-                meta_file: subagents_dir.join(format!("agent-{id}.meta.json")),
-            })
-        })
-        .collect()
-}
-
-/// `/^[\w-]+$/`: agent and session ids end up in paths, so only ever accept this shape.
-pub fn is_agent_id(id: &str) -> bool {
-    !id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+    nodus_transcripts::list_agent_files_in(subagents_dir)
 }
 
 /// What `session:agent-transcript` says about ids that aren't an agent's.
@@ -299,7 +265,7 @@ impl Agents {
         {
             return Some(cached.clone());
         }
-        let Ok(mut handle) = File::open(file) else {
+        let Ok(handle) = File::open(file) else {
             return cached.cloned();
         };
         let mut s = match cached {
@@ -308,11 +274,16 @@ impl Agents {
         };
         let mut chunk = CHUNK_BYTES;
         while s.offset < size {
-            let end = size.min(s.offset + chunk);
+            let (start, end) = (s.offset, size.min(s.offset + chunk));
             let clock = &self.shared.clock;
-            let Ok(next) = read_lines(&mut handle, s.offset, end, |line| apply_line(&mut s, &line, &**clock)) else {
-                break;
-            };
+            let next = read_lines(
+                &handle,
+                start,
+                end,
+                false,
+                |line| apply_line(&mut s, line, &**clock),
+                None,
+            );
             if next > s.offset {
                 s.offset = next;
                 chunk = CHUNK_BYTES;
@@ -363,12 +334,10 @@ fn status_of(
     hook.status
 }
 
-/// HOST-186 to HOST-191: one transcript line.
-fn apply_line(s: &mut AgentParse, line: &Value, clock: &dyn Clock) {
-    // JSON.parse gives null for a `null` line, and reading its timestamp throws.
-    if line.is_null() {
-        return;
-    }
+/// HOST-186 to HOST-191: one transcript line. (A line that isn't an object
+/// adds nothing: JSON.parse gives null for a `null` line, and reading its
+/// timestamp throws.)
+fn apply_line(s: &mut AgentParse, line: &Json, clock: &dyn Clock) {
     let t = time_of(line);
     if let Some(t) = t {
         if s.started_at.is_none_or(|started| t < started) {
@@ -378,11 +347,12 @@ fn apply_line(s: &mut AgentParse, line: &Value, clock: &dyn Clock) {
             s.updated_at = Some(t);
         }
     }
-    match get(line, "type").and_then(Value::as_str) {
+    let field = |key: &str| line.get(key);
+    match field("type").and_then(Value::as_str) {
         Some("user") => {
             // A command it sent to the background, and later the notification that it ended.
             if let Some(task) =
-                str_of(json_path(line, &["toolUseResult", "backgroundTaskId"])).filter(|t| !t.is_empty())
+                str_of(field("toolUseResult").and_then(|r| get(r, "backgroundTaskId"))).filter(|t| !t.is_empty())
             {
                 s.pending.insert(task.to_owned());
             }
@@ -394,13 +364,13 @@ fn apply_line(s: &mut AgentParse, line: &Value, clock: &dyn Clock) {
                 s.ended_at = None;
             }
             // A new message (the session writing to a resumed agent) starts more work.
-            let content = json_path(line, &["message", "content"]);
+            let content = field("message").and_then(|m| get(m, "content"));
             let is_prompt = match content {
                 Some(Value::String(_)) => true,
                 Some(Value::Array(blocks)) => !blocks.iter().any(|b| block_type(b) == Some("tool_result")),
                 _ => false,
             };
-            if is_prompt && !truthy(get(line, "isMeta")) {
+            if is_prompt && !truthy(field("isMeta")) {
                 s.ended_at = None;
             }
         }
@@ -420,7 +390,10 @@ fn apply_line(s: &mut AgentParse, line: &Value, clock: &dyn Clock) {
                     text: Some(reply_line(&parts.text)),
                 });
             }
-            let end_turn = json_path(line, &["message", "stop_reason"]).and_then(Value::as_str) == Some("end_turn");
+            let end_turn = field("message")
+                .and_then(|m| json_path(m, &["stop_reason"]))
+                .and_then(Value::as_str)
+                == Some("end_turn");
             if parts.handback || (end_turn && parts.uses.is_empty()) {
                 s.ended_at = Some(t.unwrap_or_else(|| clock.now()));
             }
@@ -490,302 +463,8 @@ fn task_ids(text: &str) -> Vec<&str> {
     ids
 }
 
-// ---------------------------------------------------------------------------
-// discovery.ts's line helpers, as agents.ts uses them.
-
-/// discovery.ts `truncate`: whitespace collapsed, and at most `max` UTF-16
-/// units, ending in `…` when cut.
-fn truncate(text: &str, max: usize) -> String {
-    let flat = collapse_spaces(text);
-    let flat = trim(&flat);
-    if js::utf16_len(flat) > max {
-        format!("{}…", trim_end(&js::slice_utf16(flat, 0, max - 1)))
-    } else {
-        flat.to_owned()
-    }
-}
-
-struct AssistantParts<'a> {
-    text: String,
-    /// The tool_use blocks, the handback left out.
-    uses: Vec<&'a Value>,
-    /// A background agent handed in its report: `text` ends with it.
-    handback: bool,
-}
-
-/// discovery.ts `assistantParts`.
-fn assistant_parts(line: &Value) -> AssistantParts<'_> {
-    let blocks = match json_path(line, &["message", "content"]) {
-        Some(Value::String(content)) => {
-            return AssistantParts {
-                text: trim(content).to_owned(),
-                uses: Vec::new(),
-                handback: false,
-            };
-        }
-        Some(Value::Array(blocks)) => blocks,
-        _ => {
-            return AssistantParts {
-                text: String::new(),
-                uses: Vec::new(),
-                handback: false,
-            };
-        }
-    };
-    let mut texts: Vec<&str> = blocks
-        .iter()
-        .filter(|b| block_type(b) == Some("text"))
-        .filter_map(|b| str_of(get(b, "text")))
-        .collect();
-    let mut uses = Vec::new();
-    let mut handback = false;
-    for block in blocks {
-        let Some(name) = str_of(get(block, "name")).filter(|_| block_type(block) == Some("tool_use")) else {
-            continue;
-        };
-        // The handback is the agent's reply, not a step of its work.
-        if name == HANDBACK_TOOL {
-            handback = true;
-            if let Some(message) = str_of(json_path(block, &["input", "message"])) {
-                texts.push(message);
-            }
-        } else {
-            uses.push(block);
-        }
-    }
-    AssistantParts {
-        text: trim(&texts.join("\n")).to_owned(),
-        uses,
-        handback,
-    }
-}
-
-/// discovery.ts `toolName`: MCP tools are named `mcp__<server>__<tool>`; the tool's own name reads best.
-fn tool_name(name: &str) -> &str {
-    if !name.starts_with("mcp__") {
-        return name;
-    }
-    let own = name.rfind("__").map_or("", |at| &name[at + 2..]);
-    if own.is_empty() { name } else { own }
-}
-
-/// discovery.ts `describeToolUse`: a tool_use block as a name and a one-line
-/// summary of what it acted on.
-fn describe_tool_use(block: &Value) -> ToolCall {
-    let input = get(block, "input").filter(|input| input.is_object() || input.is_array());
-    let field = |key: &str| str_of(input.and_then(|input| get(input, key))).filter(|value| !trim(value).is_empty());
-    let detail = field("command")
-        .map(str::to_owned)
-        .or_else(|| {
-            field("file_path")
-                .or_else(|| field("notebook_path"))
-                .map(|file| basename(file).to_owned())
-        })
-        .or_else(|| {
-            ["pattern", "url", "query", "description", "skill", "path", "prompt"]
-                .into_iter()
-                .find_map(field)
-                .map(str::to_owned)
-        });
-    ToolCall {
-        name: tool_name(&string(get(block, "name"))).to_owned(),
-        detail: detail
-            .filter(|detail| !detail.is_empty())
-            .map(|detail| truncate(&detail, 160)),
-    }
-}
-
-/// Node's `path.basename`, for the platform it runs on.
-fn basename(path: &str) -> &str {
-    let is_separator = |c: char| c == '/' || (cfg!(windows) && c == '\\');
-    let mut path = path;
-    if cfg!(windows) {
-        let bytes = path.as_bytes();
-        if bytes.len() >= 2 && bytes[1] == b':' && bytes[0].is_ascii_alphabetic() {
-            path = &path[2..];
-        }
-    }
-    let trimmed = path.trim_end_matches(is_separator);
-    trimmed.rfind(is_separator).map_or(trimmed, |at| &trimmed[at + 1..])
-}
-
-/// discovery.ts `messageText`: all the text in a line's message, whether its content is a string or blocks.
-fn message_text(line: &Value) -> String {
-    match json_path(line, &["message", "content"]) {
-        Some(Value::String(content)) => content.clone(),
-        Some(Value::Array(blocks)) => blocks
-            .iter()
-            .map(|b| str_of(get(b, "text")).unwrap_or(""))
-            .collect::<Vec<_>>()
-            .join("\n"),
-        _ => String::new(),
-    }
-}
-
-/// discovery.ts `isTaskNotification`: a background command (or task) reporting that it ended.
-fn is_task_notification(line: &Value) -> bool {
-    json_path(line, &["origin", "kind"]).and_then(Value::as_str) == Some("task-notification")
-        || message_text(line).contains("<task-notification>")
-}
-
 fn block_type(block: &Value) -> Option<&str> {
     get(block, "type").and_then(Value::as_str)
-}
-
-/// discovery.ts `timeOf`: the line's `timestamp`, as `Date.parse` reads it.
-fn time_of(line: &Value) -> Option<f64> {
-    parse_date(str_of(get(line, "timestamp"))?)
-}
-
-/// `Date.parse` for the timestamps Claude Code writes (`toISOString()`), and
-/// the variants V8 reads the same way: dates alone, times to the minute or
-/// with any number of fraction digits (milliseconds kept, the rest dropped),
-/// `t`, `z` or a space for `T` and `Z`, offsets `±HH:mm` or `±HHmm`, and
-/// six-digit years with a sign. A date and time without an offset is local
-/// time to V8; that and V8's other lenient formats read as none here.
-fn parse_date(text: &str) -> Option<f64> {
-    let mut p = DateParser { rest: text.as_bytes() };
-    let year = match p.peek() {
-        Some(sign @ (b'+' | b'-')) => {
-            p.rest = &p.rest[1..];
-            let year = p.digits(6)?;
-            if sign == b'-' && year == 0 {
-                return None;
-            }
-            if sign == b'-' { -year } else { year }
-        }
-        _ => p.digits(4)?,
-    };
-    let (mut month, mut day) = (1, 1);
-    if p.eat(b'-') {
-        month = p.digits(2)?;
-        if p.eat(b'-') {
-            day = p.digits(2)?;
-        }
-    }
-    let (mut hour, mut minute, mut second, mut ms) = (0, 0, 0, 0);
-    let mut offset_minutes = 0;
-    let has_time = matches!(p.peek(), Some(b'T' | b't' | b' '));
-    if has_time {
-        p.rest = &p.rest[1..];
-        hour = p.digits(2)?;
-        if !p.eat(b':') {
-            return None;
-        }
-        minute = p.digits(2)?;
-        if p.eat(b':') {
-            second = p.digits(2)?;
-            if p.eat(b'.') {
-                let fraction = p.rest.iter().take_while(|b| b.is_ascii_digit()).count();
-                if fraction == 0 {
-                    return None;
-                }
-                let digits = &p.rest[..fraction];
-                ms = digits
-                    .iter()
-                    .chain(std::iter::repeat(&b'0'))
-                    .take(3)
-                    .fold(0, |n, d| n * 10 + i64::from(d - b'0'));
-                p.rest = &p.rest[fraction..];
-            }
-        }
-    }
-    match p.peek() {
-        Some(b'Z' | b'z') => p.rest = &p.rest[1..],
-        Some(sign @ (b'+' | b'-')) if has_time => {
-            p.rest = &p.rest[1..];
-            let hours = p.digits(2)?;
-            p.eat(b':');
-            let minutes = p.digits(2)?;
-            if hours > 23 || minutes > 59 {
-                return None;
-            }
-            offset_minutes = (hours * 60 + minutes) * if sign == b'+' { 1 } else { -1 };
-        }
-        // Local time.
-        None if has_time => return None,
-        None => {}
-        Some(_) => return None,
-    }
-    if !p.rest.is_empty()
-        || !(1..=12).contains(&month)
-        || !(1..=31).contains(&day)
-        || hour > 24
-        || minute > 59
-        || second > 59
-        || (hour == 24 && (minute > 0 || second > 0 || ms > 0))
-    {
-        return None;
-    }
-    let days = days_from_civil(year, month, 1) + day - 1;
-    let time = (((days * 24 + hour) * 60 + minute - offset_minutes) * 60 + second) * 1000 + ms;
-    // TimeClip
-    (time.abs() <= 8_640_000_000_000_000).then_some(time as f64)
-}
-
-struct DateParser<'a> {
-    rest: &'a [u8],
-}
-
-impl DateParser<'_> {
-    fn peek(&self) -> Option<u8> {
-        self.rest.first().copied()
-    }
-
-    fn eat(&mut self, byte: u8) -> bool {
-        let found = self.peek() == Some(byte);
-        if found {
-            self.rest = &self.rest[1..];
-        }
-        found
-    }
-
-    /// Exactly `count` digits.
-    fn digits(&mut self, count: usize) -> Option<i64> {
-        let digits = self.rest.get(..count)?;
-        if !digits.iter().all(u8::is_ascii_digit) {
-            return None;
-        }
-        self.rest = &self.rest[count..];
-        Some(digits.iter().fold(0, |n, d| n * 10 + i64::from(d - b'0')))
-    }
-}
-
-/// Days from 1970-01-01 to a date of the proleptic Gregorian calendar.
-fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
-    let year = if month <= 2 { year - 1 } else { year };
-    let era = year.div_euclid(400);
-    let year_of_era = year - era * 400;
-    let month_from_march = (month + 9) % 12;
-    let day_of_year = (153 * month_from_march + 2) / 5 + day - 1;
-    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-    era * 146_097 + day_of_era - 719_468
-}
-
-/// discovery.ts `readLines`: parses the complete JSON lines in bytes
-/// `start..end` and returns the offset after the last newline. Lines that
-/// don't parse are skipped.
-fn read_lines(file: &mut File, start: u64, end: u64, mut on_line: impl FnMut(Value)) -> std::io::Result<u64> {
-    let length = usize::try_from(end.saturating_sub(start)).unwrap_or(usize::MAX);
-    if length == 0 {
-        return Ok(start);
-    }
-    let mut buffer = Vec::with_capacity(length);
-    file.seek(SeekFrom::Start(start))?;
-    file.take(length as u64).read_to_end(&mut buffer)?;
-    let Some(last_newline) = buffer.iter().rposition(|&b| b == b'\n') else {
-        return Ok(start);
-    };
-    let text = String::from_utf8_lossy(&buffer[..last_newline]);
-    for raw in text.split('\n') {
-        if raw.is_empty() {
-            continue;
-        }
-        if let Ok(line) = nodus_domain::json::from_str::<Value>(raw) {
-            on_line(line);
-        }
-    }
-    Ok(start + last_newline as u64 + 1)
 }
 
 /// Node's `path.resolve`: absolute against the working folder, with `.` and
@@ -809,20 +488,6 @@ fn resolve(path: &Path) -> PathBuf {
     out
 }
 
-/// `stat.mtimeMs` as Node works it out: seconds × 1000 + nanoseconds / 10⁶.
-fn mtime_ms(stat: &Metadata) -> f64 {
-    let Ok(modified) = stat.modified() else {
-        return 0.0;
-    };
-    match modified.duration_since(UNIX_EPOCH) {
-        Ok(since) => since.as_secs() as f64 * 1000.0 + f64::from(since.subsec_nanos()) / 1e6,
-        Err(before) => {
-            let before = before.duration();
-            -(before.as_secs() as f64 * 1000.0 + f64::from(before.subsec_nanos()) / 1e6)
-        }
-    }
-}
-
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
@@ -830,83 +495,6 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn reads_timestamps_as_date_parse_does() {
-        // Node 22, TZ=UTC; local-time forms left out.
-        let cases: &[(&str, Option<f64>)] = &[
-            ("2025-06-01T12:34:56.789Z", Some(1748781296789.0)),
-            ("2025-06-01T12:34:56Z", Some(1748781296000.0)),
-            ("2025-06-01T12:34Z", Some(1748781240000.0)),
-            ("2025-06-01", Some(1748736000000.0)),
-            ("2025-06", Some(1748736000000.0)),
-            ("2025", Some(1735689600000.0)),
-            ("2025-06-01T12:34:56.7Z", Some(1748781296700.0)),
-            ("2025-06-01T12:34:56.78Z", Some(1748781296780.0)),
-            ("2025-06-01T12:34:56.789123Z", Some(1748781296789.0)),
-            ("2025-06-01T12:34:56.7899Z", Some(1748781296789.0)),
-            ("2025-06-01T12:34:56.1234567890123Z", Some(1748781296123.0)),
-            ("2025-06-01T12:34:56.Z", None),
-            ("2025-06-01T12:34:56+04:00", Some(1748766896000.0)),
-            ("2025-06-01T12:34:56-0130", Some(1748786696000.0)),
-            ("2025-06-01T12:34:56.789+0130", Some(1748775896789.0)),
-            ("2025-06-01T12:34:56.789-01:30", Some(1748786696789.0)),
-            ("2025-06-01T12:34:56+04", None),
-            ("2025-06-01T12:34:56+24:00", None),
-            ("2025-06-01T12:34:56+23:59", Some(1748694956000.0)),
-            ("2025-06-01T12:34:56+12:60", None),
-            ("2025-06-01T24:00:00Z", Some(1748822400000.0)),
-            ("2025-06-01T24:00:01Z", None),
-            ("2025-02-30T00:00:00Z", Some(1740873600000.0)),
-            ("2025-02-31T00:00:00Z", Some(1740960000000.0)),
-            ("2025-13-01T00:00:00Z", None),
-            ("2025-06-32T00:00:00Z", None),
-            ("2025-00-01", None),
-            ("2025-06-00", None),
-            ("2025-06-01T25:00:00Z", None),
-            ("2025-06-01T12:60:00Z", None),
-            ("2025-06-01T12:34:60Z", None),
-            ("+002025-06-01T00:00:00Z", Some(1748736000000.0)),
-            ("-000001-01-01T00:00:00Z", Some(-62198755200000.0)),
-            ("-000000-01-01T00:00:00Z", None),
-            ("+275760-09-13T00:00:00.000Z", Some(8640000000000000.0)),
-            ("+275760-09-13T00:00:00.001Z", None),
-            ("275760-09-13T00:00:00Z", None),
-            ("0000-01-01T00:00:00Z", Some(-62167219200000.0)),
-            ("2025-06-01t12:34:56z", Some(1748781296000.0)),
-            ("2025-06-01T12:34:56z", Some(1748781296000.0)),
-            ("2025-06-01 12:34:56Z", Some(1748781296000.0)),
-            ("2025-06-01 12:34:56.789Z", Some(1748781296789.0)),
-            ("2025-06-01 12:34Z", Some(1748781240000.0)),
-            ("2025-06-01Z", Some(1748736000000.0)),
-            ("2025-06-01T12:34:56.789 Z", None),
-            (" 2025-06-01T00:00:00Z", None),
-            ("2025-06-01T00:00:00Z ", None),
-            ("", None),
-            ("abc", None),
-            ("1970-01-01T00:00:00.000Z", Some(0.0)),
-            ("1969-12-31T23:59:59.999Z", Some(-1.0)),
-            ("2025-06-01T12Z", None),
-            ("2025-06-01T1:02:03Z", None),
-            ("20250601T000000Z", None),
-        ];
-        for &(text, expected) in cases {
-            assert_eq!(parse_date(text), expected, "{text:?}");
-        }
-    }
-
-    #[test]
-    fn truncates_like_discovery() {
-        assert_eq!(truncate("  a \n b  ", 10), "a b");
-        assert_eq!(truncate("abcdef", 4), "abc…");
-        assert_eq!(truncate("ab   cdef", 4), "ab…");
-        // Lengths are UTF-16 units: the emoji is two.
-        assert_eq!(truncate("a🎉bc", 4), "a🎉…");
-        // JavaScript cuts the emoji in half; the half left reads as U+FFFD.
-        assert_eq!(truncate("a🎉bc", 3), "a\u{FFFD}…");
-        assert_eq!(truncate("ab🎉c", 3), "ab…");
-    }
 
     #[test]
     fn reply_lines_drop_headings_and_emphasis() {
@@ -930,42 +518,6 @@ mod tests {
         assert_eq!(task_ids("<task-id>x<b></task-id>"), Vec::<&str>::new());
         assert_eq!(task_ids("<task-id>x"), Vec::<&str>::new());
         assert_eq!(task_ids("<task-id>a\nb</task-id>"), vec!["a\nb"]);
-    }
-
-    #[test]
-    fn names_tools_and_what_they_acted_on() {
-        let call = |block: Value| describe_tool_use(&block);
-        assert_eq!(
-            call(json!({"name": "Bash", "input": {"command": "ls", "description": "List"}})),
-            ToolCall {
-                name: "Bash".into(),
-                detail: Some("ls".into())
-            }
-        );
-        assert_eq!(
-            call(json!({"name": "Read", "input": {"file_path": "/a/b/c.ts/"}}))
-                .detail
-                .as_deref(),
-            Some("c.ts")
-        );
-        // A file whose name is empty stops the search.
-        assert_eq!(
-            call(json!({"name": "Read", "input": {"file_path": "/", "pattern": "x"}})).detail,
-            None
-        );
-        assert_eq!(
-            call(json!({"name": "Grep", "input": {"command": " ", "pattern": "TODO"}}))
-                .detail
-                .as_deref(),
-            Some("TODO")
-        );
-        assert_eq!(
-            call(json!({"name": "mcp__nodus__create_note", "input": "x"})).name,
-            "create_note"
-        );
-        assert_eq!(call(json!({"name": "mcp__nodus__", "input": {}})).name, "mcp__nodus__");
-        assert_eq!(call(json!({"name": "mcp__a___b"})).name, "b");
-        assert_eq!(call(json!({"name": "Task", "input": ["prompt"]})).detail, None);
     }
 
     #[test]

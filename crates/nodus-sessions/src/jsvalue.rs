@@ -82,11 +82,6 @@ pub(crate) fn trim(s: &str) -> &str {
     s.trim_matches(is_space)
 }
 
-/// `s.trimEnd()`.
-pub(crate) fn trim_end(s: &str) -> &str {
-    s.trim_end_matches(is_space)
-}
-
 /// `s.replace(/\s+/g, ' ')`.
 pub(crate) fn collapse_spaces(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
@@ -149,7 +144,6 @@ mod tests {
         assert!(!is_space('\u{85}'));
         assert!(!is_space('\u{200B}'));
         assert_eq!(trim("\u{FEFF} a b \u{3000}"), "a b");
-        assert_eq!(trim_end(" a \n"), " a");
         assert_eq!(collapse_spaces("a \n\t b\u{A0}c"), "a b c");
     }
 }

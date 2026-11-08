@@ -16,6 +16,7 @@ nodus-host.workspace = true
 nodus-host-proto.workspace = true
 nodus-platform.workspace = true
 nodus-store.workspace = true
+nodus-transcripts.workspace = true
 regex.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

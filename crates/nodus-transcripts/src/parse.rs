@@ -466,6 +466,41 @@ mod tests {
     }
 
     #[test]
+    fn reads_an_agents_steps_as_agents_ts_does() {
+        // The subagents' reader (02) shares these; its cases, checked against agents.ts.
+        assert_eq!(truncate("ab   cdef", 4), "ab…");
+        assert_eq!(truncate("a🎉bc", 4), "a🎉…");
+        // JavaScript cuts the emoji in half; the half left reads as U+FFFD.
+        assert_eq!(truncate("a🎉bc", 3), "a\u{FFFD}…");
+        assert_eq!(truncate("ab🎉c", 3), "ab…");
+        let call = |block: Value| describe_tool_use(&block);
+        assert_eq!(
+            call(json!({"name": "Read", "input": {"file_path": "/a/b/c.ts/"}}))
+                .detail
+                .as_deref(),
+            Some("c.ts")
+        );
+        // A file whose name is empty stops the search.
+        assert_eq!(
+            call(json!({"name": "Read", "input": {"file_path": "/", "pattern": "x"}})).detail,
+            None
+        );
+        assert_eq!(
+            call(json!({"name": "Grep", "input": {"command": " ", "pattern": "TODO"}}))
+                .detail
+                .as_deref(),
+            Some("TODO")
+        );
+        assert_eq!(
+            call(json!({"name": "mcp__nodus__create_note", "input": "x"})).name,
+            "create_note"
+        );
+        assert_eq!(call(json!({"name": "mcp__nodus__", "input": {}})).name, "mcp__nodus__");
+        assert_eq!(call(json!({"name": "mcp__a___b"})).name, "b");
+        assert_eq!(call(json!({"name": "Task", "input": ["prompt"]})).detail, None);
+    }
+
+    #[test]
     fn reads_times_and_task_notifications() {
         assert_eq!(
             time_of(&line(json!({ "timestamp": "1970-01-01T00:00:01.000Z" }))),

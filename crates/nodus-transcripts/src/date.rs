@@ -2,11 +2,15 @@
 //!
 //! Claude Code writes every timestamp with `toISOString()`
 //! (`2026-11-01T10:00:00.000Z`), so the ECMAScript date-time format is read
-//! as V8 reads it: `YYYY`, `±YYYYYY`, `-MM`, `-DD`, `THH:mm`, `:ss`, `.sss`
-//! (only the first three digits count), then `Z` or `±HH:mm`. Two
-//! differences: V8 reads a date-time without an offset in local time, which
-//! this reads as UTC, and V8 falls back to a lenient parser for other
-//! formats, where this gives none.
+//! as V8 reads it, with the variants V8 reads the same way: `YYYY`,
+//! `±YYYYYY`, `-MM`, `-DD`; `T`, `t` or a space, then `HH:mm`, `:ss`, `.sss`
+//! (any number of digits, only the first three count); then `Z`, `z`,
+//! `±HH:mm` or `±HHmm`. Two differences: V8 reads a date-time without an
+//! offset in local time, which this reads as UTC, and V8 falls back to a
+//! lenient parser for other formats, where this gives none.
+//!
+//! The session transcripts (03) and the subagents (02) read their timestamps
+//! through [`parse`].
 
 /// `Date.parse(s)`, in ms since the epoch; none where it gives NaN.
 pub fn parse(s: &str) -> Option<f64> {
@@ -36,7 +40,9 @@ pub fn parse(s: &str) -> Option<f64> {
     }
     let mut time = 0;
     let mut offset = 0;
-    if r.eat(b'T') {
+    let has_time = matches!(r.peek(), Some(b'T' | b't' | b' '));
+    if has_time {
+        r.at += 1;
         let hour = r.digits(2)?;
         if !r.eat(b':') {
             return None;
@@ -55,23 +61,22 @@ pub fn parse(s: &str) -> Option<f64> {
             return None;
         }
         time = ((hour * 60 + minute) * 60 + second) * 1000 + ms;
-        match r.peek() {
-            Some(b'Z') => r.at += 1,
-            Some(sign @ (b'+' | b'-')) => {
-                r.at += 1;
-                let hours = r.digits(2)?;
-                if !r.eat(b':') {
-                    return None;
-                }
-                let minutes = r.digits(2)?;
-                if hours > 23 || minutes > 59 {
-                    return None;
-                }
-                let minutes = hours * 60 + minutes;
-                offset = if sign == b'+' { minutes } else { -minutes } * 60_000;
+    }
+    match r.peek() {
+        Some(b'Z' | b'z') => r.at += 1,
+        // An offset needs a time; after a date alone it's no date at all.
+        Some(sign @ (b'+' | b'-')) if has_time => {
+            r.at += 1;
+            let hours = r.digits(2)?;
+            r.eat(b':');
+            let minutes = r.digits(2)?;
+            if hours > 23 || minutes > 59 {
+                return None;
             }
-            _ => {}
+            let minutes = hours * 60 + minutes;
+            offset = if sign == b'+' { minutes } else { -minutes } * 60_000;
         }
+        _ => {}
     }
     if r.at != r.s.len() {
         return None;
@@ -193,6 +198,77 @@ mod tests {
         assert_eq!(parse("2026-11-01T24:00:00Z"), parse("2026-11-02T00:00:00Z"));
         // Past the month's end runs on.
         assert_eq!(parse("2026-02-31"), parse("2026-03-03"));
+    }
+
+    #[test]
+    fn reads_what_node_22_reads() {
+        // Node 22, TZ=UTC; local-time forms left out. Carried over from the
+        // subagents' reader (02), which now reads through this.
+        let cases: &[(&str, Option<f64>)] = &[
+            ("2025-06-01T12:34:56.789Z", Some(1748781296789.0)),
+            ("2025-06-01T12:34:56Z", Some(1748781296000.0)),
+            ("2025-06-01T12:34Z", Some(1748781240000.0)),
+            ("2025-06-01", Some(1748736000000.0)),
+            ("2025-06", Some(1748736000000.0)),
+            ("2025", Some(1735689600000.0)),
+            ("2025-06-01T12:34:56.7Z", Some(1748781296700.0)),
+            ("2025-06-01T12:34:56.78Z", Some(1748781296780.0)),
+            ("2025-06-01T12:34:56.789123Z", Some(1748781296789.0)),
+            ("2025-06-01T12:34:56.7899Z", Some(1748781296789.0)),
+            ("2025-06-01T12:34:56.1234567890123Z", Some(1748781296123.0)),
+            ("2025-06-01T12:34:56.Z", None),
+            ("2025-06-01T12:34:56+04:00", Some(1748766896000.0)),
+            ("2025-06-01T12:34:56-0130", Some(1748786696000.0)),
+            ("2025-06-01T12:34:56.789+0130", Some(1748775896789.0)),
+            ("2025-06-01T12:34:56.789-01:30", Some(1748786696789.0)),
+            ("2025-06-01T12:34:56+04", None),
+            ("2025-06-01T12:34:56+24:00", None),
+            ("2025-06-01T12:34:56+23:59", Some(1748694956000.0)),
+            ("2025-06-01T12:34:56+12:60", None),
+            ("2025-06-01T24:00:00Z", Some(1748822400000.0)),
+            ("2025-06-01T24:00:01Z", None),
+            ("2025-02-30T00:00:00Z", Some(1740873600000.0)),
+            ("2025-02-31T00:00:00Z", Some(1740960000000.0)),
+            ("2025-13-01T00:00:00Z", None),
+            ("2025-06-32T00:00:00Z", None),
+            ("2025-00-01", None),
+            ("2025-06-00", None),
+            ("2025-06-01T25:00:00Z", None),
+            ("2025-06-01T12:60:00Z", None),
+            ("2025-06-01T12:34:60Z", None),
+            ("+002025-06-01T00:00:00Z", Some(1748736000000.0)),
+            ("-000001-01-01T00:00:00Z", Some(-62198755200000.0)),
+            ("-000000-01-01T00:00:00Z", None),
+            ("+275760-09-13T00:00:00.000Z", Some(8640000000000000.0)),
+            ("+275760-09-13T00:00:00.001Z", None),
+            ("275760-09-13T00:00:00Z", None),
+            ("0000-01-01T00:00:00Z", Some(-62167219200000.0)),
+            ("2025-06-01t12:34:56z", Some(1748781296000.0)),
+            ("2025-06-01T12:34:56z", Some(1748781296000.0)),
+            ("2025-06-01 12:34:56Z", Some(1748781296000.0)),
+            ("2025-06-01 12:34:56.789Z", Some(1748781296789.0)),
+            ("2025-06-01 12:34Z", Some(1748781240000.0)),
+            ("2025-06-01Z", Some(1748736000000.0)),
+            ("2025-06-01T12:34:56.789 Z", None),
+            (" 2025-06-01T00:00:00Z", None),
+            ("2025-06-01T00:00:00Z ", None),
+            ("", None),
+            ("abc", None),
+            ("1970-01-01T00:00:00.000Z", Some(0.0)),
+            ("1969-12-31T23:59:59.999Z", Some(-1.0)),
+            ("2025-06-01T12Z", None),
+            ("2025-06-01T1:02:03Z", None),
+            ("20250601T000000Z", None),
+        ];
+        for &(text, expected) in cases {
+            assert_eq!(parse(text), expected, "{text:?}");
+        }
+    }
+
+    #[test]
+    fn reads_a_time_without_an_offset_as_utc() {
+        // V8 reads it as local time; Claude Code never writes one.
+        assert_eq!(parse("2025-06-01T12:34:56"), Some(1748781296000.0));
     }
 
     #[test]

@@ -60,7 +60,7 @@ Any finding blocks the push until the commit is rewritten without it. A secret t
 | D4 | **PTYs: `portable-pty`**. Async runtime: `tokio`. HTTP (hook server, MCP relay): `axum`/`hyper`. | Proposed |
 | D5 | **One binary.** `Nodus` runs the app; `Nodus host …` runs the session host (no Dock icon, outlives the app), as the Electron app runs its own binary as Node for `host.js`. | Proposed |
 | D6 | **Secrets:** read the 0.9.4 `safeStorage` ciphertext so a saved xAI key survives the upgrade. macOS: Chromium OSCrypt, password in the Keychain item service `Nodus Safe Storage`, account `Nodus Key`; the Rust app is signed with the same Team ID and bundle id so the Keychain doesn't prompt. Windows: AES-256-GCM with a key kept in `Local State` and protected by DPAPI. Exact parameters per spec 01. | Proposed |
-| D8 | **The UI is pixel-for-pixel the same (user, 2026-11-08).** Golden screenshots of 0.9.4 for every screen and state, light and dark, from synthetic seeded state, live in `migration/parity/`. Every Rust UI slice renders the same scenes and is compared side by side and with a perceptual diff before it merges. Same fonts (system UI font, SF Mono / Cascadia), same metrics. | Adopted |
+| D8 | **No visible difference for a 0.9.4 user (user, 2026-11-08).** Someone moving from 0.9.4 sees no difference in how the app looks or how it's used: same layout, colours, type, motion, shortcuts, gestures, copy and flows. Golden screenshots of 0.9.4 for every screen and state, light and dark, from synthetic seeded state, live in `migration/parity/`; every Rust UI slice renders the same scenes and is compared side by side (with a perceptual diff as an aid) before it merges. Same fonts (system UI font, SF Mono / Cascadia) and metrics. | Adopted |
 | D7 | **Branches:** each track works on a `rust/<track>` branch in its own worktree, and merges to `main` when `cargo test` and `pnpm typecheck/test/build` both pass. | Adopted |
 
 ## Architecture
@@ -169,7 +169,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 | Spec | What Chromium gives today | Proposed native behavior |
 | --- | --- | --- |
-| 01 | View menu: Reload, Force Reload, Toggle Developer Tools. | Drop them from release builds; keep Reload as a debug-only item. |
+| 01 | View menu: Reload, Force Reload, Toggle Developer Tools. | **Decided (user, 2026-11-08):** Force Reload and Toggle Developer Tools are dropped. Reload stays only in debug builds. |
 | 01 | Page zoom (⌘+ / ⌘- / ⌘0), saved in Chromium's `Preferences`. | Same shortcuts scale the whole UI, read the saved zoom once on first launch and keep it in `state.json` after. |
 | 01, 07, 11 | `localStorage` keys in Chromium's LevelDB: the capture draft, its attachments, sent-text history, the "clipboard already offered" marker, the ink colour. | Read them once from `Local Storage/leveldb` on first launch and move them into `state.json`. |
 | 01 | Spellcheck underlines in text fields. | Native spellcheck where the OS offers it (NSSpellChecker on macOS). |

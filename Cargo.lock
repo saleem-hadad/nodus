@@ -4032,6 +4032,8 @@ version = "0.9.4"
 dependencies = [
  "nodus-board",
  "nodus-domain",
+ "nodus-host-proto",
+ "nodus-sessions",
  "nodus-store",
  "nodus-transcripts",
  "serde_json",
@@ -4083,6 +4085,20 @@ dependencies = [
 [[package]]
 name = "nodus-views"
 version = "0.9.4"
+dependencies = [
+ "nodus-board",
+ "nodus-domain",
+ "nodus-platform",
+ "nodus-sessions",
+ "nodus-store",
+ "nodus-transcripts",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "uuid",
+]
 
 [[package]]
 name = "nodus-voice"

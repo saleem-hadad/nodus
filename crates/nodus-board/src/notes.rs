@@ -72,7 +72,7 @@ pub fn fit_note(text: &str) -> Size {
 }
 
 /// Cards that are drawn on the board: not archived, not a run, not a view's brain.
-pub(crate) fn active_cards(board: &BoardState) -> impl Iterator<Item = &BoardNode> {
+pub fn active_cards(board: &BoardState) -> impl Iterator<Item = &BoardNode> {
     board
         .nodes
         .values()

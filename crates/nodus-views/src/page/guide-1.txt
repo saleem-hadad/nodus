@@ -1,0 +1,5 @@
+How a view works:
+- It's one self-contained HTML document, shown in a sandboxed frame on a card on the board. It has no network: it can't fetch URLs or load scripts, stylesheets, fonts or images from anywhere, so put everything inline (CSS in <style>, JS in <script>, charts as inline SVG or <canvas>, icons as inline SVG or Unicode). Links open in the user's browser.
+- Draw from data rather than writing values into the page: the page renders nodus.data, and you change what it shows with update_view's data, which updates the page in place. Rewrite the html only to change how it looks or works.
+- Fresh data comes two ways:
+  1. Commands, for anything a CLI or curl can fetch. Declare them with update_view's commands. Each runs in the project folder with the user's shell environment (their PATH, their CLIs, and env vars such as API tokens), and the page gets its output to parse.

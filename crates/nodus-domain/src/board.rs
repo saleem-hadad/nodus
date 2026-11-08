@@ -1,0 +1,216 @@
+//! A project's board: its session cards, sections, sticky notes and ink.
+
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
+
+use crate::project::{FolderColor, Project};
+use crate::session::{SessionCard, SessionKind};
+use crate::view::BoardView;
+
+/// A rectangle in board coordinates. Like [`Viewport`], a closed shape with
+/// nothing more it could hold, so unlike the board's records it keeps no
+/// fields it doesn't know.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+pub struct Rect {
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+}
+
+/// Where the board is scrolled to, and how far it's zoomed.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Viewport {
+    pub x: f64,
+    pub y: f64,
+    pub zoom: f64,
+}
+
+/// Board-level state the app owns for a session card.
+///
+/// Fields are in the order the TypeScript first writes them, so state.json
+/// keeps its shape.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BoardNode {
+    pub session_id: String,
+    /// Absent on cards saved before terminals existed; those are Claude sessions.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<SessionKind>,
+    pub x: f64,
+    pub y: f64,
+    pub archived: bool,
+    /// User-provided title; overrides the transcript title.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// Session ids whose context was merged to create this one (drawn as edges).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parents: Option<Vec<String>>,
+    /// True when the session was started from Nodus (vs. imported).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_by_app: Option<bool>,
+    /// The action this session is a run of. Runs aren't drawn on the board, and
+    /// go when their turn ends; one the user takes over joins the board.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_of: Option<String>,
+    /// The card is expanded in place, showing its terminal on the board. Active cards only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expanded: Option<bool>,
+    /// The view this session is the brain of: it builds the view and keeps it up
+    /// to date. A brain isn't drawn on the board; its view shows what it's doing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub view_of: Option<String>,
+    /// Runs in auto mode, as sessions started on the board do, and resumes in it too.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_mode: Option<bool>,
+    /// The view whose page started this session, drawn as a dashed line from it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from_view: Option<String>,
+    pub created_at: f64,
+    /// Size of the expanded card, once it has been resized.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub w: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub h: Option<f64>,
+    /// When the card was last archived; puts it on top of the archive stack.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub archived_at: Option<f64>,
+    /// Section the card is grouped under. Archived cards never belong to one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub section_id: Option<String>,
+    /// Fields this version doesn't know, written back as they were read.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+/// A named frame grouping active cards on the board. The frame is drawn around
+/// its cards, so it grows and shrinks with them; x/y is its top-left corner,
+/// which is where it stays while it has no cards.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BoardSection {
+    pub id: String,
+    /// Empty until the user names it.
+    pub name: String,
+    pub color: FolderColor,
+    pub x: f64,
+    pub y: f64,
+    pub created_at: f64,
+    /// Fields this version doesn't know, written back as they were read.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+/// A sticky note on the board: a reminder or scratch text, with no session behind it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BoardNote {
+    pub id: String,
+    pub text: String,
+    pub color: FolderColor,
+    pub x: f64,
+    pub y: f64,
+    /// Size of the note, once it has been resized.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub w: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub h: Option<f64>,
+    /// The session started from the note. It's drawn as a sticker on that
+    /// session's card, rather than on the board, until the card leaves.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    /// The session that wrote the note with its board tools, when Claude wrote it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from: Option<String>,
+    /// That session's project, when it wrote from another project's board.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from_project: Option<String>,
+    /// That session's title as it wrote, since its card isn't on this board.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from_title: Option<String>,
+    pub created_at: f64,
+    /// Fields this version doesn't know, written back as they were read.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+string_enum! {
+    /// Ink colours. Graphite is dark ink on the light board and light ink on
+    /// the dark one. `ALL` is the TypeScript's INK_COLORS.
+    pub enum InkColor {
+        Graphite = "graphite",
+        Red = "red",
+        Orange = "orange",
+        Green = "green",
+        Blue = "blue",
+        Purple = "purple",
+    }
+}
+
+string_enum! {
+    /// What an ink mark is. `ALL` is the TypeScript's INK_KINDS.
+    pub enum InkKind {
+        Pen = "pen",
+        Arrow = "arrow",
+        Text = "text",
+    }
+}
+
+/// A mark drawn on the board with the ink tools, in board coordinates: a pen
+/// stroke's path, an arrow's tail and head, or the top-left corner of a label.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InkStroke {
+    pub id: String,
+    pub kind: InkKind,
+    pub color: InkColor,
+    /// Flat x, y pairs.
+    pub points: Vec<f64>,
+    /// How thick it's drawn, as a multiple of the default: ink keeps the size it had on screen when drawn.
+    pub size: f64,
+    /// A label's words.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    /// Fields this version doesn't know, written back as they were read.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BoardSnapshot {
+    pub project: Project,
+    pub cards: Vec<SessionCard>,
+    pub archive: Rect,
+    pub sections: Vec<BoardSection>,
+    pub notes: Vec<BoardNote>,
+    pub views: Vec<BoardView>,
+    /// Ink drawn on the board, oldest first.
+    pub ink: Vec<InkStroke>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub viewport: Option<Viewport>,
+}
+
+/// The changes `board.saveNodes` makes to a card.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NodePatch {
+    pub session_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub x: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub y: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub archived: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// `Some(None)`, sent as `sectionId: null`, takes the card out of its section.
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "crate::nullable")]
+    pub section_id: Option<Option<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expanded: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub w: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub h: Option<f64>,
+}

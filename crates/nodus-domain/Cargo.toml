@@ -1,0 +1,18 @@
+[package]
+name = "nodus-domain"
+description = "The types Nodus's domains share, serde-compatible with state.json and the app's IPC JSON"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+ryu.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

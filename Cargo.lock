@@ -912,6 +912,8 @@ version = "0.9.4"
 dependencies = [
  "indexmap",
  "nodus-domain",
+ "nodus-host",
+ "nodus-host-proto",
  "nodus-platform",
  "nodus-store",
  "regex",

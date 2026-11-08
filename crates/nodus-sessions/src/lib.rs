@@ -10,6 +10,7 @@
 //! command lines `src/main/ipc.ts` and `pty.ts` start sessions with.
 
 pub mod agents;
+pub mod client;
 pub mod hooks;
 mod jsvalue;
 pub mod launch;

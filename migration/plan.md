@@ -24,6 +24,19 @@ Done means:
 5. **Domains don't depend on the UI.** Only `nodus-ui` and the `nodus` binary know GPUI exists. Domain crates depend on `nodus-domain` and, where they must touch the OS, `nodus-platform`.
 6. **Push early.** Every slice that builds, passes tests and doesn't break the Electron app goes to `main`. Until cutover, `main` ships the Electron app; the Rust workspace grows beside it.
 7. **Port the tests.** Every Vitest case in `src/**/*.test.ts` gets a Rust counterpart in the crate that owns the behavior.
+8. **No secrets or personal data in the repo.** Nothing from the user's own `state.json`, boards, transcripts, Keychain, environment or clipboard: no keys, tokens or ciphertext, no real project names or repo paths. Fixtures are synthetic, and secrets appear only by name (`XAI_API_KEY`, `APPLE_APP_SPECIFIC_PASSWORD`). No absolute personal paths: write `~/…`, `<userData>/…` or `<scratch>/…`. Documenting *how* a secret is stored is fine.
+
+## Before every push
+
+The orchestrator is the only one who pushes. Before each push to `main`:
+
+```sh
+gitleaks git --redact --no-banner --log-opts="origin/main..HEAD" .     # brew install gitleaks
+git log -p origin/main..HEAD | grep -nE '^\+.*(/Users/[a-z]|/private/tmp/claude-)'   # must print nothing
+git diff --stat origin/main..HEAD                                        # only the files you meant to ship
+```
+
+Any finding blocks the push until the commit is rewritten without it. A secret that reached GitHub is rotated, not just deleted.
 
 ## Decisions
 

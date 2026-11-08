@@ -4,3 +4,12 @@ dist
 .DS_Store
 *.log
 /target
+# Secrets and local machine files never belong in the repo.
+.env
+.env.*
+*.pem
+*.p12
+*.p8
+*.key
+*.mobileprovision
+*.provisionprofile

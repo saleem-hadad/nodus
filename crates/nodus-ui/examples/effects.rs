@@ -151,11 +151,7 @@ impl Effects {
             .line_height(px(20.))
             .text_color(rgb(0x3a3000))
             .child("Buy milk, then ship the GPUI patch set before Friday.");
-        if self.off {
-            note
-        } else {
-            note.rotate(deg(angle))
-        }
+        if self.off { note } else { note.rotate(deg(angle)) }
     }
 
     /// Two overlapping squares faded together, as one picture: where they
@@ -165,7 +161,15 @@ impl Effects {
             .relative()
             .w(px(120.))
             .h(px(90.))
-            .child(div().absolute().left_0().top_0().size(px(70.)).rounded(px(8.)).bg(rgb(0x0a84ff)))
+            .child(
+                div()
+                    .absolute()
+                    .left_0()
+                    .top_0()
+                    .size(px(70.))
+                    .rounded(px(8.))
+                    .bg(rgb(0x0a84ff)),
+            )
             .child(
                 div()
                     .absolute()
@@ -283,7 +287,12 @@ impl Render for Effects {
                     .flex()
                     .flex_col()
                     .gap(px(10.))
-                    .child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child("Archive"))
+                    .child(
+                        div()
+                            .text_size(px(15.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child("Archive"),
+                    )
                     .children((1..=6).map(|i| {
                         div()
                             .rounded(px(8.))
@@ -372,8 +381,8 @@ fn main() {
         .ok()
         .and_then(|value| value.parse().ok())
         .unwrap_or(8.);
-    let capture_path = std::env::var_os("EFFECTS_CAPTURE")
-        .map_or_else(|| std::env::temp_dir().join("effects.png"), PathBuf::from);
+    let capture_path =
+        std::env::var_os("EFFECTS_CAPTURE").map_or_else(|| std::env::temp_dir().join("effects.png"), PathBuf::from);
     let stress = env_flag("EFFECTS_STRESS");
     let off = env_flag("EFFECTS_OFF");
     let strict = env_flag("EFFECTS_STRICT");
@@ -431,8 +440,16 @@ fn main() {
             let mut failures = 0;
             let mut hit_checks = Vec::new();
             for (label, position, expect) in [
-                ("inside the turned note, outside its box", point(px(241.5), px(175.)), !off),
-                ("outside the turned note, inside its box", point(px(200.), px(151.)), off),
+                (
+                    "inside the turned note, outside its box",
+                    point(px(241.5), px(175.)),
+                    !off,
+                ),
+                (
+                    "outside the turned note, inside its box",
+                    point(px(200.), px(151.)),
+                    off,
+                ),
                 ("the note's centre", point(px(155.), px(225.)), true),
             ] {
                 let moved = handle.update(cx, |_, window, cx| {
@@ -509,12 +526,10 @@ fn main() {
                         .map(|pair| (pair[1] - pair[0]).as_secs_f64() * 1000.)
                         .collect();
                     let over = gaps.iter().filter(|gap| **gap > 25.).count();
-                    let fps = (frames.len() - 1) as f64
-                        / (frames[frames.len() - 1] - frames[0]).as_secs_f64();
+                    let fps = (frames.len() - 1) as f64 / (frames[frames.len() - 1] - frames[0]).as_secs_f64();
                     let (p50, p95, max) = percentiles(gaps);
-                    let (cpu50, cpu95, cpu_max) = percentiles(
-                        stats.cpu.iter().map(|cpu| cpu.as_secs_f64() * 1000.).collect(),
-                    );
+                    let (cpu50, cpu95, cpu_max) =
+                        percentiles(stats.cpu.iter().map(|cpu| cpu.as_secs_f64() * 1000.).collect());
                     println!(
                         "EFFECTS FRAMES stress={stress} off={off} frames={} fps={fps:.1} \
                          gap_p50={p50:.2} gap_p95={p95:.2} gap_max={max:.2} gaps_over_25ms={over} \

@@ -6,13 +6,10 @@
 //! shell's startup files print around it doesn't matter.
 
 use std::path::Path;
-use std::process::Stdio;
 use std::time::Duration;
 
-use tokio::io::AsyncReadExt;
-use tokio::process::Command;
-
 use super::EnvMap;
+use crate::process::{Capture, Command, Signal};
 
 const MARK_START: &str = "__NODUS_ENV_START__";
 const MARK_END: &str = "__NODUS_ENV_END__";
@@ -35,37 +32,22 @@ pub(super) async fn capture() -> Option<EnvMap> {
 }
 
 /// Runs `shell -ilc` to print the environment between the markers, and reads
-/// what it printed in `timeout`.
+/// what it printed in `timeout`. Past the timeout, or past 8 MiB, the shell is
+/// stopped outright (interactive shells ignore SIGTERM) and what it printed so
+/// far is all there is. Its exit code doesn't matter.
 pub(super) async fn run(shell: &Path, timeout: Duration) -> Option<EnvMap> {
     let script = format!("printf '%s' '{MARK_START}'; env -0; printf '%s' '{MARK_END}'");
-    let mut child = Command::new(shell)
+    let output = Command::new(shell)
         .arg("-ilc")
         .arg(script)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .kill_on_drop(true)
-        .spawn()
+        .stdout(Capture::MaxBuffer(MAX_OUTPUT))
+        .stderr(Capture::Ignore)
+        .timeout(timeout)
+        .kill_signal(Signal::KILL)
+        .output()
+        .await
         .ok()?;
-    let mut stdout = child.stdout.take()?;
-    let mut output = Vec::new();
-    let read = async {
-        let mut chunk = vec![0; 64 * 1024];
-        while output.len() < MAX_OUTPUT {
-            match stdout.read(&mut chunk).await {
-                Ok(0) | Err(_) => break,
-                Ok(read) => output.extend_from_slice(&chunk[..read]),
-            }
-        }
-    };
-    // Past the timeout, what it printed so far is all there is.
-    let _ = tokio::time::timeout(timeout, read).await;
-    output.truncate(MAX_OUTPUT);
-    drop(stdout);
-    // Interactive shells ignore SIGTERM, so one still going is killed outright.
-    let _ = child.start_kill();
-    let _ = child.wait().await;
-    parse(&String::from_utf8_lossy(&output))
+    parse(&output.stdout_text())
 }
 
 /// The variables between the markers, `env -0`'s NUL-separated `NAME=value`

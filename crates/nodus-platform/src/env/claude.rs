@@ -2,13 +2,11 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
 use std::time::Duration;
-
-use tokio::process::Command;
 
 use super::EnvMap;
 use super::path_search::find_on_path;
+use crate::process::{Command, NODE_MAX_BUFFER};
 
 /// How long `claude --version` gets to answer.
 const VERSION_TIMEOUT: Duration = Duration::from_secs(10);
@@ -34,37 +32,19 @@ pub(super) fn find(path_var: &str) -> Option<PathBuf> {
 
 /// What `claude --version` prints first; None when it fails or takes too long.
 pub(super) async fn read_version(claude: &Path, env: &EnvMap) -> Option<String> {
-    let mut command = Command::new(claude);
-    command
+    let output = Command::new(claude)
         .arg("--version")
-        .env_clear()
-        .envs(env)
-        .stdin(Stdio::null())
-        .stderr(Stdio::null())
-        .kill_on_drop(true);
-    hide_window(&mut command);
-    let output = tokio::time::timeout(VERSION_TIMEOUT, command.output())
+        .env(env.clone())
+        .timeout(VERSION_TIMEOUT)
+        .max_buffer(NODE_MAX_BUFFER)
+        .exec()
         .await
-        .ok()?
         .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stdout = output.stdout_text();
     let line = stdout.trim().split('\n').next()?;
     let line = line.strip_suffix('\r').unwrap_or(line);
     (!line.is_empty()).then(|| line.to_owned())
 }
-
-/// Starts it without a console window flashing up.
-#[cfg(windows)]
-fn hide_window(command: &mut Command) {
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    command.creation_flags(CREATE_NO_WINDOW);
-}
-
-#[cfg(not(windows))]
-fn hide_window(_: &mut Command) {}
 
 /// The claude.exe an npm shim (claude.cmd) starts. A batch file can't take the
 /// JSON options sessions are started with, as cmd.exe reads its quotes and

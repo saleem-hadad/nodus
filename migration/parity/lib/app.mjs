@@ -227,6 +227,8 @@ export class App {
     await item.dblclick()
     await this.page.waitForSelector('.react-flow__viewport')
     await this.page.waitForFunction(() => !document.querySelector('.board-loading'))
+    // The branch chip comes in once git has answered; every seeded project is a repository.
+    await this.page.waitForSelector('.git-branch', { timeout: 10_000 })
   }
 
   /** Runs a menu item from the native application menu, by its path of labels. */

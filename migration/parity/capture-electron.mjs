@@ -105,6 +105,15 @@ async function shoot(scene, theme, opts, dir) {
     const { page = app.page, ...shot } = (await scene.run({ app, page: app.page, theme })) ?? {}
     const result = await capture(page, file, shot)
     return { scene: scene.id, theme, file, ms: Date.now() - started, ...result }
+  } catch (err) {
+    // What each window showed when the scene failed, to see where it got stuck.
+    const dir = path.join(os.tmpdir(), 'nodus-parity-failures')
+    fs.mkdirSync(dir, { recursive: true })
+    for (const [i, w] of (app.electron?.windows() ?? []).entries()) {
+      await w.screenshot({ path: path.join(dir, `${scene.id}.${theme}.${i}.png`) }).catch(() => {})
+    }
+    err.message = `${err.message.split('\n')[0]} (screens in ${dir})`
+    throw err
   } finally {
     await app.close()
   }
@@ -157,7 +166,12 @@ async function main() {
       const c = comparePng(fs.readFileSync(golden), fs.readFileSync(r.file))
       if (c.diffPixels > 0) differ++
       const same = fs.readFileSync(golden).equals(fs.readFileSync(r.file))
-      console.log(`${path.basename(r.file).padEnd(46)} ${same ? 'identical' : `${c.diffPixels} px differ ${JSON.stringify(c.box)}`}`)
+      const verdict = same
+        ? 'identical'
+        : c.diffPixels === 0
+          ? 'same to the eye (anti-aliasing noise only)'
+          : `${c.diffPixels} px differ, within ${JSON.stringify(c.box)}`
+      console.log(`${path.basename(r.file).padEnd(46)} ${verdict}`)
     }
     console.log(differ ? `\n${differ} shot(s) differ.` : '\nEvery shot matches.')
   } else {

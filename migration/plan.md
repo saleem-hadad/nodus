@@ -11,7 +11,7 @@ The second goal is shape: the code is split into isolated domains with no UI dep
 Done means:
 
 - Every checklist item in every `migration/features/*.md` is ticked and verified.
-- An installed 0.9.4 updates itself to the Rust release through its own updater, keeps its boards, settings and saved xAI key, and adopts the sessions still running in its session host.
+- An installed 0.9.4 updates itself to the Rust release through its own updater and keeps its boards, settings and saved xAI key. Sessions still running in its session host are handed over as decision U1 says.
 - Side-by-side screenshots of every screen, in light and dark, match the Electron app.
 - `src/`, `package.json` and the rest of the Electron toolchain are gone from `main`.
 
@@ -103,7 +103,7 @@ One file per domain in `migration/features/`. Each lists every behavior with an 
 | File | Covers (Electron sources) | Spec | Ported |
 | --- | --- | --- | --- |
 | 01-platform-shell.md | app lifecycle, menu, env, store, settings, preload/IPC plumbing | ✅ 141 | ☐ |
-| 02-session-host-status.md | host, host protocol, pty client, hooks status machine, agents, usage, notifications | ⏳ | ☐ |
+| 02-session-host-status.md | host, host protocol, pty client, hooks status machine, agents, usage, notifications | ✅ 225 | ☐ |
 | 03-sessions-transcripts.md | session create/open/send/kill, claude args, discovery, board merge, search, summarize, naming, geometry | ✅ 205 | ☐ |
 | 04-board-tools-views.md | board tools MCP, notes placement, views (main + renderer), view page, ink storage | ✅ 222 | ☐ |
 | 05-actions-voice-git.md | actions rail, voice prompts, git status/diff/log and their UI | ✅ 183 | ☐ |
@@ -155,6 +155,8 @@ Places where the code and the docs disagree, or where matching 0.9.4 exactly mea
 | 12 | Clicking an OSC 8 link shows xterm's confirm, then most likely opens nothing; a right-click on a URL may open it. | Check in 0.9.4, then match |
 | 04 | how-it-works.md says a view is a picture until clicked, double-click opens it large, and there's a View button in the title bar; none is in 0.9.4 (the click shield went in 64d9dc4, "New view…" is in the New Session button's menu). | Follows the code |
 | 04 | Saving a note from the board drops `fromProject` and `fromTitle`, so a note another project's session wrote loses its signature once moved or edited. | Same (it's a bug; flag for after cutover) |
+| 02 | The host decodes an MCP request body chunk by chunk, so a multibyte character split across chunks is corrupted. | Fixed: data corruption isn't a behavior anyone relies on |
+| 02 | A malformed `spawn` message's error is unclear in the code. | Decide in P2 from the Node host's actual reply |
 | 01 | The hidden capture panel stops the Dock from reopening a closed window on macOS, and keeps the app running after its window closes on Windows. | Same |
 
 ## Decisions for the user
@@ -168,6 +170,8 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 | 01 | Five `localStorage` keys (capture draft and history, ink colour, …) in Chromium's LevelDB. | Read them once from `Local Storage/leveldb` on first launch and move them into `state.json`. |
 | 01 | Spellcheck underlines in text fields. | Native spellcheck where the OS offers it (NSSpellChecker on macOS). |
 | 12 | Terminals on a zoomed board are a scaled bitmap, so their text goes soft. | Draw at the zoomed size, sharp, with the same columns and rows. |
+
+**U1 · Sessions running in a 0.9.4 host at the update (specs 02, 06).** A running Node host starts every new session through node-pty's `spawn-helper` inside the installed bundle, and may load other files from `app.asar`. Once the Rust app replaces the bundle, new sessions on that host fail with `posix_spawnp failed.` (On Windows, 0.9.4 already stops sessions before an update.) Options: (a) the first Rust release counts as a protocol change, so the existing, documented flow asks to stop those sessions and they resume from their cards; (b) ship a compatible `spawn-helper` at the old path so the Rust app adopts the Node host until it exits. **Default: (a)**, since it's behavior users already know and it ships no Node leftovers.
 
 ## Status log
 

@@ -20,19 +20,56 @@ serde_json.workspace = true
 sha1.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+uuid.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["process"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+block2.workspace = true
+dispatch2.workspace = true
+libc.workspace = true
+objc2.workspace = true
+objc2-app-kit = { workspace = true, features = ["NSApplication", "NSDockTile", "NSResponder", "NSWorkspace"] }
+objc2-application-services = { workspace = true, features = ["AXUIElement", "HIServices"] }
+objc2-av-foundation = { workspace = true, features = ["AVCaptureDevice", "AVMediaFormat", "block2"] }
+objc2-core-foundation = { workspace = true, features = ["CFDictionary", "CFNumber", "CFString"] }
+objc2-core-graphics = { workspace = true, features = ["CGWindow"] }
+objc2-foundation = { workspace = true, features = [
+    "NSArray",
+    "NSBundle",
+    "NSEnumerator",
+    "NSObject",
+    "NSPathUtilities",
+    "NSString",
+    "NSURL",
+] }
+objc2-user-notifications = { workspace = true, features = [
+    "UNNotification",
+    "UNNotificationContent",
+    "UNNotificationRequest",
+    "UNNotificationResponse",
+    "UNNotificationSound",
+    "UNNotificationTrigger",
+    "UNUserNotificationCenter",
+    "bitflags",
+    "block2",
+] }
 security-framework.workspace = true
 
 [target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = ["Data_Xml_Dom", "Foundation", "UI_Notifications"] }
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_Security",
     "Win32_Security_Cryptography",
+    "Win32_System_Com",
     "Win32_System_JobObjects",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_Common",
+    "Win32_UI_WindowsAndMessaging",
 ] }
 
 [dev-dependencies]

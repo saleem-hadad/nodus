@@ -7,9 +7,17 @@
 //! - [`process`]: starting child processes, the one way every crate does it.
 //! - [`secrets`]: Electron's `safeStorage`, so the xAI key 0.9.4 saved still
 //!   opens (the Keychain on macOS, DPAPI and `Local State` on Windows).
+//! - [`notify`]: notifications and the Dock badge.
+//! - [`shell`]: links to the browser, files to Finder or Explorer.
+//! - [`permissions`]: the microphone, Accessibility and Screen Recording.
+//! - [`app`]: the app's id, packaged or not, the machine, the bundle.
 
+pub mod app;
 pub mod env;
+pub mod notify;
+pub mod permissions;
 pub mod process;
 pub mod secrets;
+pub mod shell;
 
 pub use env::{ClaudeNotFound, Env, ShellCommand};

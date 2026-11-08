@@ -464,6 +464,24 @@ async fn asks_for_the_permission() {
     s.permissions.trusted.store(true, Ordering::SeqCst);
     assert_eq!(s.capture.allow().await, CaptureShortcut::Ready);
     assert_eq!(s.permissions.requests.load(Ordering::SeqCst), 1);
+    // CAP-165: the page learns the state from Allow…'s answer, and on the
+    // next show; nothing is sent to it meanwhile.
+    pass(10_000).await;
+    assert!(shown(&s.events).is_empty());
+}
+
+/// CAP-033: any value but a literal false in state.json is on.
+#[tokio::test(start_paused = true)]
+async fn the_setting_is_on_unless_false() {
+    let mut raw = seeded();
+    raw["settings"] = json!({ "capture": "no" });
+    let s = Setup::new(&raw);
+    assert_eq!(s.capture.shortcut_state(), CaptureShortcut::Ready);
+    raw["settings"] = json!({ "capture": false });
+    let s = Setup::new(&raw);
+    assert_eq!(s.capture.shortcut_state(), CaptureShortcut::Off);
+    s.capture.register();
+    assert_eq!(s.hook.starts.load(Ordering::SeqCst), 0);
 }
 
 fn shown(events: &RecordingSink) -> Vec<Event> {
@@ -768,23 +786,52 @@ async fn the_double_tap_toggles_the_panel() {
     assert!(s.capture.is_open());
 }
 
+#[cfg(unix)]
+struct StandIn(PathBuf);
+
+#[cfg(unix)]
+impl ClaudeEnv for StandIn {
+    fn claude(&self) -> Result<PathBuf, ClaudeNotFound> {
+        Ok(self.0.clone())
+    }
+
+    fn spawn_env(&self) -> EnvMap {
+        EnvMap::from([("PATH".into(), "/usr/bin:/bin".into())])
+    }
+}
+
+/// CAP-161, CAP-016: hiding the panel stops a guess in flight, which is no guess.
+#[cfg(unix)]
+#[tokio::test]
+async fn hiding_stops_a_guess() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempfile::tempdir().unwrap();
+    let script = dir.path().join("claude");
+    std::fs::write(
+        &script,
+        format!("#!/bin/sh\ntouch '{}/started'\nsleep 30\n", dir.path().display()),
+    )
+    .unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let s = Setup::with_claude(&seeded(), Arc::new(StandIn(script)));
+    s.capture.show().await;
+    let capture = s.capture.clone();
+    let guess = tokio::spawn(async move { capture.guess("fix the coupon path", &json!([])).await });
+    while !dir.path().join("started").exists() {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let started = std::time::Instant::now();
+    s.capture.hide();
+    assert_eq!(guess.await.unwrap(), Ok(None));
+    assert!(started.elapsed() < Duration::from_secs(5));
+}
+
 // The guess goes on what the panel opened over: a stand-in claude logs it.
 #[cfg(unix)]
 #[tokio::test]
 async fn guesses_on_the_app_the_panel_opened_over() {
     use std::os::unix::fs::PermissionsExt;
-
-    struct StandIn(PathBuf);
-
-    impl ClaudeEnv for StandIn {
-        fn claude(&self) -> Result<PathBuf, ClaudeNotFound> {
-            Ok(self.0.clone())
-        }
-
-        fn spawn_env(&self) -> EnvMap {
-            EnvMap::from([("PATH".into(), "/usr/bin:/bin".into())])
-        }
-    }
 
     let dir = tempfile::tempdir().unwrap();
     let script = dir.path().join("claude");

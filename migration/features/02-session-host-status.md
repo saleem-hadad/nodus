@@ -771,134 +771,134 @@ Risks:
 
 ## Parity checklist
 
-- [ ] HOST-001 Host folder
-- [ ] HOST-002 Name hash
-- [ ] HOST-003 Socket in folder
-- [ ] HOST-004 Long-path fallback
-- [ ] HOST-005 Windows pipe
-- [ ] HOST-006 Other host files
-- [ ] HOST-007 Private folder
-- [ ] HOST-008 Private file write
-- [ ] HOST-009 Hook config token check
-- [ ] HOST-010 Hook config content
-- [ ] HOST-011 Trust on macOS
-- [ ] HOST-012 Trust on Windows
-- [ ] HOST-013 Protocol number
-- [ ] HOST-014 Line framing
-- [ ] HOST-015 Several per read
-- [ ] HOST-016 Split messages
-- [ ] HOST-017 Split characters
-- [ ] HOST-018 Blank and bad lines
-- [ ] HOST-019 Newlines inside strings
-- [ ] HOST-020 No line limit
-- [ ] HOST-021 Any JSON value
-- [ ] HOST-022 Arguments
-- [ ] HOST-023 Usage error
-- [ ] HOST-024 One host per socket
-- [ ] HOST-025 Stale socket
-- [ ] HOST-026 Hook server first
-- [ ] HOST-027 Socket listen
-- [ ] HOST-028 Socket mode
-- [ ] HOST-029 Windows key
-- [ ] HOST-030 Hook token
-- [ ] HOST-031 Ready log
-- [ ] HOST-032 Unused host
+- [x] HOST-001 Host folder
+- [x] HOST-002 Name hash
+- [x] HOST-003 Socket in folder
+- [x] HOST-004 Long-path fallback
+- [x] HOST-005 Windows pipe
+- [x] HOST-006 Other host files
+- [x] HOST-007 Private folder
+- [x] HOST-008 Private file write
+- [x] HOST-009 Hook config token check
+- [x] HOST-010 Hook config content
+- [x] HOST-011 Trust on macOS
+- [x] HOST-012 Trust on Windows
+- [x] HOST-013 Protocol number
+- [x] HOST-014 Line framing
+- [x] HOST-015 Several per read
+- [x] HOST-016 Split messages
+- [x] HOST-017 Split characters
+- [x] HOST-018 Blank and bad lines
+- [x] HOST-019 Newlines inside strings
+- [x] HOST-020 No line limit
+- [x] HOST-021 Any JSON value
+- [x] HOST-022 Arguments
+- [x] HOST-023 Usage error
+- [x] HOST-024 One host per socket
+- [x] HOST-025 Stale socket
+- [x] HOST-026 Hook server first
+- [x] HOST-027 Socket listen
+- [x] HOST-028 Socket mode
+- [x] HOST-029 Windows key
+- [x] HOST-030 Hook token
+- [x] HOST-031 Ready log
+- [x] HOST-032 Unused host
 - [ ] HOST-033 Crash-proof
-- [ ] HOST-034 Log lines
-- [ ] HOST-035 Background process
-- [ ] HOST-036 Hello first
-- [ ] HOST-037 Welcome
-- [ ] HOST-038 App clients
-- [ ] HOST-039 Other protocols may only stop it
-- [ ] HOST-040 Ignored messages
-- [ ] HOST-041 Spawned reply
-- [ ] HOST-042 Broadcasts
+- [x] HOST-034 Log lines
+- [x] HOST-035 Background process
+- [x] HOST-036 Hello first
+- [x] HOST-037 Welcome
+- [x] HOST-038 App clients
+- [x] HOST-039 Other protocols may only stop it
+- [x] HOST-040 Ignored messages
+- [x] HOST-041 Spawned reply
+- [x] HOST-042 Broadcasts
 - [ ] HOST-043 Socket errors
-- [ ] HOST-044 Disconnect
-- [ ] HOST-045 Idle check on close
-- [ ] HOST-046 Newest app
-- [ ] HOST-047 Idle rule
-- [ ] HOST-048 Duplicate spawn
-- [ ] HOST-049 PTY spawn
-- [ ] HOST-050 POSIX argv
-- [ ] HOST-051 Windows command line
-- [ ] HOST-052 Spawn error
-- [ ] HOST-053 Late spawn failure (macOS)
-- [ ] HOST-054 Spawn log
-- [ ] HOST-055 Output
-- [ ] HOST-056 Output buffer
-- [ ] HOST-057 Exit
-- [ ] HOST-058 Exit code
-- [ ] HOST-059 Write
-- [ ] HOST-060 Status keys in history
-- [ ] HOST-061 Resize
-- [ ] HOST-062 Kill on POSIX
-- [ ] HOST-063 Kill on Windows
+- [x] HOST-044 Disconnect
+- [x] HOST-045 Idle check on close
+- [x] HOST-046 Newest app
+- [x] HOST-047 Idle rule
+- [x] HOST-048 Duplicate spawn
+- [x] HOST-049 PTY spawn
+- [x] HOST-050 POSIX argv
+- [x] HOST-051 Windows command line
+- [x] HOST-052 Spawn error
+- [x] HOST-053 Late spawn failure (macOS)
+- [x] HOST-054 Spawn log
+- [x] HOST-055 Output
+- [x] HOST-056 Output buffer
+- [x] HOST-057 Exit
+- [x] HOST-058 Exit code
+- [x] HOST-059 Write
+- [x] HOST-060 Status keys in history
+- [x] HOST-061 Resize
+- [x] HOST-062 Kill on POSIX
+- [x] HOST-063 Kill on Windows
 - [ ] HOST-064 Shutdown
-- [ ] HOST-065 Stopping host exits
-- [ ] HOST-066 History cap
-- [ ] HOST-067 Slim payloads
-- [ ] HOST-068 MCP path first
-- [ ] HOST-069 Token sources
-- [ ] HOST-070 Constant-time compare
-- [ ] HOST-071 Rejections
-- [ ] HOST-072 Accept first
-- [ ] HOST-073 Unknown target
-- [ ] HOST-074 Payload
-- [ ] HOST-075 Status line
-- [ ] HOST-076 History
-- [ ] HOST-077 Broadcast
-- [ ] HOST-078 Null payload
-- [ ] HOST-079 MCP auth
-- [ ] HOST-080 Non-POST
-- [ ] HOST-081 Size cap
-- [ ] HOST-082 Parse error
-- [ ] HOST-083 Requests
-- [ ] HOST-084 Notifications only
-- [ ] HOST-085 Relay
+- [x] HOST-065 Stopping host exits
+- [x] HOST-066 History cap
+- [x] HOST-067 Slim payloads
+- [x] HOST-068 MCP path first
+- [x] HOST-069 Token sources
+- [x] HOST-070 Constant-time compare
+- [x] HOST-071 Rejections
+- [x] HOST-072 Accept first
+- [x] HOST-073 Unknown target
+- [x] HOST-074 Payload
+- [x] HOST-075 Status line
+- [x] HOST-076 History
+- [x] HOST-077 Broadcast
+- [x] HOST-078 Null payload
+- [x] HOST-079 MCP auth
+- [x] HOST-080 Non-POST
+- [x] HOST-081 Size cap
+- [x] HOST-082 Parse error
+- [x] HOST-083 Requests
+- [x] HOST-084 Notifications only
+- [x] HOST-085 Relay
 - [ ] HOST-086 Relay settles
-- [ ] HOST-087 No app
-- [ ] HOST-088 Unanswered
-- [ ] HOST-089 Answer
+- [x] HOST-087 No app
+- [x] HOST-088 Unanswered
+- [x] HOST-089 Answer
 - [ ] HOST-090 Relay failure
-- [ ] HOST-091 Starting a host
-- [ ] HOST-092 Waiting for it
-- [ ] HOST-093 One attempt at a time
-- [ ] HOST-094 Connect order
-- [ ] HOST-095 Launch adopts, never starts
-- [ ] HOST-096 Hello
-- [ ] HOST-097 Welcome timeout
+- [x] HOST-091 Starting a host
+- [x] HOST-092 Waiting for it
+- [x] HOST-093 One attempt at a time
+- [x] HOST-094 Connect order
+- [x] HOST-095 Launch adopts, never starts
+- [x] HOST-096 Hello
+- [x] HOST-097 Welcome timeout
 - [ ] HOST-098 Trust first
-- [ ] HOST-099 Other protocol
-- [ ] HOST-100 Adopted in order
-- [ ] HOST-101 Later messages
-- [ ] HOST-102 Replace dialog
-- [ ] HOST-103 Quit
-- [ ] HOST-104 Stop Sessions
-- [ ] HOST-105 Adopt: hook config
-- [ ] HOST-106 Adopt: endpoint
-- [ ] HOST-107 Adopt: board tools
-- [ ] HOST-108 Adopt: sessions
-- [ ] HOST-109 Host lost
-- [ ] HOST-110 No reconnect
-- [ ] HOST-111 Quit leaves sessions running
-- [ ] HOST-112 Stop all
-- [ ] HOST-113 Spawn once
-- [ ] HOST-114 Spawn request
-- [ ] HOST-115 Spawned
-- [ ] HOST-116 Output of unknown sessions
-- [ ] HOST-117 App buffer
-- [ ] HOST-118 Coalescing
-- [ ] HOST-119 Snapshot
-- [ ] HOST-120 Exit
-- [ ] HOST-121 Write
-- [ ] HOST-122 Send prompt
-- [ ] HOST-123 Resize
-- [ ] HOST-124 Kill
-- [ ] HOST-125 Kill a project
-- [ ] HOST-126 Board tools requests
-- [ ] HOST-127 Sends while disconnected
-- [ ] HOST-128 Live list
+- [x] HOST-099 Other protocol
+- [x] HOST-100 Adopted in order
+- [x] HOST-101 Later messages
+- [x] HOST-102 Replace dialog
+- [x] HOST-103 Quit
+- [x] HOST-104 Stop Sessions
+- [x] HOST-105 Adopt: hook config
+- [x] HOST-106 Adopt: endpoint
+- [x] HOST-107 Adopt: board tools
+- [x] HOST-108 Adopt: sessions
+- [x] HOST-109 Host lost
+- [x] HOST-110 No reconnect
+- [x] HOST-111 Quit leaves sessions running
+- [x] HOST-112 Stop all
+- [x] HOST-113 Spawn once
+- [x] HOST-114 Spawn request
+- [x] HOST-115 Spawned
+- [x] HOST-116 Output of unknown sessions
+- [x] HOST-117 App buffer
+- [x] HOST-118 Coalescing
+- [x] HOST-119 Snapshot
+- [x] HOST-120 Exit
+- [x] HOST-121 Write
+- [x] HOST-122 Send prompt
+- [x] HOST-123 Resize
+- [x] HOST-124 Kill
+- [x] HOST-125 Kill a project
+- [x] HOST-126 Board tools requests
+- [x] HOST-127 Sends while disconnected
+- [x] HOST-128 Live list
 - [ ] HOST-129 Claude command (shared with 03)
 - [ ] HOST-130 Claude environment
 - [ ] HOST-131 Terminal command

@@ -135,7 +135,7 @@ One file per domain in `migration/features/`. Each lists every behavior with an 
 | File | Covers (Electron sources) | Spec | Ported |
 | --- | --- | --- | --- |
 | 01-platform-shell.md | app lifecycle, menu, env, store, settings, preload/IPC plumbing | ✅ 141 | ☐ |
-| 02-session-host-status.md | host, host protocol, pty client, hooks status machine, agents, usage, notifications | ✅ 225 | 88/225 |
+| 02-session-host-status.md | host, host protocol, pty client, hooks status machine, agents, usage, notifications | ✅ 225 | 210/225 |
 | 03-sessions-transcripts.md | session create/open/send/kill, claude args, discovery, board merge, search, summarize, naming, geometry | ✅ 205 | 194/205 |
 | 04-board-tools-views.md | board tools MCP, notes placement, views (main + renderer), view page, ink storage | ✅ 222 | ☐ |
 | 05-actions-voice-git.md | actions rail, voice prompts, git status/diff/log and their UI | ✅ 183 | ☐ |
@@ -173,7 +173,7 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 
 | Track | Branch | Scope | Status |
 | --- | --- | --- | --- |
-| host | `rust/host` | nodus-host-proto, nodus-host, nodus-sessions::client, `Nodus host` | 🟡 running |
+| host | `rust/host` | nodus-host-proto, nodus-host, nodus-sessions::client, `Nodus host` | ✅ merged: HOST-001…128 (122 ticked; 033, 043, 064's 4 s exit, 086's 20 s relay timeout, 090, 098 implemented but untested) |
 | status | `rust/status` | nodus-sessions hooks, agents, usage, notify, running | ✅ merged: HOST-132…219 (88), 0 deferred |
 | transcripts-board | `rust/transcripts-board` | nodus-transcripts, nodus-board, nodus-sessions::launch | ✅ merged: 194/205 SESS; 11 deferred to core (130, 131, 134, 135, 138, 146–148, 153, 164, 203) |
 | platform-updater | `rust/platform-updater` | nodus-platform process, secrets, notify, permissions; nodus-updater | ✅ merged: UPD 73, PLAT 11, VOICE 2 (+ OS side of HOST-208…211/215, CAP-032/040/041/055/059); UPD-013/014/076…085 to core/UI |
@@ -199,6 +199,8 @@ Follow-ups a merge left for when the tracks meet in `nodus-core` (P4). Strike th
 - Windows-only platform code (job objects, DPAPI, toasts, Explorer reveal, AppUserModelID) has passed clippy but first runs in the Windows CI job; watch its first results.
 - `nodus-transcripts::claude::spawn` uses tokio's `Command` directly; switch it to `nodus_platform::process` (31013c8).
 - `nodus-transcripts` reads only the ISO timestamps Claude Code writes; one with no offset is UTC, where Node reads local time (same as the agents note above).
+- Six host behaviors are implemented but have no test of their own: HOST-033, 043, 090, 098, the 4 s hard exit in HOST-064 and the 20 s relay timeout in HOST-086. Add tests in P4 and tick them.
+- The 0.9.4 `pty.ts` → Rust host check was run by hand under vitest and not committed (it has to live in `src/main`); repeat it before cutover.
 - The status machine and the host client both rely on `process_started` / `process_exited` being called exactly where pty.ts tracks and untracks a session.
 
 ## Spikes
@@ -249,6 +251,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-09: host merged (f0b6df8): wire protocol, PTYs as node-pty, hook server, MCP relay, `Nodus host`, the app's client; wire-compatible with the 0.9.4 Node host in both directions; 558 tests. Every running agent stopped at a usage limit again; resumed on a new account.
 - 2026-11-08: platform-updater merged (6d4dc2b): safeStorage-compatible secrets (OSCrypt parameters checked against Electron 44.5.1), notifications, Dock badge, links, permissions, nodus-updater; 446 tests.
 - 2026-11-08: `nodus_platform::process` cherry-picked to main from platform-updater (31013c8) so every track spawns through it; 338 tests. actions-voice-git started.
 - 2026-11-08: transcripts-board merged (eee039a): nodus-transcripts, nodus-board, nodus-sessions::launch; 317 workspace tests. Spec 03 fixed: Node's readdir is sorted on Unix.

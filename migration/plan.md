@@ -108,7 +108,7 @@ One file per domain in `migration/features/`. Each lists every behavior with an 
 | 04-board-tools-views.md | board tools MCP, notes placement, views (main + renderer), view page, ink storage | ✅ 222 | ☐ |
 | 05-actions-voice-git.md | actions rail, voice prompts, git status/diff/log and their UI | ✅ 183 | ☐ |
 | 06-updater-release.md | updater, packaging, signing, CI, release, smoke test, 0.9.4 → Rust handoff | ⏳ | ☐ |
-| 07-capture.md | floating capture: panel window, double tap, screen context, guess, submit | ⏳ | ☐ |
+| 07-capture.md | floating capture: panel window, double tap, screen context, guess, submit | ✅ 177 | ☐ |
 | 08-projects-shell-ui.md | App, title bar, settings, projects grid, project rail, tokens and global styles, menus, modals | ⏳ | ☐ |
 | 09-board-canvas.md | BoardView: pan/zoom, selection, drag, shortcuts, context menus, sections, archive, layout, edges | ⏳ | ☐ |
 | 10-board-cards-notes.md | session cards, expanded cards, agent deck, archive stack, notes and the pad | ✅ 203 | ☐ |
@@ -158,7 +158,7 @@ Places where the code and the docs disagree, or where matching 0.9.4 exactly mea
 | 02 | The host decodes an MCP request body chunk by chunk, so a multibyte character split across chunks is corrupted. | Fixed: data corruption isn't a behavior anyone relies on |
 | 02 | A malformed `spawn` message's error is unclear in the code. | Decide in P2 from the Node host's actual reply |
 | 11 | Fuzzy matching can throw on titles with characters like `İ` (lowercasing changes the length), and a negative top score makes the archive stack show no results. | Same, unless the user rules them bugs |
-| 01 | The hidden capture panel stops the Dock from reopening a closed window on macOS, and keeps the app running after its window closes on Windows. | Same |
+| 01, 07 CAP-174/175 | The hidden capture panel stops the Dock from reopening a closed window on macOS, and keeps the app running after its window closes on Windows (the docs say closing the window quits). | Same, unless the user rules them bugs |
 
 ## Decisions for the user
 
@@ -168,7 +168,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 | --- | --- | --- |
 | 01 | View menu: Reload, Force Reload, Toggle Developer Tools. | Drop them from release builds; keep Reload as a debug-only item. |
 | 01 | Page zoom (⌘+ / ⌘- / ⌘0), saved in Chromium's `Preferences`. | Same shortcuts scale the whole UI, read the saved zoom once on first launch and keep it in `state.json` after. |
-| 01 | Five `localStorage` keys (capture draft and history, ink colour, …) in Chromium's LevelDB. | Read them once from `Local Storage/leveldb` on first launch and move them into `state.json`. |
+| 01, 07, 11 | `localStorage` keys in Chromium's LevelDB: the capture draft, its attachments, sent-text history, the "clipboard already offered" marker, the ink colour. | Read them once from `Local Storage/leveldb` on first launch and move them into `state.json`. |
 | 01 | Spellcheck underlines in text fields. | Native spellcheck where the OS offers it (NSSpellChecker on macOS). |
 | 12 | Terminals on a zoomed board are a scaled bitmap, so their text goes soft. | Draw at the zoomed size, sharp, with the same columns and rows. |
 

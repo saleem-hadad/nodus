@@ -62,6 +62,50 @@ pub fn round(x: f64) -> f64 {
     if x - floor >= 0.5 { floor + 1.0 } else { floor }
 }
 
+/// Whether a regex's `\s` matches `c`, which is also what `trim` takes off:
+/// Unicode's spaces and line breaks, and U+FEFF, but not U+0085, unlike
+/// Rust's `char::is_whitespace`.
+pub fn is_space(c: char) -> bool {
+    matches!(
+        c,
+        '\t' | '\n' | '\u{0B}' | '\u{0C}' | '\r' | ' ' | '\u{A0}' | '\u{1680}' | '\u{2000}'
+            ..='\u{200A}' | '\u{2028}' | '\u{2029}' | '\u{202F}' | '\u{205F}' | '\u{3000}' | '\u{FEFF}'
+    )
+}
+
+/// `s.trim()`.
+pub fn trim(s: &str) -> &str {
+    s.trim_matches(is_space)
+}
+
+/// `s.trimStart()`.
+pub fn trim_start(s: &str) -> &str {
+    s.trim_start_matches(is_space)
+}
+
+/// `s.trimEnd()`.
+pub fn trim_end(s: &str) -> &str {
+    s.trim_end_matches(is_space)
+}
+
+/// `s.replace(/\s+/g, ' ')`: each run of spaces and line breaks becomes one space.
+pub fn collapse_spaces(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut in_run = false;
+    for c in s.chars() {
+        if is_space(c) {
+            if !in_run {
+                out.push(' ');
+            }
+            in_run = true;
+        } else {
+            out.push(c);
+            in_run = false;
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -107,5 +151,16 @@ mod tests {
         assert_eq!(round(1.4), 1.0);
         assert!(round(f64::NAN).is_nan());
         assert_eq!(round(f64::INFINITY), f64::INFINITY);
+    }
+
+    #[test]
+    fn trims_and_collapses_javascripts_spaces() {
+        assert_eq!(trim("\u{FEFF} a b \u{3000}\n"), "a b");
+        // U+0085 isn't a space to JavaScript.
+        assert_eq!(trim("\u{85}a\u{85}"), "\u{85}a\u{85}");
+        assert_eq!(trim_start("  a "), "a ");
+        assert_eq!(trim_end("  a \t"), "  a");
+        assert_eq!(collapse_spaces(" a \n\t b\u{FEFF}\u{A0}c "), " a b c ");
+        assert_eq!(collapse_spaces("a\u{85}b"), "a\u{85}b");
     }
 }

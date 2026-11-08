@@ -35,6 +35,9 @@ nodus-voice = { path = "crates/nodus-voice" }
 
 anyhow = "1.0.104"
 indexmap = { version = "2.14", features = ["serde"] }
+# Watches transcript folders (FSEvents on macOS, ReadDirectoryChangesW on Windows).
+notify = "8.2"
+regex = "1.13"
 rustix = { version = "1.1", features = ["fs"] }
 # The shortest digits for a number, breaking ties to even as JavaScript does.
 ryu = "1.0.23"

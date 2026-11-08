@@ -7,11 +7,14 @@
 //!
 //! Ports the xterm.js behavior in `src/renderer/src/terminal/`.
 
+pub mod fit;
 mod handler;
+pub mod host;
 pub mod keys;
 pub mod links;
 pub mod palette;
 pub mod paste;
+pub mod pointer;
 mod queries;
 pub mod registry;
 pub mod selection;

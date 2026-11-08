@@ -83,6 +83,7 @@ pub struct Terminal {
     pub(crate) dead_key: bool,
     /// The selection's columns (its lines ride on `term.selection`).
     pub(crate) selection_columns: Option<crate::selection::Columns>,
+    pub(crate) wheel: crate::pointer::WheelState,
     /// Bumped on every change a drawing could show.
     generation: u64,
 }
@@ -128,6 +129,7 @@ impl Terminal {
             focused: false,
             dead_key: false,
             selection_columns: None,
+            wheel: Default::default(),
             generation: 0,
         }
     }

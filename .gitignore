@@ -16,3 +16,7 @@ dist
 # Golden screenshots of 0.9.4 and the Rust shots compared with them stay local;
 # migration/parity/README.md says how to regenerate them.
 migration/parity/golden/
+
+# The Rust UI's shots beside the goldens, and their diffs (crates/nodus-ui/parity).
+migration/parity/golden/*.rust.png
+migration/parity/rust-diffs/

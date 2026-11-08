@@ -43,10 +43,10 @@ The TypeScript runs on V8, so some of its behavior comes from JavaScript itself.
 The orchestrator is the only one who pushes. Before each push to `main`:
 
 ```sh
-gitleaks git --redact --no-banner --log-opts="origin/main..HEAD" .     # brew install gitleaks
-git log -p origin/main..HEAD | grep -nE '^\+.*(/Users/[a-z]|/private/tmp/claude-)'   # must print nothing
-git diff --stat origin/main..HEAD                                        # only the files you meant to ship
+sh migration/prepush.sh && git diff --stat origin/main..HEAD && git push origin main
 ```
+
+`prepush.sh` runs gitleaks on the new commits and refuses added lines with personal paths or the app's pre-rename name (placeholders like `/Users/example` are fine). It exits non-zero on any finding, so the push never starts. Check the `--stat` lists only the files you meant to ship.
 
 Any finding blocks the push until the commit is rewritten without it. A secret that reached GitHub is rotated, not just deleted.
 
@@ -112,7 +112,7 @@ One file per domain in `migration/features/`. Each lists every behavior with an 
 | 08-projects-shell-ui.md | App, title bar, settings, projects grid, project rail, tokens and global styles, menus, modals | ⏳ | ☐ |
 | 09-board-canvas.md | BoardView: pan/zoom, selection, drag, shortcuts, context menus, sections, archive, layout, edges | ⏳ | ☐ |
 | 10-board-cards-notes.md | session cards, expanded cards, agent deck, archive stack, notes and the pad | ✅ 203 | ☐ |
-| 11-board-overlays.md | prompt bar (sidekick), ⌘K search, merge dialog, ink layer, selection bar | ⏳ | ☐ |
+| 11-board-overlays.md | prompt bar (sidekick), ⌘K search, merge dialog, ink layer, selection bar | ✅ 111 | ☐ |
 | 12-terminal-ui.md | terminal registry, modal, transcript preview, agent viewer, xterm behavior | ✅ 185 | ☐ |
 
 ## Phases
@@ -157,6 +157,7 @@ Places where the code and the docs disagree, or where matching 0.9.4 exactly mea
 | 04 | Saving a note from the board drops `fromProject` and `fromTitle`, so a note another project's session wrote loses its signature once moved or edited. | Same (it's a bug; flag for after cutover) |
 | 02 | The host decodes an MCP request body chunk by chunk, so a multibyte character split across chunks is corrupted. | Fixed: data corruption isn't a behavior anyone relies on |
 | 02 | A malformed `spawn` message's error is unclear in the code. | Decide in P2 from the Node host's actual reply |
+| 11 | Fuzzy matching can throw on titles with characters like `İ` (lowercasing changes the length), and a negative top score makes the archive stack show no results. | Same, unless the user rules them bugs |
 | 01 | The hidden capture panel stops the Dock from reopening a closed window on macOS, and keeps the app running after its window closes on Windows. | Same |
 
 ## Decisions for the user

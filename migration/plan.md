@@ -178,7 +178,7 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | transcripts-board | `rust/transcripts-board` | nodus-transcripts, nodus-board, nodus-sessions::launch | ✅ merged: 194/205 SESS; 11 deferred to core (130, 131, 134, 135, 138, 146–148, 153, 164, 203) |
 | platform-updater | `rust/platform-updater` | nodus-platform process, secrets, notify, permissions; nodus-updater | ✅ merged: UPD 73, PLAT 11, VOICE 2 (+ OS side of HOST-208…211/215, CAP-032/040/041/055/059); UPD-013/014/076…085 to core/UI |
 | parity-harness | `rust/parity-harness` | golden screenshots of 0.9.4 (`migration/parity/`) | 🟡 running |
-| gpui-fork | `rust/gpui-fork` | `third_party/gpui/`: backdrop blur, transforms, group opacity, frame capture (D13) | 🟡 running |
+| gpui-fork | `rust/gpui-fork` | `third_party/gpui/`: backdrop blur, transforms, group opacity, frame capture (D13) | ✅ merged: Metal + wgpu verified at 60 fps; DirectX 11 HLSL unverified (CI step `continue-on-error` until green) |
 | ui-shell | `rust/ui-shell` | nodus-core skeleton (P4a); nodus-ui theme, controls, title bar, menus, settings, projects grid, rail (P5); test driver (D11) | 🟡 running |
 | views-tools | `rust/views-tools` | nodus-views, nodus-tools, nodus-board notes and ink | 🟡 running |
 | actions-voice-git | `rust/actions-voice-git` | nodus-actions, nodus-voice (incl. the recorder), nodus-git | 🟡 running |
@@ -199,6 +199,8 @@ Follow-ups a merge left for when the tracks meet in `nodus-core` (P4). Strike th
 - Windows-only platform code (job objects, DPAPI, toasts, Explorer reveal, AppUserModelID) has passed clippy but first runs in the Windows CI job; watch its first results.
 - `nodus-transcripts::claude::spawn` uses tokio's `Command` directly; switch it to `nodus_platform::process` (31013c8).
 - `nodus-transcripts` reads only the ISO timestamps Claude Code writes; one with no offset is UTC, where Node reads local time (same as the agents note above).
+- The DirectX 11 effect shaders have never been compiled (fxc runs only in Windows release builds). The `effects` example's CI step on `windows-latest` is `continue-on-error`; make it required once it's green.
+- `Window::render_to_image()` doesn't include native views (traffic lights, webviews), and wgpu returns an error; parity shots of views need the snapshot path.
 - Six host behaviors are implemented but have no test of their own: HOST-033, 043, 090, 098, the 4 s hard exit in HOST-064 and the 20 s relay timeout in HOST-086. Add tests in P4 and tick them.
 - The 0.9.4 `pty.ts` → Rust host check was run by hand under vitest and not committed (it has to live in `src/main`); repeat it before cutover.
 - The status machine and the host client both rely on `process_started` / `process_exited` being called exactly where pty.ts tracks and untracks a session.
@@ -251,6 +253,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-09: gpui-fork merged (9ea68bd): vendored gpui-pre 0.3.11 with effect layers. `.backdrop_blur(px).backdrop_saturate(s)`, `.rotate/.scale/.translate/.transform_origin`, `.group_opacity`, `Window::render_to_image()`; the Metal compiler crash was passing `Background` by value into multi-stop gradient code. Docs in `third_party/gpui/PATCHES.md`.
 - 2026-11-09: host merged (f0b6df8): wire protocol, PTYs as node-pty, hook server, MCP relay, `Nodus host`, the app's client; wire-compatible with the 0.9.4 Node host in both directions; 558 tests. Every running agent stopped at a usage limit again; resumed on a new account.
 - 2026-11-08: platform-updater merged (6d4dc2b): safeStorage-compatible secrets (OSCrypt parameters checked against Electron 44.5.1), notifications, Dock badge, links, permissions, nodus-updater; 446 tests.
 - 2026-11-08: `nodus_platform::process` cherry-picked to main from platform-updater (31013c8) so every track spawns through it; 338 tests. actions-voice-git started.

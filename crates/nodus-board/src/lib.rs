@@ -18,6 +18,8 @@ pub mod cards;
 mod create;
 pub mod geometry;
 mod handlers;
+pub mod ink;
+pub mod notes;
 mod runs;
 pub mod stop;
 

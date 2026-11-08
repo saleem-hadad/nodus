@@ -13,3 +13,6 @@ dist
 *.key
 *.mobileprovision
 *.provisionprofile
+# Golden screenshots of 0.9.4 and the Rust shots compared with them stay local;
+# migration/parity/README.md says how to regenerate them.
+migration/parity/golden/

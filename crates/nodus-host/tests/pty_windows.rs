@@ -64,7 +64,9 @@ async fn host_051_passes_the_command_line_as_quoted() {
     .unwrap();
     let (output, code) = run_to_exit(events).await;
     assert_eq!(code, 0);
-    assert!(output.contains("\"two words\" \\\"q\\\""), "{output:?}");
+    // windowsCommandLine wraps an argument holding a quote, escaping it inside,
+    // and cmd's echo prints the command line as it got it.
+    assert!(output.contains(r#""two words" "\"q\"""#), "{output:?}");
 }
 
 #[tokio::test]

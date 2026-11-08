@@ -110,7 +110,7 @@ One file per domain in `migration/features/`. Each lists every behavior with an 
 | 05-actions-voice-git.md | actions rail, voice prompts, git status/diff/log and their UI | ✅ 183 | ☐ |
 | 06-updater-release.md | updater, packaging, signing, CI, release, smoke test, 0.9.4 → Rust handoff | ⏳ | ☐ |
 | 07-capture.md | floating capture: panel window, double tap, screen context, guess, submit | ✅ 177 | ☐ |
-| 08-projects-shell-ui.md | App, title bar, settings, projects grid, project rail, tokens and global styles, menus, modals | ⏳ | ☐ |
+| 08-projects-shell-ui.md | App, title bar, settings, projects grid, project rail, tokens and global styles, menus, modals | ✅ 305 | ☐ |
 | 09-board-canvas.md | BoardView: pan/zoom, selection, drag, shortcuts, context menus, sections, archive, layout, edges | ✅ 177 | ☐ |
 | 10-board-cards-notes.md | session cards, expanded cards, agent deck, archive stack, notes and the pad | ✅ 203 | ☐ |
 | 11-board-overlays.md | prompt bar (sidekick), ⌘K search, merge dialog, ink layer, selection bar | ✅ 111 | ☐ |

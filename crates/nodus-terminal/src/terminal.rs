@@ -484,3 +484,190 @@ fn private_mode(raw: u16) -> alacritty_terminal::vte::ansi::PrivateMode {
 fn ansi_mode_insert() -> alacritty_terminal::vte::ansi::Mode {
     alacritty_terminal::vte::ansi::Mode::Named(alacritty_terminal::vte::ansi::NamedMode::Insert)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::keys::{KeyAction, KeyEvent, Modifiers};
+    use crate::selection::BufferPoint;
+
+    fn term(text: &str) -> Terminal {
+        let mut t = Terminal::new(SessionKind::Claude, Platform::Mac, 20, 5);
+        t.feed(text);
+        t
+    }
+
+    fn lines(n: usize) -> String {
+        (0..n).map(|i| format!("line {i}\r\n")).collect()
+    }
+
+    #[test]
+    fn term_074_ten_thousand_lines_of_history() {
+        let mut t = term("");
+        t.feed(&lines(10_100));
+        assert_eq!(t.history_size(), SCROLLBACK);
+    }
+
+    #[test]
+    fn term_073_follows_output_at_the_bottom_and_holds_still_when_scrolled_up() {
+        let mut t = term(&lines(30));
+        assert_eq!(t.display_offset(), 0);
+        t.scroll_lines(-5);
+        assert_eq!(t.display_offset(), 5);
+        let top = t.line_text(-5, true, 0, None);
+        t.feed(&lines(3));
+        assert_eq!(t.display_offset(), 8);
+        assert_eq!(t.line_text(-8, true, 0, None), top);
+    }
+
+    #[test]
+    fn term_054_typing_returns_to_the_bottom_and_clears_the_selection() {
+        let mut t = term(&lines(30));
+        t.scroll_lines(-5);
+        t.select_range(BufferPoint::new(0, 0), BufferPoint::new(0, 3), false);
+        let a = t.key_down(&KeyEvent::from_parts("a", "KeyA", Modifiers::default()));
+        assert_eq!(a, KeyAction::Send("a".into()));
+        assert_eq!(t.display_offset(), 0);
+        assert!(!t.has_selection());
+        t.scroll_lines(-5);
+        assert_eq!(t.paste("x"), "x");
+        assert_eq!(t.display_offset(), 0);
+    }
+
+    #[test]
+    fn term_053_shift_page_up_scrolls_a_page_less_a_line() {
+        let mut t = term(&lines(30));
+        let shift = Modifiers {
+            shift: true,
+            ..Modifiers::default()
+        };
+        assert_eq!(
+            t.key_down(&KeyEvent::from_parts("PageUp", "PageUp", shift)),
+            KeyAction::Handled
+        );
+        assert_eq!(t.display_offset(), 4);
+        t.key_down(&KeyEvent::from_parts("PageDown", "PageDown", shift));
+        assert_eq!(t.display_offset(), 0);
+    }
+
+    #[test]
+    fn term_039_command_k_keeps_the_cursor_line_on_top() {
+        let mut t = term(&lines(30));
+        t.feed("$ prompt");
+        let meta = Modifiers {
+            meta: true,
+            ..Modifiers::default()
+        };
+        assert_eq!(t.key_down(&KeyEvent::from_parts("k", "KeyK", meta)), KeyAction::Handled);
+        assert_eq!(t.history_size(), 0);
+        assert_eq!(t.cursor_point(), (0, 8));
+        assert_eq!(t.line_text(0, true, 0, None), "$ prompt");
+        assert_eq!(t.line_text(1, true, 0, None), "");
+        // Already clear: nothing happens.
+        let g = t.generation();
+        t.feed("\x1b[H");
+        let g2 = t.generation();
+        t.clear();
+        assert!(g2 > g && t.generation() == g2);
+    }
+
+    #[test]
+    fn term_077_focus_reports_while_mode_1004_is_on() {
+        let mut t = term("");
+        assert_eq!(t.focus(), None);
+        assert_eq!(t.blur(), None);
+        t.feed("\x1b[?1004h");
+        assert_eq!(t.focus().as_deref(), Some("\x1b[I"));
+        assert_eq!(t.focus(), None, "already focused");
+        assert_eq!(t.blur().as_deref(), Some("\x1b[O"));
+    }
+
+    #[test]
+    fn term_038_term_040_command_keys_on_a_mac() {
+        let mut t = term("copy me");
+        let meta = Modifiers {
+            meta: true,
+            ..Modifiers::default()
+        };
+        assert_eq!(
+            t.key_down(&KeyEvent::from_parts("c", "KeyC", meta)),
+            KeyAction::Propagate
+        );
+        t.select_range(BufferPoint::new(0, 0), BufferPoint::new(0, 4), false);
+        assert_eq!(
+            t.key_down(&KeyEvent::from_parts("c", "KeyC", meta)),
+            KeyAction::Copy("copy".into())
+        );
+        assert!(t.has_selection(), "⌘C keeps the selection");
+        assert_eq!(t.key_down(&KeyEvent::from_parts("a", "KeyA", meta)), KeyAction::Handled);
+        assert_eq!(t.selection_text(), "copy me\n\n\n\n");
+        assert_eq!(
+            t.key_down(&KeyEvent::from_parts("v", "KeyV", meta)),
+            KeyAction::Propagate
+        );
+    }
+
+    #[test]
+    fn term_036_term_048_shift_enter_and_escape() {
+        let mut claude = term("");
+        let shift = Modifiers {
+            shift: true,
+            ..Modifiers::default()
+        };
+        assert_eq!(
+            claude.key_down(&KeyEvent::from_parts("Enter", "Enter", shift)),
+            KeyAction::WriteDirect("\x1b\r".into())
+        );
+        let mut shell = Terminal::new(SessionKind::Terminal, Platform::Mac, 20, 5);
+        assert_eq!(
+            shell.key_down(&KeyEvent::from_parts("Enter", "Enter", shift)),
+            KeyAction::Send("\r".into())
+        );
+        assert_eq!(
+            claude.key_down(&KeyEvent::from_parts("Escape", "Escape", Modifiers::default())),
+            KeyAction::Send("\x1b".into())
+        );
+    }
+
+    #[test]
+    fn term_043_windows_ctrl_c_copies_only_a_selection() {
+        let mut t = Terminal::new(SessionKind::Claude, Platform::Windows, 20, 5);
+        t.feed("copy me");
+        let ctrl = Modifiers {
+            ctrl: true,
+            ..Modifiers::default()
+        };
+        assert_eq!(
+            t.key_down(&KeyEvent::from_parts("c", "KeyC", ctrl)),
+            KeyAction::Send("\x03".into())
+        );
+        t.select_range(BufferPoint::new(0, 0), BufferPoint::new(0, 4), false);
+        assert_eq!(
+            t.key_down(&KeyEvent::from_parts("c", "KeyC", ctrl)),
+            KeyAction::Copy("copy".into())
+        );
+        assert!(!t.has_selection(), "the next Ctrl+C interrupts");
+        // On a Russian layout the letter is read from the key code (TERM-046).
+        let ctrl_shift = Modifiers {
+            ctrl: true,
+            shift: true,
+            ..Modifiers::default()
+        };
+        assert_eq!(
+            t.key_down(&KeyEvent::from_parts("Ц", "KeyW", ctrl_shift)),
+            KeyAction::Menu(nodus_domain::MenuCommand::Close)
+        );
+        assert_eq!(t.key_down(&KeyEvent::from_parts("м", "KeyV", ctrl)), KeyAction::Paste);
+    }
+
+    #[test]
+    fn term_021_reset_clears_everything_but_the_size() {
+        let mut t = term(&lines(30));
+        t.feed("\x1b[?2004h\x1b[?1h");
+        t.resize(30, 6);
+        t.reset();
+        assert_eq!((t.cols(), t.rows(), t.history_size()), (30, 6, 0));
+        assert!(!t.modes().bracketed_paste && !t.modes().application_cursor);
+        assert_eq!(t.line_text(0, true, 0, None), "");
+    }
+}

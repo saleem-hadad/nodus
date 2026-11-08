@@ -467,6 +467,27 @@ impl Terminal {
     pub fn is_in_selection(&self, p: BufferPoint) -> bool {
         self.is_selected(p)
     }
+
+    /// ⇧-click (TERM-056): the selection keeps its start and ends at `p`;
+    /// with no selection, it runs from `p` to `p` (nothing).
+    pub fn extend_selection(&mut self, p: BufferPoint) {
+        let column = self.selection_columns.is_some_and(|c| c.column_mode);
+        let start = match self.selection_range() {
+            Some((start, _, _)) => start,
+            None => p,
+        };
+        self.select_range(start, p, column);
+    }
+
+    /// A right-click (TERM-061): no menu anywhere; on a Mac it selects the
+    /// word under the pointer (not whitespace alone) unless the pointer is
+    /// inside the selection (`rightClickSelectsWord`). True if it selected.
+    pub fn right_click(&mut self, p: BufferPoint) -> bool {
+        if !self.platform.is_mac() || self.is_in_selection(p) {
+            return false;
+        }
+        self.select_word_at(p, false)
+    }
 }
 
 #[cfg(test)]
@@ -555,6 +576,37 @@ mod tests {
         let mut t = term(4, 4, "x\r\nabcdefg\r\ny");
         t.select_line_at(2);
         assert_eq!(t.selection_text(), "abcdefg");
+    }
+
+    #[test]
+    fn term_056_shift_click_extends() {
+        let mut t = term(20, 2, "hello world");
+        t.select_range(BufferPoint::new(0, 0), BufferPoint::new(0, 2), false);
+        t.extend_selection(BufferPoint::new(0, 8));
+        assert_eq!(t.selection_text(), "hello wo");
+    }
+
+    #[test]
+    fn term_061_right_click_selects_a_word_on_a_mac_only() {
+        let mut t = term(20, 2, "hello world");
+        assert!(t.right_click(BufferPoint::new(0, 7)));
+        assert_eq!(t.selection_text(), "world");
+        // Inside the selection it leaves it alone; on whitespace it selects nothing.
+        assert!(!t.right_click(BufferPoint::new(0, 8)));
+        t.clear_selection();
+        assert!(!t.right_click(BufferPoint::new(0, 5)));
+        let mut w = Terminal::new(SessionKind::Terminal, Platform::Windows, 20, 2);
+        w.feed("hello world");
+        assert!(!w.right_click(BufferPoint::new(0, 7)));
+        assert!(!w.has_selection());
+    }
+
+    #[test]
+    fn term_060_selecting_never_copies() {
+        // There is no clipboard on this side: selecting only selects.
+        let mut t = term(20, 2, "hello");
+        t.select_all();
+        assert!(t.has_selection());
     }
 
     #[test]

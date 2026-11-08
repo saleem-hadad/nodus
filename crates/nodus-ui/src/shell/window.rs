@@ -78,6 +78,8 @@ pub fn open_main_window(cx: &mut App) -> Option<WindowHandle<gpui::base::Root>> 
         })
         .ok()?;
     let _ = handle.update(cx, |_, window, cx| {
+        #[cfg(target_os = "macos")]
+        crate::mac::tag_layer_srgb(window);
         crate::theme::sync_window(window, cx);
         #[cfg(target_os = "macos")]
         if quiet {

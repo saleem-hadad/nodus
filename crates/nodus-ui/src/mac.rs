@@ -32,6 +32,29 @@ pub fn ns_window(window: &Window) -> Option<Retained<NSWindow>> {
     ns_view(window)?.window()
 }
 
+/// Tags the window's Metal layer as sRGB, so macOS converts the colours to
+/// the display's, as Chromium does with CSS colours. Untagged, the layer's
+/// sRGB values would go to a wide-gamut (P3) display unconverted and every
+/// saturated colour would look more vivid than in 0.9.4 (`--accent` #007aff
+/// shows as P3 #3579fa in Chromium).
+pub fn tag_layer_srgb(window: &Window) {
+    let Some(view) = ns_view(window) else { return };
+    let Some(space) = objc2_core_graphics::CGColorSpace::with_name(Some(
+        // SAFETY: an extern constant from Core Graphics.
+        unsafe { objc2_core_graphics::kCGColorSpaceSRGB },
+    )) else {
+        return;
+    };
+    // SAFETY: GPUI's view is layer-backed by a CAMetalLayer, which takes a
+    // CGColorSpace for its colorspace.
+    unsafe {
+        let layer: *mut AnyObject = msg_send![&*view, layer];
+        if !layer.is_null() {
+            let _: () = msg_send![layer, setColorspace: &*space];
+        }
+    }
+}
+
 /// The window server's number for the window (`screencapture -l`).
 pub fn window_number(window: &Window) -> Option<isize> {
     ns_window(window).map(|w| w.windowNumber())

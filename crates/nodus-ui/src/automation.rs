@@ -331,9 +331,46 @@ fn with_window<R>(cx: &mut AsyncApp, f: impl FnOnce(&mut gpui::Window, &mut App)
 async fn screenshot(cx: &mut AsyncApp, path: &str) -> Result<Value, String> {
     // Let the frame in flight land first.
     cx.background_executor().timer(Duration::from_millis(50)).await;
-    let image = with_window(cx, |window, _| window.render_to_image().map_err(|e| e.to_string()))??;
+    let mut image = with_window(cx, |window, _| window.render_to_image().map_err(|e| e.to_string()))??;
+    // GPUI draws sRGB values and the window shows them as sRGB (its layer
+    // is tagged so); the goldens hold what Chromium sent a Display P3
+    // screen. Converted, the two compare value for value.
+    for pixel in image.pixels_mut() {
+        let [r, g, b] = srgb_to_display_p3([pixel[0], pixel[1], pixel[2]]);
+        pixel[0] = r;
+        pixel[1] = g;
+        pixel[2] = b;
+    }
     image.save(path).map_err(|e| e.to_string())?;
     Ok(json!({ "path": path, "width": image.width(), "height": image.height() }))
+}
+
+/// An sRGB colour in Display P3 (same white point and transfer curve; the
+/// primaries differ).
+pub fn srgb_to_display_p3(rgb: [u8; 3]) -> [u8; 3] {
+    fn linear(v: u8) -> f64 {
+        let v = f64::from(v) / 255.0;
+        if v <= 0.04045 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
+    }
+    fn encode(v: f64) -> u8 {
+        let v = v.clamp(0.0, 1.0);
+        let v = if v <= 0.003_130_8 {
+            v * 12.92
+        } else {
+            1.055 * v.powf(1.0 / 2.4) - 0.055
+        };
+        (v * 255.0).round() as u8
+    }
+    let [r, g, b] = rgb.map(linear);
+    [
+        encode(0.822_462_1 * r + 0.177_538 * g),
+        encode(0.033_194_1 * r + 0.966_805_8 * g),
+        encode(0.017_082_7 * r + 0.072_397_4 * g + 0.910_519_9 * b),
+    ]
 }
 
 /// Calls a core command by its `window.api` name.
@@ -382,5 +419,22 @@ async fn core(nodus: &nodus_core::Nodus, command: &Value) -> Result<Value, Strin
             Ok(Value::Null)
         }
         other => Err(format!("unknown core method {other}")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn converts_srgb_to_display_p3_as_chromium_shows_it() {
+        // --accent, as the goldens hold it.
+        let [r, g, b] = srgb_to_display_p3([0x00, 0x7a, 0xff]);
+        assert!(
+            r.abs_diff(0x35) <= 1 && g.abs_diff(0x79) <= 1 && b.abs_diff(0xfa) <= 4,
+            "{r:x} {g:x} {b:x}"
+        );
+        // Greys don't move.
+        assert_eq!(srgb_to_display_p3([0xf5, 0xf5, 0xf4]), [0xf5, 0xf5, 0xf4]);
     }
 }

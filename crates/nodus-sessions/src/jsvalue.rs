@@ -67,6 +67,44 @@ pub(crate) fn or<'a>(a: Option<&'a Value>, b: Option<&'a Value>) -> Option<&'a V
     if truthy(a) { a } else { b }
 }
 
+/// Whether `c` is in JavaScript's `\s` (and what `trim()` removes): the
+/// Unicode spaces, the line terminators and U+FEFF, but not U+0085.
+pub(crate) fn is_space(c: char) -> bool {
+    matches!(
+        c,
+        '\t' | '\n' | '\u{0B}' | '\u{0C}' | '\r' | ' ' | '\u{A0}' | '\u{1680}' | '\u{2000}'
+            ..='\u{200A}' | '\u{2028}' | '\u{2029}' | '\u{202F}' | '\u{205F}' | '\u{3000}' | '\u{FEFF}'
+    )
+}
+
+/// `s.trim()`.
+pub(crate) fn trim(s: &str) -> &str {
+    s.trim_matches(is_space)
+}
+
+/// `s.trimEnd()`.
+pub(crate) fn trim_end(s: &str) -> &str {
+    s.trim_end_matches(is_space)
+}
+
+/// `s.replace(/\s+/g, ' ')`.
+pub(crate) fn collapse_spaces(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut in_space = false;
+    for c in s.chars() {
+        if is_space(c) {
+            if !in_space {
+                out.push(' ');
+            }
+            in_space = true;
+        } else {
+            out.push(c);
+            in_space = false;
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -102,5 +140,16 @@ mod tests {
         assert_eq!(string(Some(&json!({"a": 1}))), "[object Object]");
         assert_eq!(string(Some(&json!(["a", null, ["b", "c"], 1]))), "a,,b,c,1");
         assert_eq!(string(Some(&json!([]))), "");
+    }
+
+    #[test]
+    fn knows_javascripts_spaces() {
+        assert!(is_space('\u{FEFF}'));
+        assert!(is_space('\u{2028}'));
+        assert!(!is_space('\u{85}'));
+        assert!(!is_space('\u{200B}'));
+        assert_eq!(trim("\u{FEFF} a b \u{3000}"), "a b");
+        assert_eq!(trim_end(" a \n"), " a");
+        assert_eq!(collapse_spaces("a \n\t b\u{A0}c"), "a b c");
     }
 }

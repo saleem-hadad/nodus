@@ -19,6 +19,8 @@ node --experimental-strip-types crates/nodus-sessions/tests/fixtures/generate.mj
 - HOST-160 to HOST-165 keystroke rules, the 1200 ms interrupt timer on `tokio::time`, replayed history
 - HOST-166 to HOST-173 usage (`usage::to_usage`, dedupe key, pause/resume)
 - HOST-174 to HOST-182 endpoint, `hookEnv`, the three settings variants byte for byte, settings cache, silent hooks (real `sh` + `curl` against a local server)
+- HOST-183 to HOST-200 agents (`agents::Agents`, `list_agent_files`, `agent_transcript_file`): replayed against real agents.ts over synthetic transcripts and meta files (`fixtures/agents.json`: background tasks, task notifications, handback, end_turn, headings, incremental growth, shrink, same size with a new mtime, meta mid-rewrite, hold and settle)
+- HOST-201 nothing watches agent files: by design, documented in agents.rs (the project watcher, track transcripts-board, covers it)
 
 ## Deferred
 
@@ -26,7 +28,7 @@ node --experimental-strip-types crates/nodus-sessions/tests/fixtures/generate.mj
 
 ## In progress
 
-- agents (HOST-183 to HOST-201), notify (HOST-202 to HOST-215), running counts (HOST-216 to HOST-219)
+- notify (HOST-202 to HOST-215), running counts (HOST-216 to HOST-219)
 
 ## Interfaces nodus-core must wire
 
@@ -34,3 +36,9 @@ node --experimental-strip-types crates/nodus-sessions/tests/fixtures/generate.mj
 - The session host client (track host) feeds it: `process_started(id, initial)` when it starts tracking a session (spawned, or each welcome session), `process_exited(id)` when it stops (exit, host lost, stopAll), `receive_hook(event, id, payload, at)` for each `hook` message (`at: None`) and each replayed history entry or status line (`at: Some(recorded)`), `note_user_input(id, data, at)` before each `write` and for replayed `input` entries. Liveness is tracked from those calls, so `StatusMachine::is_live` equals the client's `isLive`.
 - `hooks::HookEndpoint`: the client calls `set(port, token, config)` on adoption (HOST-106); the claude command builder (track transcripts-board, `launch`) calls `settings(hooks::uses_powershell(&env))` and merges `env(session_id)` into the spawn environment.
 - Other domains read `status()`, `usage()`, `forget()`.
+- `agents::Agents::new(home, clock)`: `session:agents` is `read_agents(&status, session_id, &list_agent_files(&subagents_dir))` and the board load calls `attach_agents(&status, &mut card, &files, last_prompt_at)`, with `subagents_dir` from nodus-transcripts (`<transcript dir>/<session id>/subagents`); `session:agent-transcript` checks ids with `agent_transcript_file` and reads it with nodus-transcripts' `readTranscript(…, agent)`.
+
+## Notes for integration
+
+- agents.rs carries private copies of the discovery.ts helpers it uses (`truncate`, `assistantParts`, `describeToolUse`, `toolName`, `messageText`, `isTaskNotification`, `timeOf`/`Date.parse`, `readLines`); swap them for nodus-transcripts' once both tracks are merged. Its `Date.parse` reads what Claude Code writes (`toISOString()`) and V8's UTC-equivalent variants; a date-time without an offset (local time to V8) reads as no time.
+- A meta file field that isn't a string (`agentType: 7`) is written as `String()` would write it; 0.9.4 passed the raw value to the renderer. Claude Code writes strings.

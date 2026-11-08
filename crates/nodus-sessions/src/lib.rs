@@ -8,6 +8,7 @@
 //!
 //! Ports `src/main/pty.ts`, `src/main/hooks.ts` and `src/main/agents.ts`.
 
+pub mod agents;
 pub mod hooks;
 mod jsvalue;
 pub mod usage;

@@ -542,5 +542,184 @@ hooks.configureStatus({
 usagePayloads.forEach((payload, i) => hooks.receiveHook('StatusLine', `usage-${i}`, payload, 1000 + i))
 writeJson('usage.json', usageFixture)
 
+// ---------------------------------------------------------------------------
+// Subagents: transcripts and meta files read as agents.ts reads them
+
+const lines = (...objects) => objects.map((o) => (typeof o === 'string' ? o : JSON.stringify(o)) + '\n').join('')
+const at = (time) => `2025-06-01T${time}Z`
+const early = (time) => `2023-11-01T${time}Z`
+const text = (t) => ({ type: 'text', text: t })
+const tool = (name, input) => ({ type: 'tool_use', id: `toolu_${name}`, name, input })
+const said = (timestamp, content, extra = {}) => ({ type: 'assistant', timestamp, message: { role: 'assistant', content }, ...extra })
+const asked = (timestamp, content, extra = {}) => ({ type: 'user', timestamp, message: { role: 'user', content }, ...extra })
+const longCommand = `git log --oneline ${'--author=example '.repeat(12)}-- src/`
+const longReply = `${'The report goes on and on. '.repeat(10)}End.`
+
+const agentFiles = {
+  'agent-a1.jsonl': {
+    mtime: START - 50_000,
+    content: lines(
+      asked(at('10:00:00.000'), 'Look into the flaky test'),
+      said(at('10:00:05.000'), [text('Running it.'), tool('Bash', { command: 'npm test -- --watch=false', run_in_background: true })]),
+      asked(at('10:00:06.000'), [{ type: 'tool_result', tool_use_id: 'toolu_Bash', content: 'started' }], { toolUseResult: { backgroundTaskId: 'bg-1' } }),
+      said(at('10:00:07.000'), [text('## Waiting\n\n**Tests** are running in `bg-1`; __I__ will report back.')], { message: { role: 'assistant', stop_reason: 'end_turn', content: [text('## Waiting\n\n**Tests** are running in `bg-1`; __I__ will report back.')] } })
+    )
+  },
+  'agent-a1.meta.json': { mtime: START - 50_000, content: JSON.stringify({ agentType: 'Explore', description: 'Find the flaky test' }) },
+  'agent-a2.jsonl': {
+    mtime: START - 40_000,
+    content: lines(
+      asked(at('10:01:00.000'), 'Put a note on the board'),
+      said(at('10:01:01.000'), [tool('Read', { file_path: '/repo/src/very/deep/file.ts' })]),
+      said(at('10:01:02.000'), [tool('mcp__nodus__create_note', { text: 'x' }), tool('mcp__nodus__', { query: '  ' })]),
+      said(at('10:01:03.000'), [tool('SubagentHandback', { message: '# Report\n\nAll done: the note is on the board.' })])
+    )
+  },
+  'agent-a2.meta.json': { mtime: START - 30_000, content: JSON.stringify({ agentType: 'general-purpose', name: 'Note taker', finished: true }) },
+  'agent-a3.jsonl': {
+    mtime: START - 35_000,
+    content: lines({ type: 'assistant', message: { stop_reason: 'end_turn', content: '  A reply with no time  ' } })
+  },
+  'agent-a3.meta.json': { mtime: START - 35_000, content: JSON.stringify({ stoppedByUser: true, parentAgentId: 'a1', description: '' }) },
+  'agent-a4.jsonl': {
+    mtime: START - 20_000,
+    content:
+      lines(
+        asked(early('09:00:00.000'), [{ type: 'tool_result', content: 'ok' }], { toolUseResult: { backgroundTaskId: 'bg-7' } }),
+        asked(early('09:00:00.500'), [{ type: 'tool_result', content: 'ok' }], { toolUseResult: 'Error: no task' }),
+        asked(early('09:00:01.000'), '<task-notification><task-id> bg-7 </task-id><summary>done</summary></task-notification>', { origin: { kind: 'task-notification' } }),
+        'not json',
+        'null',
+        '5',
+        '',
+        said(early('08:59:59.000'), [tool('Bash', { command: longCommand, description: 'History' })]),
+        said(early('09:00:02.000'), [text('Thinking… 🎉 é')]),
+        asked(early('09:00:03.000'), [text('more context')], { isMeta: true })
+      ) + JSON.stringify(said(early('09:00:04.000'), [text('half writ')])).slice(0, 40)
+  },
+  'agent-a4.meta.json': { mtime: START - 20_000, content: '[1, 2]' },
+  'agent-a5.jsonl': {
+    mtime: START - 10_000,
+    content: lines(
+      said(early('09:10:01.000'), [text('Done.')], { message: { role: 'assistant', stop_reason: 'end_turn', content: [text('Done.')] } }),
+      said(early('09:10:02.000'), [tool('Glob', { path: 'lib' })]),
+      said(early('09:10:03.000'), [tool('Grep', { pattern: 'TODO', path: 'src' }), tool('Edit', { file_path: '  ', notebook_path: 'nb/analysis.ipynb' })])
+    )
+  },
+  'agent-a5.meta.json': { mtime: START - 10_000, content: '{"agentType": "Plan", "description": "half' },
+  'agent-a6.jsonl': {
+    mtime: START - 9_000,
+    content: lines(said(early('09:20:00.000'), [text('#####\n###### Six\n####### Seven\n   # Indented\n    # Too far\n\t#\tTabbed\n\n \n' + longReply)]))
+  },
+  'agent-a7.jsonl': {
+    mtime: START - 8_000,
+    content: lines(said(early('09:30:00.000'), [text('# Only a heading')], { message: { role: 'assistant', stop_reason: 'end_turn', content: [text('# Only a heading')] } }))
+  },
+  'agent-a7.meta.json': { mtime: START - 8_000, content: '{"agentType": "", "name": "Heading writer", "parentAgentId": "", "stoppedByUser": "yes", "finished": 1}' },
+  'agent-a8.jsonl': {
+    mtime: START - 7_000,
+    content: lines(said(early('09:40:00.000'), [tool('Bash', { command: longCommand, description: 'History' }), { type: 'tool_use', name: 7 }, null]))
+  },
+  'agent-x.txt': { mtime: START, content: 'not an agent' },
+  'agent-.jsonl': { mtime: START, content: '' },
+  'agent-a b.jsonl': { mtime: START, content: '' },
+  'notes.jsonl': { mtime: START, content: '' }
+}
+
+const agentSteps = [
+  { files: agentFiles },
+  { start: 'S' },
+  { hook: 'SubagentStart', session: 'S', payload: { agent_id: 'a1' } },
+  { hook: 'SubagentStart', session: 'S', payload: { agent_id: 'a2' } },
+  { hook: 'PreToolUse', session: 'S', payload: { agent_id: 'a3', tool_name: 'AskUserQuestion' } },
+  { hook: 'SubagentStart', session: 'S', payload: { agent_id: 'a4' } },
+  { hook: 'SubagentStop', session: 'S', payload: { agent_id: 'a1', agent_transcript_path: '$DIR/agent-a1.jsonl' } },
+  { advance: 1000 },
+  { read: 'S' },
+  { pendingWork: '$DIR/agent-a1.jsonl' },
+  { pendingWork: '$DIR/../subagents/./agent-a1.jsonl' },
+  { pendingWork: '$DIR/agent-a2.jsonl' },
+  { pendingWork: '$DIR/agent-a1.meta.json' },
+  { pendingWork: '$DIR/missing.jsonl' },
+  { pendingWork: '/tmp/example/agent-a1.jsonl' },
+  { attach: { sessionId: 'S', x: 0, y: 0, archived: false, createdAt: 0, status: 'working', live: true }, lastPromptAt: Date.parse(at('10:00:30.000')) },
+  { attach: { sessionId: 'S', x: 0, y: 0, archived: true, createdAt: 0, status: 'done', live: true } },
+  { attach: { sessionId: 'S', kind: 'terminal', x: 0, y: 0, archived: false, createdAt: 0, status: 'done', live: true } },
+  { attach: { sessionId: 'nobody', x: 0, y: 0, archived: false, createdAt: 0, status: 'done', live: false } },
+  // a1's background command reports back and wakes it; it grew, so parsing carries on.
+  {
+    files: {
+      'agent-a1.jsonl': {
+        append: true,
+        mtime: START + 5_000,
+        content: lines(
+          asked(at('10:02:00.000'), [text('<task-notification><task-id>bg-1</task-id><summary>Tests passed</summary></task-notification>')]),
+          said(at('10:02:01.000'), [tool('Grep', { pattern: 'flaky' })])
+        )
+      }
+    }
+  },
+  { hook: 'PostToolUse', session: 'S', payload: { agent_id: 'a1' } },
+  { pendingWork: '$DIR/agent-a1.jsonl' },
+  { read: 'S' },
+  // a2 rewritten shorter, and the same size with a new time: both start over.
+  {
+    files: {
+      'agent-a2.jsonl': { mtime: START + 6_000, content: lines(said(at('10:05:00.000'), [tool('Write', { file_path: 'notes/new.md' })])) },
+      'agent-a4.jsonl': { mtime: START + 6_000, same: true },
+      'agent-a5.meta.json': { mtime: START + 6_000, content: '{"agentType": "Plan", "description": "Plan it", "finished": true}' }
+    }
+  },
+  { hook: 'SubagentStart', session: 'S', payload: { agent_id: 'a5' } },
+  { advance: 1000 },
+  { read: 'S' },
+  { exit: 'S' },
+  { read: 'S' }
+]
+
+function runAgentSteps(dir) {
+  const results = []
+  const resolve = (p) => p.replace('$DIR', dir)
+  for (const s of agentSteps) {
+    if ('files' in s) {
+      for (const [name, file] of Object.entries(s.files)) {
+        const target = path.join(dir, name)
+        if (file.append) fs.appendFileSync(target, file.content)
+        else if (!file.same) fs.writeFileSync(target, file.content)
+        fs.utimesSync(target, file.mtime / 1000, file.mtime / 1000)
+      }
+    } else if ('read' in s) {
+      results.push(['agents', agents.readAgents('/repo', s.read)])
+    } else if ('pendingWork' in s) {
+      results.push(['pendingWork', s.pendingWork, agents.hasPendingWork(resolve(s.pendingWork))])
+    } else if ('attach' in s) {
+      const card = { ...s.attach }
+      agents.attachAgents(card, '/repo', s.lastPromptAt)
+      results.push(['card', { agentCount: card.agentCount, agents: card.agents }])
+    } else {
+      const copy = JSON.parse(JSON.stringify(s))
+      if (copy.payload?.agent_transcript_path) copy.payload.agent_transcript_path = resolve(copy.payload.agent_transcript_path)
+      events = results
+      step(copy)
+    }
+  }
+  return results
+}
+
+{
+  hooks.configureStatus({
+    onChange: (id, status, live) => events.push(['status', id, status, live]),
+    onAgentChange: (id, agentId, status) => events.push(['agent', id, agentId, status]),
+    onUsage: (id, usage) => events.push(['usage', id, usage]),
+    isLive: (id) => globalThis.__live.has(id),
+    hasPendingWork: agents.hasPendingWork
+  })
+  now = START
+  const dir = path.join(home, '.claude', 'projects', '-repo', 'S', 'subagents')
+  fs.mkdirSync(dir, { recursive: true })
+  const results = runAgentSteps(dir)
+  writeJson('agents.json', { start: START, steps: agentSteps, results })
+}
+
 fs.rmSync(work, { recursive: true, force: true })
 console.log(`fixtures written to ${path.relative(process.cwd(), here)}`)

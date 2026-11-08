@@ -1,0 +1,778 @@
+{
+  "start": 1700000000000,
+  "steps": [
+    {
+      "files": {
+        "agent-a1.jsonl": {
+          "mtime": 1699999950000,
+          "content": "{\"type\":\"user\",\"timestamp\":\"2025-06-01T10:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":\"Look into the flaky test\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2025-06-01T10:00:05.000Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Running it.\"},{\"type\":\"tool_use\",\"id\":\"toolu_Bash\",\"name\":\"Bash\",\"input\":{\"command\":\"npm test -- --watch=false\",\"run_in_background\":true}}]}}\n{\"type\":\"user\",\"timestamp\":\"2025-06-01T10:00:06.000Z\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_Bash\",\"content\":\"started\"}]},\"toolUseResult\":{\"backgroundTaskId\":\"bg-1\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2025-06-01T10:00:07.000Z\",\"message\":{\"role\":\"assistant\",\"stop_reason\":\"end_turn\",\"content\":[{\"type\":\"text\",\"text\":\"## Waiting\\n\\n**Tests** are running in `bg-1`; __I__ will report back.\"}]}}\n"
+        },
+        "agent-a1.meta.json": {
+          "mtime": 1699999950000,
+          "content": "{\"agentType\":\"Explore\",\"description\":\"Find the flaky test\"}"
+        },
+        "agent-a2.jsonl": {
+          "mtime": 1699999960000,
+          "content": "{\"type\":\"user\",\"timestamp\":\"2025-06-01T10:01:00.000Z\",\"message\":{\"role\":\"user\",\"content\":\"Put a note on the board\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2025-06-01T10:01:01.000Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_Read\",\"name\":\"Read\",\"input\":{\"file_path\":\"/repo/src/very/deep/file.ts\"}}]}}\n{\"type\":\"assistant\",\"timestamp\":\"2025-06-01T10:01:02.000Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_mcp__nodus__create_note\",\"name\":\"mcp__nodus__create_note\",\"input\":{\"text\":\"x\"}},{\"type\":\"tool_use\",\"id\":\"toolu_mcp__nodus__\",\"name\":\"mcp__nodus__\",\"input\":{\"query\":\"  \"}}]}}\n{\"type\":\"assistant\",\"timestamp\":\"2025-06-01T10:01:03.000Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_SubagentHandback\",\"name\":\"SubagentHandback\",\"input\":{\"message\":\"# Report\\n\\nAll done: the note is on the board.\"}}]}}\n"
+        },
+        "agent-a2.meta.json": {
+          "mtime": 1699999970000,
+          "content": "{\"agentType\":\"general-purpose\",\"name\":\"Note taker\",\"finished\":true}"
+        },
+        "agent-a3.jsonl": {
+          "mtime": 1699999965000,
+          "content": "{\"type\":\"assistant\",\"message\":{\"stop_reason\":\"end_turn\",\"content\":\"  A reply with no time  \"}}\n"
+        },
+        "agent-a3.meta.json": {
+          "mtime": 1699999965000,
+          "content": "{\"stoppedByUser\":true,\"parentAgentId\":\"a1\",\"description\":\"\"}"
+        },
+        "agent-a4.jsonl": {
+          "mtime": 1699999980000,
+          "content": "{\"type\":\"user\",\"timestamp\":\"2023-11-01T09:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"content\":\"ok\"}]},\"toolUseResult\":{\"backgroundTaskId\":\"bg-7\"}}\n{\"type\":\"user\",\"timestamp\":\"2023-11-01T09:00:00.500Z\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"content\":\"ok\"}]},\"toolUseResult\":\"Error: no task\"}\n{\"type\":\"user\",\"timestamp\":\"2023-11-01T09:00:01.000Z\",\"message\":{\"role\":\"user\",\"content\":\"<task-notification><task-id> bg-7 </task-id><summary>done</summary></task-notification>\"},\"origin\":{\"kind\":\"task-notification\"}}\nnot json\nnull\n5\n\n{\"type\":\"assistant\",\"timestamp\":\"2023-11-01T08:59:59.000Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_Bash\",\"name\":\"Bash\",\"input\":{\"command\":\"git log --oneline --author=example --author=example --author=example --author=example --author=example --author=example --author=example --author=example --author=example --author=example --author=example --author=example -- src/\",\"description\":\"History\"}}]}}\n{\"type\":\"assistant\",\"timestamp\":\"2023-11-01T09:00:02.000Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Thinking… 🎉 é\"}]}}\n{\"type\":\"user\",\"timestamp\":\"2023-11-01T09:00:03.000Z\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"more context\"}]},\"isMeta\":true}\n{\"type\":\"assistant\",\"timestamp\":\"2023-11"
+        },
+        "agent-a4.meta.json": {
+          "mtime": 1699999980000,
+          "content": "[1, 2]"
+        },
+        "agent-a5.jsonl": {
+          "mtime": 1699999990000,
+          "content": "{\"type\":\"assistant\",\"timestamp\":\"2023-11-01T09:10:01.000Z\",\"message\":{\"role\":\"assistant\",\"stop_reason\":\"end_turn\",\"content\":[{\"type\":\"text\",\"text\":\"Done.\"}]}}\n{\"type\":\"assistant\",\"timestamp\":\"2023-11-01T09:10:02.000Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_Glob\",\"name\":\"Glob\",\"input\":{\"path\":\"lib\"}}]}}\n{\"type\":\"assistant\",\"timestamp\":\"2023-11-01T09:10:03.000Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_Grep\",\"name\":\"Grep\",\"input\":{\"pattern\":\"TODO\",\"path\":\"src\"}},{\"type\":\"tool_use\",\"id\":\"toolu_Edit\",\"name\":\"Edit\",\"input\":{\"file_path\":\"  \",\"notebook_path\":\"nb/analysis.ipynb\"}}]}}\n"
+        },
+        "agent-a5.meta.json": {
+          "mtime": 1699999990000,
+          "content": "{\"agentType\": \"Plan\", \"description\": \"half"
+        },
+        "agent-a6.jsonl": {
+          "mtime": 1699999991000,
+          "content": "{\"type\":\"assistant\",\"timestamp\":\"2023-11-01T09:20:00.000Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"#####\\n###### Six\\n####### Seven\\n   # Indented\\n    # Too far\\n\\t#\\tTabbed\\n\\n \\nThe report goes on and on. The report goes on and on. The report goes on and on. The report goes on and on. The report goes on and on. The report goes on and on. The report goes on and on. The report goes on and on. The report goes on and on. The report goes on and on. End.\"}]}}\n"
+        },
+        "agent-a7.jsonl": {
+          "mtime": 1699999992000,
+          "content": "{\"type\":\"assistant\",\"timestamp\":\"2023-11-01T09:30:00.000Z\",\"message\":{\"role\":\"assistant\",\"stop_reason\":\"end_turn\",\"content\":[{\"type\":\"text\",\"text\":\"# Only a heading\"}]}}\n"
+        },
+        "agent-a7.meta.json": {
+          "mtime": 1699999992000,
+          "content": "{\"agentType\": \"\", \"name\": \"Heading writer\", \"parentAgentId\": \"\", \"stoppedByUser\": \"yes\", \"finished\": 1}"
+        },
+        "agent-a8.jsonl": {
+          "mtime": 1699999993000,
+          "content": "{\"type\":\"assistant\",\"timestamp\":\"2023-11-01T09:40:00.000Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_Bash\",\"name\":\"Bash\",\"input\":{\"command\":\"git log --oneline --author=example --author=example --author=example --author=example --author=example --author=example --author=example --author=example --author=example --author=example --author=example --author=example -- src/\",\"description\":\"History\"}},{\"type\":\"tool_use\",\"name\":7},null]}}\n"
+        },
+        "agent-x.txt": {
+          "mtime": 1700000000000,
+          "content": "not an agent"
+        },
+        "agent-.jsonl": {
+          "mtime": 1700000000000,
+          "content": ""
+        },
+        "agent-a b.jsonl": {
+          "mtime": 1700000000000,
+          "content": ""
+        },
+        "notes.jsonl": {
+          "mtime": 1700000000000,
+          "content": ""
+        }
+      }
+    },
+    {
+      "start": "S"
+    },
+    {
+      "hook": "SubagentStart",
+      "session": "S",
+      "payload": {
+        "agent_id": "a1"
+      }
+    },
+    {
+      "hook": "SubagentStart",
+      "session": "S",
+      "payload": {
+        "agent_id": "a2"
+      }
+    },
+    {
+      "hook": "PreToolUse",
+      "session": "S",
+      "payload": {
+        "agent_id": "a3",
+        "tool_name": "AskUserQuestion"
+      }
+    },
+    {
+      "hook": "SubagentStart",
+      "session": "S",
+      "payload": {
+        "agent_id": "a4"
+      }
+    },
+    {
+      "hook": "SubagentStop",
+      "session": "S",
+      "payload": {
+        "agent_id": "a1",
+        "agent_transcript_path": "$DIR/agent-a1.jsonl"
+      }
+    },
+    {
+      "advance": 1000
+    },
+    {
+      "read": "S"
+    },
+    {
+      "pendingWork": "$DIR/agent-a1.jsonl"
+    },
+    {
+      "pendingWork": "$DIR/../subagents/./agent-a1.jsonl"
+    },
+    {
+      "pendingWork": "$DIR/agent-a2.jsonl"
+    },
+    {
+      "pendingWork": "$DIR/agent-a1.meta.json"
+    },
+    {
+      "pendingWork": "$DIR/missing.jsonl"
+    },
+    {
+      "pendingWork": "/tmp/example/agent-a1.jsonl"
+    },
+    {
+      "attach": {
+        "sessionId": "S",
+        "x": 0,
+        "y": 0,
+        "archived": false,
+        "createdAt": 0,
+        "status": "working",
+        "live": true
+      },
+      "lastPromptAt": 1748772030000
+    },
+    {
+      "attach": {
+        "sessionId": "S",
+        "x": 0,
+        "y": 0,
+        "archived": true,
+        "createdAt": 0,
+        "status": "done",
+        "live": true
+      }
+    },
+    {
+      "attach": {
+        "sessionId": "S",
+        "kind": "terminal",
+        "x": 0,
+        "y": 0,
+        "archived": false,
+        "createdAt": 0,
+        "status": "done",
+        "live": true
+      }
+    },
+    {
+      "attach": {
+        "sessionId": "nobody",
+        "x": 0,
+        "y": 0,
+        "archived": false,
+        "createdAt": 0,
+        "status": "done",
+        "live": false
+      }
+    },
+    {
+      "files": {
+        "agent-a1.jsonl": {
+          "append": true,
+          "mtime": 1700000005000,
+          "content": "{\"type\":\"user\",\"timestamp\":\"2025-06-01T10:02:00.000Z\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"<task-notification><task-id>bg-1</task-id><summary>Tests passed</summary></task-notification>\"}]}}\n{\"type\":\"assistant\",\"timestamp\":\"2025-06-01T10:02:01.000Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_Grep\",\"name\":\"Grep\",\"input\":{\"pattern\":\"flaky\"}}]}}\n"
+        }
+      }
+    },
+    {
+      "hook": "PostToolUse",
+      "session": "S",
+      "payload": {
+        "agent_id": "a1"
+      }
+    },
+    {
+      "pendingWork": "$DIR/agent-a1.jsonl"
+    },
+    {
+      "read": "S"
+    },
+    {
+      "files": {
+        "agent-a2.jsonl": {
+          "mtime": 1700000006000,
+          "content": "{\"type\":\"assistant\",\"timestamp\":\"2025-06-01T10:05:00.000Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_Write\",\"name\":\"Write\",\"input\":{\"file_path\":\"notes/new.md\"}}]}}\n"
+        },
+        "agent-a4.jsonl": {
+          "mtime": 1700000006000,
+          "same": true
+        },
+        "agent-a5.meta.json": {
+          "mtime": 1700000006000,
+          "content": "{\"agentType\": \"Plan\", \"description\": \"Plan it\", \"finished\": true}"
+        }
+      }
+    },
+    {
+      "hook": "SubagentStart",
+      "session": "S",
+      "payload": {
+        "agent_id": "a5"
+      }
+    },
+    {
+      "advance": 1000
+    },
+    {
+      "read": "S"
+    },
+    {
+      "exit": "S"
+    },
+    {
+      "read": "S"
+    }
+  ],
+  "results": [
+    [
+      "status",
+      "S",
+      "done",
+      true
+    ],
+    [
+      "agent",
+      "S",
+      "a1",
+      "working"
+    ],
+    [
+      "status",
+      "S",
+      "working",
+      true
+    ],
+    [
+      "agent",
+      "S",
+      "a2",
+      "working"
+    ],
+    [
+      "agent",
+      "S",
+      "a3",
+      "waiting"
+    ],
+    [
+      "status",
+      "S",
+      "waiting",
+      true
+    ],
+    [
+      "agent",
+      "S",
+      "a4",
+      "working"
+    ],
+    [
+      "agent",
+      "S",
+      "a2",
+      "done"
+    ],
+    [
+      "agent",
+      "S",
+      "a3",
+      "done"
+    ],
+    [
+      "status",
+      "S",
+      "working",
+      true
+    ],
+    [
+      "agents",
+      [
+        {
+          "agentId": "a4",
+          "agentType": "agent",
+          "description": "Agent",
+          "status": "working",
+          "activity": "Thinking… 🎉 é",
+          "toolCount": 1,
+          "startedAt": 1698829199000,
+          "updatedAt": 1698829203000
+        },
+        {
+          "agentId": "a5",
+          "agentType": "agent",
+          "description": "Agent",
+          "status": "done",
+          "tool": "Edit",
+          "activity": "analysis.ipynb",
+          "toolCount": 3,
+          "startedAt": 1698829801000,
+          "updatedAt": 1698829803000
+        },
+        {
+          "agentId": "a6",
+          "agentType": "agent",
+          "description": "Agent",
+          "status": "done",
+          "activity": "##### ####### Seven # Too far The report goes on and on. The report goes on and on. The report goes on and on. The report goes on and on. The report goes on and on. The report goes on and on. The rep…",
+          "toolCount": 0,
+          "startedAt": 1698830400000,
+          "updatedAt": 1698830400000
+        },
+        {
+          "agentId": "a7",
+          "agentType": "agent",
+          "description": "Heading writer",
+          "status": "done",
+          "activity": "# Only a heading",
+          "toolCount": 0,
+          "startedAt": 1698831000000,
+          "updatedAt": 1698831000000
+        },
+        {
+          "agentId": "a8",
+          "agentType": "agent",
+          "description": "Agent",
+          "status": "done",
+          "tool": "Bash",
+          "activity": "git log --oneline --author=example --author=example --author=example --author=example --author=example --author=example --author=example --author=example --aut…",
+          "toolCount": 1,
+          "startedAt": 1698831600000,
+          "updatedAt": 1698831600000
+        },
+        {
+          "agentId": "a3",
+          "agentType": "agent",
+          "description": "Agent",
+          "status": "done",
+          "parentAgentId": "a1",
+          "stopped": true,
+          "activity": "A reply with no time",
+          "toolCount": 0,
+          "startedAt": 1699999965000,
+          "updatedAt": 1699999965000
+        },
+        {
+          "agentId": "a1",
+          "agentType": "Explore",
+          "description": "Find the flaky test",
+          "status": "working",
+          "activity": "Tests are running in bg-1; I will report back.",
+          "background": 1,
+          "toolCount": 1,
+          "startedAt": 1748772000000,
+          "updatedAt": 1748772007000
+        },
+        {
+          "agentId": "a2",
+          "agentType": "general-purpose",
+          "description": "Note taker",
+          "status": "done",
+          "activity": "All done: the note is on the board.",
+          "toolCount": 3,
+          "startedAt": 1748772060000,
+          "updatedAt": 1748772063000
+        }
+      ]
+    ],
+    [
+      "pendingWork",
+      "$DIR/agent-a1.jsonl",
+      true
+    ],
+    [
+      "pendingWork",
+      "$DIR/../subagents/./agent-a1.jsonl",
+      true
+    ],
+    [
+      "pendingWork",
+      "$DIR/agent-a2.jsonl",
+      false
+    ],
+    [
+      "pendingWork",
+      "$DIR/agent-a1.meta.json",
+      false
+    ],
+    [
+      "pendingWork",
+      "$DIR/missing.jsonl",
+      false
+    ],
+    [
+      "pendingWork",
+      "/tmp/example/agent-a1.jsonl",
+      false
+    ],
+    [
+      "card",
+      {
+        "agentCount": 8,
+        "agents": [
+          {
+            "agentId": "a4",
+            "agentType": "agent",
+            "description": "Agent",
+            "status": "working",
+            "activity": "Thinking… 🎉 é",
+            "toolCount": 1,
+            "startedAt": 1698829199000,
+            "updatedAt": 1698829203000
+          },
+          {
+            "agentId": "a1",
+            "agentType": "Explore",
+            "description": "Find the flaky test",
+            "status": "working",
+            "activity": "Tests are running in bg-1; I will report back.",
+            "background": 1,
+            "toolCount": 1,
+            "startedAt": 1748772000000,
+            "updatedAt": 1748772007000
+          },
+          {
+            "agentId": "a2",
+            "agentType": "general-purpose",
+            "description": "Note taker",
+            "status": "done",
+            "activity": "All done: the note is on the board.",
+            "toolCount": 3,
+            "startedAt": 1748772060000,
+            "updatedAt": 1748772063000
+          }
+        ]
+      }
+    ],
+    [
+      "card",
+      {
+        "agentCount": 8
+      }
+    ],
+    [
+      "card",
+      {}
+    ],
+    [
+      "card",
+      {}
+    ],
+    [
+      "pendingWork",
+      "$DIR/agent-a1.jsonl",
+      false
+    ],
+    [
+      "agents",
+      [
+        {
+          "agentId": "a4",
+          "agentType": "agent",
+          "description": "Agent",
+          "status": "working",
+          "activity": "Thinking… 🎉 é",
+          "toolCount": 1,
+          "startedAt": 1698829199000,
+          "updatedAt": 1698829203000
+        },
+        {
+          "agentId": "a5",
+          "agentType": "agent",
+          "description": "Agent",
+          "status": "done",
+          "tool": "Edit",
+          "activity": "analysis.ipynb",
+          "toolCount": 3,
+          "startedAt": 1698829801000,
+          "updatedAt": 1698829803000
+        },
+        {
+          "agentId": "a6",
+          "agentType": "agent",
+          "description": "Agent",
+          "status": "done",
+          "activity": "##### ####### Seven # Too far The report goes on and on. The report goes on and on. The report goes on and on. The report goes on and on. The report goes on and on. The report goes on and on. The rep…",
+          "toolCount": 0,
+          "startedAt": 1698830400000,
+          "updatedAt": 1698830400000
+        },
+        {
+          "agentId": "a7",
+          "agentType": "agent",
+          "description": "Heading writer",
+          "status": "done",
+          "activity": "# Only a heading",
+          "toolCount": 0,
+          "startedAt": 1698831000000,
+          "updatedAt": 1698831000000
+        },
+        {
+          "agentId": "a8",
+          "agentType": "agent",
+          "description": "Agent",
+          "status": "done",
+          "tool": "Bash",
+          "activity": "git log --oneline --author=example --author=example --author=example --author=example --author=example --author=example --author=example --author=example --aut…",
+          "toolCount": 1,
+          "startedAt": 1698831600000,
+          "updatedAt": 1698831600000
+        },
+        {
+          "agentId": "a3",
+          "agentType": "agent",
+          "description": "Agent",
+          "status": "done",
+          "parentAgentId": "a1",
+          "stopped": true,
+          "activity": "A reply with no time",
+          "toolCount": 0,
+          "startedAt": 1699999965000,
+          "updatedAt": 1699999965000
+        },
+        {
+          "agentId": "a1",
+          "agentType": "Explore",
+          "description": "Find the flaky test",
+          "status": "working",
+          "tool": "Grep",
+          "activity": "flaky",
+          "toolCount": 2,
+          "startedAt": 1748772000000,
+          "updatedAt": 1748772121000
+        },
+        {
+          "agentId": "a2",
+          "agentType": "general-purpose",
+          "description": "Note taker",
+          "status": "done",
+          "activity": "All done: the note is on the board.",
+          "toolCount": 3,
+          "startedAt": 1748772060000,
+          "updatedAt": 1748772063000
+        }
+      ]
+    ],
+    [
+      "agent",
+      "S",
+      "a5",
+      "working"
+    ],
+    [
+      "agent",
+      "S",
+      "a5",
+      "done"
+    ],
+    [
+      "agents",
+      [
+        {
+          "agentId": "a4",
+          "agentType": "agent",
+          "description": "Agent",
+          "status": "working",
+          "activity": "Thinking… 🎉 é",
+          "toolCount": 1,
+          "startedAt": 1698829199000,
+          "updatedAt": 1698829203000
+        },
+        {
+          "agentId": "a5",
+          "agentType": "Plan",
+          "description": "Plan it",
+          "status": "done",
+          "tool": "Edit",
+          "activity": "analysis.ipynb",
+          "toolCount": 3,
+          "startedAt": 1698829801000,
+          "updatedAt": 1698829803000
+        },
+        {
+          "agentId": "a6",
+          "agentType": "agent",
+          "description": "Agent",
+          "status": "done",
+          "activity": "##### ####### Seven # Too far The report goes on and on. The report goes on and on. The report goes on and on. The report goes on and on. The report goes on and on. The report goes on and on. The rep…",
+          "toolCount": 0,
+          "startedAt": 1698830400000,
+          "updatedAt": 1698830400000
+        },
+        {
+          "agentId": "a7",
+          "agentType": "agent",
+          "description": "Heading writer",
+          "status": "done",
+          "activity": "# Only a heading",
+          "toolCount": 0,
+          "startedAt": 1698831000000,
+          "updatedAt": 1698831000000
+        },
+        {
+          "agentId": "a8",
+          "agentType": "agent",
+          "description": "Agent",
+          "status": "done",
+          "tool": "Bash",
+          "activity": "git log --oneline --author=example --author=example --author=example --author=example --author=example --author=example --author=example --author=example --aut…",
+          "toolCount": 1,
+          "startedAt": 1698831600000,
+          "updatedAt": 1698831600000
+        },
+        {
+          "agentId": "a3",
+          "agentType": "agent",
+          "description": "Agent",
+          "status": "done",
+          "parentAgentId": "a1",
+          "stopped": true,
+          "activity": "A reply with no time",
+          "toolCount": 0,
+          "startedAt": 1699999965000,
+          "updatedAt": 1699999965000
+        },
+        {
+          "agentId": "a1",
+          "agentType": "Explore",
+          "description": "Find the flaky test",
+          "status": "working",
+          "tool": "Grep",
+          "activity": "flaky",
+          "toolCount": 2,
+          "startedAt": 1748772000000,
+          "updatedAt": 1748772121000
+        },
+        {
+          "agentId": "a2",
+          "agentType": "general-purpose",
+          "description": "Note taker",
+          "status": "done",
+          "tool": "Write",
+          "activity": "new.md",
+          "toolCount": 1,
+          "startedAt": 1748772300000,
+          "updatedAt": 1748772300000
+        }
+      ]
+    ],
+    [
+      "status",
+      "S",
+      "done",
+      false
+    ],
+    [
+      "agents",
+      [
+        {
+          "agentId": "a4",
+          "agentType": "agent",
+          "description": "Agent",
+          "status": "done",
+          "activity": "Thinking… 🎉 é",
+          "toolCount": 1,
+          "startedAt": 1698829199000,
+          "updatedAt": 1698829203000
+        },
+        {
+          "agentId": "a5",
+          "agentType": "Plan",
+          "description": "Plan it",
+          "status": "done",
+          "tool": "Edit",
+          "activity": "analysis.ipynb",
+          "toolCount": 3,
+          "startedAt": 1698829801000,
+          "updatedAt": 1698829803000
+        },
+        {
+          "agentId": "a6",
+          "agentType": "agent",
+          "description": "Agent",
+          "status": "done",
+          "activity": "##### ####### Seven # Too far The report goes on and on. The report goes on and on. The report goes on and on. The report goes on and on. The report goes on and on. The report goes on and on. The rep…",
+          "toolCount": 0,
+          "startedAt": 1698830400000,
+          "updatedAt": 1698830400000
+        },
+        {
+          "agentId": "a7",
+          "agentType": "agent",
+          "description": "Heading writer",
+          "status": "done",
+          "activity": "# Only a heading",
+          "toolCount": 0,
+          "startedAt": 1698831000000,
+          "updatedAt": 1698831000000
+        },
+        {
+          "agentId": "a8",
+          "agentType": "agent",
+          "description": "Agent",
+          "status": "done",
+          "tool": "Bash",
+          "activity": "git log --oneline --author=example --author=example --author=example --author=example --author=example --author=example --author=example --author=example --aut…",
+          "toolCount": 1,
+          "startedAt": 1698831600000,
+          "updatedAt": 1698831600000
+        },
+        {
+          "agentId": "a3",
+          "agentType": "agent",
+          "description": "Agent",
+          "status": "done",
+          "parentAgentId": "a1",
+          "stopped": true,
+          "activity": "A reply with no time",
+          "toolCount": 0,
+          "startedAt": 1699999965000,
+          "updatedAt": 1699999965000
+        },
+        {
+          "agentId": "a1",
+          "agentType": "Explore",
+          "description": "Find the flaky test",
+          "status": "done",
+          "tool": "Grep",
+          "activity": "flaky",
+          "toolCount": 2,
+          "startedAt": 1748772000000,
+          "updatedAt": 1748772121000
+        },
+        {
+          "agentId": "a2",
+          "agentType": "general-purpose",
+          "description": "Note taker",
+          "status": "done",
+          "tool": "Write",
+          "activity": "new.md",
+          "toolCount": 1,
+          "startedAt": 1748772300000,
+          "updatedAt": 1748772300000
+        }
+      ]
+    ]
+  ]
+}

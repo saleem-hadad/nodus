@@ -187,7 +187,7 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | gpui-text | `rust/gpui-text` | patched GPUI text parity with Chromium: sRGB tagging, no SF Pro tracking, hanging trailing spaces, Chromium's rounding; Windows effects CI step | 🟡 running |
 | board-canvas | `rust/board-canvas` | P6, spec 09: the board route and canvas (pan/zoom/select/drag, sections, edges, menus, shortcuts), node plug-in interface | 🟡 running |
 | board-cards | `rust/board-cards` | P6, spec 10: session cards, expanded card chrome, agent deck, archive stack, notes, pad (`nodus-ui/src/board/cards/`) | 🟡 running |
-| capture-panel | `rust/capture-panel` | P10, spec 07 UI: the panel window and page, Settings' capture rows, File › Capture…, `nodus.capture()` | ⏸ paused at adc385b (6 commits; resume when a slot frees) |
+| capture-panel | `rust/capture-panel2` (from `rust/capture-panel` at adc385b) | P10, spec 07 UI: the panel window and page, Settings' capture rows, File › Capture…, `nodus.capture()` | 🟡 running (fresh agent on a new branch: two stale worktrees hold `rust/capture-panel`) |
 | packaging | `rust/packaging` | P11: macOS bundle + DMGs, Windows NSIS (electron-builder templates), signing/notarizing, CI packaging + native smoke test, `release-rust.yml` with D12 handoff gates; publishes nothing | ✅ merged (bec0388): `packaging/`, `rust-package.yml`, `release-rust.yml`; arm64 DMG passes 0.9.4's checks locally (ad-hoc); Windows and signing first run in CI / with the certificate |
 | actions-git-voice-ui | `rust/actions-git-voice-ui` | P9, spec 05 UI: actions rail and dialog, branch chip + commits popover + diff modal, session mic and recording look | ⏸ paused (3 commits; resume when a slot frees) |
 | terminal-ui | `rust/terminal-ui` | P7, spec 12 UI: the GPUI terminal element, session window, transcript preview, agents viewer | 🟡 running |
@@ -271,6 +271,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-09: More watchdog stalls traced to agents reading full-size 2880×1800 screenshots; tracks now compare with the diff tool and look only at small crops. capture-panel continues on `rust/capture-panel2`.
 - 2026-11-09: packaging merged (bec0388): macOS bundles and DMGs as 0.9.4's, electron-builder's NSIS templates for Windows, handoff gates replaying 0.9.4's updater, a native smoke test, `rust-package.yml` in CI and a hand-started `release-rust.yml` that refuses to publish on a failed gate. 1,092 tests.
 - 2026-11-09: Agents kept dying to the 10-minute no-progress watchdog: with seven tracks building GPUI at once, one `cargo` call ran past it. Now at most five tracks run, each with `CARGO_BUILD_JOBS=4` and long builds in the background; board-cards, terminal-ui, board-canvas and gpui-text restarted as fresh agents from their branches (work committed), capture-panel and actions-git-voice-ui paused. A WIP sweep briefly committed a stale worktree's snapshot onto rust/capture-panel; reset locally, never pushed. The old worktree `.claude/worktrees/agent-abd95dd991086fde4` is stale: don't commit there.
 - 2026-11-09: All seven UI/packaging tracks stopped at a session limit with work committed (2–7 commits each); resumed after the reset. Disk at ~28 GB free with seven builds.

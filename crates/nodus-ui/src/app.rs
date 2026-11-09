@@ -65,6 +65,7 @@ pub fn run(user_data: PathBuf) -> anyhow::Result<()> {
         let _ = applied_tx.send(settings.clone());
     }));
 
+    let core_runtime = runtime.handle().clone();
     let app = gpui::application().with_assets(Assets);
     // PLAT-030: a Dock click with no window opens one.
     app.on_reopen(|cx| {
@@ -75,6 +76,7 @@ pub fn run(user_data: PathBuf) -> anyhow::Result<()> {
     app.run(move |cx: &mut App| {
         gpui::init(cx);
         theme::fonts::register(cx);
+        cx.set_global(crate::board::CoreRuntime(core_runtime));
         crate::board::init(cx);
         cx.set_global(window::Core(nodus.clone()));
         theme::apply_preference(settings.theme, cx);

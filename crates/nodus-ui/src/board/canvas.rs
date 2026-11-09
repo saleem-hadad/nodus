@@ -647,11 +647,16 @@ impl BoardCanvas {
         let vp = self.viewport;
         let project_id = self.project_id.clone();
         let nodus = self.state.read(cx).nodus.clone();
+        let rt = crate::board::core_rt(cx);
         self.save_timer = Some(cx.spawn(async move |_, cx| {
             cx.background_executor()
                 .timer(Duration::from_millis(SAVE_VIEWPORT_MS))
                 .await;
-            nodus.board().save_viewport(&project_id, vp).await;
+            crate::board::on_core(&rt, {
+                let (nodus, project_id, vp) = (nodus.clone(), project_id.clone(), vp);
+                async move { nodus.board().save_viewport(&project_id, vp).await }
+            })
+            .await;
         }));
     }
 

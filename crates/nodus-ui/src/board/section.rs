@@ -18,7 +18,6 @@ use super::canvas::BoardCanvas;
 use super::layout::{SECTION_HEADER_H, SECTION_PAD};
 use super::units::fu;
 use crate::components::folder_icon::folder_hues;
-use crate::components::icon::{Icon, icon};
 use crate::components::status_dot::status_dot;
 use crate::components::text_field::{focus_all, input, new_input};
 use crate::components::tween::transition;
@@ -154,7 +153,9 @@ impl BoardCanvas {
                 .bg(t.bg_window)
                 .shadow(vec![theme::tokens::ring(2. * props.zoom * s, hue)])
                 .text_color(t.text_primary)
-                .w(fu(chars as f32 * 7.5 * s))
+                // `size = max(14, length + 1)`: Chromium sizes it by the font's average
+                // character width (SF Pro at 13px: ~10.3px), plus the padding.
+                .w(fu((chars as f32 * 10.3 + 12.) * s))
                 // BOARD-093: the field keeps its keys and presses; Escape cancels.
                 .on_key_down(cx.listener(|this, e: &gpui::KeyDownEvent, window, cx| {
                     cx.stop_propagation();
@@ -167,20 +168,8 @@ impl BoardCanvas {
                 .into_any_element()
         } else {
             match &props.naming {
-                Some(None) => div()
-                    .flex()
-                    .items_center()
-                    .gap(fu(6. * s))
-                    .font_weight(FontWeight::MEDIUM)
-                    .child(icon(Icon::Sparkles, 13. * props.zoom * s, 2., gpui::rgb(0xbf5af2)))
-                    .child("Naming…")
-                    .into_any_element(),
-                Some(Some(landed)) if !landed.is_empty() => div()
-                    .min_w_0()
-                    .overflow_hidden()
-                    .text_ellipsis()
-                    .child(landed.clone())
-                    .into_any_element(),
+                Some(None) => super::naming::naming_label(&id, props.zoom, s, header_color, window, cx),
+                Some(Some(landed)) if !landed.is_empty() => super::naming::reveal(&id, landed, props.zoom, window, cx),
                 _ => {
                     let untitled = props.section.name.is_empty();
                     div()
@@ -227,6 +216,10 @@ impl BoardCanvas {
                 )
             });
 
+        let glow = props
+            .naming
+            .as_ref()
+            .map(|naming| super::naming::glow(&id, props.zoom, naming.is_some(), window, cx));
         div()
             .relative()
             .size_full()
@@ -234,6 +227,7 @@ impl BoardCanvas {
             .border(fu(1.5))
             .border_color(border)
             .bg(fill)
+            .children(glow)
             .child(
                 div()
                     .flex()

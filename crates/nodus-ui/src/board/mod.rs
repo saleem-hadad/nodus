@@ -17,6 +17,7 @@ mod hud;
 mod input;
 pub mod layout;
 mod menus;
+mod naming;
 pub mod nodes;
 mod render;
 pub mod scene;
@@ -39,6 +40,33 @@ use crate::components::icon::{Icon, icon};
 use crate::components::split_button::SplitButton;
 use crate::platform::keys;
 use crate::theme;
+
+/// The tokio runtime the core runs on: core commands that spawn processes
+/// or talk to the session host must run there, not on GPUI's executor.
+#[derive(Clone)]
+pub struct CoreRuntime(pub tokio::runtime::Handle);
+
+impl gpui::Global for CoreRuntime {}
+
+/// The core's runtime, once the app has set it.
+pub(crate) fn core_rt(cx: &App) -> Option<tokio::runtime::Handle> {
+    cx.try_global::<CoreRuntime>().map(|r| r.0.clone())
+}
+
+/// Runs a core command on the core's runtime and waits for it from the UI.
+/// Never finishes when the runtime has gone (the app is quitting).
+pub(crate) async fn on_core<T: Send + 'static>(
+    rt: &Option<tokio::runtime::Handle>,
+    fut: impl Future<Output = T> + Send + 'static,
+) -> T {
+    match rt {
+        Some(handle) => match handle.spawn(fut).await {
+            Ok(value) => value,
+            Err(_) => std::future::pending().await,
+        },
+        None => fut.await,
+    }
+}
 
 /// Sets the board up once at start-up: installs the node renderers.
 pub fn init(cx: &mut App) {

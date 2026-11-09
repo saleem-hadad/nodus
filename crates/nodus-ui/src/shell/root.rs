@@ -53,6 +53,10 @@ impl Shell {
                     if let Some(rail) = this.rail.clone() {
                         rail.update(cx, ProjectRail::hide_numbers);
                     }
+                    // The board lets go of Space (React Flow's key state).
+                    if let Some(board) = this.board.clone() {
+                        board.update(cx, |b, _| b.release_keys());
+                    }
                 }
             }),
             // UI-160: so does resizing the window.

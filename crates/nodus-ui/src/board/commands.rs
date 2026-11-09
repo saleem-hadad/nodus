@@ -221,9 +221,14 @@ impl BoardCanvas {
             ..CreateSessionOptions::default()
         };
         let nodus = self.nodus(cx);
+        let rt = crate::board::core_rt(cx);
         let project_id = self.project_id.clone();
         cx.spawn(async move |this, cx| {
-            let created = nodus.sessions().create(&project_id, &opts).await;
+            let created = crate::board::on_core(&rt, {
+                let (nodus, project_id, opts) = (nodus.clone(), project_id.clone(), opts.clone());
+                async move { nodus.sessions().create(&project_id, &opts).await }
+            })
+            .await;
             let _ = this.update(cx, |c, cx| match created {
                 Ok(card) => {
                     let id = card.node.session_id.clone();
@@ -362,6 +367,7 @@ impl BoardCanvas {
         let ask = nodus_board::stop_confirmation(&targets, card_title)
             .map(|q| self.confirm(q.title, q.message, &q.confirm_label, q.danger, cx));
         let nodus = self.nodus(cx);
+        let rt = crate::board::core_rt(cx);
         cx.spawn(async move |_, _| {
             if let Some(ask) = ask
                 && !ask.await.unwrap_or(false)
@@ -369,7 +375,11 @@ impl BoardCanvas {
                 return;
             }
             let ids: Vec<String> = targets.iter().map(|c| c.node.session_id.clone()).collect();
-            nodus.sessions().stop(&ids).await;
+            crate::board::on_core(&rt, {
+                let (nodus, ids) = (nodus.clone(), ids.clone());
+                async move { nodus.sessions().stop(&ids).await }
+            })
+            .await;
         })
         .detach();
     }
@@ -444,13 +454,18 @@ impl BoardCanvas {
             cx,
         );
         let nodus = self.nodus(cx);
+        let rt = crate::board::core_rt(cx);
         let id = session_id.to_owned();
         cx.spawn(async move |this, cx| {
             if !ask.await.unwrap_or(false) {
                 return;
             }
             if card.live {
-                nodus.sessions().kill(&id).await;
+                crate::board::on_core(&rt, {
+                    let (nodus, id) = (nodus.clone(), id.clone());
+                    async move { nodus.sessions().kill(&id).await }
+                })
+                .await;
             }
             let _ = this.update(cx, |c, cx| {
                 c.state.update(cx, |s, cx| s.remove_card(&id, cx).detach());
@@ -498,9 +513,14 @@ impl BoardCanvas {
         self.naming.insert(section_id.clone(), None);
         cx.notify();
         let nodus = self.nodus(cx);
+        let rt = crate::board::core_rt(cx);
         let project_id = self.project_id.clone();
         cx.spawn(async move |this, cx| {
-            let named = nodus.board().name_section(&project_id, &ids).await;
+            let named = crate::board::on_core(&rt, {
+                let (nodus, project_id, ids) = (nodus.clone(), project_id.clone(), ids.clone());
+                async move { nodus.board().name_section(&project_id, &ids).await }
+            })
+            .await;
             let name = match named {
                 Ok(name) => Some(name),
                 Err(err) => {
@@ -783,9 +803,16 @@ impl BoardCanvas {
             self.save_note(next, cx);
         } else {
             let nodus = self.nodus(cx);
+            let rt = crate::board::core_rt(cx);
             let project_id = self.project_id.clone();
-            cx.spawn(async move |_, _| nodus.board().save_note(&project_id, &next).await)
-                .detach();
+            cx.spawn(async move |_, _| {
+                crate::board::on_core(&rt, {
+                    let (nodus, project_id, next) = (nodus.clone(), project_id.clone(), next.clone());
+                    async move { nodus.board().save_note(&project_id, &next).await }
+                })
+                .await;
+            })
+            .detach();
         }
     }
 
@@ -819,9 +846,14 @@ impl BoardCanvas {
             ..CreateSessionOptions::default()
         };
         let nodus = self.nodus(cx);
+        let rt = crate::board::core_rt(cx);
         let project_id = self.project_id.clone();
         cx.spawn(async move |this, cx| {
-            let created = nodus.sessions().create(&project_id, &opts).await;
+            let created = crate::board::on_core(&rt, {
+                let (nodus, project_id, opts) = (nodus.clone(), project_id.clone(), opts.clone());
+                async move { nodus.sessions().create(&project_id, &opts).await }
+            })
+            .await;
             let _ = this.update(cx, |c, cx| {
                 match created {
                     Ok(card) => {
@@ -887,9 +919,14 @@ impl BoardCanvas {
             y: js::round(spot.y),
         };
         let nodus = self.nodus(cx);
+        let rt = crate::board::core_rt(cx);
         let project_id = self.project_id.clone();
         cx.spawn(async move |this, cx| {
-            let view = nodus.views().create(&project_id, &opts).await?;
+            let view = crate::board::on_core(&rt, {
+                let (nodus, project_id, opts) = (nodus.clone(), project_id.clone(), opts.clone());
+                async move { nodus.views().create(&project_id, &opts).await }
+            })
+            .await?;
             let _ = this.update(cx, |c, cx| {
                 c.state.update(cx, |s, cx| s.upsert_view(view, cx));
                 c.ensure_visible(spot, VIEW_SIZE, cx);
@@ -901,9 +938,14 @@ impl BoardCanvas {
     /// BOARD-126.
     pub fn open_view_session(&mut self, view_id: String, cx: &mut Context<'_, Self>) {
         let nodus = self.nodus(cx);
+        let rt = crate::board::core_rt(cx);
         let project_id = self.project_id.clone();
         cx.spawn(async move |this, cx| {
-            let brain = nodus.views().brain(&project_id, &view_id).await;
+            let brain = crate::board::on_core(&rt, {
+                let (nodus, project_id, view_id) = (nodus.clone(), project_id.clone(), view_id.clone());
+                async move { nodus.views().brain(&project_id, &view_id).await }
+            })
+            .await;
             let _ = this.update(cx, |c, cx| match brain {
                 Ok(id) => c.state.update(cx, |s, cx| s.open_terminal(&id, cx)),
                 Err(err) => c.show_toast(format!("Couldn't open its session: {}", message(&err)), cx),
@@ -955,10 +997,16 @@ impl BoardCanvas {
     /// BOARD-128: `Refresh`.
     pub fn refresh_view(&mut self, view_id: &str, cx: &mut Context<'_, Self>) {
         let nodus = self.nodus(cx);
+        let rt = crate::board::core_rt(cx);
         let project_id = self.project_id.clone();
         let view_id = view_id.to_owned();
         cx.spawn(async move |this, cx| {
-            if let Err(err) = nodus.views().refresh(&project_id, &view_id).await {
+            if let Err(err) = crate::board::on_core(&rt, {
+                let (nodus, project_id, view_id) = (nodus.clone(), project_id.clone(), view_id.clone());
+                async move { nodus.views().refresh(&project_id, &view_id).await }
+            })
+            .await
+            {
                 let _ = this.update(cx, |c, cx| {
                     c.show_toast(format!("Couldn't refresh it: {}", message(&err)), cx);
                 });
@@ -1038,9 +1086,15 @@ impl BoardCanvas {
             ..CreateSessionOptions::default()
         };
         let nodus = self.nodus(cx);
+        let rt = crate::board::core_rt(cx);
         let project_id = self.project_id.clone();
         cx.spawn(async move |this, cx| {
-            let Ok(card) = nodus.sessions().create(&project_id, &opts).await else {
+            let Ok(card) = crate::board::on_core(&rt, {
+                let (nodus, project_id, opts) = (nodus.clone(), project_id.clone(), opts.clone());
+                async move { nodus.sessions().create(&project_id, &opts).await }
+            })
+            .await
+            else {
                 return;
             };
             let _ = this.update(cx, |c, cx| {
@@ -1093,9 +1147,14 @@ impl BoardCanvas {
             ..CreateSessionOptions::default()
         };
         let nodus = self.nodus(cx);
+        let rt = crate::board::core_rt(cx);
         let project_id = self.project_id.clone();
         cx.spawn(async move |this, cx| {
-            let created = nodus.sessions().create(&project_id, &opts).await;
+            let created = crate::board::on_core(&rt, {
+                let (nodus, project_id, opts) = (nodus.clone(), project_id.clone(), opts.clone());
+                async move { nodus.sessions().create(&project_id, &opts).await }
+            })
+            .await;
             let _ = this.update(cx, |c, cx| match created {
                 Ok(card) => c.state.update(cx, |s, cx| s.upsert_card(card, cx)),
                 Err(err) => c.show_toast(format!("Couldn't run {action_name}: {}", message(&err)), cx),

@@ -74,7 +74,13 @@ SCENES = {
         M("drag", EMPTY[0] - 330, EMPTY[1] - 260)]),
     "board-menu-pane": ([], STOREFRONT_LIVE + [M("right", *EMPTY)]),
     "board-menu-archived": ([], STOREFRONT_LIVE + [M("right", *STACK)]),
-    "board-menu-section": ([], STOREFRONT_LIVE + [M("right", *AT(1100, 166))]),
+    "board-selected": ([], STOREFRONT_LIVE + [
+        M("click", 1030, 300, shift=True), M("click", 495, 560, shift=True), AWAY]),
+    "board-section-naming": (["slowNaming"], STOREFRONT_LIVE + [
+        M("click", 495, 560, shift=True), M("click", 776, 560, shift=True),
+        {"cmd": "key", "keystroke": "cmd-g"}, {"cmd": "wait", "ms": 700}, AWAY]),
+    "board-section-rename": ([], STOREFRONT_LIVE + [M("double", 700, 163), {"cmd": "wait", "ms": 300}, AWAY]),
+    "board-menu-section": ([], STOREFRONT_LIVE + [M("right", 700, 163)]),
     "projects-empty": (["empty"], []),
     "projects-grid": ([], []),
     "projects-focus": (["focusOn"], []),
@@ -119,7 +125,8 @@ def run(scene, theme, opts):
     world = opts["world"]
     env = dict(os.environ, NODUS_USER_DATA=os.path.join(world, "userData"), NODUS_AUTOMATION=SOCK,
                HOME=os.path.join(world, "home"), PATH=os.path.join(world, "bin") + ":/usr/bin:/bin:/usr/sbin",
-               SHELL=os.path.join(world, "bin", "fakeshell"), TZ="UTC", LANG="en_US.UTF-8")
+               SHELL=os.path.join(world, "bin", "fakeshell"), TZ="UTC", LANG="en_US.UTF-8",
+               PARITY_RESPONSES=os.path.join(world, "responses.json"))
     if os.path.exists(SOCK):
         os.remove(SOCK)
     log = open(os.path.join(world, "app.log"), "w")

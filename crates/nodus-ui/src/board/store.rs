@@ -37,9 +37,14 @@ impl AppState {
         self.board_loading = self.board.as_ref().is_none_or(|b| b.project.id != project_id);
         cx.notify();
         let nodus = self.nodus.clone();
+        let rt = crate::board::core_rt(cx);
         let project_id = project_id.to_owned();
         cx.spawn(async move |this, cx| {
-            let loaded = nodus.board().load(&project_id).await;
+            let loaded = crate::board::on_core(&rt, {
+                let (nodus, project_id) = (nodus.clone(), project_id.clone());
+                async move { nodus.board().load(&project_id).await }
+            })
+            .await;
             let _ = this.update(cx, |state, cx| {
                 if let Ok(board) = loaded
                     && state.route.project_id() == Some(project_id.as_str())
@@ -132,8 +137,13 @@ impl AppState {
         let project_id = board.project.id.clone();
         cx.notify();
         let nodus = self.nodus.clone();
+        let rt = crate::board::core_rt(cx);
         cx.spawn(async move |_, _| {
-            let _ = nodus.board().save_nodes(&project_id, &patches).await;
+            let _ = crate::board::on_core(&rt, {
+                let (nodus, project_id, patches) = (nodus.clone(), project_id.clone(), patches.clone());
+                async move { nodus.board().save_nodes(&project_id, &patches).await }
+            })
+            .await;
         })
         .detach();
     }
@@ -170,8 +180,15 @@ impl AppState {
         let project_id = board.project.id.clone();
         cx.notify();
         let nodus = self.nodus.clone();
+        let rt = crate::board::core_rt(cx);
         let session_id = session_id.to_owned();
-        cx.spawn(async move |_, _| nodus.board().remove_node(&project_id, &session_id).await)
+        cx.spawn(async move |_, _| {
+            crate::board::on_core(&rt, {
+                let (nodus, project_id, session_id) = (nodus.clone(), project_id.clone(), session_id.clone());
+                async move { nodus.board().remove_node(&project_id, &session_id).await }
+            })
+            .await;
+        })
     }
 
     /// `setArchive`.
@@ -181,8 +198,15 @@ impl AppState {
         let project_id = board.project.id.clone();
         cx.notify();
         let nodus = self.nodus.clone();
-        cx.spawn(async move |_, _| nodus.board().save_archive(&project_id, rect).await)
-            .detach();
+        let rt = crate::board::core_rt(cx);
+        cx.spawn(async move |_, _| {
+            crate::board::on_core(&rt, {
+                let (nodus, project_id, rect) = (nodus.clone(), project_id.clone(), rect);
+                async move { nodus.board().save_archive(&project_id, rect).await }
+            })
+            .await;
+        })
+        .detach();
     }
 
     /// `saveSection`.
@@ -195,8 +219,15 @@ impl AppState {
         let project_id = board.project.id.clone();
         cx.notify();
         let nodus = self.nodus.clone();
-        cx.spawn(async move |_, _| nodus.board().save_section(&project_id, &section).await)
-            .detach();
+        let rt = crate::board::core_rt(cx);
+        cx.spawn(async move |_, _| {
+            crate::board::on_core(&rt, {
+                let (nodus, project_id, section) = (nodus.clone(), project_id.clone(), section.clone());
+                async move { nodus.board().save_section(&project_id, &section).await }
+            })
+            .await;
+        })
+        .detach();
     }
 
     /// `removeSection`: its cards stay where they are, ungrouped.
@@ -211,9 +242,16 @@ impl AppState {
         let project_id = board.project.id.clone();
         cx.notify();
         let nodus = self.nodus.clone();
+        let rt = crate::board::core_rt(cx);
         let section_id = section_id.to_owned();
-        cx.spawn(async move |_, _| nodus.board().remove_section(&project_id, &section_id).await)
-            .detach();
+        cx.spawn(async move |_, _| {
+            crate::board::on_core(&rt, {
+                let (nodus, project_id, section_id) = (nodus.clone(), project_id.clone(), section_id.clone());
+                async move { nodus.board().remove_section(&project_id, &section_id).await }
+            })
+            .await;
+        })
+        .detach();
     }
 
     /// `saveNote`.
@@ -226,8 +264,15 @@ impl AppState {
         let project_id = board.project.id.clone();
         cx.notify();
         let nodus = self.nodus.clone();
-        cx.spawn(async move |_, _| nodus.board().save_note(&project_id, &note).await)
-            .detach();
+        let rt = crate::board::core_rt(cx);
+        cx.spawn(async move |_, _| {
+            crate::board::on_core(&rt, {
+                let (nodus, project_id, note) = (nodus.clone(), project_id.clone(), note.clone());
+                async move { nodus.board().save_note(&project_id, &note).await }
+            })
+            .await;
+        })
+        .detach();
     }
 
     /// `removeNotes`.
@@ -240,8 +285,15 @@ impl AppState {
         let project_id = board.project.id.clone();
         cx.notify();
         let nodus = self.nodus.clone();
-        cx.spawn(async move |_, _| nodus.board().remove_notes(&project_id, &ids).await)
-            .detach();
+        let rt = crate::board::core_rt(cx);
+        cx.spawn(async move |_, _| {
+            crate::board::on_core(&rt, {
+                let (nodus, project_id, ids) = (nodus.clone(), project_id.clone(), ids.clone());
+                async move { nodus.board().remove_notes(&project_id, &ids).await }
+            })
+            .await;
+        })
+        .detach();
     }
 
     /// `upsertView`.
@@ -280,8 +332,13 @@ impl AppState {
         let project_id = board.project.id.clone();
         cx.notify();
         let nodus = self.nodus.clone();
+        let rt = crate::board::core_rt(cx);
         cx.spawn(async move |_, _| {
-            let _ = nodus.views().save(&project_id, &patch).await;
+            let _ = crate::board::on_core(&rt, {
+                let (nodus, project_id, patch) = (nodus.clone(), project_id.clone(), patch.clone());
+                async move { nodus.views().save(&project_id, &patch).await }
+            })
+            .await;
         })
         .detach();
     }
@@ -306,9 +363,14 @@ impl AppState {
         let project_id = board.project.id.clone();
         cx.notify();
         let nodus = self.nodus.clone();
+        let rt = crate::board::core_rt(cx);
         let view_id = view_id.to_owned();
         cx.spawn(async move |_, _| {
-            let _ = nodus.views().remove(&project_id, &view_id).await;
+            let _ = crate::board::on_core(&rt, {
+                let (nodus, project_id, view_id) = (nodus.clone(), project_id.clone(), view_id.clone());
+                async move { nodus.views().remove(&project_id, &view_id).await }
+            })
+            .await;
         })
     }
 

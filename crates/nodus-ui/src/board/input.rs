@@ -1144,6 +1144,16 @@ impl BoardCanvas {
                 s.diff_open,
             )
         };
+        // BOARD-141: the confirm's button has the keyboard: Enter or Space
+        // confirms, Escape cancels.
+        if self.confirm.is_some() {
+            match key.as_str() {
+                "escape" => self.resolve_confirm(false, cx),
+                "enter" | "space" => self.resolve_confirm(true, cx),
+                _ => return false,
+            }
+            return true;
+        }
         let overlay = self.overlay_open(cx);
         // Space held alone pans (React Flow's panActivationKeyCode).
         if key == "space" && !typing && !m.modified() {

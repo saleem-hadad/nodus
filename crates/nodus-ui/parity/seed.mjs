@@ -6,6 +6,7 @@ const [harness, work, theme, ...mutations] = process.argv.slice(2)
 const { seed } = await import(path.join(path.resolve(harness), 'seed', 'index.mjs'))
 const storefront = (s) => s.projects.find((p) => p.name === 'storefront').id
 const MUTATIONS = {
+  slowNaming: () => {},
   empty: (s) => {
     s.projects = []
     s.groups = []
@@ -37,5 +38,7 @@ seed(work, {
   theme,
   mutate: (state) => {
     for (const m of mutations) MUTATIONS[m](state)
-  }
+  },
+  // The stand-in claude is slow to name sections when a scene asks.
+  responses: mutations.includes('slowNaming') ? { delayMs: 120_000 } : undefined
 })

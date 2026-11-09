@@ -65,9 +65,9 @@ $marker = Join-Path $userData 'install-check.txt'
 Set-Content $marker 'kept'
 $p = Start-Process -FilePath (Join-Path $dir 'Uninstall Nodus.exe') -ArgumentList '/currentuser', '/S' -PassThru -Wait
 if ($p.ExitCode -ne 0) { Fail "The uninstaller exited with $($p.ExitCode)" }
-# The uninstaller copies itself out and runs from there, so wait for the folder to go.
+# The uninstaller copies itself out and runs from there, so wait for it to finish.
 $deadline = (Get-Date).AddSeconds(60)
-while ((Test-Path $exe) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+while (((Test-Path $exe) -or (Test-Path $uninstallKey)) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
 if (Test-Path $exe) { Fail "Nodus.exe is still there" }
 if ((Test-Path $uninstallKey) -or (Test-Path $startLink) -or (Test-Path $desktopLink)) { Fail "The uninstall left its registry key or shortcuts" }
 if (-not (Test-Path $marker)) { Fail "The uninstall deleted %APPDATA%\Nodus" }

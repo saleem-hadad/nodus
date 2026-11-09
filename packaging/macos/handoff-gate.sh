@@ -146,10 +146,12 @@ exe="$(plist_value "$target" CFBundleExecutable)"
 [ "$(/usr/bin/lipo -archs "$target/Contents/MacOS/Nodus")" = "$lipo_arch" ] || fail "Nodus isn't a thin $lipo_arch binary"
 minos="$(/usr/bin/vtool -show-build "$target/Contents/MacOS/Nodus" | awk '$1 == "minos" { print $2; exit }')"
 [ "$minos" = "13.0" ] && [ "$(plist_value "$target" LSMinimumSystemVersion)" = "13.0" ] || fail "Not built for macOS 13.0"
+# Both sides resolved, since the temp folder is behind /var -> /private/var.
+inside="$(cd "$target" && pwd -P)"
 while IFS= read -r link; do
   points="$(cd "$(dirname "$link")" && realpath "$(readlink "$link")" 2>/dev/null || echo /)"
   case "$points" in
-    "$target"/*) ;;
+    "$inside"/*) ;;
     *) fail "A link points out of the bundle: $link" ;;
   esac
 done < <(find "$target" -type l)

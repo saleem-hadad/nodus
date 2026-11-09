@@ -916,7 +916,7 @@ Risks and unknowns:
 - [x] PLAT-002 Windows AUMID `dev.saleem.nodus` at start
 - [x] PLAT-003 Default userData folder per OS
 - [x] PLAT-004 `NODUS_USER_DATA` override (non-empty, raw)
-- [ ] PLAT-005 userData string byte-identical to 0.9.4
+- [x] PLAT-005 userData string byte-identical to 0.9.4
 - [x] PLAT-006 No single-instance lock on macOS
 - [ ] PLAT-007 Windows lock; second launch exits 0
 - [ ] PLAT-008 Second launch shows the first's window when ready
@@ -942,7 +942,7 @@ Risks and unknowns:
 - [x] PLAT-028 Theme source system/light/dark everywhere
 - [x] PLAT-029 macOS: closing window keeps app running
 - [x] PLAT-030 macOS activate recreates window only with zero windows (panel quirk)
-- [ ] PLAT-031 Windows quits on all windows closed (panel quirk)
+- [x] PLAT-031 Windows quits on all windows closed (panel quirk)
 - [x] PLAT-032 shutdown() order on before-quit
 - [x] PLAT-033 Quitting leaves sessions running
 - [x] PLAT-034 Quit and Stop Sessions: shutdown host, ≤5000 ms, then quit
@@ -968,7 +968,7 @@ Risks and unknowns:
 - [x] PLAT-054 Quit/Exit behavior
 - [x] PLAT-055 Off-Mac shown-not-registered accelerators
 - [x] PLAT-056 Edit roles act on focused field/terminal
-- [ ] PLAT-057 Reload/DevTools/zoom/full screen semantics (decision)
+- [x] PLAT-057 Reload/DevTools/zoom/full screen semantics (decision)
 - [x] PLAT-058 About panel (macOS) / message box (Windows)
 - [x] PLAT-059 Native Hide/Show All/Services/Minimize/Zoom/Front
 - [x] PLAT-060 app:show-menu popup at rounded (x,y)
@@ -1048,8 +1048,8 @@ Risks and unknowns:
 - [x] PLAT-134 data-platform root attribute
 - [x] PLAT-135 `#capture` page routing
 - [ ] PLAT-136 CSP: frames only nodus-view
-- [ ] PLAT-137 Spellcheck underlines in opted-in fields
+- [x] PLAT-137 Spellcheck underlines in opted-in fields
 - [x] PLAT-138 No native right-click menu in fields
-- [ ] PLAT-139 Persisted page zoom (migrate from Preferences)
+- [x] PLAT-139 Persisted page zoom (migrate from Preferences)
 - [x] PLAT-140 localStorage keys (migrate or accept loss)
 - [x] PLAT-141 Leave Chromium files; keep Local State/Preferences/Local Storage

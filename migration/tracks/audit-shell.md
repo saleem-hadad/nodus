@@ -6,32 +6,71 @@
   selectable static text, an action name's paste cut to 40, the test driver on a Windows named pipe, and the Windows
   window chrome (☰ menu, caption buttons, single instance, quit quirks).
 - **Evidence:** one line per ID below: `done` (already implemented; where, and the test when there is one),
-  `implemented in <commit>` (this track), or `deferred` (and why). Line numbers are as of this branch.
+  `implemented in <commit>` (this track), or `deferred` (and why). Ticked in the specs: every `done` and every
+  `implemented` that runs on a Mac. The Windows-only ones (PLAT-007, PLAT-008, PLAT-018, UI-099) stay unticked until
+  the Windows CI job has run them.
 
 ## Spec 01 · Platform & shell
 
 - PLAT-001 — done: `shell/menus.rs` (`Nodus` app menu, `About Nodus`, `Hide Nodus`, `Quit Nodus`; test
   `has_windows_file_and_help_items`), `packaging/macos/Info.plist` (`CFBundleName`/`CFBundleDisplayName` `Nodus`),
   window title `Nodus` (`shell/window.rs` `open_main_window`).
+- PLAT-005 — implemented in f525550: `nodus-store/src/paths.rs` `app_data_dir` asks Foundation for Application
+  Support (Chromium's `DIR_APP_DATA`, which ignores `$HOME`) and the shell for the Roaming AppData known folder
+  (`DIR_ROAMING_APP_DATA`), as 0.9.4 did, so the string (and the host socket's hash of it) is the same; test
+  `asks_foundation_for_application_support`.
 - PLAT-006 — done: no lock anywhere on a Mac (`crates/nodus/src/main.rs`, `nodus-ui/src/app.rs` `run`); a second
   process started directly runs on its own, as `packaging/smoke.py --open` (`open -n`) does.
+- PLAT-007 — implemented in ec1989e: `nodus-platform/src/instance.rs` `acquire` (a `Local\` mutex and a pipe named
+  after a hash of userData), called first in `nodus-ui/src/app.rs` `run`, which returns `Ok` (exit 0) for a second
+  launch before anything starts; test `names_the_lock_after_the_folder`. Runs in the Windows CI job (clippy-clean
+  for `x86_64-pc-windows-msvc` here).
+- PLAT-008 — implemented in ec1989e: the second launch allows the first to take the foreground
+  (`AllowSetForegroundWindow`) and writes to its pipe; the first shows its window (`window::show_window`) only once
+  `launch()` has finished, and ignores earlier launches (`app.rs`, `started`).
+- PLAT-009 — deferred: the `nodus-view` scheme is wry's custom protocol, registered by the views-ui track
+  (`nodus-ui/src/views/`, in flight).
 - PLAT-012 — done: `nodus-core/src/nodus.rs` `Nodus::start` spawns `Env::init` on the core runtime without waiting,
   and `Inner::env` waits on the `watch` for it (every ⏳env command calls it: `app.info`, `actions.draft`,
   `voice.transcribe`, `git.*`, sessions); the window opens after `launch()`, which doesn't wait for it.
 - PLAT-013 — done: by construction; every command is a method on `nodus_core::Nodus`, which exists before
   `open_main_window` (`nodus-ui/src/app.rs` `run`).
+- PLAT-018 — implemented in c46897f: `shell/windows_chrome.rs` `caption_buttons` (minimize, maximize/restore,
+  close, 46px each in the bar's 138px, 52px tall, `caption_bg` with `caption_symbol` as tokens.rs has them; each a
+  `WindowControlArea`, so the OS handles them and Windows 11's snap layouts). Hover/press tints are Chromium's
+  (10%/20% of the symbol colour, close `#e81123`); the glyphs are Segoe Fluent Icons (MDL2 on Windows 10). First seen
+  in the Windows CI smoke shots, which now go through the driver.
 - PLAT-020 — done: `shell/window.rs` `open_main_window` (`WindowBackgroundAppearance::Opaque`, no vibrancy, no
   always-on-top, OS shadow and corners).
 - PLAT-024 — done: links leave only for `http(s)` (`terminal/host.rs` `activate_link` → `links::browser_url`;
   Settings' and the menu's fixed `https` links); nothing in GPUI opens an in-app window for a link.
 - PLAT-025 — done: by construction; GPUI draws the app, there's no page to navigate away from.
+- PLAT-026 — deferred: a view frame's navigation policy is the views-ui track's (wry `with_navigation_handler`,
+  `nodus-ui/src/views/`).
+- PLAT-027 — deferred: no bridge in view frames: the views-ui track's (its page relay only answers the view's own
+  `window.nodus`).
+- PLAT-031 — done: `nodus-ui/src/app.rs` `on_window_closed` (off a Mac the last window closing quits, unless the
+  capture panel was ever made, the CAP-175 quirk).
 - PLAT-033 — done: `nodus-core/tests/headless.rs` `a_view_starts_its_brain_and_a_relaunch_adopts_the_host`
   (quitting lets go of the host; the relaunch adopts its sessions).
+- PLAT-035 — deferred (needs the user's decision): on Windows logoff GPUI runs the app's quit path
+  (`WM_ENDSESSION` → the quit callback), so `Nodus::shutdown` runs and the last 300 ms of changes are saved, where
+  0.9.4 skipped `before-quit` and could lose them. Matching it would mean dropping the save on purpose; the port keeps
+  it unless the user rules otherwise.
+- PLAT-045 — deferred: the Rust menu bar as AppKit shows it is listed by the driver's new `menus` command (7fdc103):
+  AppKit adds Writing Tools, AutoFill, Start Dictation… and Emoji & Symbols to Edit, the window list to Window, and no
+  second full-screen item to View. 0.9.4's own list on this macOS still has to be read to compare (reading another
+  app's menus needs the Accessibility permission).
 - PLAT-054 — done: `shell/menus.rs` `register_actions` (`Quit` → `cx.quit()` → `on_app_quit` → `Nodus::shutdown`,
   PLAT-032; `QuitAndStopSessions` → `core_shell::quit_and_stop_sessions`, PLAT-034).
 - PLAT-056 — done: menu Undo/Redo/Cut/Copy/Paste/Select All are gpui-component's input actions with the OS
   selectors (`shell/menus.rs` `app_menus`), handled by the focused text field; a focused terminal takes Copy, Paste
   and Select All (`terminal/host.rs`, TERM-040…043). Paste and Match Style pastes (plain text is all GPUI has).
+- PLAT-057 — implemented in 33e5270: View › Actual Size / Zoom In / Zoom Out move the level 0 / ±0.5 and scale the
+  whole main window by 1.2^level within Blink's 25–500% (GPUI patch 11, `Window::set_ui_zoom`; checked live: at
+  +0.5 the viewport is 1168×733 of 1280×803 at scale 2.19); Reload stays in debug builds only, Force Reload and
+  Toggle Developer Tools are gone, Toggle Full Screen is native (`shell/menus.rs`). The capture panel isn't zoomed
+  (0.9.4 shared the page zoom; check on 0.9.4 whether its panel grew).
 - PLAT-083 — done: `nodus-store/src/store.rs` (`Store`: one `State`, whole file rewritten); test
   `writes_the_file_back_exactly_as_it_read_it`.
 - PLAT-084 — done: `store.rs` `migrate_old_state`; tests `brings_the_old_apps_state_over`,
@@ -83,7 +122,18 @@
 - PLAT-129 — done: by construction; commands take typed Rust arguments (absent = `None`, `voice.transcribe` takes
   bytes), nothing else can be passed.
 - PLAT-135 — done: the capture panel is its own window and view (`nodus-ui/src/capture/`), not a hash route.
+- PLAT-136 — deferred: frames only `nodus-view:`: the views-ui track's webviews.
+- PLAT-137 — implemented in 230d415: `nodus-platform/src/spell.rs` (NSSpellChecker; ISpellChecker in the user's
+  language on Windows) and `components/spellcheck.rs` (red dots under each misspelled word once the field has had
+  the keyboard, not the word at the caret) on the action dialog's three fields and the capture box; checked live
+  (`storefrnt`, `agaisnt` underlined). The Sidekick prompt, notes and the view dialog are the overlays, board-cards
+  and views-ui tracks' fields: `spellcheck::underlines` is there for them. Test
+  `finds_the_words_the_system_doesnt_know`.
 - PLAT-138 — done: `components/text_field.rs` (no native menu), and GPUI shows none elsewhere.
+- PLAT-139 — implemented in 33e5270: `nodus-core/src/zoom.rs` reads 0.9.4's level once from `Preferences`
+  (`partition.per_host_zoom_levels.<hash>["file://…/out/renderer/index.html"]`, a number or `{zoom_level}`) and keeps
+  it in state.json as `zoomLevel`; the window opens at it. Tests `reads_the_level_chromium_kept`,
+  `brings_the_level_over_once_and_keeps_its_own`, `zooms_as_chromium_does`.
 - PLAT-140 — done: `nodus-core/src/local_storage.rs` (every `file://` key brought over from `Local Storage/leveldb`
   once, kept under `localStorage` in state.json); tests `keeps_what_a_page_stored_across_restarts` and the LevelDB
   reader's. The capture keys use it (capture-panel); `nodus.inkColor` uses it on rust/overlays.
@@ -116,6 +166,29 @@
 - UPD-084 — done: `settings/mod.rs` (`Download updates automatically`, hidden when off, both hints, `switch_row`
   disabled until settings load).
 - UPD-085 — done: `settings/mod.rs` (the error state's hint linking `RELEASES_URL`).
+
+## Spec 06 · Release
+
+- REL-043 — done: `nodus-updater/src/updater.rs` `clean_up` (UPD-071…UPD-075 on whatever is in `updates/`, which
+  is where 0.9.4 left the same names), run at launch; test `upd_071_to_074_clean_up_keeps_only_a_failure_that_still_matters`.
+- REL-047 — done: every UPD-001…UPD-085 is ticked, and `release-rust.yml` uploads the same four asset names.
+- REL-002, REL-013, REL-014 — deferred (plan.md, Decisions for the user): `release-rust.yml` is started by hand and
+  publishes a draft once every digest checks, where 0.9.4's ran on `v*` tags and published at once; switch at cutover
+  if the user prefers.
+- REL-008, REL-009, REL-041, REL-046 — deferred: need the Developer ID certificate and notarization secrets.
+- REL-016…REL-026, REL-028, REL-044 — deferred: electron-builder's templates; first proof is the Windows packaging
+  job, whose last full run stopped at makensis ("Invalid command: odus": template paths went into sed as
+  `D:\a\nodus\…`). Fixed in fd45d92; the next run shows them.
+- REL-032 — deferred: the smoke test shoots the grid and a terminal in both themes; the board shot is still to add
+  (the board route has landed). On Windows it now runs through the driver's named pipe.
+- REL-034 — deferred: the smoke test doesn't press Ctrl+W / Ctrl+Shift+W yet.
+- REL-037, REL-038, REL-039, REL-040 — deferred to cutover and the first Rust release (postinstall.cjs goes with the
+  Electron toolchain; links and the version are checked when it's published; the handoff gates run in that workflow).
+
+## Spec 07 · Capture
+
+- CAP-056 — deferred: the Windows screenshot (GDI BitBlt of the display under the pointer) needs an interactive
+  desktop; the Windows test job runs `dib_to_bmp` only, and the smoke test doesn't capture.
 
 ## Spec 08 · Shell UI (board route store)
 
@@ -162,8 +235,46 @@
 - UI-077 — done: `store.rs` `open_agents`, `terminal/actions.rs` `open_agents`; `git/mod.rs` sets and clears
   `diff_open`.
 - UI-078 — done: `actions/mod.rs` (ACT-017 `setActions`: the project in the list, the open board's, the global list).
+- UI-099 — implemented in c46897f: `shell/windows_chrome.rs` `AppMenu` (the ☰ button's popup: File, Edit, View,
+  Window, Help with Windows' items, each submenu beside its row, Electron's accelerator text, the Focus Mode tick;
+  items dispatch to whatever has the keyboard; Escape or a press outside closes it) at `menu_origin()` = 4px under
+  the button's bottom-left; test `shows_every_item_of_the_windows_menu_with_electrons_shortcuts`. Chromium's views
+  menu look isn't captured anywhere; compare on Windows.
 
 ## Debts
 
+- Selectable static text — implemented in 23bde1f: `components/selectable.rs` (`TextSelection`, `selection_scope`,
+  `selectable_part`, `selectable`, `selectable_text`): drag to select (across a block's texts, as the Changes window's
+  lines), double click a word, triple click the line, shift-click extends, ⌘C / Ctrl+C and Edit › Copy copy, ⌘A / Ctrl+A
+  selects the block, a press elsewhere clears it; the text fields' selection colour. Used wherever 0.9.4's CSS let text
+  be selected in this track's modules: the Changes window's path, lines (`.diff-text`, not the numbers) and notice
+  detail, the remove dialog's path, the action dialog's error, the session window's folder and error detail, the
+  agent viewer's list note, the transcript's messages, tool-call details and empty-state detail. Checked live (drag
+  and double click on the remove dialog's path) and against the goldens (projects-remove-confirm 0.04%, the Changes
+  window 0.33%). Left for their tracks: the expanded card's error detail (board-cards), the view dialog's error and
+  `.view-approve-cmd` (views-ui), the merge dialog's source error (overlays). Tests `takes_words_spaces_and_lines`,
+  `draws_the_selection_over_the_highlights`.
 - Action name paste — implemented in 51a455a: `components/text_field.rs` `fit_max_length` / `paste_within` on the
   name field (`actions/dialog_view.rs`); test `cuts_a_paste_to_what_fits_as_max_length_does`.
+- Test driver on Windows — implemented in ec1989e: `automation.rs` `listen` serves the named pipe NODUS_AUTOMATION
+  names (`nodus_platform::pipe::serve`), one client at a time, same JSON lines; `packaging/smoke.py` already opens
+  `\\.\pipe\nodus-smoke-<pid>`, so its Windows run now goes through the driver.
+- Windows chrome — implemented in c46897f and ec1989e: UI-099, PLAT-018, PLAT-007, PLAT-008 above; PLAT-031 was
+  already done; PLAT-035 waits for the user's call.
+
+## Also fixed
+
+- fb3d2f4: on Windows, a program started with its own environment is found on that environment's PATH as libuv
+  finds it (the working folder, then PATH, `.com` and `.exe`), so a missing one fails with `spawn <name> ENOENT`; the
+  Windows test job failed on `fails_when_git_is_missing`.
+- fd45d92: the Windows installer script's sed replacements quote backslashes (the packaging job's makensis failure).
+- 470c518: the board store disposes the terminals of cards it drops (UI-054, UI-059, UI-069) and a board preview
+  clears an earlier search (UI-076).
+
+## For the user
+
+- PLAT-035: keep saving on Windows logoff (the port) or skip it as 0.9.4 did.
+- The ☰ popup and the caption buttons follow Chromium's/Windows' look from its sources; compare with a Windows 0.9.4.
+- Zoom In's Windows accelerator text is written `Ctrl+Shift+=` (Electron's `CommandOrControl+Plus`); check 0.9.4.
+- Edit › Delete with nothing selected deletes the next character in a field (gpui-component's Delete); Chromium's
+  did nothing.

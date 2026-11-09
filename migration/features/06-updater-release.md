@@ -821,8 +821,8 @@ No macOS test exists in TypeScript. Recommended Rust additions, marked as such s
 - [ ] REL-040 Contract holds for every Mac 0.6.0–0.9.4 and Windows 0.9.0–0.9.4 updater
 - [ ] REL-041 Rust .app passes deep-strict verify, id, version and same TeamIdentifier
 - [x] REL-042 Rust app starts via `open -n` and honors `open --env NODUS_USER_DATA`
-- [ ] REL-043 Rust first launch cleans up the 0.9.4 `updates/` leftovers
+- [x] REL-043 Rust first launch cleans up the 0.9.4 `updates/` leftovers
 - [ ] REL-044 Rust installer run as `--updated /S --force-run` replaces the Electron install in place and starts the app
 - [x] REL-045 Rust app ignores the `--updated` argument
 - [ ] REL-046 Same designated requirement as 0.9.4 (TCC grants and Keychain item survive)
-- [ ] REL-047 Rust releases keep the same contract; the Rust updater implements UPD-001…UPD-085
+- [x] REL-047 Rust releases keep the same contract; the Rust updater implements UPD-001…UPD-085

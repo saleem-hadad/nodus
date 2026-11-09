@@ -55,8 +55,7 @@
 ## Deferred
 
 - BAR-005: the field grows 1–5 lines then scrolls, as 0.9.4's; the spellcheck underline isn't drawn (GPUI's text input has no spellchecker; plan.md's "Decisions for the user" spellcheck row).
-- INKUI-016: hovering a stroke with the pointer finds it, but GPUI has no `move` cursor (`CursorStyle` lacks it and custom cursor images); needs the patched GPUI.
-- INKUI-017: pen, arrow and text show crosshair and I-beam over everything; the eraser's 20px circle cursor needs a custom cursor image (patched GPUI), and shows the crosshair meanwhile.
+- ~~INKUI-016, INKUI-017~~: done by gpui-polish (the `move` cursor and the eraser's circle, PATCHES 12).
 - INKUI-018: views have no live pages yet (spec 04's UI); `BoardCx.ink_tool` says when a tool is out, for the view renderer to ignore the pointer and show its snapshot (D3).
 - BOARD-036: the jump selects and centres the card and sets `BoardCx.flash`; the flash is the card's to draw (board-cards).
 

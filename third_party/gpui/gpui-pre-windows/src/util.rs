@@ -100,7 +100,23 @@ pub(crate) fn load_cursor(style: CursorStyle) -> Option<HCURSOR> {
     static SIZENWSE: OnceLock<SafeCursor> = OnceLock::new();
     static SIZENESW: OnceLock<SafeCursor> = OnceLock::new();
     static NO: OnceLock<SafeCursor> = OnceLock::new();
+    // Nodus patch (custom cursors): CSS `move` is IDC_SIZEALL, as in Chromium.
+    static SIZEALL: OnceLock<SafeCursor> = OnceLock::new();
+    if let CursorStyle::Custom(custom) = style {
+        return image_cursor(custom).or_else(|| {
+            let fallback = custom
+                .image()
+                .map_or(CursorStyle::Arrow, |image| image.fallback);
+            if matches!(fallback, CursorStyle::Custom(_)) {
+                load_cursor(CursorStyle::Arrow)
+            } else {
+                load_cursor(fallback)
+            }
+        });
+    }
     let (lock, name) = match style {
+        CursorStyle::Move => (&SIZEALL, IDC_SIZEALL),
+        CursorStyle::Cell => (&CROSS, IDC_CROSS),
         CursorStyle::IBeam | CursorStyle::IBeamCursorForVerticalLayout => (&IBEAM, IDC_IBEAM),
         CursorStyle::Crosshair => (&CROSS, IDC_CROSS),
         CursorStyle::PointingHand | CursorStyle::DragLink => (&HAND, IDC_HAND),
@@ -128,6 +144,98 @@ pub(crate) fn load_cursor(style: CursorStyle) -> Option<HCURSOR> {
             .into()
         })),
     )
+}
+
+/// Nodus patch (custom cursors): the `HCURSOR` for a registered image,
+/// made from the bitmap for the system's DPI the first time and kept.
+fn image_cursor(cursor: CustomCursor) -> Option<HCURSOR> {
+    use std::{collections::HashMap, sync::Mutex};
+    static MADE: OnceLock<Mutex<HashMap<u32, Option<SafeCursor>>>> = OnceLock::new();
+    let made = MADE.get_or_init(Default::default);
+    if let Some(cursor) = made.lock().ok()?.get(&cursor.id()) {
+        return cursor.as_ref().map(|c| **c);
+    }
+    let image = cursor.image()?;
+    let scale = unsafe { windows::Win32::UI::HiDpi::GetDpiForSystem() } as f32 / 96.0;
+    let created = CustomCursor::bitmap_for_scale(&image, scale).and_then(|bitmap| {
+        let hotspot = (
+            (image.hotspot.x * bitmap.scale).round().max(0.) as u32,
+            (image.hotspot.y * bitmap.scale).round().max(0.) as u32,
+        );
+        create_image_cursor(bitmap, hotspot)
+    });
+    made.lock()
+        .ok()?
+        .insert(cursor.id(), created.map(SafeCursor::from));
+    created
+}
+
+/// A cursor from a 32-bit top-down DIB with alpha (straight, as icon
+/// bitmaps are) and an empty AND mask.
+fn create_image_cursor(bitmap: &CursorBitmap, hotspot: (u32, u32)) -> Option<HCURSOR> {
+    use windows::Win32::Graphics::Gdi::{
+        BI_BITFIELDS, BITMAPINFO, BITMAPV5HEADER, CreateBitmap, CreateDIBSection, DIB_RGB_COLORS,
+        DeleteObject, GetDC, ReleaseDC,
+    };
+    let (width, height) = (bitmap.width as usize, bitmap.height as usize);
+    if width == 0 || height == 0 || bitmap.rgba.len() < width * height * 4 {
+        return None;
+    }
+    let header = BITMAPV5HEADER {
+        bV5Size: std::mem::size_of::<BITMAPV5HEADER>() as u32,
+        bV5Width: width as i32,
+        bV5Height: -(height as i32),
+        bV5Planes: 1,
+        bV5BitCount: 32,
+        bV5Compression: BI_BITFIELDS,
+        bV5RedMask: 0x00FF_0000,
+        bV5GreenMask: 0x0000_FF00,
+        bV5BlueMask: 0x0000_00FF,
+        bV5AlphaMask: 0xFF00_0000,
+        ..Default::default()
+    };
+    unsafe {
+        let hdc = GetDC(None);
+        let mut bits: *mut std::ffi::c_void = std::ptr::null_mut();
+        let color = CreateDIBSection(
+            Some(hdc),
+            &header as *const BITMAPV5HEADER as *const BITMAPINFO,
+            DIB_RGB_COLORS,
+            &mut bits,
+            None,
+            0,
+        );
+        ReleaseDC(None, hdc);
+        let color = color.log_err()?;
+        if bits.is_null() {
+            let _ = DeleteObject(color.into());
+            return None;
+        }
+        let out = std::slice::from_raw_parts_mut(bits as *mut u8, width * height * 4);
+        for (dst, src) in out.chunks_exact_mut(4).zip(bitmap.rgba.chunks_exact(4)) {
+            dst.copy_from_slice(&[src[2], src[1], src[0], src[3]]);
+        }
+        // Rows of a monochrome bitmap are padded to 16 bits.
+        let mask_bits = vec![0u8; width.div_ceil(16) * 2 * height];
+        let mask = CreateBitmap(
+            width as i32,
+            height as i32,
+            1,
+            1,
+            Some(mask_bits.as_ptr() as *const std::ffi::c_void),
+        );
+        let info = ICONINFO {
+            fIcon: false.into(),
+            xHotspot: hotspot.0,
+            yHotspot: hotspot.1,
+            hbmMask: mask,
+            hbmColor: color,
+        };
+        let icon = CreateIconIndirect(&info).log_err();
+        let _ = DeleteObject(color.into());
+        let _ = DeleteObject(mask.into());
+        icon.map(|icon| HCURSOR(icon.0))
+    }
 }
 
 /// This function is used to configure the dark mode for the window built-in title bar.

@@ -4,6 +4,8 @@
 //! macOS screens have a y axis that goes up from the bottom of the screen and
 //! an origin at the bottom left of the main display.
 
+// Nodus patch (custom cursors).
+mod cursor;
 mod display;
 mod display_link;
 mod events;
@@ -19,7 +21,7 @@ use gpui_apple::metal_renderer as renderer;
 pub mod metal_renderer {
     pub use gpui_apple::metal_renderer::{PathRasterizationVertex, PathSprite, SurfaceBounds};
 
-    #[cfg(any(test, feature = "bench-support", feature = "test-support"))]
+    #[cfg(any(feature = "bench-support", feature = "test-support"))]
     pub use gpui_apple::metal_renderer::MetalHeadlessRenderer;
 }
 

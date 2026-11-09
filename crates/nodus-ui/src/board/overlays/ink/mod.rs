@@ -148,6 +148,8 @@ pub(crate) struct Ink {
     history: InkHistory,
     /// The layer's hitbox: a press is on the board when it's hovered.
     hitbox: Option<Hitbox>,
+    /// INKUI-016: the pointer tool is over a stroke (`.ink-hover`).
+    hover: bool,
     /// The colour button and its palette, for the outside press.
     color_area: Vec<Bounds<Pixels>>,
     label_key: u64,
@@ -196,6 +198,7 @@ fn measurer(window: &Window) -> impl Fn(&str, f64) -> f64 + use<> {
     move |text: &str, size: f64| label_width(&ts, text, size)
 }
 
+mod cursor;
 mod dock;
 mod draw;
 mod input;

@@ -38,6 +38,8 @@ impl BoardCanvas {
         self.overlays.ink.tool = tool;
         if tool != InkTool::Select {
             self.overlays.ink.selected = None;
+            // INKUI-017: switching away from the pointer drops the move cursor.
+            self.overlays.ink.hover = false;
         }
         cx.notify();
     }

@@ -2149,7 +2149,13 @@ impl PlatformInputHandler {
 
     pub fn bounds_for_range(&mut self, range_utf16: Range<usize>) -> Option<Bounds<Pixels>> {
         self.cx
-            .update(|window, cx| self.handler.bounds_for_range(range_utf16, window, cx))
+            .update(|window, cx| {
+                // Nodus patch: in the platform's points, as the window is zoomed.
+                let zoom = window.ui_zoom();
+                self.handler
+                    .bounds_for_range(range_utf16, window, cx)
+                    .map(|b| b.map(|v| v * zoom))
+            })
             .ok()
             .flatten()
     }
@@ -2226,7 +2232,11 @@ impl PlatformInputHandler {
     #[allow(unused)]
     pub fn character_index_for_point(&mut self, point: Point<Pixels>) -> Option<usize> {
         self.cx
-            .update(|window, cx| self.handler.character_index_for_point(point, window, cx))
+            .update(|window, cx| {
+                // Nodus patch: from the platform's points, as the window is zoomed.
+                let point = point.map(|v| v / window.ui_zoom());
+                self.handler.character_index_for_point(point, window, cx)
+            })
             .ok()
             .flatten()
     }
@@ -3109,6 +3119,93 @@ pub enum CursorStyle {
     /// A cursor indicating that the operation will result in a context menu
     /// corresponds to the CSS cursor value `context-menu`
     ContextualMenu,
+
+    // Nodus patch (custom cursors): `move`, `cell` and image cursors.
+    /// A four-way arrow: something can be moved
+    /// corresponds to the CSS cursor value `move`
+    Move,
+
+    /// A plus-shaped cell cursor
+    /// corresponds to the CSS cursor value `cell`
+    Cell,
+
+    /// A cursor drawn from an image registered with [`CustomCursor::register`]
+    /// corresponds to the CSS cursor value `url(…) x y, <fallback>`
+    Custom(CustomCursor),
+}
+
+/// Nodus patch (custom cursors): a cursor made from an image, like CSS's
+/// `cursor: url(…) x y, <fallback>`. Register the image once with
+/// [`CustomCursor::register`] and use `CursorStyle::Custom(cursor)`
+/// wherever a cursor style goes; the platform makes the native cursor the
+/// first time it's shown and keeps it.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+pub struct CustomCursor(u32);
+
+/// One bitmap of a [`CursorImage`], drawn for a display scale.
+#[derive(Clone, Debug)]
+pub struct CursorBitmap {
+    /// Width in device pixels.
+    pub width: u32,
+    /// Height in device pixels.
+    pub height: u32,
+    /// The display scale it's drawn for (2 on a Retina display).
+    pub scale: f32,
+    /// Straight (not premultiplied) sRGB RGBA, 8 bits a channel, rows top to bottom.
+    pub rgba: Vec<u8>,
+}
+
+/// What a [`CustomCursor`] shows.
+#[derive(Clone, Debug)]
+pub struct CursorImage {
+    /// The size in logical pixels (points).
+    pub size: Size<f32>,
+    /// The hotspot in logical pixels from the top left.
+    pub hotspot: Point<f32>,
+    /// The image at one or more display scales; the platform picks the one
+    /// for the display (macOS keeps them all in one `NSImage`).
+    pub bitmaps: Vec<CursorBitmap>,
+    /// The cursor shown where the platform can't make one of the image.
+    pub fallback: CursorStyle,
+}
+
+static CUSTOM_CURSORS: std::sync::LazyLock<parking_lot::RwLock<Vec<Arc<CursorImage>>>> =
+    std::sync::LazyLock::new(Default::default);
+
+impl CustomCursor {
+    /// Registers an image cursor. Each call registers a new one, so call it
+    /// once per image and keep the handle.
+    pub fn register(image: CursorImage) -> Self {
+        let mut cursors = CUSTOM_CURSORS.write();
+        cursors.push(Arc::new(image));
+        CustomCursor((cursors.len() - 1) as u32)
+    }
+
+    /// The image registered for this cursor.
+    pub fn image(self) -> Option<Arc<CursorImage>> {
+        CUSTOM_CURSORS.read().get(self.0 as usize).cloned()
+    }
+
+    /// A number that identifies this cursor for as long as the process runs.
+    pub fn id(self) -> u32 {
+        self.0
+    }
+
+    /// The bitmap drawn for the scale nearest `scale` from above (or the
+    /// largest, when every bitmap is for a smaller scale).
+    pub fn bitmap_for_scale(image: &CursorImage, scale: f32) -> Option<&CursorBitmap> {
+        image
+            .bitmaps
+            .iter()
+            .filter(|b| b.scale >= scale)
+            .min_by(|a, b| a.scale.total_cmp(&b.scale))
+            .or_else(|| {
+                image
+                    .bitmaps
+                    .iter()
+                    .max_by(|a, b| a.scale.total_cmp(&b.scale))
+            })
+    }
 }
 
 /// A clipboard item that should be copied to the clipboard

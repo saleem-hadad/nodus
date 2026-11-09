@@ -2573,7 +2573,22 @@ extern "C" fn reset_cursor_rects(this: &AnyObject, _: Sel) {
         let window_state = get_window_state(this);
         let cursor_style = window_state.lock().cursor_style;
 
-        let cursor: *mut AnyObject = match cursor_style {
+        let cursor = ns_cursor(cursor_style);
+
+        let bounds: NSRect = msg_send![this, bounds];
+        let _: () = msg_send![this, addCursorRect: bounds, cursor: cursor];
+    }
+}
+
+/// The `NSCursor` for a style (Nodus patch: a function, so an image cursor
+/// can fall back to another style).
+///
+/// # Safety
+///
+/// Call on the main thread.
+unsafe fn ns_cursor(cursor_style: CursorStyle) -> *mut AnyObject {
+    unsafe {
+        match cursor_style {
             CursorStyle::Arrow => msg_send![class!(NSCursor), arrowCursor],
             CursorStyle::IBeam => msg_send![class!(NSCursor), IBeamCursor],
             CursorStyle::Crosshair => msg_send![class!(NSCursor), crosshairCursor],
@@ -2607,10 +2622,24 @@ extern "C" fn reset_cursor_rects(this: &AnyObject, _: Sel) {
             CursorStyle::DragLink => msg_send![class!(NSCursor), dragLinkCursor],
             CursorStyle::DragCopy => msg_send![class!(NSCursor), dragCopyCursor],
             CursorStyle::ContextualMenu => msg_send![class!(NSCursor), contextualMenuCursor],
-        };
-
-        let bounds: NSRect = msg_send![this, bounds];
-        let _: () = msg_send![this, addCursorRect: bounds, cursor: cursor];
+            // Nodus patch (custom cursors): CSS `move`, `cell` and images.
+            CursorStyle::Move => crate::cursor::core_cursor(crate::cursor::CORE_CURSOR_MOVE)
+                .unwrap_or_else(|| msg_send![class!(NSCursor), openHandCursor]),
+            CursorStyle::Cell => crate::cursor::core_cursor(crate::cursor::CORE_CURSOR_CELL)
+                .unwrap_or_else(|| msg_send![class!(NSCursor), crosshairCursor]),
+            CursorStyle::Custom(custom) => {
+                crate::cursor::image_cursor(custom).unwrap_or_else(|| {
+                    let fallback = custom
+                        .image()
+                        .map_or(CursorStyle::Arrow, |image| image.fallback);
+                    if matches!(fallback, CursorStyle::Custom(_)) {
+                        msg_send![class!(NSCursor), arrowCursor]
+                    } else {
+                        ns_cursor(fallback)
+                    }
+                })
+            }
+        }
     }
 }
 

@@ -37,22 +37,23 @@ impl BoardCanvas {
         .into_any_element()
     }
 
-    /// INKUI-006, INKUI-017: the board's surface, above every node (the
-    /// open archive panel's too) and under the HUD and the bar: a press is
-    /// the ink's when this is hovered, and the tool's cursor wins over the
-    /// cards' own. The eraser's circle has no system cursor in GPUI, so it
-    /// shows the crosshair (deferred, INKUI-017).
+    /// INKUI-006, INKUI-016, INKUI-017: the board's surface, above every
+    /// node (the open archive panel's too) and under the HUD and the bar: a
+    /// press is the ink's when this is hovered, and the tool's cursor wins
+    /// over the cards' own: crosshair, I-beam, the eraser's circle, or with
+    /// the pointer over a stroke, `move`.
     pub(crate) fn render_ink_hitbox(&self, cx: &mut Context<'_, Self>) -> AnyElement {
         let tool = self.overlays.ink.tool;
+        let hover = self.overlays.ink.hover;
         let me = cx.entity();
         canvas(
             move |bounds, window, _| window.insert_hitbox(bounds, HitboxBehavior::Normal),
             move |_, hitbox, window, cx| {
                 match tool {
-                    InkTool::Pen | InkTool::Arrow | InkTool::Eraser => {
-                        window.set_cursor_style(CursorStyle::Crosshair, &hitbox);
-                    }
+                    InkTool::Pen | InkTool::Arrow => window.set_cursor_style(CursorStyle::Crosshair, &hitbox),
+                    InkTool::Eraser => window.set_cursor_style(cursor::eraser(), &hitbox),
                     InkTool::Text => window.set_cursor_style(CursorStyle::IBeam, &hitbox),
+                    InkTool::Select if hover => window.set_cursor_style(CursorStyle::Move, &hitbox),
                     InkTool::Select => {}
                 }
                 me.update(cx, |c, _| c.overlays.ink.hitbox = Some(hitbox));

@@ -42,6 +42,26 @@ impl BoardCanvas {
         }
     }
 
+    /// INKUI-016: with the pointer tool and no button held, ink under the
+    /// pointer shows it can be picked up (the move cursor over the whole
+    /// board surface). GPUI hands over one move a frame, as 0.9.4 checked
+    /// once per animation frame.
+    fn ink_hover(&mut self, e: &MouseMoveEvent, window: &mut Window, cx: &mut Context<'_, Self>) {
+        if self.overlays.ink.tool != InkTool::Select || e.pressed_button.is_some() {
+            return;
+        }
+        let strokes = self.ink_strokes();
+        let over = !strokes.is_empty() && self.overlays.ink.hitbox.as_ref().is_some_and(|h| h.is_hovered(window)) && {
+            let p = self.ink_point(e.position);
+            let measure = measurer(window);
+            stroke_at(&strokes, p, HIT_PX / self.viewport.zoom, &measure).is_some()
+        };
+        if over != self.overlays.ink.hover {
+            self.overlays.ink.hover = over;
+            cx.notify();
+        }
+    }
+
     /// INKUI-006…INKUI-015, INKUI-019, INKUI-020: a press, seen before
     /// anything on the board.
     pub(crate) fn ink_mouse_down(&mut self, e: &MouseDownEvent, window: &mut Window, cx: &mut Context<'_, Self>) {
@@ -156,6 +176,7 @@ impl BoardCanvas {
     /// The pointer moving while the ink holds it (INKUI-007).
     pub(crate) fn ink_mouse_move(&mut self, e: &MouseMoveEvent, window: &mut Window, cx: &mut Context<'_, Self>) {
         if self.overlays.ink.gesture.is_none() {
+            self.ink_hover(e, window, cx);
             return;
         }
         cx.stop_propagation();

@@ -1281,6 +1281,8 @@ pub struct Window {
     modifiers: Modifiers,
     capslock: Capslock,
     scale_factor: f32,
+    /// Nodus patch: the page zoom the whole window is drawn at (1.0 is none).
+    ui_zoom: f32,
     pub(crate) bounds_observers: SingleSubscriberSet<AnyObserver>,
     appearance: WindowAppearance,
     pub(crate) appearance_observers: SingleSubscriberSet<AnyObserver>,
@@ -2406,6 +2408,7 @@ impl Window {
             modifiers,
             capslock,
             scale_factor,
+            ui_zoom: 1.0,
             bounds_observers: SingleSubscriberSet::new(),
             appearance,
             appearance_observers: SingleSubscriberSet::new(),
@@ -3017,9 +3020,7 @@ impl Window {
     /// the platform window, then notifies observers. Normally called automatically
     /// by the platform's resize callback, but exposed publicly for test infrastructure.
     pub fn bounds_changed(&mut self, cx: &mut App) {
-        self.scale_factor = self.platform_window.scale_factor();
-        self.viewport_size = self.platform_window.content_size();
-        self.mouse_position = self.platform_window.mouse_position();
+        self.read_platform_metrics();
 
         self.refresh();
 
@@ -3349,6 +3350,33 @@ impl Window {
     pub fn set_scale_factor(&mut self, scale_factor: f32) {
         self.scale_factor = scale_factor;
         self.refresh();
+    }
+
+    /// Nodus patch: the page zoom the window is drawn at, 1.0 for none.
+    pub fn ui_zoom(&self) -> f32 {
+        self.ui_zoom
+    }
+
+    /// Nodus patch: zooms the whole window as a browser zooms a page. Layout
+    /// works in pixels `zoom` times larger: the viewport shrinks by `zoom`,
+    /// everything is drawn `zoom` times bigger at full resolution, and
+    /// input positions and scroll distances are divided by it. 1.0 is none.
+    pub fn set_ui_zoom(&mut self, zoom: f32, cx: &mut App) {
+        let zoom = if zoom.is_finite() && zoom > 0.0 { zoom } else { 1.0 };
+        if zoom == self.ui_zoom {
+            return;
+        }
+        self.ui_zoom = zoom;
+        self.bounds_changed(cx);
+    }
+
+    /// The display's scale, the content's size and the pointer, from the
+    /// platform window, in the zoomed window's pixels.
+    fn read_platform_metrics(&mut self) {
+        let zoom = self.ui_zoom;
+        self.scale_factor = self.platform_window.scale_factor() * zoom;
+        self.viewport_size = self.platform_window.content_size().map(|v| v / zoom);
+        self.mouse_position = self.platform_window.mouse_position().map(|v| v / zoom);
     }
 
     /// The size of an em for the base font of the application. Adjusting this value allows the
@@ -6055,6 +6083,12 @@ impl Window {
     /// Dispatch a mouse, keyboard, or touch event on the window.
     #[profiling::function]
     pub fn dispatch_event(&mut self, event: PlatformInput, cx: &mut App) -> DispatchEventResult {
+        // Nodus patch: positions arrive in the platform's points.
+        let event = if self.ui_zoom == 1.0 {
+            event
+        } else {
+            event.unzoomed(self.ui_zoom)
+        };
         #[cfg(feature = "profiler")]
         self.window_profiler.begin_input(event.kind_name());
         let update_count_before = self.invalidator.update_count();

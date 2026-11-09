@@ -134,14 +134,14 @@ One file per domain in `migration/features/`. Each lists every behavior with an 
 
 | File | Covers (Electron sources) | Spec | Ported |
 | --- | --- | --- | --- |
-| 01-platform-shell.md | app lifecycle, menu, env, store, settings, preload/IPC plumbing | ✅ 141 | 83/141 |
-| 02-session-host-status.md | host, host protocol, pty client, hooks status machine, agents, usage, notifications | ✅ 225 | 222/225 |
+| 01-platform-shell.md | app lifecycle, menu, env, store, settings, preload/IPC plumbing | ✅ 141 | 132/141 |
+| 02-session-host-status.md | host, host protocol, pty client, hooks status machine, agents, usage, notifications | ✅ 225 | 225/225 |
 | 03-sessions-transcripts.md | session create/open/send/kill, claude args, discovery, board merge, search, summarize, naming, geometry | ✅ 205 | 205/205 |
 | 04-board-tools-views.md | board tools MCP, notes placement, views (main + renderer), view page, ink storage | ✅ 222 | 222/222 |
-| 05-actions-voice-git.md | actions rail, voice prompts, git status/diff/log and their UI | ✅ 183 | 181/183 |
-| 06-updater-release.md | updater, packaging, signing, CI, release, smoke test, 0.9.4 → Rust handoff | ✅ 132 | 99/132 |
+| 05-actions-voice-git.md | actions rail, voice prompts, git status/diff/log and their UI | ✅ 183 | 183/183 |
+| 06-updater-release.md | updater, packaging, signing, CI, release, smoke test, 0.9.4 → Rust handoff | ✅ 132 | 106/132 |
 | 07-capture.md | floating capture: panel window, double tap, screen context, guess, submit | ✅ 177 | 176/177 |
-| 08-projects-shell-ui.md | App, title bar, settings, projects grid, project rail, tokens and global styles, menus, modals | ✅ 305 | 270/305 |
+| 08-projects-shell-ui.md | App, title bar, settings, projects grid, project rail, tokens and global styles, menus, modals | ✅ 305 | 303/305 |
 | 09-board-canvas.md | BoardView: pan/zoom, selection, drag, shortcuts, context menus, sections, archive, layout, edges | ✅ 177 | 177/177 |
 | 10-board-cards-notes.md | session cards, expanded cards, agent deck, archive stack, notes and the pad | ✅ 203 | 203/203 |
 | 11-board-overlays.md | prompt bar (sidekick), ⌘K search, merge dialog, ink layer, selection bar | ✅ 111 | 108/111 |
@@ -185,7 +185,7 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | actions-voice-git | `rust/actions-voice-git` | nodus-actions, nodus-voice (incl. the recorder), nodus-git | ✅ merged: 97 (GIT 28, ACT 37, VOICE 32); recorder is Core Audio voice processing + Opus/WebM like MediaRecorder |
 | capture | `rust/capture` | nodus-capture backend: double tap, key hook, screen context, guess, submit | ✅ merged: 98 CAP; panel UI and page wiring to the capture-panel track |
 | core | `rust/core` | P4: wire every merged domain into nodus-core (sessions, board, views, updates, events, startup/quit), deferred core IDs, debts, headless end-to-end tests | ✅ merged (6243e7c): every domain composed; git/actions/voice wired; the windowed app launches, runs sessions through `Nodus host` and quits through the core |
-| audit-shell | `rust/audit-shell` | P12 slice: resolve every unticked ID in specs 01–03, 05–08 (tick with evidence, implement, or defer with a reason); selectable static text; action-name paste; test driver on Windows named pipes; Windows chrome (☰ menu, caption buttons, single instance) | 🟡 running |
+| audit-shell | `rust/audit-shell` | P12 slice: resolve every unticked ID in specs 01–03, 05–08 | ✅ merged (67aa3fe): every ID resolved with evidence in `migration/tracks/audit-shell.md`; selectable static text, 40-char paste, driver named pipe, Windows chrome (☰, caption buttons, single instance), page zoom, spellcheck; Windows-only and certificate items stay open for CI and cutover |
 | views-polish | `rust/views-polish` | ink over live view pages, tooltips as coverage, overlay timing, New view dialog wrap + grip, one git status source, `render_to_image` blank-menu bug | 🟡 running |
 | cross-wiring | `rust/cross-wiring` | BOARD-037 (transcript preview at the search match), MODAL-028…031 (session windows closing with their card, run or view; shortcuts and ⌘K while one is open) | ✅ merged (875ce8c): all five, with app checks in `parity/cross_wiring.py` |
 | gpui-polish | `rust/gpui-polish` | GPUI/UI gaps: custom cursors (ink move, eraser circle), spellcheck underline + suggestions, rounded search highlights and underline offset, Chromium-style tooltips, shadows outside see-through boxes | 🟡 running |
@@ -224,10 +224,12 @@ Follow-ups a merge left for when the tracks meet in `nodus-core` (P4). Strike th
 - Changed files sort with root collation; 0.9.4 used ICU `localeCompare` in the user's locale.
 - ~~Keep one global for the core's runtime~~ (done in f2f5747). ~~Keep one wheel arbiter~~ (board-cards: one arbiter, the terminals' wheel gate).
 - **Views (from views-ui):** ink strokes over a view hide under its live page while no ink tool is out (0.9.4 always drew ink on top); another element's tooltip over a live page is hidden; the New view box's placeholder doesn't wrap and it has no resize grip; a menu or overlay over a live page appears a frame or two late; `render_to_image` sometimes leaves a menu's contents blank when view snapshots are in the frame (GPUI fork, test-only); views poll `git status` every 4 s themselves until they use the git UI's model. Windows: WebView2 never run; no snapshots, rounded clipping, clip to board or pass-through there yet.
-- **Text selection (UX):** text outside fields can't be selected in GPUI (the Changes window's paths and lines, dialog error text), where 0.9.4 let users select and copy it. Needs selectable static text before cutover.
-- **Paste into an action's name:** a paste over 40 characters is refused whole; 0.9.4 kept the first 40. Match it.
+- ~~Text selection~~ (audit-shell: `components/selectable.rs`, used where 0.9.4's CSS allowed selection; the expanded card, view dialog and merge dialog are checked in the final sweep). ~~Action-name paste~~ (cut to 40 UTF-16 units).
+- **Edit › Delete** with nothing selected deletes the next character; Chromium did nothing. Match it.
+- **Zoom and the capture panel:** ⌘+/⌘- doesn't zoom the capture panel; check whether 0.9.4's did (Chromium keeps zoom per origin, so it may have).
+- **Windows chrome** (☰ popup, caption buttons) follows Chromium's look but hasn't been compared with a Windows 0.9.4; Zoom In's shortcut text reads `Ctrl+Shift+=`.
 - The scene runner needs Node 22+ (`migration/parity` seed); under Node 20 the stand-in claude exits at once.
-- The test driver (`NODUS_AUTOMATION`) listens only on Unix sockets, so the Windows smoke test checks only the window and quit; add a named-pipe listener in `automation.rs`.
+- ~~Test driver on Windows~~ (audit-shell: named pipe; `smoke.py` runs fully there).
 - Six host behaviors are implemented but have no test of their own: HOST-033, 043, 090, 098, the 4 s hard exit in HOST-064 and the 20 s relay timeout in HOST-086. Add tests in P4 and tick them.
 - The 0.9.4 `pty.ts` → Rust host check was run by hand under vitest and not committed (it has to live in `src/main`); repeat it before cutover.
 - The status machine and the host client both rely on `process_started` / `process_exited` being called exactly where pty.ts tracks and untracks a session.
@@ -260,6 +262,7 @@ Places where the code and the docs disagree, or where matching 0.9.4 exactly mea
 | 06 | When a GitHub lookup times out mid-body the updater says "Couldn't reach GitHub…"; and a non-JSON answer shows serde's parse message where 0.9.4 shows V8's `JSON.parse` message. Both are rare error paths. | Differs; match V8's message if the user asks |
 | 12 | alacritty differs from xterm in three small ways: a resize that changes only the column count clears the selection (and reflow is alacritty's), there's no overline (SGR 53), and a selection inside a scroll region moves with it. | Differs; none seen in Claude Code's output |
 | 12 | Windows wheel speed in a terminal may be 0.5× where xterm uses 1.25×. | Check against 0.9.4 on Windows |
+| 01 PLAT-035 | On Windows logoff, 0.9.4 could lose up to 300 ms of unsaved board changes. | Deliberately safer: the port saves them |
 | 01 PLAT-086/088 | The TS store drops unknown top-level and settings keys, and overwrites a `state.json` that parses but doesn't fit on the next save. | Deliberately safer, invisible to users: unknown keys are kept, and a misfit file is moved aside to `state.json.unreadable-<ms>` |
 | 01 | A login shell that hangs ignores the SIGTERM Node sends at the 10 s timeout, so 0.9.4 never stops it. | Killed at 10 s |
 | 01, 07 CAP-174/175 | The hidden capture panel stops the Dock from reopening a closed window on macOS, and keeps the app running after its window closes on Windows (the docs say closing the window quits). | Same, unless the user rules them bugs |
@@ -283,6 +286,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-10: audit-shell merged (67aa3fe): every unticked ID in specs 01–03 and 05–08 resolved; also fixed two Windows CI breakers (the installer script's sed on `D:\\a\\nodus`, program lookup on the child's PATH); 1,290+ tests.
 - 2026-11-10: cross-wiring merged (875ce8c): ⌘K into the transcript preview at the match, session windows closing (and their terminals disposed) with their card, run or view; a stale search match no longer leaks into later previews.
 - 2026-11-10: views-ui merged (75672a9): views on the board in WKWebView with the snapshot swap, scaled by a CSS transform as 0.9.4 did, the relay, dialogs; 1,264+ tests. views-polish next.
 - 2026-11-10: overlays merged (f4467cd): prompt bar with the shared mic, ⌘K search, merge dialog, ink layer and dock, selection bar; the ink colour kept via the core's local-storage store; 1,252 tests. gpui-polish started.

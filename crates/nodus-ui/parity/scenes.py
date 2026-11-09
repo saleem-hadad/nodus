@@ -62,6 +62,10 @@ STOREFRONT_LIVE = OPEN("storefront") + [
 
 EMPTY = AT(1150, 690)  # the empty board below the terminal card
 STACK = AT(172, 200)  # the archive stack's top card
+PAD = AT(172, 546)  # the pad's top sheet
+SF_CART = AT(1216, 148)  # the middle of sf-cart's card
+NOTE = AT(1508, 148)  # the middle of the yellow note
+SIGNED = AT(1520, 408)  # the middle of the signed blue note
 
 # scene: (seed mutations, steps)
 SCENES = {
@@ -88,14 +92,22 @@ SCENES = {
     "try-drag-out": ([], STOREFRONT_LIVE + [
         M("down", 1030, 300), M("drag", 1031, 301), M("drag", 1080, 500), M("drag", 1130, 640),
         M("up", 1130, 640), {"cmd": "wait", "ms": 600}, AWAY]),
-    "try-click1": ([], STOREFRONT_LIVE + [M("click", 497, 300)]),
-    "try-click2": ([], STOREFRONT_LIVE + [M("down", 497, 300), M("up", 497, 300)]),
-    "try-click3": ([], OPEN("storefront") + [M("click", 497, 300, shift=True)]),
     "try-select-all": ([], STOREFRONT_LIVE + [{"cmd": "key", "keystroke": "cmd-a"}, AWAY]),
     "try-wait": ([], OPEN("storefront") + [{"cmd": "wait", "ms": 4000}, AWAY]),
     "try-pane-note": ([], STOREFRONT_LIVE + [M("right", *EMPTY), {"cmd": "wait", "ms": 200},
         M("click", 1020, 761), {"cmd": "wait", "ms": 600}, AWAY]),
     "board-menu-section": ([], STOREFRONT_LIVE + [M("right", 700, 163)]),
+    "board-menu-card": ([], STOREFRONT_LIVE + [M("right", *SF_CART)]),
+    "board-menu-note": ([], STOREFRONT_LIVE + [M("right", *NOTE)]),
+    "board-note-editing": ([], STOREFRONT_LIVE + [M("double", *NOTE), {"cmd": "wait", "ms": 300}]),
+    "board-note-selected": ([], STOREFRONT_LIVE + [M("click", *SIGNED), AWAY]),
+    "board-card-hover": ([], STOREFRONT_LIVE + [M("move", *SF_CART), {"cmd": "wait", "ms": 300}]),
+    "board-archive-hover": ([], STOREFRONT_LIVE + [M("move", *STACK), {"cmd": "wait", "ms": 300}]),
+    "board-archive-open": ([], STOREFRONT_LIVE + [M("click", *STACK), {"cmd": "wait", "ms": 900}, AWAY]),
+    "board-pad-hover": ([], STOREFRONT_LIVE + [M("move", PAD[0] + 40, PAD[1] + 40), M("move", *PAD),
+                                               {"cmd": "wait", "ms": 300}]),
+    "board-deck-fanned": ([], STOREFRONT_LIVE + [M("move", *AT(544, 263)), {"cmd": "wait", "ms": 400}]),
+    "board-expanded-stopped": ([], OPEN("infra") + [AWAY]),
     "projects-empty": (["empty"], []),
     "projects-grid": ([], []),
     "projects-focus": (["focusOn"], []),

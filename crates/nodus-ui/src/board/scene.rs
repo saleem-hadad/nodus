@@ -272,6 +272,7 @@ pub fn build_nodes(input: BuildInput<'_>) -> Vec<FlowNode> {
             None
         };
         let matched = result.and_then(|slot| stack.results[slot].1.clone());
+        // BOARD-011: depth is the place in the pile (results left out).
         let depth = stack.pile.iter().position(|pid| pid == id).unwrap_or(0);
         let live = held.get(id);
         let held_here = p.is_some_and(|p| p.dragging || busy.contains(id)) || live.is_some();
@@ -281,6 +282,8 @@ pub fn build_nodes(input: BuildInput<'_>) -> Vec<FlowNode> {
             x: card.node.x,
             y: card.node.y,
         };
+        // BOARD-010: the pile sits at the stack top whatever was stored;
+        // results at their slots; a dragged, resized or busy card stays put.
         if let Some(slot) = result {
             position = stack_result_spot(board.archive, slot, stack.scroll);
         } else if folded {

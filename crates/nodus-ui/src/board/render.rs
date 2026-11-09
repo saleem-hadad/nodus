@@ -300,6 +300,8 @@ impl BoardCanvas {
             .top(px(top))
             .w(px(w))
             .h(px(h))
+            // `grabbing` while dragged; otherwise `default` (board.css).
+            .when(node.dragging, |d| d.cursor(CursorStyle::ClosedHand))
             .child(content);
         let wrapper = if click_through {
             wrapper.into_any_element()
@@ -421,15 +423,33 @@ impl BoardCanvas {
         )
     }
 
+    /// The flow rect the canvas shows.
+    fn visible_rect(&self) -> Rect {
+        let (w, h) = self.canvas_size();
+        let vp = self.viewport;
+        Rect {
+            x: -vp.x / vp.zoom,
+            y: -vp.y / vp.zoom,
+            w: w / vp.zoom,
+            h: h / vp.zoom,
+        }
+    }
+
     /// The edges, in canvas pixels: their Bézier, stroke, width and dashes
     /// (BOARD-025…BOARD-031).
     fn edge_paths(&self, t: &Tokens) -> Vec<EdgePaint> {
         let vp = self.viewport;
         let rect_of = |id: &str| self.node(id).filter(|n| !n.hidden).map(FlowNode::rect);
+        let view = self.visible_rect();
+        let only_visible = self.board.as_ref().is_some_and(|b| b.cards.len() > VISIBLE_ONLY_ABOVE);
         self.edges
             .iter()
             .filter_map(|e| {
                 let (s, d) = (rect_of(&e.source)?, rect_of(&e.target)?);
+                // React Flow's `isEdgeVisible`: the box around both ends.
+                if only_visible && !overlaps(super::layout::bounds_of(&[s, d]), view) {
+                    return None;
+                }
                 let pts = edges::path(s, d).map(|p| {
                     let (x, y) = super::viewport::to_screen(vp, p.x, p.y);
                     Point { x, y }
@@ -463,6 +483,14 @@ impl BoardCanvas {
             })
             .collect()
     }
+}
+
+/// Past this many cards the board draws only what's in view.
+const VISIBLE_ONLY_ABOVE: usize = 150;
+
+/// Two rects share some area (React Flow's partial overlap).
+fn overlaps(a: Rect, b: Rect) -> bool {
+    a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
 }
 
 /// A glide that has arrived.
@@ -637,7 +665,16 @@ impl Render for BoardCanvas {
         let renderers = renderers(cx);
         let now = Instant::now();
         let order = paint_order(&self.nodes);
-        let nodes: Vec<FlowNode> = order.iter().map(|&i| self.nodes[i].clone()).collect();
+        // `onlyRenderVisibleElements` above 150 cards: only what overlaps the
+        // canvas is drawn (an expanded card off screen lets its terminal go).
+        let view = self.visible_rect();
+        let only_visible = self.board.as_ref().is_some_and(|b| b.cards.len() > VISIBLE_ONLY_ABOVE);
+        let nodes: Vec<FlowNode> = order
+            .iter()
+            .map(|&i| &self.nodes[i])
+            .filter(|n| !only_visible || overlaps(n.rect(), view))
+            .cloned()
+            .collect();
         let mut below = Vec::new();
         let mut above = Vec::new();
         let mut gliding = false;
@@ -714,6 +751,8 @@ impl Render for BoardCanvas {
         .absolute()
         .size_full();
 
+        // BOARD-028: edges are painted, never hit: the pointer goes to what's
+        // under them.
         let edges_layer = canvas(
             |_, _, _| {},
             move |bounds, _, window, _| {

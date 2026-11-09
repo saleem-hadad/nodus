@@ -179,7 +179,7 @@ pub fn stack_scroll_max(results: usize) -> f64 {
     0f64.max(((results as f64 / 2.0).ceil() - STACK_ROWS) * (CARD_H + GAP))
 }
 
-/// Stack order: most recently archived or active first.
+/// Stack order: most recently archived or active first (BOARD-011).
 pub fn stack_rank(card: &SessionCard) -> f64 {
     let updated = card.meta.as_ref().map_or(card.node.created_at, |m| m.updated_at);
     card.node.archived_at.unwrap_or(0.0).max(updated)

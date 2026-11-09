@@ -195,7 +195,6 @@ impl BoardCanvas {
     /// BOARD-076: a press anywhere on the board but the archive and its
     /// cards folds the open stack (capture phase).
     pub(crate) fn capture_mouse_down(&mut self, e: &MouseDownEvent, cx: &mut Context<'_, Self>) {
-        eprintln!("DEBUG capture down {:?} bounds={:?} at={:?}", e.position, self.bounds, self.node_at(self.to_flow(e.position)).map(|n| n.id.clone()));
         if !self.stack_open() || !self.bounds.contains(&e.position) {
             return;
         }
@@ -406,9 +405,10 @@ impl BoardCanvas {
             return;
         }
         self.title_click = None;
-        // BOARD-042: the terminal takes focus (spec 12).
+        // BOARD-042: a click on an expanded card focuses its terminal, like
+        // clicking a window.
         if is_expanded(&card) {
-            let _ = window;
+            super::nodes::renderers(cx).focus_terminal(id, window, cx);
             return;
         }
         // BOARD-043.
@@ -424,6 +424,7 @@ impl BoardCanvas {
         let Some(node) = self.node(id).cloned() else { return };
         match &node.kind {
             NodeKind::Section { .. } => self.set_renaming(Some(id.to_owned()), cx),
+            // BOARD-046: a free note opens for writing; the top sheet doesn't.
             NodeKind::Note { index } => {
                 if index.is_some() {
                     self.set_renaming(Some(id.to_owned()), cx);
@@ -753,6 +754,7 @@ impl BoardCanvas {
             n.dragging = false;
         }
         let lead = drag.node.clone().unwrap_or_else(|| drag.items[0].0.clone());
+        // BOARD-058.
         self.archive_hot = false;
         self.hot_section = None;
         let Some(node) = self.node(&lead).cloned() else { return };
@@ -935,6 +937,7 @@ impl BoardCanvas {
             .filter(|n| !is_bounced(&n.id))
             .map(|n| {
                 let card = &board.cards[n.card_index().unwrap_or(0)];
+                // BOARD-063: a result dropped outside the stack is restored where it lands.
                 let archived = !is_terminal(card) && is_in_archive(n.position, zone, card_size(card));
                 NodePatch {
                     session_id: n.id.clone(),
@@ -984,6 +987,7 @@ impl BoardCanvas {
             .collect();
         let released: Vec<String> = moved.iter().map(|n| n.id.clone()).collect();
 
+        // BOARD-065: the cards in one patch, then each moved note and view.
         let apply = move |c: &mut BoardCanvas, cx: &mut Context<'_, BoardCanvas>| {
             c.state.update(cx, |s, cx| {
                 s.patch_cards(patches, cx);
@@ -1171,6 +1175,7 @@ impl BoardCanvas {
                     cx.notify();
                 });
             }
+            self.open_search(cx);
             return true;
         }
         // BOARD-158.
@@ -1297,12 +1302,12 @@ impl BoardCanvas {
             MenuCommand::NewSession => self.create_session(None, SessionKind::Claude, None, cx),
             MenuCommand::NewTerminal => self.create_session(None, SessionKind::Terminal, None, cx),
             MenuCommand::Search => {
-                // Over whatever session is open; ⌘K search is spec 11's.
                 self.state.update(cx, |s, cx| {
                     s.terminal_session_id = None;
                     s.preview_session_id = None;
                     cx.notify();
                 });
+                self.open_search(cx);
             }
             _ => {}
         }

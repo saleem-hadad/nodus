@@ -6,41 +6,60 @@
 
 ## Status
 
-Every component is drawn natively and plugs into board-canvas's node interface (`board::nodes::NodeRenderers`, installed by `cards::install` from `board::init`). The pure logic of the spec (previews, times, the deck's state machine, the fan's pick and side, wakes, wheel gestures, archive geometry, notes) lives in `present.rs` with its tests. Side-by-side checks against the goldens are under way; until a behavior's look has been checked it's listed as in progress.
+Every component is drawn natively and plugged into the board. 202 of 203 behaviors are done (179 here, 23 by the canvas under spec 09's IDs); one is deferred to the voice UI. Checked side by side with the goldens in both themes, through the real app (`scenes.py`) and the cards gallery (`examples/board_cards.rs`).
+
+## How it plugs into the canvas
+
+- `cards::install` (from `board::init`) registers `CardRenderers` as the canvas's `board::nodes::NodeRenderers`: `card` (compact or expanded, with its deck, fan and stickers), `note` (free notes and the pad's top sheet), `archive`, `pad`, and the hooks `wake` (`wakeCardTerminal`, XCARD-025) and `focus_terminal` (XCARD-017, BOARD-042).
+- Each node gets a `BoardEnv` built from `BoardCx` (renaming, archive hot, the stack, zoom, the search jump's `flash`) and the app's state, read through the main window's shell (`shell::window::main_shell`): never through the canvas, which is being updated while it draws its nodes.
+- `CanvasActions` maps the cards' `CardActions` onto the canvas's `BoardActions` and the app state; notes saved after the board changed go to their own project on the core's runtime (NOTEUI-015).
+- The expanded card's body hosts terminal-ui's `terminal::card::CardTerminals` through the `TerminalHost` trait (`install.rs`); the card's start, wake and focus rules decide when it attaches (TERM-093, 095–099, 103, 108). One wheel arbiter decides gestures (`present::WheelArbiter`, given to the terminals as their wheel gate): the window marks where a gesture begins, as 0.9.4's capture listener did.
+- Content is drawn at the board's zoom (`Z`), text laid out at its CSS size and drawn scaled (`para.rs`) so lines break where Chromium's do.
 
 ## Files
 
 | File | What |
 | --- | --- |
-| `mod.rs` | `BoardEnv` (what the board knows), `CardActions` (what the cards ask of it), `TerminalHost` (the terminal track's slot), shadows as CSS layers (`Shadow`, `Shade`) |
-| `install.rs` | `CardRenderers` (the canvas's `NodeRenderers`), `CanvasActions` (`CardActions` on the canvas's `BoardActions`) |
-| `present.rs` | pure presentation logic with tests |
-| `session_card.rs` | the node: deck, card, stickers, fan; the compact card |
-| `expanded_card.rs` | the expanded card: title bar, usage, tools, body, overlays, wakes, wheel arbitration |
-| `agent_deck.rs` | deck layers, `DeckHandles`, the fan |
+| `mod.rs` | `BoardEnv`, `CardActions`, `TerminalHost`; shadows as CSS layers (`Shadow`: transitions, `soft` for GPUI, `rings` drawn exactly), `outer_shadow` (outside the box only) |
+| `install.rs` | `CardRenderers`, `CanvasActions`, the `TerminalHost` impl for `CardTerminals` |
+| `present.rs` | pure presentation logic with tests: previews, times, titles, the deck's state machine, the fan's pick and side, wakes, the wheel arbiter, archive geometry, notes, signatures, resizing |
+| `session_card.rs` | the node (deck, card, stickers, fan), the compact card, the rename field, the flash |
+| `expanded_card.rs` | title bar, usage, tools, body with the terminal, overlays, wakes, resize zones, grip |
+| `agent_deck.rs` | deck layers, `DeckHandles`, the fan and its deal-in |
 | `archive_zone.rs` | the frame, header, placeholders, search, divider, scrollbar |
+| `border.rs` | rounded borders and shadow rings as Chromium draws them (exact width; Blink's dashes) |
 | `note.rs`, `sticker.rs`, `note_pad.rs`, `paper.rs` | notes and their editor, stickers, the pad |
-| `status_dot.rs`, `icons.rs`, `para.rs`, `anim.rs`, `resize.rs` | dots, lucide icons, Chromium-like paragraphs, keyframe helpers, resize zones |
-| `examples/board_cards.rs` | gallery: the parity scenes' nodes where the goldens have them |
+| `status_dot.rs`, `icons.rs`, `para.rs`, `anim.rs`, `resize.rs` | dots, lucide icons, Chromium-like paragraphs, keyframes with delays and fill modes, resize zones |
+| `examples/board_cards.rs` | the gallery: the parity scenes' nodes where the goldens have them, without the app |
 
-## Done
+## Done (implemented; IDs in the code)
 
-(none checked yet)
+Checked against the goldens where a golden shows the behavior (looks, layout, copy, both themes); the rest (interactions, timings, states no golden captures) against the TypeScript and `present.rs`'s tests. Timings: CSS transitions and keyframes keep their durations, delays, fill modes and easings, `ease-stack`'s 29 stops and `ease-spring` overshooting included (the fan's deal, the sticker's landing, the stack, the search field, the pad's peel).
 
-## In progress (implemented, IDs in the code; look not yet checked against the goldens)
-
-- CARD-001…CARD-048 (CARD-043 see Deferred), CARD-049 (the title's press → `press_title`; the 240ms wait and double-click are the canvas's)
-- XCARD-001…XCARD-032 (XCARD-010 see Deferred)
-- DECK-001…DECK-028
-- ARCH-001…ARCH-005, ARCH-007…ARCH-011, ARCH-013, ARCH-015…ARCH-017, ARCH-019…ARCH-028, ARCH-032…ARCH-036
-- NOTEUI-001…NOTEUI-026, NOTEUI-031…NOTEUI-044
-
-## In the canvas's code (board-canvas, spec 09's IDs)
-
-CARD-050…CARD-053 (edges, glides), ARCH-006, ARCH-012, ARCH-014's placement, ARCH-018, ARCH-029…ARCH-031, ARCH-037…ARCH-040, NOTEUI-027…NOTEUI-030, NOTEUI-045…NOTEUI-049.
+- **CARD** (53): CARD-001…CARD-048; CARD-049 (the title's press is reported; the 240ms wait and double-click rename are the canvas's, BOARD-043/047); CARD-050…CARD-053 by the canvas (`edges.rs`, `render.rs`: facing-side edges, the dashes' march, the 420ms glides).
+- **XCARD** (31): XCARD-001…XCARD-009, XCARD-011…XCARD-032 (the terminal through `CardTerminals`; XCARD-017's click is the canvas's, calling `focus_terminal`).
+- **DECK** (29): DECK-001…DECK-029 (DECK-014's z 1400 through `BoardActions::raise`).
+- **ARCH** (40): ARCH-001…ARCH-005, ARCH-007…ARCH-011, ARCH-013…ARCH-017, ARCH-019…ARCH-028, ARCH-032…ARCH-036 here; ARCH-006, ARCH-012, ARCH-018, ARCH-029…ARCH-031, ARCH-037…ARCH-040 by the canvas (`scene.rs`: z rules, pile order, results, clipping, glides, closing, travel, drops, count).
+- **NOTEUI** (49): NOTEUI-001…NOTEUI-026, NOTEUI-031…NOTEUI-044 here; NOTEUI-027…NOTEUI-030 and NOTEUI-045…NOTEUI-049 by the canvas (note z, glides, bounces, delete, the pad's drop, click and menu, travel with the archive).
 
 ## Deferred
 
-- CARD-043, DECK-029 and the other accessible names: GPUI has no accessibility tree yet; the strings are kept (`present::aria_label`, tested).
-- XCARD-010: the mic is the actions-git-voice-ui track's; the card has a `TerminalHost::mic` slot and draws the idle button until then.
-- XCARD-018…XCARD-028's terminal: the body has a `TerminalHost::element` slot for the terminal-ui track's element; `install.rs` passes no host yet, so the card shows the not-started overlay.
+- XCARD-010: the session mic is the actions-git-voice-ui track's (spec 05). The card asks `TerminalHost::mic` for it and draws the idle button until it's there; `type_in` and the wake are wired.
+
+## Checked side by side
+
+Real app, `python3 crates/nodus-ui/parity/scenes.py <scene> --golden <dir> --world <scratch>` (put Node 22+ first on `PATH`: the stand-in `claude` needs it), compared with `compare.mjs`:
+
+| Scene | Light | Dark |
+| --- | --- | --- |
+| board-expanded (live terminals, usage) | 0.72 % | 0.77 % |
+| board-expanded-stopped | 0.42 % | 0.47 % |
+
+Gallery, `cargo run -p nodus-ui --example board_cards -- <dir>` (nodes only: no title bar, prompt bar, sections, edges or ink, so a whole frame differs by 1–2.5 % from those alone): every card, deck, fan, archive (folded, hovered, open), note and pad scene, cropped region by region. The open panel's blurred backdrop and the dashes' period (7.19 device px at 80 %) now match to the pixel value.
+
+## Known differences
+
+- Text rasterisation and placement (gpui-text's): SF Pro's tracking, and baselines that round half a device pixel the other way; a few labels sit a device pixel off (the title bar's usage line, the archive and pad header labels, a fan row's tool line).
+- Dashed borders and shadow rings are paths with 4× MSAA where Chromium covers edges analytically: edge pixels can differ by an eighth of coverage.
+- GPUI snaps layout lengths to device pixels where Chromium keeps fractions, so some boxes sit up to a device pixel off (e.g. children of a 1.5px border at 80 %).
+- The gallery's simulated pointer shows GPUI-drawn tooltips that the goldens (native tooltips) don't capture.

@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use gpui::App;
-use nodus_core::{Dialogs, EnvSource, Nodus, NodusConfig, PickFolder};
+use nodus_core::{Dialogs, Nodus, NodusConfig, PickFolder};
 
 use crate::components::icon::Assets;
 use crate::shell::{menus, window};
@@ -44,11 +44,8 @@ pub fn run(user_data: PathBuf) -> anyhow::Result<()> {
         .build()?;
     let (requests, mut picks) = tokio::sync::mpsc::unbounded_channel();
     let nodus = Nodus::start(NodusConfig {
-        user_data,
-        env: EnvSource::Capture,
         dialogs: Some(Arc::new(WindowDialogs { requests })),
-        runtime: runtime.handle().clone(),
-        home: std::env::home_dir().unwrap_or_default(),
+        ..NodusConfig::new(user_data, runtime.handle().clone())
     })?;
 
     // UI-004: the saved settings, read before the window exists.

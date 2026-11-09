@@ -618,7 +618,9 @@ impl IntoElement for StyledText {
 /// follows its last word when there is room; otherwise characters go from
 /// its end, mid-word, until there is. Nothing else is trimmed (GPUI used to
 /// drop punctuation before the ellipsis). Returns the text to lay out
-/// instead, with its runs, or none when it fits.
+/// instead, with its runs, or none when it fits. For a clamp it also returns
+/// the width its last row is aligned by: the row as it was wrapped, without
+/// its hanging spaces, since Chromium aligns the row before it truncates it.
 fn chromium_ellipsis(
     text: &SharedString,
     runs: &[TextRun],
@@ -627,7 +629,7 @@ fn chromium_ellipsis(
     clamp: Option<(usize, crate::WrapStyle)>,
     affix: &SharedString,
     window: &mut Window,
-) -> Option<(SharedString, Vec<TextRun>)> {
+) -> Option<(SharedString, Vec<TextRun>, Option<Pixels>)> {
     use unicode_segmentation::UnicodeSegmentation as _;
 
     let text_system = window.text_system().clone();
@@ -685,8 +687,10 @@ fn chromium_ellipsis(
             .map_or(layout.width, |glyph| glyph.position.x)
     };
     let mut content_end = row_end;
+    let mut align_width = None;
     if clamp.is_some() {
         content_end = row_start + line_text[row_start..row_end].trim_end_matches(' ').len();
+        align_width = Some(x_of(content_end) - row_start_x);
     }
 
     // The ellipsis in the style of the text it follows.
@@ -698,7 +702,9 @@ fn chromium_ellipsis(
             }
             start += run.len;
         }
-        runs.last().cloned().unwrap_or_else(|| window.text_style().to_run(0))
+        runs.last()
+            .cloned()
+            .unwrap_or_else(|| window.text_style().to_run(0))
     };
     let mut affix_run = style_at((line_start + content_end).saturating_sub(1));
     affix_run.len = affix.len();
@@ -739,7 +745,7 @@ fn chromium_ellipsis(
             kept.push(run);
         }
     }
-    Some((result, kept))
+    Some((result, kept, align_width))
 }
 
 /// The Layout for TextElement. This can be used to map indices to pixels and vice versa.
@@ -827,6 +833,46 @@ impl TextLayout {
                         (None, "".into(), TruncateFrom::End)
                     };
 
+                // Nodus patch: a text's min-content width is its widest piece
+                // that can't break (CSS's min-content contribution), so a flex
+                // item with text shrinks to its longest word, as in Chromium,
+                // where GPUI answered with the whole line. Only a probe: the
+                // layout wrapped at every opportunity isn't kept for painting.
+                if known_dimensions.width.is_none()
+                    && available_space.width == crate::AvailableSpace::MinContent
+                    && text_style.white_space == WhiteSpace::Normal
+                {
+                    let Some(lines) = window
+                        .text_system()
+                        .shape_text_wrapped(
+                            text.clone(),
+                            font_size,
+                            &runs,
+                            Some(Pixels::ZERO),
+                            None,
+                            text_style.wrap_style(),
+                        )
+                        .log_err()
+                    else {
+                        return Size::default();
+                    };
+                    let width = lines
+                        .iter()
+                        .map(|line| line.widest_row())
+                        .fold(Pixels::ZERO, Pixels::max);
+                    let mut rows: usize = lines
+                        .iter()
+                        .map(|line| line.wrap_boundaries().len() + 1)
+                        .sum();
+                    if let Some(max_lines) = text_style.line_clamp {
+                        rows = rows.min(max_lines);
+                    }
+                    return Size {
+                        width: crate::layout_unit_ceil(width, window.scale_factor()),
+                        height: line_height * rows as f32,
+                    };
+                }
+
                 // Only use cached layout if:
                 // 1. We have a cached size
                 // 2. wrap_width matches (or both are None)
@@ -846,8 +892,8 @@ impl TextLayout {
 
                 let wrap_style = text_style.wrap_style();
                 let mut line_wrapper = cx.text_system().line_wrapper(text_style.font(), font_size);
-                // Nodus patch: a clamp's ellipsis hangs after the aligned text.
-                let mut hanging_ellipsis = 0;
+                // Nodus patch: a clamp's last row is aligned as it was wrapped.
+                let mut last_row_align_width = None;
                 let (text, runs) = if let Some(truncate_width) = truncate_width {
                     if truncate_from == TruncateFrom::End {
                         // Nodus patch: CSS's ellipsis, as Chromium places it.
@@ -866,10 +912,8 @@ impl TextLayout {
                             &truncation_affix,
                             window,
                         ) {
-                            Some((text, runs)) => {
-                                if clamp.is_some() {
-                                    hanging_ellipsis = truncation_affix.len();
-                                }
+                            Some((text, runs, align_width)) => {
+                                last_row_align_width = align_width;
                                 (text, Cow::Owned(runs))
                             }
                             None => (text.clone(), Cow::Borrowed(&*runs)),
@@ -940,7 +984,7 @@ impl TextLayout {
                 };
 
                 if let Some(line) = lines.last_mut() {
-                    line.hanging_suffix = hanging_ellipsis;
+                    line.last_row_align_width = last_row_align_width;
                 }
 
                 let mut size: Size<Pixels> = Size::default();

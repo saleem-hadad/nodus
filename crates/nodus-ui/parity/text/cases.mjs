@@ -4,7 +4,8 @@
 // system-font text on white, each case an absolutely positioned div: line
 // boxes and baselines at sizes and line heights the app uses, wrapping
 // (hanging spaces, overflow-wrap, word-break, alignment), -webkit-line-clamp
-// with its ellipsis, and one-line text-overflow: ellipsis.
+// with its ellipsis, one-line text-overflow: ellipsis, and min-content sizes
+// (text in a flex row that is too narrow for it).
 import fs from 'node:fs'
 import path from 'node:path'
 const out = process.argv[2]
@@ -44,6 +45,13 @@ for (const w of [60, 75.5, 78, 80, 90, 120]) {
   add({ kind: 'ellipsis', x: 860, y, w, size: 13, lh: 18.2, ellipsis: true, text: 'storefront, docs-site and mobile-app' })
   y += 22
 }
+// 5. Min-content: a flex row too narrow for its text and a 100px box; the
+// text shrinks to its longest word (or a character, with overflow-wrap:
+// anywhere) and the box follows it.
+for (const overflowWrap of [null, 'anywhere']) {
+  add({ kind: 'flex', x: 860, y: y + 4, w: 140, cw: 220, box: 100, size: 12, lh: 16.8, overflowWrap, text: 'storefront checkout experiments' })
+  y += 16.8 * 4 + 12
+}
 fs.writeFileSync(path.join(out, 'cases.json'), JSON.stringify(cases, null, 1))
 const css = (c) => [
   `left:${c.x}px`, `top:${c.y}px`, c.w != null ? `width:${c.w}px` : '', `font-size:${c.size}px`, `font-weight:${c.weight}`,
@@ -51,15 +59,17 @@ const css = (c) => [
   c.overflowWrap ? `overflow-wrap:${c.overflowWrap}` : '', c.wordBreak ? `word-break:${c.wordBreak}` : '',
   c.clamp ? `display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:${c.clamp};overflow:hidden` : '',
   c.ellipsis ? 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis' : '',
-  c.kind === 'stack' ? 'white-space:nowrap' : ''
+  c.kind === 'stack' ? 'white-space:nowrap' : '',
+  c.kind === 'flex' ? 'display:flex;align-items:flex-start' : ''
 ].filter(Boolean).join(';')
+const body = (c) => (c.kind === 'flex' ? `<div>${c.text}</div><div style="flex:none;width:${c.box}px;height:10px;background:#000"></div>` : c.text)
 const html = `<!doctype html><html><head><meta charset="utf-8"><style>
 html, body { margin: 0; background: #fff; }
 body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; -webkit-font-smoothing: antialiased; color: #000; }
 .c { position: absolute; }
 .bar { position: absolute; height: 2px; background: #000; }
 </style></head><body>
-${cases.map((c) => `<div class="c" style="${css(c)}">${c.text}</div>${c.bar ? `<div class="bar" style="left:${c.x + 30}px;top:${c.y + c.lh}px;width:20px"></div>` : ''}`).join('\n')}
+${cases.map((c) => `<div class="c" style="${css(c)}">${body(c)}</div>${c.bar ? `<div class="bar" style="left:${c.x + 30}px;top:${c.y + c.lh}px;width:20px"></div>` : ''}`).join('\n')}
 <script>window.measure = () => [...document.querySelectorAll('.c')].map((e) => { const r = e.getBoundingClientRect(); return [r.top, r.height, r.width] })</script>
 </body></html>`
 fs.writeFileSync(path.join(out, 'page.html'), html)

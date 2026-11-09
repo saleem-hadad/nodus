@@ -302,9 +302,7 @@ impl TaffyLayoutEngine {
                                 snap_measured_size_to_device_pixels(measured_size, scale_factor)
                                     .into()
                             } else {
-                                measured_size
-                                    .map(|d| d.0.max(0.0) * scale_factor)
-                                    .into()
+                                measured_size.map(|d| d.0.max(0.0) * scale_factor).into()
                             }
                         },
                     )

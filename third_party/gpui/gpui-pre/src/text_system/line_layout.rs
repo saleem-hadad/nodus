@@ -1,6 +1,6 @@
 use crate::{
-    FontId, GlyphId, OverflowWrap, Pixels, PlatformTextSystem, Point, SharedString, Size, WordBreak,
-    WrapStyle, point, px,
+    FontId, GlyphId, OverflowWrap, Pixels, PlatformTextSystem, Point, SharedString, Size,
+    WordBreak, WrapStyle, point, px,
 };
 use collections::{FxHashMap, FxHashSet};
 use itertools::Itertools;
@@ -959,7 +959,13 @@ mod tests {
         layout.len = "你好".len();
         assert_eq!(
             layout
-                .compute_wrap_boundaries("你好", px(15.), None, ANYWHERE, &mut WrapScratch::default())
+                .compute_wrap_boundaries(
+                    "你好",
+                    px(15.),
+                    None,
+                    ANYWHERE,
+                    &mut WrapScratch::default()
+                )
                 .as_slice(),
             &[WrapBoundary {
                 run_ix: 0,
@@ -993,7 +999,13 @@ mod tests {
             layout.width = px(indices.len() as f32 * 10.);
             layout.len = text.len();
             assert_eq!(
-                layout.compute_wrap_boundaries(text, px(40.), None, ANYWHERE, &mut WrapScratch::default()),
+                layout.compute_wrap_boundaries(
+                    text,
+                    px(40.),
+                    None,
+                    ANYWHERE,
+                    &mut WrapScratch::default()
+                ),
                 expected_boundaries
                     .into_iter()
                     .map(|glyph_ix| WrapBoundary {

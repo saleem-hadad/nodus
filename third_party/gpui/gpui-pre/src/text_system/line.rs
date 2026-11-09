@@ -188,7 +188,7 @@ impl ShapedLine {
         paint_line(
             origin,
             &self.layout,
-            &self.text,
+            RowAlign::new(&self.text, None),
             line_height,
             align,
             align_width,
@@ -213,7 +213,7 @@ impl ShapedLine {
         paint_line_background(
             origin,
             &self.layout,
-            &self.text,
+            RowAlign::new(&self.text, None),
             line_height,
             align,
             align_width,
@@ -443,7 +443,7 @@ impl LineLayout {
         paint_line(
             origin,
             self,
-            "",
+            RowAlign::default(),
             line_height,
             align,
             align_width,
@@ -473,7 +473,7 @@ impl LineLayout {
         paint_line_background(
             origin,
             self,
-            "",
+            RowAlign::default(),
             line_height,
             align,
             align_width,
@@ -494,17 +494,26 @@ pub struct WrappedLine {
     /// The text that was shaped for this line.
     pub text: SharedString,
     pub(crate) decoration_runs: Vec<DecorationRun>,
-    /// Nodus patch: bytes at the end of the text that don't count when the
-    /// last row is aligned (the ellipsis `-webkit-line-clamp` adds, which
-    /// Chromium places after the aligned text).
-    pub(crate) hanging_suffix: usize,
+    /// Nodus patch: the width the last row is centred or right-aligned by,
+    /// when it isn't the row's own: a `-webkit-line-clamp` row is aligned as
+    /// it was wrapped, before its end gave way to the ellipsis, as Chromium
+    /// aligns it (the ellipsis then follows the text that's left).
+    pub(crate) last_row_align_width: Option<Pixels>,
 }
 
 impl WrappedLine {
-    /// Nodus patch: the text that counts when rows are aligned.
-    fn alignment_text(&self) -> &str {
-        let end = self.text.len().saturating_sub(self.hanging_suffix);
-        self.text.get(..end).unwrap_or(&self.text)
+    /// Nodus patch: the widest row, without the spaces that hang at its end:
+    /// a text's min-content width once it is wrapped at every opportunity.
+    pub(crate) fn widest_row(&self) -> Pixels {
+        let layout = &self.layout.unwrapped_layout;
+        let row_align = RowAlign::new(&self.text, None);
+        let mut row_start = Pixels::ZERO;
+        let mut widest = Pixels::ZERO;
+        for boundary in self.wrap_boundaries.iter().map(Some).chain([None]) {
+            widest = widest.max(row_align.width(layout, row_start, boundary));
+            row_start = boundary_x(layout, boundary);
+        }
+        widest
     }
 
     /// The length of the underlying, unwrapped layout, in utf-8 bytes.
@@ -531,7 +540,7 @@ impl WrappedLine {
         paint_line(
             origin,
             &self.layout.unwrapped_layout,
-            self.alignment_text(),
+            RowAlign::new(&self.text, self.last_row_align_width),
             line_height,
             align,
             align_width,
@@ -563,7 +572,7 @@ impl WrappedLine {
         paint_line_background(
             origin,
             &self.layout.unwrapped_layout,
-            self.alignment_text(),
+            RowAlign::new(&self.text, self.last_row_align_width),
             line_height,
             align,
             align_width,
@@ -580,7 +589,7 @@ impl WrappedLine {
 fn paint_line(
     origin: Point<Pixels>,
     layout: &LineLayout,
-    text: &str,
+    row_align: RowAlign<'_>,
     line_height: Pixels,
     align: TextAlign,
     align_width: Option<Pixels>,
@@ -599,7 +608,7 @@ fn paint_line(
     let line_bounds = line_paint_bounds(
         origin,
         layout,
-        text,
+        row_align,
         line_height,
         align,
         align_width,
@@ -612,7 +621,13 @@ fn paint_line(
         // row since the rows' tops can fall between device pixels.
         let scale_factor = window.scale_factor();
         let row_baseline = |top: Pixels| {
-            chromium_baseline_offset(top, line_height, layout.ascent, layout.descent, scale_factor)
+            chromium_baseline_offset(
+                top,
+                line_height,
+                layout.ascent,
+                layout.descent,
+                scale_factor,
+            )
         };
         let mut glyph_baseline = row_baseline(origin.y);
         let underline_y_offset = underline_y_offset(line_height, layout.ascent, layout.descent);
@@ -630,8 +645,9 @@ fn paint_line(
                 px(0.0),
                 &align,
                 layout,
-                text,
+                row_align,
                 wraps.peek(),
+                window.scale_factor(),
             ),
             origin.y,
         );
@@ -694,8 +710,9 @@ fn paint_line(
                         glyph.position.x,
                         &align,
                         layout,
-                        text,
+                        row_align,
                         wraps.peek(),
+                        window.scale_factor(),
                     );
                     glyph_origin.y += line_height;
                     glyph_baseline = row_baseline(glyph_origin.y);
@@ -862,7 +879,7 @@ fn paint_line(
 fn paint_line_background(
     origin: Point<Pixels>,
     layout: &LineLayout,
-    text: &str,
+    row_align: RowAlign<'_>,
     line_height: Pixels,
     align: TextAlign,
     align_width: Option<Pixels>,
@@ -874,7 +891,7 @@ fn paint_line_background(
     let line_bounds = line_paint_bounds(
         origin,
         layout,
-        text,
+        row_align,
         line_height,
         align,
         align_width,
@@ -893,8 +910,9 @@ fn paint_line_background(
                 px(0.0),
                 &align,
                 layout,
-                text,
+                row_align,
                 wraps.peek(),
+                window.scale_factor(),
             ),
             origin.y,
         );
@@ -934,8 +952,9 @@ fn paint_line_background(
                         glyph.position.x,
                         &align,
                         layout,
-                        text,
+                        row_align,
                         wraps.peek(),
+                        window.scale_factor(),
                     );
                     glyph_origin.y += line_height;
                 }
@@ -1016,7 +1035,7 @@ fn paint_line_background(
 fn line_paint_bounds(
     origin: Point<Pixels>,
     layout: &LineLayout,
-    text: &str,
+    row_align: RowAlign<'_>,
     line_height: Pixels,
     align: TextAlign,
     align_width: Option<Pixels>,
@@ -1037,7 +1056,8 @@ fn line_paint_bounds(
     let mut row_start = Pixels::ZERO;
     let row_ends = wrap_boundaries.iter().map(Some).chain([None]);
     for (row, boundary) in row_ends.enumerate() {
-        let width = row_end_x(layout, text, boundary) - row_start;
+        let next_row_start = boundary_x(layout, boundary);
+        let width = row_align.width(layout, row_start, boundary);
         let offset = match align {
             TextAlign::Left => Pixels::ZERO,
             TextAlign::Center => (align_width - width) / 2.,
@@ -1045,53 +1065,82 @@ fn line_paint_bounds(
         };
         bounds = bounds.union(&Bounds::new(
             point(origin.x + offset, origin.y + line_height * row as f32),
-            size(width, line_height),
+            size(next_row_start - row_start, line_height),
         ));
-        row_start = boundary.map_or(layout.width, |boundary| {
-            layout.runs[boundary.run_ix].glyphs[boundary.glyph_ix]
-                .position
-                .x
-        });
+        row_start = next_row_start;
     }
     bounds
 }
 
-/// Nodus patch: where a row's text ends for alignment: before the spaces at
-/// its end, which hang past the line (CSS `white-space: normal`) and don't
-/// count when it is centred or right-aligned. `boundary` is the glyph that
-/// starts the next row, or none for the last row; without the text (a bare
-/// layout) every glyph counts.
-fn row_end_x(layout: &LineLayout, text: &str, boundary: Option<&WrapBoundary>) -> Pixels {
-    let end = boundary.map_or(layout.width, |boundary| {
+/// Nodus patch: what a row is centred or right-aligned by. Spaces at the end
+/// of a row hang past it (CSS `white-space: normal`) and don't count; a
+/// clamped last row keeps the width it was wrapped at.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct RowAlign<'a> {
+    /// The text that was laid out, to find the spaces at a row's end; empty
+    /// for a bare layout, where every glyph counts.
+    text: &'a str,
+    /// The width the last row is aligned by, when it isn't its own.
+    last_row_width: Option<Pixels>,
+}
+
+impl<'a> RowAlign<'a> {
+    pub(crate) fn new(text: &'a str, last_row_width: Option<Pixels>) -> Self {
+        Self {
+            text,
+            last_row_width,
+        }
+    }
+
+    /// The width, for alignment, of the row that starts at `row_start` and
+    /// ends at `boundary` (the glyph that starts the next row, or none for
+    /// the last row).
+    fn width(
+        self,
+        layout: &LineLayout,
+        row_start: Pixels,
+        boundary: Option<&WrapBoundary>,
+    ) -> Pixels {
+        if boundary.is_none()
+            && let Some(width) = self.last_row_width
+        {
+            return width;
+        }
+        let mut end = boundary_x(layout, boundary);
+        if self.text.is_empty() {
+            return end - row_start;
+        }
+        let before = boundary.map_or(usize::MAX, |boundary| {
+            layout.runs[..boundary.run_ix]
+                .iter()
+                .map(|run| run.glyphs.len())
+                .sum::<usize>()
+                + boundary.glyph_ix
+        });
+        let mut glyphs = layout
+            .runs
+            .iter()
+            .flat_map(|run| run.glyphs.iter())
+            .take(before)
+            .collect::<SmallVec<[_; 64]>>();
+        while let Some(glyph) = glyphs.pop() {
+            if self.text.as_bytes().get(glyph.index) != Some(&b' ') {
+                break;
+            }
+            end = glyph.position.x;
+        }
+        end - row_start
+    }
+}
+
+/// Where the row ending at `boundary` ends: the next row's first glyph, or
+/// the layout's width for the last row.
+fn boundary_x(layout: &LineLayout, boundary: Option<&WrapBoundary>) -> Pixels {
+    boundary.map_or(layout.width, |boundary| {
         layout.runs[boundary.run_ix].glyphs[boundary.glyph_ix]
             .position
             .x
-    });
-    if text.is_empty() {
-        return end;
-    }
-    let before = boundary.map_or(usize::MAX, |boundary| {
-        layout.runs[..boundary.run_ix]
-            .iter()
-            .map(|run| run.glyphs.len())
-            .sum::<usize>()
-            + boundary.glyph_ix
-    });
-    let mut glyphs = layout
-        .runs
-        .iter()
-        .flat_map(|run| run.glyphs.iter())
-        .take(before)
-        .collect::<SmallVec<[_; 64]>>();
-    let mut end = end;
-    while let Some(glyph) = glyphs.pop() {
-        // A glyph past the text given hangs too (a hanging suffix).
-        if !matches!(text.as_bytes().get(glyph.index), Some(b' ') | None) {
-            break;
-        }
-        end = glyph.position.x;
-    }
-    end
+    })
 }
 
 fn aligned_origin_x(
@@ -1100,17 +1149,25 @@ fn aligned_origin_x(
     last_glyph_x: Pixels,
     align: &TextAlign,
     layout: &LineLayout,
-    text: &str,
+    row_align: RowAlign<'_>,
     wrap_boundary: Option<&&WrapBoundary>,
+    scale_factor: f32,
 ) -> Pixels {
-    let end_of_line = row_end_x(layout, text, wrap_boundary.copied());
-
-    let line_width = end_of_line - last_glyph_x;
+    if *align == TextAlign::Left {
+        return origin.x;
+    }
+    // Nodus patch: hanging spaces and a clamped row's width (`RowAlign`),
+    // and Blink's arithmetic in layout units: the row's width rounded up to
+    // one, the space left over halved by truncating.
+    let line_width = row_align.width(layout, last_glyph_x, wrap_boundary.copied());
+    let units = scale_factor * 64.;
+    let line_width = (line_width.0 * units).ceil();
+    let space = (align_width.0 * units).round() - line_width;
 
     match align {
         TextAlign::Left => origin.x,
-        TextAlign::Center => (origin.x * 2.0 + align_width - line_width) / 2.0,
-        TextAlign::Right => origin.x + align_width - line_width,
+        TextAlign::Center => origin.x + px((space / 2.).trunc() / units),
+        TextAlign::Right => origin.x + px(space / units),
     }
 }
 
@@ -1191,7 +1248,7 @@ mod tests {
                     line_paint_bounds(
                         origin,
                         &line.layout,
-                        "",
+                        RowAlign::default(),
                         line_height,
                         align,
                         align_width.map(px),
@@ -1211,7 +1268,7 @@ mod tests {
                 line_paint_bounds(
                     origin,
                     &empty.layout,
-                    "",
+                    RowAlign::default(),
                     line_height,
                     align,
                     Some(px(100.)),
@@ -1490,7 +1547,7 @@ mod tests {
                     }),
                     text: line.text,
                     decoration_runs: line.decoration_runs.into_vec(),
-                    hanging_suffix: 0,
+                    last_row_align_width: None,
                 };
                 window.next_frame.scene.clear();
                 wrapped
@@ -1502,7 +1559,7 @@ mod tests {
                 paint_line(
                     origin,
                     &wrapped.unwrapped_layout,
-                    "",
+                    RowAlign::default(),
                     line_height,
                     TextAlign::Left,
                     Some(px(16.)),

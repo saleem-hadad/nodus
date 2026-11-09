@@ -11,7 +11,7 @@ use crate::{
     AsyncWindowContext, AtlasTile, AvailableSpace, Background, BorderStyle, Bounds, BoxShadow,
     Capslock, Context, Corners, CursorHideMode, CursorStyle, Decorations, DevicePixels,
     DispatchActionListener, DispatchNodeId, DispatchTree, DisplayId, Edges, Effect, EffectLayer,
-    ElementTransform, Entity, EntityId, EventEmitter, FileDropEvent, FontId, Global,
+    ElementTransform, Entity, EntityId, EventEmitter, FileDropEvent, FontId, FontSmoothing, Global,
     GlobalElementId, GlyphId, GpuSpecs, Hsla, InputHandler, InputPreference, IsZero, KeyBinding,
     KeyContext, KeyDownEvent, KeyEvent, Keystroke, KeystrokeEvent, LayerEffects, LayoutId,
     LineLayoutIndex, Modifiers, ModifiersChangedEvent, MonochromeSprite, MouseButton, MouseEvent,
@@ -21,7 +21,7 @@ use crate::{
     Replay, ResizeEdge, SMOOTH_SVG_SCALE_FACTOR, SUBPIXEL_VARIANTS_X, SUBPIXEL_VARIANTS_Y,
     ScaledPixels, Scene, Shadow, SharedString, Size, StrikethroughStyle, Style, SubpixelSprite,
     Subscription, SystemWindowTab, SystemWindowTabController, TabStopMap, Task,
-    TextInputConfiguration, TextInputStateChange, TextRenderingMode, FontSmoothing, TextStyle,
+    TextInputConfiguration, TextInputStateChange, TextRenderingMode, TextStyle,
     TextStyleRefinement, ThermalState, TransformationMatrix, Underline, UnderlineStyle,
     WindowAppearance, WindowBackgroundAppearance, WindowBounds, WindowControls, WindowDecorations,
     WindowInsets, WindowOptions, WindowParams, WindowTextSystem, WindowVisibility, point,
@@ -5652,7 +5652,11 @@ impl Window {
     /// Nodus patch: like [`Self::request_measured_layout`], but the measured
     /// size is used as it is, not rounded up to device pixels, as Chromium
     /// keeps a text's box in its layout units.
-    pub(crate) fn request_measured_layout_unsnapped<F>(&mut self, style: Style, measure: F) -> LayoutId
+    pub(crate) fn request_measured_layout_unsnapped<F>(
+        &mut self,
+        style: Style,
+        measure: F,
+    ) -> LayoutId
     where
         F: Fn(Size<Option<Pixels>>, Size<AvailableSpace>, &mut Window, &mut App) -> Size<Pixels>
             + 'static,
@@ -5673,7 +5677,12 @@ impl Window {
     pub(crate) fn unrounded_layout_origin(&mut self, layout_id: LayoutId) -> Point<Pixels> {
         let bounds = self.layout_bounds(layout_id);
         let scale_factor = self.scale_factor();
-        let Some(origin) = self.layout_engine.as_ref().unwrap().unrounded_origin(layout_id) else {
+        let Some(origin) = self
+            .layout_engine
+            .as_ref()
+            .unwrap()
+            .unrounded_origin(layout_id)
+        else {
             return bounds.origin;
         };
         point(px(origin.x / scale_factor), px(origin.y / scale_factor))

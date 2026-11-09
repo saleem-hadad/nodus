@@ -4,7 +4,7 @@
 //! usage: `cargo run -p nodus-ui --example text_parity -- <cases.json> <out.png>`
 //!
 //! Each case is `{x, y, w?, size, weight, lh, text, align, overflowWrap?,
-//! wordBreak?, clamp?, ellipsis?, bar?}` in logical pixels, black system-font
+//! wordBreak?, clamp?, ellipsis?, bar?, box?}` in logical pixels, black system-font
 //! text on white, as a page of absolutely positioned divs would draw it in
 //! Chromium. The window is a non-activating pop-up (it never takes focus);
 //! the frame is saved with `Window::render_to_image` (2x on Retina) and the
@@ -66,7 +66,16 @@ impl Render for Cases {
             if case["kind"].as_str() == Some("stack") {
                 el = el.whitespace_nowrap();
             }
-            root = root.child(el.child(text));
+            el = match (case["kind"].as_str(), number("box")) {
+                // Text in a flex row too narrow for it, then a fixed box.
+                (Some("flex"), Some(width)) => el
+                    .flex()
+                    .items_start()
+                    .child(div().child(text))
+                    .child(div().flex_none().w(px(width)).h(px(10.)).bg(black())),
+                _ => el.child(text),
+            };
+            root = root.child(el);
             if case["bar"].as_bool() == Some(true) {
                 root = root.child(div().absolute().left(px(x + 30.)).top(px(y + lh)).w(px(20.)).h(px(2.)).bg(black()));
             }

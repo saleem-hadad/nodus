@@ -52,7 +52,7 @@ if (crop.length) {
   let total = 0
   for (const c of cases) {
     const [, height] = rects[c.id]
-    const r = region(c.x - 2, c.y - 2, (c.w ?? 50) + 4, height + 4 + (c.bar ? 3 : 0))
+    const r = region(c.x - 2, c.y - 2, (c.cw ?? c.w ?? 50) + 4, height + 4 + (c.bar ? 3 : 0))
     total += r.n
     const label = `${c.kind} ${c.size}px${c.w ? ` w${c.w}` : ''} ${c.align}${c.clamp ? ` clamp ${c.clamp}` : ''}`
     console.log(`${String(c.id).padStart(2)} ${label.padEnd(34)} ${String(r.n).padStart(5)} px  ink ${r.ink.toFixed(3)}  (${r.dx.toFixed(2)}, ${r.dy.toFixed(2)})  ${c.text.slice(0, 28)}`)

@@ -441,6 +441,11 @@ impl Nodus {
         crate::CaptureApi { nodus: self }
     }
 
+    /// The values 0.9.4's pages kept in `localStorage` (CAP-157).
+    pub fn local_storage(&self) -> crate::LocalStorageApi<'_> {
+        crate::LocalStorageApi { nodus: self }
+    }
+
     /// What the application menu's own items do (01): Check for Updates…
     /// and Quit and Stop Sessions.
     pub fn menu(&self) -> MenuApi<'_> {

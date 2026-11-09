@@ -1,7 +1,7 @@
 use crate::{
-    App, Bounds, DevicePixels, Half, Hsla, LineLayout, Pixels, Point, RenderGlyphParams, Result,
-    SharedString, StrikethroughStyle, TextAlign, UnderlineStyle, Window, WrapBoundary,
-    WrappedLineLayout, black, fill, point, px, size, underline_y_offset,
+    App, Bounds, Corners, DevicePixels, Half, Hsla, InlineBackground, LineLayout, Pixels, Point,
+    RenderGlyphParams, Result, SharedString, StrikethroughStyle, TextAlign, UnderlineStyle, Window,
+    WrapBoundary, WrappedLineLayout, black, fill, point, px, size, underline_y_offset,
 };
 use derive_more::{Deref, DerefMut};
 use smallvec::SmallVec;
@@ -614,6 +614,12 @@ fn paint_line(
         align_width,
         wrap_boundaries,
     );
+    // Nodus patch: CSS `text-underline-offset`, when the text style sets it.
+    let underline_offset = decoration_runs
+        .iter()
+        .any(|run| run.underline.is_some())
+        .then(|| window.text_style().underline_offset)
+        .flatten();
     window.paint_layer(line_bounds, |window| {
         let padding_top = (line_height - layout.ascent - layout.descent) / 2.;
         let baseline_offset = point(px(0.), padding_top + layout.ascent);
@@ -746,7 +752,13 @@ fn paint_line(
                         }
                         if let Some(run_underline) = style_run.underline.as_ref() {
                             current_underline.get_or_insert((
-                                point(glyph_origin.x, glyph_origin.y + underline_y_offset),
+                                point(
+                                    glyph_origin.x,
+                                    glyph_origin.y
+                                        + underline_offset.map_or(underline_y_offset, |offset| {
+                                            glyph_baseline + offset
+                                        }),
+                                ),
                                 UnderlineStyle {
                                     color: Some(run_underline.color.unwrap_or(style_run.color)),
                                     thickness: run_underline.thickness,
@@ -897,11 +909,36 @@ fn paint_line_background(
         align_width,
         wrap_boundaries,
     );
+    // Nodus patch: CSS-style inline backgrounds, when the text style asks.
+    let inline = decoration_runs
+        .iter()
+        .any(|run| run.background_color.is_some())
+        .then(|| window.text_style().inline_background)
+        .flatten();
+    let (ascent, descent) = (layout.ascent, layout.descent);
+    let paint_background = |window: &mut Window,
+                            origin: Point<Pixels>,
+                            width: Pixels,
+                            color: Hsla,
+                            ends: (bool, bool)| {
+        paint_run_background(
+            window,
+            origin,
+            width,
+            line_height,
+            (ascent, descent),
+            color,
+            inline,
+            ends,
+        )
+    };
     window.paint_layer(line_bounds, |window| {
         let mut decoration_runs = decoration_runs.iter();
         let mut wraps = wrap_boundaries.iter().peekable();
         let mut run_end = 0;
-        let mut current_background: Option<(Point<Pixels>, Hsla)> = None;
+        // Nodus patch: the third field is whether the run started on an
+        // earlier row (its start isn't rounded there).
+        let mut current_background: Option<(Point<Pixels>, Hsla, bool)> = None;
         let text_system = cx.text_system().clone();
         let mut glyph_origin = point(
             aligned_origin_x(
@@ -926,21 +963,24 @@ fn paint_line_background(
 
                 if wraps.peek() == Some(&&WrapBoundary { run_ix, glyph_ix }) {
                     wraps.next();
-                    if let Some((background_origin, background_color)) = current_background.as_mut()
+                    if let Some((background_origin, background_color, continued)) =
+                        current_background.as_mut()
                     {
                         if glyph_origin.x == background_origin.x {
                             background_origin.x -= max_glyph_size.width.half()
                         }
-                        window.paint_quad(fill(
-                            Bounds {
-                                origin: *background_origin,
-                                size: size(glyph_origin.x - background_origin.x, line_height),
-                            },
+                        let ends = glyph.index >= run_end;
+                        paint_background(
+                            window,
+                            *background_origin,
+                            glyph_origin.x - background_origin.x,
                             *background_color,
-                        ));
+                            (!*continued, ends),
+                        );
                         if glyph.index < run_end {
                             background_origin.x = origin.x;
                             background_origin.y += line_height;
+                            *continued = true;
                         } else {
                             current_background = None;
                         }
@@ -960,7 +1000,7 @@ fn paint_line_background(
                 }
                 prev_glyph_position = glyph.position;
 
-                let mut finished_background: Option<(Point<Pixels>, Hsla)> = None;
+                let mut finished_background: Option<(Point<Pixels>, Hsla, bool)> = None;
                 if glyph.index >= run_end {
                     let mut style_run = decoration_runs.next();
 
@@ -974,7 +1014,7 @@ fn paint_line_background(
                     }
 
                     if let Some(style_run) = style_run {
-                        if let Some((_, background_color)) = &mut current_background
+                        if let Some((_, background_color, _)) = &mut current_background
                             && style_run.background_color.as_ref() != Some(background_color)
                         {
                             finished_background = current_background.take();
@@ -983,6 +1023,7 @@ fn paint_line_background(
                             current_background.get_or_insert((
                                 point(glyph_origin.x, glyph_origin.y),
                                 run_background,
+                                false,
                             ));
                         }
                         run_end += style_run.len as usize;
@@ -992,18 +1033,20 @@ fn paint_line_background(
                     }
                 }
 
-                if let Some((mut background_origin, background_color)) = finished_background {
+                if let Some((mut background_origin, background_color, continued)) =
+                    finished_background
+                {
                     let width = glyph_origin.x - background_origin.x;
                     if background_origin.x == glyph_origin.x {
                         background_origin.x -= max_glyph_size.width.half();
                     };
-                    window.paint_quad(fill(
-                        Bounds {
-                            origin: background_origin,
-                            size: size(width, line_height),
-                        },
+                    paint_background(
+                        window,
+                        background_origin,
+                        width,
                         background_color,
-                    ));
+                        (!continued, true),
+                    );
                 }
             }
         }
@@ -1015,21 +1058,77 @@ fn paint_line_background(
             last_line_end_x -= glyph.position.x;
         }
 
-        if let Some((mut background_origin, background_color)) = current_background.take() {
+        if let Some((mut background_origin, background_color, continued)) =
+            current_background.take()
+        {
             if last_line_end_x == background_origin.x {
                 background_origin.x -= max_glyph_size.width.half()
             };
-            window.paint_quad(fill(
-                Bounds {
-                    origin: background_origin,
-                    size: size(last_line_end_x - background_origin.x, line_height),
-                },
+            paint_background(
+                window,
+                background_origin,
+                last_line_end_x - background_origin.x,
                 background_color,
-            ));
+                (!continued, true),
+            );
         }
 
         Ok(())
     })
+}
+
+/// Nodus patch: one row's piece of a run's background. GPUI fills the line
+/// height; with an [`InlineBackground`] it covers the font's content area
+/// as CSS does (from the baseline, the ascent above and the descent below,
+/// each rounded to device pixels, as Blink's font metrics are), rounded at
+/// the run's start and end (`ends`: the piece starts it, the piece ends it).
+#[allow(clippy::too_many_arguments)]
+fn paint_run_background(
+    window: &mut Window,
+    row_origin: Point<Pixels>,
+    width: Pixels,
+    line_height: Pixels,
+    (ascent, descent): (Pixels, Pixels),
+    color: Hsla,
+    inline: Option<InlineBackground>,
+    (starts, ends): (bool, bool),
+) {
+    let Some(inline) = inline else {
+        window.paint_quad(fill(
+            Bounds {
+                origin: row_origin,
+                size: size(width, line_height),
+            },
+            color,
+        ));
+        return;
+    };
+    let scale = window.scale_factor();
+    let round = |v: f32| (v + 0.5).floor();
+    let baseline =
+        row_origin.y + chromium_baseline_offset(row_origin.y, line_height, ascent, descent, scale);
+    let ascent = px(round(ascent.0 * scale) / scale);
+    let descent = px(round(descent.0 * scale) / scale);
+    let r = inline.corner_radius;
+    let (left, right) = (
+        if starts { r } else { px(0.) },
+        if ends { r } else { px(0.) },
+    );
+    window.paint_quad(
+        fill(
+            Bounds {
+                origin: point(row_origin.x, baseline - ascent),
+                size: size(width, ascent + descent),
+            },
+            color,
+        )
+        .corner_radii(Corners {
+            top_left: left,
+            bottom_left: left,
+            top_right: right,
+            bottom_right: right,
+        }),
+    );
 }
 
 fn line_paint_bounds(

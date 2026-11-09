@@ -487,6 +487,18 @@ pub enum OverflowWrap {
     Anywhere,
 }
 
+/// Nodus patch: draw text runs' backgrounds the way CSS draws an inline
+/// element's (a `<mark>`): over the font's content area (its ascent and
+/// descent, rounded to device pixels, about the baseline) rather than the
+/// whole line height, with `border-radius` rounding the ends of the run.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct InlineBackground {
+    /// The corner radius of each run's background (CSS `border-radius`);
+    /// a run that wraps is rounded only where it starts and ends, as CSS's
+    /// default `box-decoration-break: slice` does.
+    pub corner_radius: Pixels,
+}
+
 /// Nodus patch: where lines may break inside words, as CSS `word-break`.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub enum WordBreak {
@@ -587,6 +599,14 @@ pub struct TextStyle {
     /// Nodus patch: where lines may break inside words (CSS `word-break`).
     pub word_break: WordBreak,
 
+    /// Nodus patch: runs' backgrounds drawn as CSS draws an inline
+    /// element's (content area, rounded); `None` fills the line height.
+    pub inline_background: Option<InlineBackground>,
+
+    /// Nodus patch: the distance from the baseline to the top of an
+    /// underline (CSS `text-underline-offset`); `None` places it GPUI's way.
+    pub underline_offset: Option<Pixels>,
+
     /// The text should be truncated if it overflows the width of the element
     pub text_overflow: Option<TextOverflow>,
 
@@ -615,6 +635,8 @@ impl Default for TextStyle {
             white_space: WhiteSpace::Normal,
             overflow_wrap: OverflowWrap::default(),
             word_break: WordBreak::default(),
+            inline_background: None,
+            underline_offset: None,
             text_overflow: None,
             text_align: TextAlign::default(),
             line_clamp: None,

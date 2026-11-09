@@ -146,6 +146,17 @@ GPUI's `CursorStyle` had no `move`, no `cell` and no image cursors, which the in
 
 Linux and web (not vendored, not built for Nodus) match `CursorStyle` exhaustively and would need arms for the three new variants if they're ever built. Checked: `cargo test -p gpui-pre-macos --lib cursor` (the move and cell cursors exist and are 24×24 with the hotspot at 12,12; an image cursor keeps its size, hotspot and both bitmaps), nodus-ui's `ink::cursor` tests (the eraser's SVG at 1× and 2×), and `cargo check -p gpui-pre-windows --target x86_64-pc-windows-msvc`.
 
+### 13. Highlights as CSS draws them: rounded marks, the underline's offset (Nodus, track gpui-polish)
+
+GPUI filled a text run's background over the whole line height with square corners, and put underlines where it computes them from the line box. 0.9.4's highlights are inline elements: ⌘K's snippet marks and the transcript preview's are `mark { border-radius: 3px }`, the diff's changed words 2px, and a search title's matches are underlined `text-underline-offset: 3px` below the baseline (spec 11 SRCH-019/020). Two text styles, so nothing changes for text that doesn't ask:
+
+- `Styled::inline_background_radius(px)` (`TextStyle::inline_background: Option<InlineBackground>`): runs' backgrounds cover the font's content area as Blink's inline boxes do (from Chromium's baseline, `chromium_baseline_offset`, the ascent above and the descent below, each rounded to device pixels) instead of the line height, as a quad with that corner radius. A run that wraps is rounded only where it starts and ends (CSS's default `box-decoration-break: slice`). `paint_run_background` in `text_system/line.rs`.
+- `Styled::underline_offset(px)` (`TextStyle::underline_offset: Option<Pixels>`): an underline's top edge sits that far below the row's (Chromium) baseline.
+
+`TextRun`, `HighlightStyle` and `UnderlineStyle` are unchanged: gpui-component builds them as struct literals, so new fields there would break it; the styles are read from the text style in effect when a line paints, and only when one of its runs has a background or an underline.
+
+Checked on `search-results` against 0.9.4's golden, both themes: the snippet's mark covers the same 28 device rows (375–402) with the same rounded ends, and the title's underline the same two rows (364–365; the golden's underline is one CSS pixel thick, though `search.css` asks for 2px).
+
 ## Verification
 
 - `crates/nodus-ui/examples/effects.rs` (see `migration/tracks/gpui-fork.md`): frosted panels at blur 30/saturate 1.8 and 20/1.6 over moving cards, a note rotated 3–7° with CoreText-rendered text, a 3° sticker, the pad's sheet turning about its top edge, `group_opacity` beside `.opacity`, hit testing through the rotation (synthetic mouse moves; the window never takes focus), and a capture written to PNG. `EFFECTS_STRICT=1` exits 1 if a check fails; CI runs it on macOS and Windows.

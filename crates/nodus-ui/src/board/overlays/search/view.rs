@@ -10,7 +10,7 @@ use gpui::{
 use nodus_domain::{SearchSnippet, SearchSnippetKind, SessionStatus};
 
 use super::text::Mark;
-use super::{Row, highlighted, time_ago, updated_at};
+use super::{MARK_RADIUS, Row, UNDERLINE_OFFSET, highlighted, time_ago, updated_at};
 use crate::board::canvas::BoardCanvas;
 use crate::board::layout::card_title;
 use crate::board::overlays::{kbd, spinner};
@@ -272,6 +272,7 @@ impl BoardCanvas {
                         .whitespace_nowrap()
                         .text_ellipsis()
                         .font_weight(FontWeight::SEMIBOLD)
+                        .underline_offset(UNDERLINE_OFFSET)
                         .child(highlighted(
                             &title,
                             &title_ranges,
@@ -499,6 +500,7 @@ fn snippet_line(t: &Tokens, s: &SearchSnippet) -> AnyElement {
         .min_w_0()
         .line_clamp(2)
         .overflow_hidden()
+        .inline_background_radius(MARK_RADIUS)
         .when(code, |d| {
             d.font_family(fonts::MONO).text_size(TEXT_XS).line_height(px(17.))
         })

@@ -17,7 +17,7 @@ use crate::board::canvas::BoardCanvas;
 use crate::board::layout::is_terminal;
 use crate::terminal::actions::PreviewFind;
 
-pub(crate) use text::{highlighted, time_ago};
+pub(crate) use text::{MARK_RADIUS, UNDERLINE_OFFSET, highlighted, time_ago};
 
 /// SRCH-006: the query is sent this long after the last edit.
 pub const DEBOUNCE_MS: u64 = 120;

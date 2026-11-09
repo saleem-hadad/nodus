@@ -2,9 +2,9 @@ use crate::{
     self as gpui, AbsoluteLength, AlignContent, AlignItems, AlignSelf, Background, BlendMode,
     BorderStyle, ColorMatrix, CursorStyle, DefiniteLength, Display, ElementTransform, Fill,
     FlexDirection, FlexWrap, Font, FontFeatures, FontStyle, FontWeight, GridPlacement,
-    GridTemplate, GridTemplateMinSize, Hsla, JustifyContent, Length, OverflowWrap, Pixels, Radians,
-    SharedString, StrikethroughStyle, StyleRefinement, TextAlign, TextOverflow,
-    TextStyleRefinement, UnderlineStyle, WhiteSpace, WordBreak, px, relative, rems,
+    GridTemplate, GridTemplateMinSize, Hsla, InlineBackground, JustifyContent, Length,
+    OverflowWrap, Pixels, Radians, SharedString, StrikethroughStyle, StyleRefinement, TextAlign,
+    TextOverflow, TextStyleRefinement, UnderlineStyle, WhiteSpace, WordBreak, px, relative, rems,
 };
 pub use gpui_macros::{
     border_style_methods, box_shadow_style_methods, cursor_style_methods, margin_style_methods,
@@ -160,6 +160,23 @@ pub trait Styled: Sized {
     /// (`normal` by default, as in CSS).
     fn word_break(mut self, word_break: WordBreak) -> Self {
         self.text_style().word_break = Some(word_break);
+        self
+    }
+
+    /// Nodus patch: text runs' backgrounds (highlights) drawn as CSS draws
+    /// an inline element's: over the font's ascent and descent, with
+    /// `radius` rounding the ends (`mark { border-radius: … }`).
+    fn inline_background_radius(mut self, radius: Pixels) -> Self {
+        self.text_style().inline_background = Some(InlineBackground {
+            corner_radius: radius,
+        });
+        self
+    }
+
+    /// Nodus patch: underlines `offset` below the baseline (their top edge),
+    /// as CSS `text-underline-offset`.
+    fn underline_offset(mut self, offset: Pixels) -> Self {
+        self.text_style().underline_offset = Some(offset);
         self
     }
 

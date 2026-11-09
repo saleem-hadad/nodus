@@ -1,7 +1,7 @@
 //! Highlighted text (`Highlight.tsx`, SRCH-019, SRCH-020) and the rows'
 //! relative times (`timeAgo`, CARD-041).
 
-use gpui::{HighlightStyle, Hsla, StyledText, UnderlineStyle, px};
+use gpui::{HighlightStyle, Hsla, Pixels, StyledText, UnderlineStyle, px};
 use nodus_domain::js;
 
 const MINUTE: f64 = 60_000.0;
@@ -10,6 +10,11 @@ const DAY: f64 = 24.0 * HOUR;
 const MONTHS: [&str; 12] = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
+
+/// `.search-row mark { border-radius: 3px }`.
+pub(crate) const MARK_RADIUS: Pixels = px(3.);
+/// `.search-title mark { text-underline-offset: 3px }`.
+pub(crate) const UNDERLINE_OFFSET: Pixels = px(3.);
 
 /// How a match is marked: a background (snippets) or an underline (titles).
 #[derive(Debug, Clone, Copy)]
@@ -33,7 +38,10 @@ pub(crate) fn byte_ranges(text: &str, ranges: &[[u32; 2]]) -> Vec<std::ops::Rang
         .collect()
 }
 
-/// The text with its ranges marked; no ranges, plain text.
+/// The text with its ranges marked; no ranges, plain text. The element
+/// holding it sets how marks look (`search.css`): a snippet's
+/// `inline_background_radius(MARK_RADIUS)`, a title's
+/// `underline_offset(UNDERLINE_OFFSET)`.
 pub(crate) fn highlighted(text: &str, ranges: &[[u32; 2]], mark: Mark) -> StyledText {
     let style = match mark {
         Mark::Background(color) => HighlightStyle {
@@ -42,7 +50,9 @@ pub(crate) fn highlighted(text: &str, ranges: &[[u32; 2]], mark: Mark) -> Styled
         },
         Mark::Underline(color) => HighlightStyle {
             underline: Some(UnderlineStyle {
-                thickness: px(2.),
+                // `text-decoration: underline 2px …`, but 0.9.4 drew it one
+                // CSS pixel thick (two device rows in both goldens).
+                thickness: px(1.),
                 color: Some(color),
                 wavy: false,
             }),

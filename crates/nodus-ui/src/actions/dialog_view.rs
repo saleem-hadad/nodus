@@ -10,7 +10,7 @@ use gpui::{
 use nodus_actions::dialog::{EXAMPLES, Step};
 use nodus_domain::ActionIcon;
 
-use super::dialog::ActionDialogView;
+use super::dialog::{ActionDialogView, NAME_MAX};
 use super::icons::{Glyph, glyph};
 use crate::components::modal::Modal;
 use crate::components::native_tooltip;
@@ -237,6 +237,8 @@ impl ActionDialogView {
         let name_focused = self.name.read(cx).focus_handle(cx).is_focused(window);
         let name = div().flex().flex_col().gap(px(6.)).child(label(t, "Name")).child(
             field_frame(t, name_focused, false)
+                // `maxLength`: a long paste is cut to fit, not refused.
+                .capture_action(crate::components::text_field::paste_within(&self.name, NAME_MAX))
                 .h(px(32.))
                 .px(px(10.))
                 .flex()

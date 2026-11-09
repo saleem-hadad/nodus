@@ -20,7 +20,7 @@ Done means:
 1. **The Electron app is the spec.** When a feature file and the TypeScript disagree, the TypeScript wins, and the feature file gets fixed.
 2. **No new features, no "improvements".** Same strings, same timings, same sizes, same shortcuts, same file formats. Bugs that users rely on are features.
 3. **Data compatibility is not optional.** Same userData folder (`~/Library/Application Support/Nodus`, `%APPDATA%\Nodus`), same `state.json` schema (read and write), same `views/` and `captures/` layout, same `NODUS_USER_DATA` override, same bundle id `dev.saleem.nodus`, same release asset names.
-4. **Wire compatibility with the 0.9.4 session host.** The Rust host speaks the same protocol (same `PROTOCOL` number, same messages), so a Rust app adopts a running Node host and vice versa.
+4. **Wire compatibility with the 0.9.4 session host.** The Rust host speaks 0.9.4's messages byte for byte. Per U1 the first Rust release says `PROTOCOL` 2 (0.9.4 says 1), so an updated app asks to stop a 0.9.4 host's sessions rather than adopting it, through the existing, documented flow.
 5. **Domains don't depend on the UI.** Only `nodus-ui` and the `nodus` binary know GPUI exists. Domain crates depend on `nodus-domain` and, where they must touch the OS, `nodus-platform`.
 6. **Push early.** Every slice that builds, passes tests and doesn't break the Electron app goes to `main`. Until cutover, `main` ships the Electron app; the Rust workspace grows beside it.
 7. **Port the tests.** Every Vitest case in `src/**/*.test.ts` gets a Rust counterpart in the crate that owns the behavior.
@@ -67,7 +67,7 @@ Any finding blocks the push until the commit is rewritten without it. A secret t
 | D11 | **A test driver built into the app, off unless `NODUS_AUTOMATION` names a socket.** It runs core commands, sends input, and takes screenshots of scenes. It replaces the DevTools-protocol smoke test (`scripts/smoke.mjs`) and renders the Rust side of the golden screenshots. | Proposed |
 | D12 | **Handoff gates in the release workflow.** Before upload, CI replays 0.9.4's exact updater checks on each DMG, and installs a real 0.9.4 and updates it to the new build on Windows. `releases/latest` is the first place 0.9.4 sees a release, so there's no rehearsal after that. | Proposed (spec 06) |
 | D13 | **We own a patched GPUI.** Stock GPUI can't blur behind an element (the prompt bar, menus, toasts, modals and archive panel all do) or rotate boxes and text (dragged notes, stickers, the pad, the agent fan), and fades elements primitive by primitive rather than as a group. The patch set: the effect-layers PR stack (zed#63773–#63780, backdrop blur on Metal, wgpu and DirectX 11) with a real fix for the two shaders Apple's Metal compiler crashes on, transforms on offscreen layers, and group opacity. The patched `gpui-pre*` crates are vendored under `third_party/gpui/`, keeping their package names and version, and swapped in with `[patch.crates-io]`. | Adopted (S1) |
-| D7 | **Branches:** each track works on a `rust/<track>` branch in its own worktree, and merges to `main` when `cargo test` and `pnpm typecheck/test/build` both pass. | Adopted |
+| D7 | **Branches:** each track works on a `rust/<track>` branch in its own worktree, and merges to `main` when `cargo fmt`, `cargo clippy -D warnings` and `cargo test --workspace` pass and `migration/prepush.sh` is clean (until the cutover, the Electron checks too). | Adopted |
 
 ## Architecture
 
@@ -165,7 +165,7 @@ Tracks after P1 run in parallel where the dependency column allows.
 | P9 | Views (wry), board tools, actions, voice, git UI | P6 | ✅ merged (Windows WebView2 unverified) |
 | P10 | Capture panel, notifications, Dock badge, updater | P6 | ✅ merged (notifications and the Dock badge need the packaged app to see) |
 | P11 | Packaging: .app and DMGs (same bundle id, Info.plist keys, entitlements, signing, notarizing), Windows NSIS (same flags), release workflow; 0.9.4 → Rust update test | P10 | 🟡 merged; waits on Windows CI, the real certificate, and the UI tracks |
-| P12 | Parity audit (every checklist item, screenshots light and dark), then cutover: delete Electron, update README and docs, release | P11 | 🟡 audit-shell started (specs 01–08) |
+| P12 | Parity audit (every checklist item, screenshots light and dark), then cutover: delete Electron, update README and docs, release | P11 | 🟡 audits merged; cutover merged; polish tracks, final sweep, CI on Windows and the 1.0.0 release left |
 
 ## Tracks
 
@@ -186,7 +186,7 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | capture | `rust/capture` | nodus-capture backend: double tap, key hook, screen context, guess, submit | ✅ merged: 98 CAP; panel UI and page wiring to the capture-panel track |
 | core | `rust/core` | P4: wire every merged domain into nodus-core (sessions, board, views, updates, events, startup/quit), deferred core IDs, debts, headless end-to-end tests | ✅ merged (6243e7c): every domain composed; git/actions/voice wired; the windowed app launches, runs sessions through `Nodus host` and quits through the core |
 | audit-shell | `rust/audit-shell` | P12 slice: resolve every unticked ID in specs 01–03, 05–08 | ✅ merged (67aa3fe): every ID resolved with evidence in `migration/tracks/audit-shell.md`; selectable static text, 40-char paste, driver named pipe, Windows chrome (☰, caption buttons, single instance), page zoom, spellcheck; Windows-only and certificate items stay open for CI and cutover |
-| cutover | `rust/cutover` | PROTOCOL → 2 (U1), Rust-only CI and release workflow, README and how-it-works for the Rust app, Electron sources removed; **not merged until the user approves** | 🟡 running |
+| cutover | `rust/cutover` | PROTOCOL → 2 (U1), Rust-only CI and release workflow, README and how-it-works for the Rust app, Electron sources removed, version 1.0.0 | ✅ merged (db61c8f) with the user's approval: `main` is Rust-only |
 | views-polish | `rust/views-polish` | ink over live view pages, tooltips as coverage, overlay timing, New view dialog wrap + grip, one git status source, `render_to_image` blank-menu bug | 🟡 running |
 | cross-wiring | `rust/cross-wiring` | BOARD-037 (transcript preview at the search match), MODAL-028…031 (session windows closing with their card, run or view; shortcuts and ⌘K while one is open) | ✅ merged (875ce8c): all five, with app checks in `parity/cross_wiring.py` |
 | gpui-polish | `rust/gpui-polish` | GPUI/UI gaps: custom cursors (ink move, eraser circle), spellcheck underline + suggestions, rounded search highlights and underline offset, Chromium-style tooltips, shadows outside see-through boxes | 🟡 running |
@@ -232,7 +232,7 @@ Follow-ups a merge left for when the tracks meet in `nodus-core` (P4). Strike th
 - The scene runner needs Node 22+ (`migration/parity` seed); under Node 20 the stand-in claude exits at once.
 - ~~Test driver on Windows~~ (audit-shell: named pipe; `smoke.py` runs fully there).
 - Six host behaviors are implemented but have no test of their own: HOST-033, 043, 090, 098, the 4 s hard exit in HOST-064 and the 20 s relay timeout in HOST-086. Add tests in P4 and tick them.
-- The 0.9.4 `pty.ts` → Rust host check was run by hand under vitest and not committed (it has to live in `src/main`); repeat it before cutover.
+- ~~The 0.9.4 `pty.ts` → Rust host check~~: under U1 a 0.9.4 app can only shut a Rust host down; the cutover tested both directions against a real 0.9.4 host built from the tag.
 - The status machine and the host client both rely on `process_started` / `process_exited` being called exactly where pty.ts tracks and untracks a session.
 
 ## Spikes
@@ -289,6 +289,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-10: **Cutover merged (db61c8f): `main` is Rust-only.** PROTOCOL 2, `ci.yml`/`package.yml`/`release.yml` for Rust, docs for the Rust workspace, `src/` and the Electron toolchain removed, version 1.0.0; fixture generators and the parity harness read tag v0.9.4.
 - 2026-11-10: The user approved the cutover, version 1.0.0 for the first Rust release, and running the release workflow.
 - 2026-11-10: audit-shell merged (67aa3fe): every unticked ID in specs 01–03 and 05–08 resolved; also fixed two Windows CI breakers (the installer script's sed on `D:\\a\\nodus`, program lookup on the child's PATH); 1,290+ tests.
 - 2026-11-10: cross-wiring merged (875ce8c): ⌘K into the transcript preview at the match, session windows closing (and their terminals disposed) with their card, run or view; a stale search match no longer leaks into later previews.

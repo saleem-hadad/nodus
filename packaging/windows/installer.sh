@@ -208,7 +208,10 @@ trap 'rm -rf "$work"' EXIT
 # A Windows path as a sed replacement: its backslashes (`D:\a\nodus`, where
 # GNU sed reads `\a` and `\n` as escapes), `&` and the `|` delimiter quoted.
 sed_path() { native "$1" | sed -e 's/[\\&|]/\\&/g'; }
-sed -e "s|@TEMPLATES@|$(sed_path "$here/nsis")|g" \
+# The separator joining those paths to what follows them, as a sed replacement.
+if [ "$windows" = 1 ]; then sep='\\'; else sep='/'; fi
+sed -e "s|@SEP@|$sep|g" \
+  -e "s|@TEMPLATES@|$(sed_path "$here/nsis")|g" \
   -e "s|@PLUGINS@|$(sed_path "$resources/plugins")|g" \
   -e "s|@GENERATED@|$(sed_path "$here/nsis-header")|g" \
   "$here/nsis-header/header.nsh" >"$work/script.nsi"

@@ -748,6 +748,8 @@ fn main() {
                     // Only the simulated pointer counts (the patched GPUI tags
                     // the layer sRGB itself).
                     nodus_ui::mac::ignore_real_mouse(window);
+                    #[cfg(not(target_os = "macos"))]
+                    let _ = window;
                     cx.new(|_| Gallery { scene })
                 }
             })

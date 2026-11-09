@@ -1,9 +1,11 @@
 # The header electron-builder 26.15.3 put before installer.nsi for Nodus's nsis options
 # (NsisTarget.computeCommonInstallerScriptHeader: one-click, Unicode, its 26 default
 # languages), generated with its own NsisScriptGenerator. packaging/windows/installer.sh
-# fills in @TEMPLATES@, @PLUGINS@ and @GENERATED@.
-!include "@TEMPLATES@/include/StdUtils.nsh"
-!addincludedir "@TEMPLATES@/include"
+# fills in @TEMPLATES@, @PLUGINS@ and @GENERATED@, and @SEP@ with the platform's path
+# separator: NSIS on Windows splits a path at its last backslash, so a mixed
+# `D:\…\nsis/include/StdUtils.nsh` is looked for as a file named `nsis/include/…`.
+!include "@TEMPLATES@@SEP@include@SEP@StdUtils.nsh"
+!addincludedir "@TEMPLATES@@SEP@include"
 !macro _isUpdated _a _b _t _f
   ${StdUtils.TestParameter} $R9 "updated"
   StrCmp "$R9" "true" `${_t}` `${_f}`
@@ -75,5 +77,5 @@
   !insertmacro MUI_LANGUAGE "Vietnamese"
 !macroend
 
-!addplugindir /x86-unicode "@PLUGINS@/x86-unicode"
-!include "@GENERATED@/messages.nsh"
+!addplugindir /x86-unicode "@PLUGINS@@SEP@x86-unicode"
+!include "@GENERATED@@SEP@messages.nsh"

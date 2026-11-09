@@ -1257,7 +1257,11 @@ impl BoardCanvas {
                 }
                 // BOARD-166, BOARD-167, BOARD-169: the prompt bar and ink (spec 11).
                 "v" => !e.is_held,
-                "/" => true,
+                // BAR-033: the bar takes the keyboard, with `/` typed.
+                "/" => {
+                    self.bar_focus_from_board(Some("/".to_owned()), cx);
+                    true
+                }
                 "p" | "a" | "x" => {
                     if let Some(tool) = super::overlays::ink::tool_for_key(&ch) {
                         self.ink_set_tool(tool, None, cx);

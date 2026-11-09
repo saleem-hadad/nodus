@@ -777,10 +777,12 @@ impl Render for BoardCanvas {
         let pill = self.render_zoom_pill(window, cx);
         let minimap = self.render_minimap(cx);
         let hint = empty.then(|| self.render_hint(window, cx));
-        let toast = self.render_toast(window, cx);
+        // BOARD-138: the toast is stacked above the prompt bar (spec 11).
+        let bar = self.render_bar(window, cx);
         let confirm = self.render_confirm(window, cx);
         let ink_input = self.render_ink_input(cx);
         let ink_layer = self.render_ink_layer(window, cx);
+        let ink_hitbox = self.render_ink_hitbox(cx);
         let ink_dock = self.render_ink_dock(window, cx);
 
         div()
@@ -818,11 +820,12 @@ impl Render for BoardCanvas {
             .children(raised)
             .children(selection)
             .children(marquee)
+            .child(ink_hitbox)
             .children(hint)
             .child(ink_dock)
             .child(pill)
             .child(minimap)
-            .children(toast)
+            .child(bar)
             .children(confirm)
             .into_any_element()
     }

@@ -40,7 +40,7 @@ def K(keystroke):
 
 
 def typed(text):
-    keys = {" ": "space", "-": "minus", ".": "period", ",": "comma", "/": "/", ":": "shift-;", "?": "shift-/"}
+    keys = {" ": "space"}
     out = []
     for c in text:
         if c in keys:
@@ -88,6 +88,10 @@ POINTER, PEN, ARROW, TEXT, ERASER, COLOUR, CLEAR = 636, 666, 696, 726, 756, 795,
 PURPLE = (206, COLOUR)
 
 PEN_A = AT(1080, 650)
+FIELD = (600, 856)  # the prompt bar's field, closed
+SF_CART = AT(1216, 148)
+SF_COUPONS = (495, 560)
+SF_SEARCH_PLAN = (776, 560)
 ARROW_A = AT(1300, 700)
 
 SCENES = {
@@ -104,6 +108,19 @@ SCENES = {
                       for i in range(1, 9)]),
     "ink-selected": ([], STOREFRONT + [AWAY, M("click", *AT(470, 652)), AWAY]),
     "board-populated": ([], STOREFRONT + [AWAY]),
+    "bar-focused": ([], STOREFRONT + [AWAY, M("click", *FIELD)]),
+    "bar-typing": ([], STOREFRONT + [AWAY, M("click", *FIELD)] + typed("Add a sort menu to the search results:")
+                   + [K("shift-enter")] + typed("- price, low to high and high to low") + [K("shift-enter")]
+                   + typed("- newest first")),
+    "bar-slash-menu": ([], STOREFRONT + [AWAY, W(300), K("/")]),
+    "bar-view": ([], STOREFRONT + [AWAY, M("click", *FIELD)] + typed("/view ") + typed("failing tests by file")),
+    "bar-note": ([], STOREFRONT + [AWAY, M("click", *FIELD)] + typed("/note ")
+                 + typed("Check the coupon edge cases with Sam")),
+    "bar-one-selected": ([], STOREFRONT + [AWAY, M("click", *SF_CART, shift=True), M("click", *FIELD)]),
+    "bar-several-selected": ([], STOREFRONT + [AWAY, M("click", *SF_COUPONS, shift=True),
+                                               M("click", *SF_SEARCH_PLAN, shift=True), M("click", *FIELD)]
+                             + typed("What do these two have in common?")),
+    "board-selected": ([], STOREFRONT + [M("click", 1030, 300, shift=True), M("click", 495, 560, shift=True), AWAY]),
 }
 
 

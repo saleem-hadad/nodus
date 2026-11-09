@@ -37,6 +37,32 @@ impl BoardCanvas {
         .into_any_element()
     }
 
+    /// INKUI-006, INKUI-017: the board's surface, above every node (the
+    /// open archive panel's too) and under the HUD and the bar: a press is
+    /// the ink's when this is hovered, and the tool's cursor wins over the
+    /// cards' own. The eraser's circle has no system cursor in GPUI, so it
+    /// shows the crosshair (deferred, INKUI-017).
+    pub(crate) fn render_ink_hitbox(&self, cx: &mut Context<'_, Self>) -> AnyElement {
+        let tool = self.overlays.ink.tool;
+        let me = cx.entity();
+        canvas(
+            move |bounds, window, _| window.insert_hitbox(bounds, HitboxBehavior::Normal),
+            move |_, hitbox, window, cx| {
+                match tool {
+                    InkTool::Pen | InkTool::Arrow | InkTool::Eraser => {
+                        window.set_cursor_style(CursorStyle::Crosshair, &hitbox)
+                    }
+                    InkTool::Text => window.set_cursor_style(CursorStyle::IBeam, &hitbox),
+                    InkTool::Select => {}
+                }
+                me.update(cx, |c, _| c.overlays.ink.hitbox = Some(hitbox));
+            },
+        )
+        .absolute()
+        .size_full()
+        .into_any_element()
+    }
+
     /// INKUI-025, INKUI-026: lines in stored order, the live stroke, the
     /// selection outline, then labels and the label being typed; above every
     /// card, under the open archive panel.
@@ -77,7 +103,6 @@ impl BoardCanvas {
                 .and_then(|id| shown.iter().find(|s| &s.id == id))
                 .map(|s| (stroke_box(s, &measure), s.size))
         };
-        let tool = ink.tool;
         let vp = self.viewport;
         let z = vp.zoom;
 
@@ -94,18 +119,9 @@ impl BoardCanvas {
             })
             .collect();
         let accent = t.accent;
-        let me = cx.entity();
         let layer = canvas(
-            move |bounds, window, _| window.insert_hitbox(bounds, HitboxBehavior::Normal),
-            move |bounds, hitbox, window, cx| {
-                me.update(cx, |c, _| c.overlays.ink.hitbox = Some(hitbox.clone()));
-                // INKUI-017: the tool's cursor wins over the cards' own.
-                match tool {
-                    InkTool::Pen | InkTool::Arrow => window.set_cursor_style(CursorStyle::Crosshair, &hitbox),
-                    InkTool::Text => window.set_cursor_style(CursorStyle::IBeam, &hitbox),
-                    InkTool::Eraser => window.set_cursor_style(CursorStyle::Crosshair, &hitbox),
-                    InkTool::Select => {}
-                }
+            |_, _, _| {},
+            move |bounds, _, window, _| {
                 let at = |p: Pt| {
                     point(
                         bounds.origin.x + px((vp.x + p[0] * z) as f32),

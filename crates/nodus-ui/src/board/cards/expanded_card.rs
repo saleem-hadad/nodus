@@ -471,8 +471,11 @@ fn tools(
         group = group.child(agent_deck::trigger(b, handles));
     }
     if !shell {
-        // XCARD-010: the mic is voice's (05); without it, its idle look.
-        let mic = env.terminals.as_ref().and_then(|h| h.mic(&id, z.0, window, cx));
+        // XCARD-010: the mic is voice's (05); without a host, its idle look.
+        let mic = env
+            .terminals
+            .as_ref()
+            .and_then(|h| h.mic(&id, card.live, z.0, window, cx));
         group = group.child(match mic {
             Some(el) => el,
             None => {

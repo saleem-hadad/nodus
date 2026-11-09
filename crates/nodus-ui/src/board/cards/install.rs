@@ -211,7 +211,10 @@ pub fn env(board: &BoardCx, zoom: f32, window: &Window, cx: &mut App) -> Rc<Boar
         terminal_modal: state.and_then(|s| s.terminal_session_id.clone()),
         platform: Platform::CURRENT,
         actions: Rc::new(CanvasActions(board.actions.clone())),
-        terminals: Some(Rc::new(card_terminals(&board.project_id, zoom, cx))),
+        terminals: Some(Rc::new(CardHost {
+            terminals: card_terminals(&board.project_id, zoom, cx),
+            project_id: board.project_id.to_string(),
+        })),
     })
 }
 
@@ -225,15 +228,21 @@ fn card_terminals(project_id: &str, zoom: f32, cx: &mut App) -> CardTerminals {
     }))
 }
 
-impl TerminalHost for CardTerminals {
+/// The expanded cards' terminals and mics on one board.
+struct CardHost {
+    terminals: CardTerminals,
+    project_id: String,
+}
+
+impl TerminalHost for CardHost {
     fn needs_open(&self, session_id: &str) -> bool {
-        CardTerminals::needs_open(self, session_id)
+        self.terminals.needs_open(session_id)
     }
     fn set_enabled(&self, session_id: &str, kind_terminal: bool, enabled: bool, cx: &mut App) {
-        CardTerminals::set_enabled(self, session_id, kind_terminal, enabled, cx);
+        self.terminals.set_enabled(session_id, kind_terminal, enabled, cx);
     }
     fn phase(&self, session_id: &str, cx: &App) -> Phase {
-        match CardTerminals::phase(self, session_id, cx) {
+        match self.terminals.phase(session_id, cx) {
             None => Phase::Idle,
             Some(p) => match p.phase {
                 TermPhase::Loading => Phase::Loading,
@@ -243,20 +252,33 @@ impl TerminalHost for CardTerminals {
         }
     }
     fn reattach(&self, session_id: &str, cx: &mut App) {
-        CardTerminals::reattach(self, session_id, cx);
+        self.terminals.reattach(session_id, cx);
     }
     fn focus(&self, session_id: &str, window: &mut Window, cx: &mut App) {
-        CardTerminals::focus(self, session_id, window, cx);
+        self.terminals.focus(session_id, window, cx);
     }
     fn type_in(&self, session_id: &str, text: &str, starting: bool, cx: &mut App) {
-        CardTerminals::type_in(self, session_id, text, starting, cx);
+        self.terminals.type_in(session_id, text, starting, cx);
     }
     fn element(&self, session_id: &str, window: &mut Window, cx: &mut App) -> Option<AnyElement> {
-        CardTerminals::element(self, session_id, window, cx)
+        self.terminals.element(session_id, window, cx)
     }
-    fn mic(&self, _: &str, _: f32, _: &mut Window, _: &mut App) -> Option<AnyElement> {
-        // The session mic is the voice UI's (spec 05).
-        None
+    fn mic(&self, session_id: &str, live: bool, scale: f32, window: &mut Window, cx: &mut App) -> Option<AnyElement> {
+        // XCARD-010 (TERM-102): `typeIn`, then the wake, as ExpandedCard.tsx.
+        let terminals = self.terminals.clone();
+        let id = session_id.to_owned();
+        let type_in: crate::voice::OnText = Rc::new(move |text: String, cx: &mut App| {
+            terminals.type_in(&id, &text, !live, cx);
+            super::expanded_card::wake_card_terminal(&id, cx);
+        });
+        Some(crate::voice::card_mic(
+            session_id,
+            &self.project_id,
+            scale,
+            type_in,
+            window,
+            cx,
+        ))
     }
 }
 

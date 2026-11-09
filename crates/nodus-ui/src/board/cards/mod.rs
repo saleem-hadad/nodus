@@ -467,8 +467,10 @@ pub trait TerminalHost {
     fn type_in(&self, session_id: &str, text: &str, starting: bool, cx: &mut App);
     /// The terminal element filling the card's body.
     fn element(&self, session_id: &str, window: &mut Window, cx: &mut App) -> Option<AnyElement>;
-    /// The mic button for the card's title bar (spec 05), if voice is wired.
-    fn mic(&self, session_id: &str, scale: f32, window: &mut Window, cx: &mut App) -> Option<AnyElement>;
+    /// The mic for the card's title bar (spec 05, XCARD-010): what's said is
+    /// typed at the prompt (`starting` while the session isn't `live`) and
+    /// the card wakes.
+    fn mic(&self, session_id: &str, live: bool, scale: f32, window: &mut Window, cx: &mut App) -> Option<AnyElement>;
 }
 
 /// What the board knows that its things draw from (the React contexts and

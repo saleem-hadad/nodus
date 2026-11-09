@@ -269,6 +269,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-09: All seven UI/packaging tracks stopped at a session limit with work committed (2–7 commits each); resumed after the reset. Disk at ~28 GB free with seven builds.
 - 2026-11-09: core phase 2 merged (6243e7c): git/actions/voice in the core; every core command runs on the core's tokio runtime whatever awaits it; the GUI opens after `launch()`, starts hosts through `Nodus host`, has live counts, Settings' voice and update rows, Quit and Stop Sessions; 1,092 tests.
 - 2026-11-09: core's first part merged (3cd11cf): the whole app runs headless in tests with a stand-in claude and the real Rust host; integration debts resolved; 1,088 tests. Weekly usage limit hit on one account; resumed on another.
 - 2026-11-09: parity-harness merged: `node migration/parity/capture-electron.mjs` regenerates the goldens from 0.9.4 with synthetic seeded data (see migration/parity/README.md). capture-panel restarted fresh after stalling with nothing committed.

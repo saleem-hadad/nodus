@@ -69,7 +69,7 @@ mkdir -p "$tools" "$root/dist"
 
 seven="${SEVEN_ZIP:-}"
 if [ -z "$seven" ]; then
-  for candidate in 7z 7zz 7za; do
+  for candidate in 7z 7zz 7za "/c/Program Files/7-Zip/7z.exe"; do
     command -v "$candidate" >/dev/null && seven="$candidate" && break
   done
 fi

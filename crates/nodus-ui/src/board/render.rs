@@ -786,6 +786,8 @@ impl Render for BoardCanvas {
         let ink_layer = self.render_ink_layer(window, cx);
         let ink_hitbox = self.render_ink_hitbox(cx);
         let ink_dock = self.render_ink_dock(window, cx);
+        // Spec 04: views' webviews kept in step, their large window and the New view dialog.
+        let views_layer = crate::views::board_layer(self, window, cx);
 
         div()
             .id("board-canvas")
@@ -831,6 +833,7 @@ impl Render for BoardCanvas {
             .children(search)
             .children(merge)
             .children(confirm)
+            .children(views_layer)
             .into_any_element()
     }
 }

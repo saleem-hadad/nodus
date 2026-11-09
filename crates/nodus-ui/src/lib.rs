@@ -26,6 +26,7 @@ pub mod shell;
 pub mod state;
 pub mod terminal;
 pub mod theme;
+pub mod views;
 pub mod voice;
 
 pub use app::run;

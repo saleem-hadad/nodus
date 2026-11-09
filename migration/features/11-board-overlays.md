@@ -720,7 +720,7 @@ Risks:
 - [x] INKUI-015 Pointer tool select/move (3px), clears card selection, pass-through
 - [ ] INKUI-016 Move cursor on hover over ink
 - [ ] INKUI-017 Tool cursors incl. eraser circle
-- [ ] INKUI-018 Views ignore pointer while a tool is out
+- [x] INKUI-018 Views ignore pointer while a tool is out
 - [x] INKUI-019 No new session on double-click while drawing / on a line
 - [x] INKUI-020 Space held → ink ignores presses
 - [x] INKUI-021 Undo/redo, 100 entries, per board, guards

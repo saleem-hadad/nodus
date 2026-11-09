@@ -19,7 +19,7 @@ use tokio::sync::oneshot;
 use super::edges::{self, Edge};
 use super::fuzzy::fuzzy_match;
 use super::layout::{self, card_title, stack_rank, stack_zone};
-use super::nodes::{ArchiveStack, BoardActions, BoardCx};
+use super::nodes::{ArchiveStack, BoardActions, BoardCx, BoardPointer};
 use super::scene::{self, BuildInput, FlowNode, NodeKind, StackView};
 use super::viewport::{self, Flight as VpFlight};
 use crate::components::context_menu::{Menu, MenuItem, MenuLayer};
@@ -1060,6 +1060,14 @@ impl BoardCanvas {
                 canvas: cx.entity().downgrade(),
                 title_pressed: self.title_pressed.clone(),
             },
+            pointer: BoardPointer {
+                dragging: matches!(self.gesture, Gesture::Drag(_)) || self.section_drag.is_some(),
+                marquee: self.marquee_rect(),
+                selection_rect: self.selection_rect,
+                moving: self.moving
+                    || self.anim.is_some()
+                    || matches!(self.gesture, Gesture::Pan { .. } | Gesture::MinimapPan { .. }),
+            },
         }
     }
 
@@ -1126,6 +1134,29 @@ impl BoardCanvas {
 
     pub fn patch_view(&mut self, patch: ViewPatch, cx: &mut Context<'_, Self>) {
         self.state.update(cx, |s, cx| s.patch_view(patch, cx));
+    }
+
+    /// A click inside a node that its contents took (a view's tools and
+    /// buttons): React Flow's `handleNodeClick` still selected the node, or
+    /// with a multi-select key toggled it.
+    pub fn click_select(&mut self, id: &str, multi: bool, cx: &mut Context<'_, Self>) {
+        self.selection_rect = false;
+        let Some(selected) = self.node(id).filter(|n| n.selectable).map(|n| n.selected) else {
+            return;
+        };
+        if !selected {
+            for n in &mut self.nodes {
+                if n.id == id {
+                    n.selected = true;
+                } else if !multi {
+                    n.selected = false;
+                }
+            }
+        } else if multi && let Some(n) = self.node_mut(id) {
+            n.selected = false;
+        }
+        self.sync_selection(cx);
+        cx.notify();
     }
 
     /// A node's live box while it's resized.

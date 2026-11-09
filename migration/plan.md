@@ -137,14 +137,14 @@ One file per domain in `migration/features/`. Each lists every behavior with an 
 | 01-platform-shell.md | app lifecycle, menu, env, store, settings, preload/IPC plumbing | ✅ 141 | 83/141 |
 | 02-session-host-status.md | host, host protocol, pty client, hooks status machine, agents, usage, notifications | ✅ 225 | 222/225 |
 | 03-sessions-transcripts.md | session create/open/send/kill, claude args, discovery, board merge, search, summarize, naming, geometry | ✅ 205 | 205/205 |
-| 04-board-tools-views.md | board tools MCP, notes placement, views (main + renderer), view page, ink storage | ✅ 222 | 168/222 |
+| 04-board-tools-views.md | board tools MCP, notes placement, views (main + renderer), view page, ink storage | ✅ 222 | 222/222 |
 | 05-actions-voice-git.md | actions rail, voice prompts, git status/diff/log and their UI | ✅ 183 | 181/183 |
 | 06-updater-release.md | updater, packaging, signing, CI, release, smoke test, 0.9.4 → Rust handoff | ✅ 132 | 99/132 |
 | 07-capture.md | floating capture: panel window, double tap, screen context, guess, submit | ✅ 177 | 176/177 |
 | 08-projects-shell-ui.md | App, title bar, settings, projects grid, project rail, tokens and global styles, menus, modals | ✅ 305 | 270/305 |
-| 09-board-canvas.md | BoardView: pan/zoom, selection, drag, shortcuts, context menus, sections, archive, layout, edges | ✅ 177 | 170/177 |
+| 09-board-canvas.md | BoardView: pan/zoom, selection, drag, shortcuts, context menus, sections, archive, layout, edges | ✅ 177 | 176/177 |
 | 10-board-cards-notes.md | session cards, expanded cards, agent deck, archive stack, notes and the pad | ✅ 203 | 203/203 |
-| 11-board-overlays.md | prompt bar (sidekick), ⌘K search, merge dialog, ink layer, selection bar | ✅ 111 | 107/111 |
+| 11-board-overlays.md | prompt bar (sidekick), ⌘K search, merge dialog, ink layer, selection bar | ✅ 111 | 108/111 |
 | 12-terminal-ui.md | terminal registry, modal, transcript preview, agent viewer, xterm behavior | ✅ 185 | 181/185 |
 
 ## Phases
@@ -162,7 +162,7 @@ Tracks after P1 run in parallel where the dependency column allows.
 | P6 | Board canvas: pan/zoom/select/drag, cards, sections, archive, notes, edges, controls, context menus, shortcuts | P4, P5 | ✅ merged (canvas + cards) |
 | P7 | Terminal: element, modal, expanded cards, transcript preview, agent viewer | P2, P5 | ✅ merged; expanded cards plug in through `terminal::card::CardTerminals` |
 | P8 | Overlays: prompt bar, ⌘K search, merge dialog, ink, selection bar, agent deck | P6 | ✅ merged |
-| P9 | Views (wry), board tools, actions, voice, git UI | P6 | ☐ |
+| P9 | Views (wry), board tools, actions, voice, git UI | P6 | ✅ merged (Windows WebView2 unverified) |
 | P10 | Capture panel, notifications, Dock badge, updater | P6 | ✅ merged (notifications and the Dock badge need the packaged app to see) |
 | P11 | Packaging: .app and DMGs (same bundle id, Info.plist keys, entitlements, signing, notarizing), Windows NSIS (same flags), release workflow; 0.9.4 → Rust update test | P10 | 🟡 merged; waits on Windows CI, the real certificate, and the UI tracks |
 | P12 | Parity audit (every checklist item, screenshots light and dark), then cutover: delete Electron, update README and docs, release | P11 | 🟡 audit-shell started (specs 01–08) |
@@ -180,12 +180,13 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | parity-harness | `rust/parity-harness` | golden screenshots of 0.9.4 (`migration/parity/`) | ✅ merged: harness, seed and scene list; ~98 scenes × 2 themes captured locally (gitignored) |
 | gpui-fork | `rust/gpui-fork` | `third_party/gpui/`: backdrop blur, transforms, group opacity, frame capture (D13) | ✅ merged: Metal + wgpu verified at 60 fps; DirectX 11 HLSL unverified (CI step `continue-on-error` until green) |
 | ui-shell | `rust/ui-shell` | nodus-core skeleton (P4a); nodus-ui theme, controls, title bar, menus, settings, projects grid, rail (P5); test driver (D11) | ✅ merged: UI 243, PLAT 64; shell scenes within 0.03–0.3% of the goldens; board route, live counts and Settings rows on other APIs deferred |
-| views-ui | `rust/views-ui` | P9, spec 04 UI: view cards, wry webviews with the snapshot swap, the page relay, New view / change dialogs, BOARD-129/130 | 🟡 running |
+| views-ui | `rust/views-ui` | P9, spec 04 UI: view cards, wry webviews with the snapshot swap, the page relay, New view / change dialogs, BOARD-129/130 | ✅ merged (75672a9): all 54 UI VIEW + BOARD-129/130 + INKUI-018 on macOS; scenes 0.08–0.56% off the goldens; WebView2 unverified |
 | views-tools | `rust/views-tools` | nodus-views, nodus-tools, nodus-board notes and ink | ✅ merged: NOTE 16, INK 12, TOOL 40 (004…013/015 by host), VIEW 100; 54 VIEW UI-only to the UI tracks |
 | actions-voice-git | `rust/actions-voice-git` | nodus-actions, nodus-voice (incl. the recorder), nodus-git | ✅ merged: 97 (GIT 28, ACT 37, VOICE 32); recorder is Core Audio voice processing + Opus/WebM like MediaRecorder |
 | capture | `rust/capture` | nodus-capture backend: double tap, key hook, screen context, guess, submit | ✅ merged: 98 CAP; panel UI and page wiring to the capture-panel track |
 | core | `rust/core` | P4: wire every merged domain into nodus-core (sessions, board, views, updates, events, startup/quit), deferred core IDs, debts, headless end-to-end tests | ✅ merged (6243e7c): every domain composed; git/actions/voice wired; the windowed app launches, runs sessions through `Nodus host` and quits through the core |
 | audit-shell | `rust/audit-shell` | P12 slice: resolve every unticked ID in specs 01–03, 05–08 (tick with evidence, implement, or defer with a reason); selectable static text; action-name paste; test driver on Windows named pipes; Windows chrome (☰ menu, caption buttons, single instance) | 🟡 running |
+| views-polish | `rust/views-polish` | ink over live view pages, tooltips as coverage, overlay timing, New view dialog wrap + grip, one git status source, `render_to_image` blank-menu bug | 🟡 running |
 | cross-wiring | `rust/cross-wiring` | BOARD-037 (transcript preview at the search match), MODAL-028…031 (session windows closing with their card, run or view; shortcuts and ⌘K while one is open) | 🟡 running |
 | gpui-polish | `rust/gpui-polish` | GPUI/UI gaps: custom cursors (ink move, eraser circle), spellcheck underline + suggestions, rounded search highlights and underline offset, Chromium-style tooltips, shadows outside see-through boxes | 🟡 running |
 | overlays | `rust/overlays` | P8, spec 11: prompt bar, ⌘K search, merge dialog, ink layer, selection bar, on the board's `board/bar.rs` hooks | ✅ merged (f4467cd): 107 of 111 + 19 board hooks; BAR-005 (spellcheck underline), INKUI-016/017 (cursors) to gpui-polish, INKUI-018 to views-ui; overlay regions 0–1.6% off the goldens |
@@ -222,6 +223,7 @@ Follow-ups a merge left for when the tracks meet in `nodus-core` (P4). Strike th
 - Thumbnails of copied images are encoded differently from Chromium's, so an image 0.9.4 already offered is offered once more after the upgrade; a non-ASCII host shows as written on a tab tile, where 0.9.4 shows punycode.
 - Changed files sort with root collation; 0.9.4 used ICU `localeCompare` in the user's locale.
 - ~~Keep one global for the core's runtime~~ (done in f2f5747). ~~Keep one wheel arbiter~~ (board-cards: one arbiter, the terminals' wheel gate).
+- **Views (from views-ui):** ink strokes over a view hide under its live page while no ink tool is out (0.9.4 always drew ink on top); another element's tooltip over a live page is hidden; the New view box's placeholder doesn't wrap and it has no resize grip; a menu or overlay over a live page appears a frame or two late; `render_to_image` sometimes leaves a menu's contents blank when view snapshots are in the frame (GPUI fork, test-only); views poll `git status` every 4 s themselves until they use the git UI's model. Windows: WebView2 never run; no snapshots, rounded clipping, clip to board or pass-through there yet.
 - **Text selection (UX):** text outside fields can't be selected in GPUI (the Changes window's paths and lines, dialog error text), where 0.9.4 let users select and copy it. Needs selectable static text before cutover.
 - **Paste into an action's name:** a paste over 40 characters is refused whole; 0.9.4 kept the first 40. Match it.
 - The scene runner needs Node 22+ (`migration/parity` seed); under Node 20 the stand-in claude exits at once.
@@ -281,6 +283,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-10: views-ui merged (75672a9): views on the board in WKWebView with the snapshot swap, scaled by a CSS transform as 0.9.4 did, the relay, dialogs; 1,264+ tests. views-polish next.
 - 2026-11-10: overlays merged (f4467cd): prompt bar with the shared mic, ⌘K search, merge dialog, ink layer and dock, selection bar; the ink colour kept via the core's local-storage store; 1,252 tests. gpui-polish started.
 - 2026-11-10: board-cards merged: every card, expanded card, agent deck, archive and note behavior; real terminals and mics in expanded cards; one wheel arbiter; a crash fixed (nodes reading the canvas while it drew); 1,227+ tests.
 - 2026-11-10: actions-git-voice-ui merged (1e9d618): the actions rail and dialog, the branch chip and Changes window, the shared mic and recording look; 1,191+ tests.

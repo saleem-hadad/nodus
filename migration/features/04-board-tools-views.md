@@ -1516,10 +1516,10 @@ One line per behavior ID, in the order above. Tick only when the Rust build matc
 - [x] VIEW-024 scriptJson(value) = JSON.stringify(value) ?? 'null' with every < replaced by <, U+2028 by  , U+2029 by   (the six-character escapes)
 - [x] VIEW-025 The CSP (VIEW_CSP, verbatim in Data & formats) allows inline scripts and styles only, images/media from data:/blob:, fonts from data:, and nothing else: no network, no…
 - [x] VIEW-026 The injected theme (Data & formats) defines --nodus-* colours for light and, under prefers-color-scheme: dark, dark
-- [ ] VIEW-027 A view's page shows in a frame with sandbox="allow-scripts"…
-- [ ] VIEW-028 A frame may only navigate to a nodus-view:// URL, and once it shows a view page, only to that same view id
-- [ ] VIEW-029 Each mounted frame registers with the relay under its window: {projectId, viewId, version}
-- [ ] VIEW-030 The card renders its frame only when version > 0 and a board project is open
+- [x] VIEW-027 A view's page shows in a frame with sandbox="allow-scripts"…
+- [x] VIEW-028 A frame may only navigate to a nodus-view:// URL, and once it shows a view page, only to that same view id
+- [x] VIEW-029 Each mounted frame registers with the relay under its window: {projectId, viewId, version}
+- [x] VIEW-030 The card renders its frame only when version > 0 and a board project is open
 - [x] VIEW-031 window.nodus has viewId, title, canStartSessions (Boolean(boot.startsSessions)), data, state, results (an object, boot.results || {}), and methods on, setState, run…
 - [x] VIEW-032 A call posts {id: ++seq, method, args: args || {}, nodus: 1} to parent with target origin '*' (seq starts at 0 so the first id is 1) and returns a Promise
 - [x] VIEW-033 Incoming messages are accepted only when e.source === parent and e.data.nodus === 1; a message with a truthy id is a reply (VIEW-032) and nothing else
@@ -1533,22 +1533,22 @@ One line per behavior ID, in the order above. Tick only when the Rust build matc
 - [x] VIEW-041 Wheel routing (listener on window, non-passive): ignored if defaultPrevented or both deltas are 0. A ctrlKey wheel (pinch) always goes to the board
 - [x] VIEW-042 scrolls(el, dx, dy): walks from the target up to (not including) <html>, element nodes only: an element scrolls when its computed overflowY (for dy) / overflowX (for dx)…
 - [x] VIEW-043 A wheel that goes to the board is preventDefault()ed in the page and posted as {wheel: {dx, dy, mode, x, y, ctrl, shift, alt, meta}, nodus…
-- [ ] VIEW-044 The board knows which view a message is from only by the frame window that sent it
-- [ ] VIEW-045 {error: string} → views.report(projectId, viewId, {error}) (fire-and-forget; main ignores reports for views that have gone)
-- [ ] VIEW-046 {loaded: truthy} → views.report(projectId, viewId, {loaded: <the version the frame was registered with>})
-- [ ] VIEW-047 {wheel: object} → replayed on the frame element as a synthetic, bubbling, cancelable wheel event: deltas/mode from the message (non-finite → 0), clientX = frameRect.left…
-- [ ] VIEW-048 A request needs a numeric id and a string method, else ignored
-- [ ] VIEW-049 openSession: args.id must be a string, else nodus.openSession needs a session id
-- [ ] VIEW-050 startSession, in order: prompt (string, trimmed) empty → nodus.startSession needs a prompt
-- [ ] VIEW-051 *Activated* = at the moment the request arrives, the board document's focused element is this frame AND the board window has transient user…
-- [ ] VIEW-052 Every other method goes to main as views.call(projectId, viewId, method, args) (VIEW-060–VIEW-071)
-- [ ] VIEW-053 Error text returned to pages, dialogs and the card is the message with any leading Error invoking remote method '<channel>':  and an optional following Error: …
-- [ ] VIEW-054 Main's ev:view(projectId, viewId, event, payload) is posted as {nodus: 1, event, payload} to every frame showing that view
-- [ ] VIEW-055 The board posts {event: 'board'} to all frames 300 ms after its cards, notes or views last changed (trailing debounce; also once 300 ms after the board mounts), and…
-- [ ] VIEW-056 The view must have startsSessions
-- [ ] VIEW-057 At most one start per view every 3000 ms (VIEW_START_GAP_MS, in-memory per board): sooner → This view just started a session
-- [ ] VIEW-058 The new session is an expanded card (720 × 480) placed with findSpotBeside({x: view.x, y: view.y…
-- [ ] VIEW-059 Main stores fromView only for a Claude session whose fromView is an own property of that board's views
+- [x] VIEW-044 The board knows which view a message is from only by the frame window that sent it
+- [x] VIEW-045 {error: string} → views.report(projectId, viewId, {error}) (fire-and-forget; main ignores reports for views that have gone)
+- [x] VIEW-046 {loaded: truthy} → views.report(projectId, viewId, {loaded: <the version the frame was registered with>})
+- [x] VIEW-047 {wheel: object} → replayed on the frame element as a synthetic, bubbling, cancelable wheel event: deltas/mode from the message (non-finite → 0), clientX = frameRect.left…
+- [x] VIEW-048 A request needs a numeric id and a string method, else ignored
+- [x] VIEW-049 openSession: args.id must be a string, else nodus.openSession needs a session id
+- [x] VIEW-050 startSession, in order: prompt (string, trimmed) empty → nodus.startSession needs a prompt
+- [x] VIEW-051 *Activated* = at the moment the request arrives, the board document's focused element is this frame AND the board window has transient user…
+- [x] VIEW-052 Every other method goes to main as views.call(projectId, viewId, method, args) (VIEW-060–VIEW-071)
+- [x] VIEW-053 Error text returned to pages, dialogs and the card is the message with any leading Error invoking remote method '<channel>':  and an optional following Error: …
+- [x] VIEW-054 Main's ev:view(projectId, viewId, event, payload) is posted as {nodus: 1, event, payload} to every frame showing that view
+- [x] VIEW-055 The board posts {event: 'board'} to all frames 300 ms after its cards, notes or views last changed (trailing debounce; also once 300 ms after the board mounts), and…
+- [x] VIEW-056 The view must have startsSessions
+- [x] VIEW-057 At most one start per view every 3000 ms (VIEW_START_GAP_MS, in-memory per board): sooner → This view just started a session
+- [x] VIEW-058 The new session is an expanded card (720 × 480) placed with findSpotBeside({x: view.x, y: view.y…
+- [x] VIEW-059 Main stores fromView only for a Claude session whose fromView is an own property of that board's views
 - [x] VIEW-060 callView first resolves the view on that board (VIEW-016)
 - [x] VIEW-061 The page's rate-limit and other per-view state are keyed by view id
 - [x] VIEW-062 sessions → sessionList(project, null, false) (TOOL-035 shape: active cards, no brains)
@@ -1590,7 +1590,7 @@ One line per behavior ID, in the order above. Tick only when the Rust build matc
 - [x] VIEW-098 Any terminal input the user sends to a session (session:write) records "last input" for it only while it has an idle timer
 - [x] VIEW-099 A brain is not drawn on the board and isn't a card anywhere: it is filtered out of the board's cards, list_sessions, nodus.sessions(), ⌘K search, notifications, and…
 - [x] VIEW-100 views:create(projectId, {description, x, y}) waits for the login-shell env, checks the project exists (Unknown project <id>), then createView: description =…
-- [ ] VIEW-101 The board's create (dialog, context menu, title-bar menu): preferred top-left = {at.x − 240, at.y − 180} for "here" or the viewport centre for a 480 × 360 view
+- [x] VIEW-101 The board's create (dialog, context menu, title-bar menu): preferred top-left = {at.x − 240, at.y − 180} for "here" or the viewport centre for a 480 × 360 view
 - [x] VIEW-102 create_view checks, in order: title = clip(title, 80) empty → A view needs a title
 - [x] VIEW-103 create_view placement (placeView): preferred = right of the caller's active card (x + cardSize.w + 32, same y), else right of the rightmost active card, else {dock.x +…
 - [x] VIEW-104 Size from tools: clampViewSize({w: Number(width), h: Number(height)}): non-finite → undefined (default 480/360)
@@ -1611,36 +1611,36 @@ One line per behavior ID, in the order above. Tick only when the Rust build matc
 - [x] VIEW-119 views:report (fire-and-forget; any error, e.g. a view that has gone, is swallowed): a non-empty string error → appended as {message: error.slice(0, 2000), at: now}…
 - [x] VIEW-120 views:refresh, views:ask (origin user, prompt String(prompt ?? '')), views:brain wait for the login-shell env first
 - [x] VIEW-121 The "how a view works" guide (VIEW_GUIDE) is given to brains (in their system prompt) and to every session (in create_view's description)
-- [ ] VIEW-122 Board nodes: one per view, type: 'view', position (x, y), size viewSize(view) (480 × 360 default), zIndex: 0, dragHandle: '.view-head' (only the title bar drags)…
-- [ ] VIEW-123 While a view is being dragged/resized (or the board marks it busy) its node keeps the live position (and the live size while resizing) instead of the saved one
-- [ ] VIEW-124 The card's brain status = the brain card's status when its process is live, else done
-- [ ] VIEW-125 Title bar left: when working or waiting, a small status dot (data-status = status) with tooltip Claude is working on this view / Claude needs you to carry on with this…
-- [ ] VIEW-126 Title: the view's title (single line, ellipsis) with the description as tooltip
-- [ ] VIEW-127 Renaming: an input (placeholder View name, spellcheck off) with the current title, focused and all selected
-- [ ] VIEW-128 Tools, right-aligned, in order: ⟳ Refresh (only when the view has a refresh or at least one allowed command), ✎ Change view, ⌨ Open its session, ⤢ Open large, ⋯ More
-- [ ] VIEW-129 ⟳: tooltip Refresh: run its commands, and ask its brain for fresh data when the view has a refresh, else Refresh: run its commands
-- [ ] VIEW-130 ✎: tooltip Ask Claude to change this view, aria-label Change view, toggles the ask bar (aria-expanded)
-- [ ] VIEW-131 Ask bar: an input (placeholder Tell Claude what to change…, spellcheck off) focused on open without scrolling, and a primary Send…
-- [ ] VIEW-132 ⌨: tooltip Open its brain, the Claude session that builds this view, aria-label Open its session: views.brain then opens that session's terminal
-- [ ] VIEW-133 ⤢: tooltip/aria-label Open large, disabled while version === 0; opens the large modal (VIEW-147)
-- [ ] VIEW-134 ⋯: tooltip/aria-label More
-- [ ] VIEW-135 Approvals: for each waiting command, in command order: This view wants to run[ <every label>]: followed by the full command line in a code block, then Don’t allow…
-- [ ] VIEW-136 Every label (everyLabel(minutes)): not a whole number of hours → every minute (1) / every <n> minutes
-- [ ] VIEW-137 With version === 0, the body shows an empty state: working → spinning LoaderCircle (18 px), Claude is building this view…, ghost button Watch it work (opens the brain)
-- [ ] VIEW-138 Build it asks the brain Build this view
-- [ ] VIEW-139 The card error line (role="status") clears itself 6000 ms after it was last set
-- [ ] VIEW-140 A selected view (not renaming) shows resize handles
-- [ ] VIEW-141 While any node is being dragged, a selection rectangle exists, or this view is being resized, frames don't take the pointer, so drags and resizes pass over pages
-- [ ] VIEW-142 A page takes clicks, typing and scrolling on the first interaction: there is no "click to use" shield and clicking in the page doesn't select the…
-- [ ] VIEW-143 View menu (right-click on the view, or ⋯)…
-- [ ] VIEW-144 Deleting asks first (danger confirm): one view → title Delete view?, message “<title>” and its page go, and the Claude session that keeps it up to date stops
-- [ ] VIEW-145 Removing in the board: the view and its brain card leave the board state immediately
-- [ ] VIEW-146 patchView applies the patch's defined fields to the board state immediately and sends views.save (not awaited)
-- [ ] VIEW-147 Large modal: a modal over the board (view-modal) with a header (LayoutDashboard 15 px, the title as heading, a close button X 15 px with tooltip/aria-label Close) and a…
-- [ ] VIEW-148 Dragging views: a view dropped onto the archive or the note pad bounces back to where its drag started
-- [ ] VIEW-149 Keyboard on the board: Backspace/Delete (no ⌘/Ctrl, no ⌥) with views selected → delete them, asking…
-- [ ] VIEW-150 A source handle on the card's right edge (1 × 1 px, invisible, not connectable) anchors the dashed lines to sessions the view started
-- [ ] VIEW-151 Opened from the board's context menu New view here… (LayoutDashboard, disabled over the archive; the view is placed around the clicked point) and from the New Session…
-- [ ] VIEW-152 Content: icon tile (LayoutDashboard 16 px, stroke 2.2), title New view, subtitle Say what it should show and where the data comes from
-- [ ] VIEW-153 Example chips (label → text), clicking fills the box with the text
-- [ ] VIEW-154 Create view (or ⌘Enter / Ctrl+Enter anywhere in the dialog) with a non-blank description: everything disables, Create view shows a spinning LoaderCircle (14 px) before…
+- [x] VIEW-122 Board nodes: one per view, type: 'view', position (x, y), size viewSize(view) (480 × 360 default), zIndex: 0, dragHandle: '.view-head' (only the title bar drags)…
+- [x] VIEW-123 While a view is being dragged/resized (or the board marks it busy) its node keeps the live position (and the live size while resizing) instead of the saved one
+- [x] VIEW-124 The card's brain status = the brain card's status when its process is live, else done
+- [x] VIEW-125 Title bar left: when working or waiting, a small status dot (data-status = status) with tooltip Claude is working on this view / Claude needs you to carry on with this…
+- [x] VIEW-126 Title: the view's title (single line, ellipsis) with the description as tooltip
+- [x] VIEW-127 Renaming: an input (placeholder View name, spellcheck off) with the current title, focused and all selected
+- [x] VIEW-128 Tools, right-aligned, in order: ⟳ Refresh (only when the view has a refresh or at least one allowed command), ✎ Change view, ⌨ Open its session, ⤢ Open large, ⋯ More
+- [x] VIEW-129 ⟳: tooltip Refresh: run its commands, and ask its brain for fresh data when the view has a refresh, else Refresh: run its commands
+- [x] VIEW-130 ✎: tooltip Ask Claude to change this view, aria-label Change view, toggles the ask bar (aria-expanded)
+- [x] VIEW-131 Ask bar: an input (placeholder Tell Claude what to change…, spellcheck off) focused on open without scrolling, and a primary Send…
+- [x] VIEW-132 ⌨: tooltip Open its brain, the Claude session that builds this view, aria-label Open its session: views.brain then opens that session's terminal
+- [x] VIEW-133 ⤢: tooltip/aria-label Open large, disabled while version === 0; opens the large modal (VIEW-147)
+- [x] VIEW-134 ⋯: tooltip/aria-label More
+- [x] VIEW-135 Approvals: for each waiting command, in command order: This view wants to run[ <every label>]: followed by the full command line in a code block, then Don’t allow…
+- [x] VIEW-136 Every label (everyLabel(minutes)): not a whole number of hours → every minute (1) / every <n> minutes
+- [x] VIEW-137 With version === 0, the body shows an empty state: working → spinning LoaderCircle (18 px), Claude is building this view…, ghost button Watch it work (opens the brain)
+- [x] VIEW-138 Build it asks the brain Build this view
+- [x] VIEW-139 The card error line (role="status") clears itself 6000 ms after it was last set
+- [x] VIEW-140 A selected view (not renaming) shows resize handles
+- [x] VIEW-141 While any node is being dragged, a selection rectangle exists, or this view is being resized, frames don't take the pointer, so drags and resizes pass over pages
+- [x] VIEW-142 A page takes clicks, typing and scrolling on the first interaction: there is no "click to use" shield and clicking in the page doesn't select the…
+- [x] VIEW-143 View menu (right-click on the view, or ⋯)…
+- [x] VIEW-144 Deleting asks first (danger confirm): one view → title Delete view?, message “<title>” and its page go, and the Claude session that keeps it up to date stops
+- [x] VIEW-145 Removing in the board: the view and its brain card leave the board state immediately
+- [x] VIEW-146 patchView applies the patch's defined fields to the board state immediately and sends views.save (not awaited)
+- [x] VIEW-147 Large modal: a modal over the board (view-modal) with a header (LayoutDashboard 15 px, the title as heading, a close button X 15 px with tooltip/aria-label Close) and a…
+- [x] VIEW-148 Dragging views: a view dropped onto the archive or the note pad bounces back to where its drag started
+- [x] VIEW-149 Keyboard on the board: Backspace/Delete (no ⌘/Ctrl, no ⌥) with views selected → delete them, asking…
+- [x] VIEW-150 A source handle on the card's right edge (1 × 1 px, invisible, not connectable) anchors the dashed lines to sessions the view started
+- [x] VIEW-151 Opened from the board's context menu New view here… (LayoutDashboard, disabled over the archive; the view is placed around the clicked point) and from the New Session…
+- [x] VIEW-152 Content: icon tile (LayoutDashboard 16 px, stroke 2.2), title New view, subtitle Say what it should show and where the data comes from
+- [x] VIEW-153 Example chips (label → text), clicking fills the box with the text
+- [x] VIEW-154 Create view (or ⌘Enter / Ctrl+Enter anywhere in the dialog) with a non-blank description: everything disables, Create view shows a spinning LoaderCircle (14 px) before…

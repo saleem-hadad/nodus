@@ -75,6 +75,8 @@ pub(crate) async fn on_core<T: Send + 'static>(
 pub fn init(cx: &mut App) {
     // board/cards/ installs its renderers here: `cards::install(cx)`.
     cards::install(cx);
+    // Views draw their own nodes, whichever renderers are installed (spec 04).
+    crate::views::install(cx);
     if cx.try_global::<nodes::Renderers>().is_none() {
         nodes::install(nodes::Placeholders, cx);
     }

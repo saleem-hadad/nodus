@@ -160,7 +160,7 @@ Tracks after P1 run in parallel where the dependency column allows.
 | P4 | `nodus-core`: every command and event in api.ts, tested headless | P2, P3 | 🟡 all but actions/voice/git/capture merged, tested headless |
 | P5 | UI foundation: app shell, theme tokens (light/dark), title bar, menus, settings, projects grid, project rail | P1, S1 | ✅ merged (ui-shell) |
 | P6 | Board canvas: pan/zoom/select/drag, cards, sections, archive, notes, edges, controls, context menus, shortcuts | P4, P5 | 🟡 board-canvas + board-cards running |
-| P7 | Terminal: element, modal, expanded cards, transcript preview, agent viewer | P2, P5 | ☐ |
+| P7 | Terminal: element, modal, expanded cards, transcript preview, agent viewer | P2, P5 | 🟡 model merged; terminal-ui running |
 | P8 | Overlays: prompt bar, ⌘K search, merge dialog, ink, selection bar, agent deck | P6 | ☐ |
 | P9 | Views (wry), board tools, actions, voice, git UI | P6 | ☐ |
 | P10 | Capture panel, notifications, Dock badge, updater | P6 | ☐ |
@@ -183,11 +183,12 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | views-tools | `rust/views-tools` | nodus-views, nodus-tools, nodus-board notes and ink | ✅ merged: NOTE 16, INK 12, TOOL 40 (004…013/015 by host), VIEW 100; 54 VIEW UI-only to the UI tracks |
 | actions-voice-git | `rust/actions-voice-git` | nodus-actions, nodus-voice (incl. the recorder), nodus-git | ✅ merged: 97 (GIT 28, ACT 37, VOICE 32); recorder is Core Audio voice processing + Opus/WebM like MediaRecorder |
 | capture | `rust/capture` | nodus-capture backend: double tap, key hook, screen context, guess, submit | ✅ merged: 98 CAP; panel UI and page wiring to the capture-panel track |
-| core | `rust/core` | P4: wire every merged domain into nodus-core (sessions, board, views, updates, events, startup/quit), deferred core IDs, debts, headless end-to-end tests | 🟡 first part merged (3cd11cf): composition, board/sessions/views/updates/menu APIs, debts, headless e2e; next: git/actions/voice wiring |
+| core | `rust/core` | P4: wire every merged domain into nodus-core (sessions, board, views, updates, events, startup/quit), deferred core IDs, debts, headless end-to-end tests | 🟡 first part merged (3cd11cf): composition, board/sessions/views/updates/menu APIs, debts, headless e2e; next: git/actions/voice wiring, then app wiring in nodus-ui (AppShell, launch, host, notifications, updater, Settings rows, live counts) |
 | gpui-text | `rust/gpui-text` | patched GPUI text parity with Chromium: sRGB tagging, no SF Pro tracking, hanging trailing spaces, Chromium's rounding; Windows effects CI step | 🟡 running |
 | board-canvas | `rust/board-canvas` | P6, spec 09: the board route and canvas (pan/zoom/select/drag, sections, edges, menus, shortcuts), node plug-in interface | 🟡 running |
 | board-cards | `rust/board-cards` | P6, spec 10: session cards, expanded card chrome, agent deck, archive stack, notes, pad (`nodus-ui/src/board/cards/`) | 🟡 running |
-| capture-panel | `rust/capture-panel` | P10, spec 07 UI: the panel window and page, Settings' capture rows, File › Capture…, `nodus.capture()` | 🟡 running |
+| capture-panel | `rust/capture-panel` | P10, spec 07 UI: the panel window and page, Settings' capture rows, File › Capture…, `nodus.capture()` | 🟡 running (restarted fresh) |
+| terminal-ui | `rust/terminal-ui` | P7, spec 12 UI: the GPUI terminal element, session window, transcript preview, agents viewer | 🟡 running |
 | terminal | `rust/terminal` | nodus-terminal (GPUI-free): alacritty model, xterm key encoder, query answers, widths, registry | ✅ merged: 83 TERM; 26 drawing/focus/timing TERM + MODAL/TRANS/AGV to the terminal UI track |
 
 ### Integration debts

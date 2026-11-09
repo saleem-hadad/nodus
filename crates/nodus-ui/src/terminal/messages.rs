@@ -238,8 +238,6 @@ pub fn message(p: &MessageProps<'_>, cx: &App) -> AnyElement {
                         ))
                     })
                     .cursor_text()
-                    // `.tp-msg mark { border-radius: 3px }`
-                    .inline_background_radius(px(3.))
                     .child(selectable_highlighted((p.id.clone(), "text"), &text, &ranges, cx)),
             )
             .when(long, |d| {
@@ -286,7 +284,6 @@ pub fn message(p: &MessageProps<'_>, cx: &App) -> AnyElement {
                     .min_w_0()
                     .text_color(t.text_secondary)
                     .cursor_text()
-                    .inline_background_radius(px(3.))
                     .child(selectable_highlighted((p.id.clone(), "found"), &s.text, &s.ranges, cx)),
             )
     });

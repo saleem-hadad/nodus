@@ -805,8 +805,6 @@ fn diff_line(
                 .pr(px(16.))
                 .text_color(text_color)
                 .when(line.kind == DiffLineKind::Note, Styled::italic)
-                // `.diff-word { border-radius: 2px }`
-                .inline_background_radius(px(2.))
                 .child(styled),
         );
     div()

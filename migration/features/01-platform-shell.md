@@ -912,31 +912,31 @@ Risks and unknowns:
 
 ## Parity checklist
 
-- [ ] PLAT-001 App name `Nodus` in OS and menus
+- [x] PLAT-001 App name `Nodus` in OS and menus
 - [x] PLAT-002 Windows AUMID `dev.saleem.nodus` at start
 - [x] PLAT-003 Default userData folder per OS
 - [x] PLAT-004 `NODUS_USER_DATA` override (non-empty, raw)
 - [ ] PLAT-005 userData string byte-identical to 0.9.4
-- [ ] PLAT-006 No single-instance lock on macOS
+- [x] PLAT-006 No single-instance lock on macOS
 - [ ] PLAT-007 Windows lock; second launch exits 0
 - [ ] PLAT-008 Second launch shows the first's window when ready
 - [ ] PLAT-009 `nodus-view` registered standard+secure
 - [x] PLAT-010 Startup order (13 steps)
 - [x] PLAT-011 Window waits for host connect to settle
-- [ ] PLAT-012 Env capture non-blocking; ⏳env commands wait
-- [ ] PLAT-013 All commands registered before the window
+- [x] PLAT-012 Env capture non-blocking; ⏳env commands wait
+- [x] PLAT-013 All commands registered before the window
 - [x] PLAT-014 Window 1440×920, min 960×620, centered, title `Nodus`
 - [x] PLAT-015 No window bounds persistence
 - [x] PLAT-016 Hidden until first frame
 - [x] PLAT-017 macOS hiddenInset, traffic lights (18,18)
 - [ ] PLAT-018 Windows caption overlay h52 + colors
 - [x] PLAT-019 Window background `#1e1e20` / `#f5f5f4`
-- [ ] PLAT-020 No vibrancy/transparency
+- [x] PLAT-020 No vibrancy/transparency
 - [x] PLAT-021 Live theme change updates background/overlay
 - [x] PLAT-022 Single main window; events dropped without it
 - [x] PLAT-023 showWindow: create / restore / show+focus
-- [ ] PLAT-024 New-window requests: http(s) → browser, else ignored
-- [ ] PLAT-025 Main window never navigates away; http(s) → browser
+- [x] PLAT-024 New-window requests: http(s) → browser, else ignored
+- [x] PLAT-025 Main window never navigates away; http(s) → browser
 - [ ] PLAT-026 View frames only load their own `nodus-view://<id>`
 - [ ] PLAT-027 Bridge never exposed to view frames
 - [x] PLAT-028 Theme source system/light/dark everywhere
@@ -944,7 +944,7 @@ Risks and unknowns:
 - [x] PLAT-030 macOS activate recreates window only with zero windows (panel quirk)
 - [ ] PLAT-031 Windows quits on all windows closed (panel quirk)
 - [x] PLAT-032 shutdown() order on before-quit
-- [ ] PLAT-033 Quitting leaves sessions running
+- [x] PLAT-033 Quitting leaves sessions running
 - [x] PLAT-034 Quit and Stop Sessions: shutdown host, ≤5000 ms, then quit
 - [ ] PLAT-035 Windows logoff skips shutdown()
 - [x] PLAT-036 Menu commands dropped with no window; others still work
@@ -965,9 +965,9 @@ Risks and unknowns:
 - [x] PLAT-051 Report a Bug… URL
 - [x] PLAT-052 Focus Mode item visibility/enabled/tick/click
 - [x] PLAT-053 Focus menu re-sync on applySettings
-- [ ] PLAT-054 Quit/Exit behavior
+- [x] PLAT-054 Quit/Exit behavior
 - [x] PLAT-055 Off-Mac shown-not-registered accelerators
-- [ ] PLAT-056 Edit roles act on focused field/terminal
+- [x] PLAT-056 Edit roles act on focused field/terminal
 - [ ] PLAT-057 Reload/DevTools/zoom/full screen semantics (decision)
 - [x] PLAT-058 About panel (macOS) / message box (Windows)
 - [x] PLAT-059 Native Hide/Show All/Services/Minimize/Zoom/Front
@@ -994,37 +994,37 @@ Risks and unknowns:
 - [x] PLAT-080 groups:create default `New Group`
 - [x] PLAT-081 groups:update
 - [x] PLAT-082 groups:remove ungroups projects
-- [ ] PLAT-083 Single state.json, full rewrite
-- [ ] PLAT-084 Old-app state migration (voiceKey dropped)
-- [ ] PLAT-085 Load: per-field acceptance + key order
-- [ ] PLAT-086 Corrupt/missing → defaults, overwritten later
-- [ ] PLAT-087 Nested records kept verbatim (unknown fields)
-- [ ] PLAT-088 Unknown top-level keys dropped
-- [ ] PLAT-089 No per-entry validation at load
-- [ ] PLAT-090 getProject/getGroup error texts
-- [ ] PLAT-091 getBoard lazy default + backfill without save
-- [ ] PLAT-092 projectIdForView/Session lookup
-- [ ] PLAT-093 300 ms debounced save; error logged
-- [ ] PLAT-094 Atomic write via `.<pid>.tmp` + rename, 2-space JSON
-- [ ] PLAT-095 flush only when pending
-- [ ] PLAT-096 Initial env; Windows PATH fold
+- [x] PLAT-083 Single state.json, full rewrite
+- [x] PLAT-084 Old-app state migration (voiceKey dropped)
+- [x] PLAT-085 Load: per-field acceptance + key order
+- [x] PLAT-086 Corrupt/missing → defaults, overwritten later
+- [x] PLAT-087 Nested records kept verbatim (unknown fields)
+- [x] PLAT-088 Unknown top-level keys dropped
+- [x] PLAT-089 No per-entry validation at load
+- [x] PLAT-090 getProject/getGroup error texts
+- [x] PLAT-091 getBoard lazy default + backfill without save
+- [x] PLAT-092 projectIdForView/Session lookup
+- [x] PLAT-093 300 ms debounced save; error logged
+- [x] PLAT-094 Atomic write via `.<pid>.tmp` + rename, 2-space JSON
+- [x] PLAT-095 flush only when pending
+- [x] PLAT-096 Initial env; Windows PATH fold
 - [x] PLAT-097 macOS login-shell capture + parse
-- [ ] PLAT-098 Windows: no capture
-- [ ] PLAT-099 Merge captured over process env
-- [ ] PLAT-100 Fallback PATH dirs appended
-- [ ] PLAT-101 findOnPath order + checks
-- [ ] PLAT-102 macOS claude lookup
-- [ ] PLAT-103 Windows claude.exe / .cmd shim lookup
-- [ ] PLAT-104 exeBehindShim regex
+- [x] PLAT-098 Windows: no capture
+- [x] PLAT-099 Merge captured over process env
+- [x] PLAT-100 Fallback PATH dirs appended
+- [x] PLAT-101 findOnPath order + checks
+- [x] PLAT-102 macOS claude lookup
+- [x] PLAT-103 Windows claude.exe / .cmd shim lookup
+- [x] PLAT-104 exeBehindShim regex
 - [x] PLAT-105 claude --version read
-- [ ] PLAT-106 Lookup once per launch
-- [ ] PLAT-107 spawnEnv strip + TERM/COLORTERM/LANG + extra
-- [ ] PLAT-108 envVar unstripped
-- [ ] PLAT-109 userShell
-- [ ] PLAT-110 terminalShell args
-- [ ] PLAT-111 shellCommand args
-- [ ] PLAT-112 requireClaude messages
-- [ ] PLAT-113 gitBash lookup + memo
+- [x] PLAT-106 Lookup once per launch
+- [x] PLAT-107 spawnEnv strip + TERM/COLORTERM/LANG + extra
+- [x] PLAT-108 envVar unstripped
+- [x] PLAT-109 userShell
+- [x] PLAT-110 terminalShell args
+- [x] PLAT-111 shellCommand args
+- [x] PLAT-112 requireClaude messages
+- [x] PLAT-113 gitBash lookup + memo
 - [x] PLAT-114 app:info contract
 - [x] PLAT-115 voiceKey = base64 safeStorage blob
 - [x] PLAT-116 macOS v10 AES-128-CBC/PBKDF2 format
@@ -1040,16 +1040,16 @@ Risks and unknowns:
 - [x] PLAT-126 pathForFile / dropped paths
 - [x] PLAT-127 Subscriptions + unsubscribe, multi-listener
 - [x] PLAT-128 ⏳env commands wait; failure still resolves
-- [ ] PLAT-129 Structured-clone argument semantics
+- [x] PLAT-129 Structured-clone argument semantics
 - [x] PLAT-130 isMac / platform value
 - [x] PLAT-131 modKey / otherModKey
 - [x] PLAT-132 shortcutKey layout handling
 - [x] PLAT-133 keys() label conversion
 - [x] PLAT-134 data-platform root attribute
-- [ ] PLAT-135 `#capture` page routing
+- [x] PLAT-135 `#capture` page routing
 - [ ] PLAT-136 CSP: frames only nodus-view
 - [ ] PLAT-137 Spellcheck underlines in opted-in fields
-- [ ] PLAT-138 No native right-click menu in fields
+- [x] PLAT-138 No native right-click menu in fields
 - [ ] PLAT-139 Persisted page zoom (migrate from Preferences)
-- [ ] PLAT-140 localStorage keys (migrate or accept loss)
-- [ ] PLAT-141 Leave Chromium files; keep Local State/Preferences/Local Storage
+- [x] PLAT-140 localStorage keys (migrate or accept loss)
+- [x] PLAT-141 Leave Chromium files; keep Local State/Preferences/Local Storage

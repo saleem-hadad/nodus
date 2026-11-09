@@ -899,9 +899,9 @@ Risks:
 - [x] HOST-126 Board tools requests
 - [x] HOST-127 Sends while disconnected
 - [x] HOST-128 Live list
-- [ ] HOST-129 Claude command (shared with 03)
-- [ ] HOST-130 Claude environment
-- [ ] HOST-131 Terminal command
+- [x] HOST-129 Claude command (shared with 03)
+- [x] HOST-130 Claude environment
+- [x] HOST-131 Terminal command
 - [x] HOST-132 Three statuses
 - [x] HOST-133 Combined status
 - [x] HOST-134 Only changes

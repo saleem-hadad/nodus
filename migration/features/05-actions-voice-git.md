@@ -728,7 +728,7 @@ Risks:
 - [x] ACT-013 Global list command
 - [x] ACT-014 Save command
 - [x] ACT-015 Remove command
-- [ ] ACT-016 Draft command
+- [x] ACT-016 Draft command
 - [x] ACT-017 Renderer list update
 - [x] ACT-018 Global list loading
 - [x] ACT-019 Empty description
@@ -814,7 +814,7 @@ Risks:
 - [x] VOICE-016 Response body
 - [x] VOICE-017 HTTP error
 - [x] VOICE-018 Success
-- [ ] VOICE-019 Transcribe command
+- [x] VOICE-019 Transcribe command
 - [x] VOICE-020 Capture
 - [x] VOICE-021 Encoding
 - [x] VOICE-022 Level meter

@@ -1133,7 +1133,7 @@ Risks:
 - [x] UI-023 Starts on the grid
 - [x] UI-024 Startup loads
 - [x] UI-025 Root layout
-- [ ] UI-026 Board route composition
+- [x] UI-026 Board route composition
 - [x] UI-027 Pinned rail column
 - [x] UI-028 Board remount per project
 - [x] UI-029 Rail survives board switches
@@ -1141,11 +1141,11 @@ Risks:
 - [x] UI-031 Navigate resets
 - [x] UI-032 Navigate loads
 - [x] UI-033 Stats refresh
-- [ ] UI-034 Board changed event
+- [x] UI-034 Board changed event
 - [x] UI-035 Projects changed event
-- [ ] UI-036 Status event
-- [ ] UI-037 Agent status event
-- [ ] UI-038 Usage event
+- [x] UI-036 Status event
+- [x] UI-037 Agent status event
+- [x] UI-038 Usage event
 - [x] UI-039 Settings command
 - [x] UI-040 ⌘W closes the top layer
 - [x] UI-041 ⌘W never closes the window
@@ -1157,35 +1157,35 @@ Risks:
 - [x] UI-047 Toggle focus command
 - [x] UI-048 What persists
 - [x] UI-049 Refresh projects
-- [ ] UI-050 Board loading flag
-- [ ] UI-051 Stale board loads
-- [ ] UI-052 Archived terminal closes
-- [ ] UI-053 Patch cards: guards
-- [ ] UI-054 Patch cards: empty sessions leave
-- [ ] UI-055 Patch cards: merge
-- [ ] UI-056 Patch cards: archiving
-- [ ] UI-057 Patch cards: persist
-- [ ] UI-058 Upsert card
-- [ ] UI-059 Remove card
-- [ ] UI-060 Notes fall off
-- [ ] UI-061 Archive rect
-- [ ] UI-062 Save section
-- [ ] UI-063 Remove section
-- [ ] UI-064 Save note
-- [ ] UI-065 Remove notes
+- [x] UI-050 Board loading flag
+- [x] UI-051 Stale board loads
+- [x] UI-052 Archived terminal closes
+- [x] UI-053 Patch cards: guards
+- [x] UI-054 Patch cards: empty sessions leave
+- [x] UI-055 Patch cards: merge
+- [x] UI-056 Patch cards: archiving
+- [x] UI-057 Patch cards: persist
+- [x] UI-058 Upsert card
+- [x] UI-059 Remove card
+- [x] UI-060 Notes fall off
+- [x] UI-061 Archive rect
+- [x] UI-062 Save section
+- [x] UI-063 Remove section
+- [x] UI-064 Save note
+- [x] UI-065 Remove notes
 - [ ] UI-066 Save ink
-- [ ] UI-067 Upsert view
-- [ ] UI-068 Patch view
-- [ ] UI-069 Remove view
-- [ ] UI-070 Status on a card
-- [ ] UI-071 Stopped session's agents
-- [ ] UI-072 Agent status
-- [ ] UI-073 Usage
-- [ ] UI-074 Git read sharing
-- [ ] UI-075 Git result
-- [ ] UI-076 Terminal vs preview
-- [ ] UI-077 Agents and diff flags
-- [ ] UI-078 Action lists
+- [x] UI-067 Upsert view
+- [x] UI-068 Patch view
+- [x] UI-069 Remove view
+- [x] UI-070 Status on a card
+- [x] UI-071 Stopped session's agents
+- [x] UI-072 Agent status
+- [x] UI-073 Usage
+- [x] UI-074 Git read sharing
+- [x] UI-075 Git result
+- [x] UI-076 Terminal vs preview
+- [x] UI-077 Agents and diff flags
+- [x] UI-078 Action lists
 - [x] UI-079 Optimistic settings
 - [x] UI-080 Settings survive navigation
 - [x] UI-081 Duration format

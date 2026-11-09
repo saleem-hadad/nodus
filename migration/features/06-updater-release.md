@@ -774,11 +774,11 @@ No macOS test exists in TypeScript. Recommended Rust additions, marked as such s
 - [x] UPD-078 `updates:install` runs `restartToUpdate()`
 - [x] UPD-079 Menu `Check for Updates…` opens Settings then `check(true)`; Mac app menu after About, else File after Settings…
 - [x] UPD-080 `useUpdateStatus` null until the first answer, then follows events
-- [ ] UPD-081 Title-bar `Restart to Update` only in `ready`, with the platform tooltip
-- [ ] UPD-082 Settings `Updates`: `Nodus <current>` + state hint strings
-- [ ] UPD-083 Button: `Restart to Update` (ready), none (off), else `Check Now` disabled while null/checking/downloading
-- [ ] UPD-084 Switch `Download updates automatically` hidden when off, platform hint, disabled until settings load
-- [ ] UPD-085 Error state shows `You can also download the latest version yourself.` linking to releases/latest
+- [x] UPD-081 Title-bar `Restart to Update` only in `ready`, with the platform tooltip
+- [x] UPD-082 Settings `Updates`: `Nodus <current>` + state hint strings
+- [x] UPD-083 Button: `Restart to Update` (ready), none (off), else `Check Now` disabled while null/checking/downloading
+- [x] UPD-084 Switch `Download updates automatically` hidden when off, platform hint, disabled until settings load
+- [x] UPD-085 Error state shows `You can also download the latest version yourself.` linking to releases/latest
 - [x] REL-001 One version source feeds status, UA, plist versions, DMG name, exe/NSIS version fields
 - [ ] REL-002 Release workflow on `v*` tags, `contents: write`
 - [x] REL-003 Tag/version mismatch fails with the `::error::Tag …` message

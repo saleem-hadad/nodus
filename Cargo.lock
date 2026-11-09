@@ -4222,6 +4222,7 @@ dependencies = [
  "image",
  "indexmap",
  "libc",
+ "nodus-board",
  "nodus-core",
  "nodus-domain",
  "nodus-platform",
@@ -4239,6 +4240,7 @@ dependencies = [
  "tracing",
  "unicode-linebreak",
  "unicode-segmentation",
+ "uuid",
 ]
 
 [[package]]

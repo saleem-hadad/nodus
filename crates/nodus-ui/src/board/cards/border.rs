@@ -202,13 +202,14 @@ pub fn dashes(length: f32, width: f32) -> Vec<(f32, f32)> {
     }
     let gap = best_dash_gap(length, dash, width);
     let period = dash + gap;
-    let mut out = Vec::new();
-    let mut s = 0.0;
-    while s < length - 1e-3 {
-        out.push((s, (s + dash).min(length)));
-        s += period;
-    }
-    out
+    // A whole number of periods goes round (the gap was chosen so).
+    let count = (length / period).round().max(1.0) as usize;
+    (0..count)
+        .map(|k| {
+            let s = k as f32 * period;
+            (s, (s + dash).min(length))
+        })
+        .collect()
 }
 
 /// The `box-shadow` rings (no blur, no offset: `0 0 0 <spread> <colour>`)

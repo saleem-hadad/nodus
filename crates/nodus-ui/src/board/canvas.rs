@@ -246,6 +246,8 @@ pub struct BoardCanvas {
     pub(crate) section_field: Option<(String, Entity<gpui::component::input::InputState>)>,
     pub(crate) section_field_sub: Option<Subscription>,
     pub(crate) clock: Instant,
+    /// The prompt bar, search, the merge dialog and the ink (spec 11).
+    pub(crate) overlays: super::overlays::Overlays,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -331,6 +333,7 @@ impl BoardCanvas {
             section_field: None,
             section_field_sub: None,
             clock: Instant::now(),
+            overlays: super::overlays::Overlays::default(),
             _subscriptions: subscriptions,
         };
         canvas.sync(cx);

@@ -677,6 +677,8 @@ impl Render for BoardCanvas {
             .collect();
         let mut below = Vec::new();
         let mut above = Vec::new();
+        // INKUI-025: ink goes over every node but the open archive panel's.
+        let mut raised = Vec::new();
         let mut gliding = false;
         for node in &nodes {
             let (drawn, moving) = self.drawn(node, now, cx);
@@ -684,6 +686,8 @@ impl Render for BoardCanvas {
             let el = self.render_node(node, drawn, &board_cx, &renderers, window, cx);
             if node.z_drawn() < 0 {
                 below.push(el);
+            } else if node.z_drawn() >= super::overlays::INK_Z_BELOW {
+                raised.push(el);
             } else {
                 above.push(el);
             }
@@ -775,6 +779,9 @@ impl Render for BoardCanvas {
         let hint = empty.then(|| self.render_hint(window, cx));
         let toast = self.render_toast(window, cx);
         let confirm = self.render_confirm(window, cx);
+        let ink_input = self.render_ink_input(cx);
+        let ink_layer = self.render_ink_layer(window, cx);
+        let ink_dock = self.render_ink_dock(window, cx);
 
         div()
             .id("board-canvas")
@@ -802,13 +809,17 @@ impl Render for BoardCanvas {
             )
             .on_scroll(cx.listener(|this, e, _, cx| this.wheel(e, cx)))
             .on_pinch(cx.listener(|this, e, _, cx| this.pinch(e, cx)))
+            .child(ink_input)
             .child(background)
             .children(below)
             .child(edges_layer)
             .children(above)
+            .child(ink_layer)
+            .children(raised)
             .children(selection)
             .children(marquee)
             .children(hint)
+            .child(ink_dock)
             .child(pill)
             .child(minimap)
             .children(toast)

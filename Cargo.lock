@@ -4223,6 +4223,7 @@ dependencies = [
  "image",
  "indexmap",
  "libc",
+ "lyon",
  "nodus-board",
  "nodus-core",
  "nodus-domain",

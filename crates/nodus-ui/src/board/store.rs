@@ -448,6 +448,20 @@ impl AppState {
         cx.notify();
     }
 
+    /// `saveInk` (INKUI-024): the board's ink at once, then saved (spec 11).
+    pub fn save_ink(&mut self, strokes: Vec<nodus_domain::InkStroke>, cx: &mut Context<'_, Self>) {
+        let Some(board) = self.board.as_mut() else { return };
+        board.ink = strokes.clone();
+        let project_id = board.project.id.clone();
+        cx.notify();
+        let nodus = self.nodus.clone();
+        let rt = crate::board::core_rt(cx);
+        cx.spawn(async move |_, _| {
+            crate::board::on_core(&rt, async move { nodus.board().save_ink(&project_id, &strokes).await }).await;
+        })
+        .detach();
+    }
+
     /// `setSelection`: the selected session cards (BOARD-…, store sync).
     pub fn set_selection(&mut self, ids: Vec<String>, cx: &mut Context<'_, Self>) {
         if self.selection != ids {

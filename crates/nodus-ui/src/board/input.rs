@@ -1182,9 +1182,9 @@ impl BoardCanvas {
         if modal || preview || agents || diff || overlay || typing {
             return false;
         }
-        // BOARD-159: only ink has an undo (spec 11).
+        // BOARD-159: only ink has an undo (spec 11, INKUI-021).
         if key == "z" && modk && !m.alt && !other {
-            return false;
+            return if m.shift { self.ink_redo(cx) } else { self.ink_undo(cx) };
         }
         let sel = self.selected_cards();
         let note_sel = self.selected_notes();
@@ -1194,6 +1194,10 @@ impl BoardCanvas {
         match key.as_str() {
             // BOARD-160.
             "escape" => {
+                // INKUI-023: the ink puts its tool down or lets go of its stroke first.
+                if self.ink_escape(cx) {
+                    return false;
+                }
                 if self.stack_open() {
                     self.close_stack(cx);
                 }
@@ -1217,6 +1221,10 @@ impl BoardCanvas {
             }
             // BOARD-163.
             "backspace" | "delete" if !modk && !m.alt => {
+                // INKUI-022: the selected stroke goes first.
+                if self.ink_delete_selected(cx) {
+                    return true;
+                }
                 if !any {
                     return false;
                 }
@@ -1250,7 +1258,12 @@ impl BoardCanvas {
                 // BOARD-166, BOARD-167, BOARD-169: the prompt bar and ink (spec 11).
                 "v" => !e.is_held,
                 "/" => true,
-                "p" | "a" | "x" => true,
+                "p" | "a" | "x" => {
+                    if let Some(tool) = super::overlays::ink::tool_for_key(&ch) {
+                        self.ink_set_tool(tool, None, cx);
+                    }
+                    true
+                }
                 // BOARD-168.
                 "e" => {
                     let active: Vec<bool> = self
@@ -1287,6 +1300,8 @@ impl BoardCanvas {
     /// Window blur and any context menu let go of held keys.
     pub fn release_keys(&mut self) {
         self.space = false;
+        // INKUI-012, INKUI-020: a gesture the window lost goes.
+        self.overlays.ink.drop_gesture();
     }
 
     /// BOARD-171: the app menu's board commands.

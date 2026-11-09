@@ -20,6 +20,7 @@ pub mod layout;
 mod menus;
 mod naming;
 pub mod nodes;
+pub mod overlays;
 mod render;
 pub mod scene;
 mod section;

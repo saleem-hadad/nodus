@@ -278,6 +278,21 @@ impl PageWebview {
         }
     }
 
+    /// The page's `prefers-color-scheme` follows the app's theme (VIEW-026):
+    /// on macOS through the app's appearance, which the webview inherits;
+    /// WebView2 is told.
+    pub fn set_dark(&self, dark: bool) {
+        #[cfg(windows)]
+        {
+            use wry::WebViewExtWindows as _;
+            let _ = self
+                .webview
+                .set_theme(if dark { wry::Theme::Dark } else { wry::Theme::Light });
+        }
+        #[cfg(not(windows))]
+        let _ = dark;
+    }
+
     /// Takes a picture of the page; `done` gets it on the main thread.
     pub fn snapshot(&self, done: impl FnOnce(Option<Arc<RenderImage>>) + 'static) {
         #[cfg(target_os = "macos")]

@@ -21,7 +21,7 @@
 | `views/shell.rs` | the shell page (`<iframe sandbox="allow-scripts">` + relay script), URLs, the navigation rule (VIEW-028) |
 | `views/relay.rs` | page messages → report/call/board, replies, `ev:view` to frames, `board`/`git` broadcasts |
 | `views/large.rs`, `views/dialog.rs` | the large window (VIEW-147) and the New view dialog (VIEW-151…154) |
-| `views/mac.rs` | the clip container (rounded, pass-through, resize-edge pass-through), view scale, occlusion, sRGB snapshots, first responder, driver clicks |
+| `views/mac.rs` | the clip container (rounded, pass-through, resize-edge pass-through), occlusion, no context menu, sRGB snapshots, first responder, driver clicks |
 | `views/icons.rs` | `ellipsis`, `wand-sparkles` |
 | `parity/views_scenes.py` | the six golden scenes, plus `try-*` interaction scenes (relay page, rename, refresh, resize, drag, create, wheel, keyboard) |
 
@@ -39,9 +39,10 @@ Shared files touched (additive): `board/nodes.rs` (`ViewRenderer` global used by
   The page itself comes from `Views::serve_page`, status and headers unchanged. Only the shell's own document may post
   to the app (the page's frame could reach the webview's handler; its messages are dropped), and the frame may only
   navigate within its view (VIEW-028).
-- **Scale.** WKWebView's view scale (`_setViewScale:`) lays the page out at the body's size in flow units and draws it
-  at the board's zoom, like 0.9.4's iframe under the board's transform. Page zoom laid out the same but bumped zoomed
-  text to WebKit's 9px "smart minimum" (rows came out 12% taller).
+- **Scale.** The webview is the card's body on screen; the shell lays the page's frame out at the body's size in flow
+  units and scales it by the board's zoom with a CSS transform (`__nodusScale`), as 0.9.4's board scaled its iframe.
+  WebKit's page zoom laid out the same but bumped zoomed-out text to its 9px "smart minimum" (rows 12% taller), and its
+  private view scale lost a pixel to rounding and left a white sliver.
 - **Swap (D3).** After each frame the body's probe hitbox is hit-tested over the page's visible rect: anything drawn
   later that blocks the pointer (notes, menus, the minimap, dialogs) covers it. Covered, dragged, resized, zooming, an
   ink tool out, the marquee over it, one of the card's own tooltips up, or parity mode → the page goes transparent and
@@ -58,16 +59,16 @@ Shared files touched (additive): `board/nodes.rs` (`ViewRenderer` global used by
 ## Checked side by side
 
 `python3 crates/nodus-ui/parity/views_scenes.py views- --golden <dir> --world <scratch>` (node 22+ first on PATH), then
-`compare.mjs`. Views are compared per card (the rest of the board is other tracks'):
+`compare.mjs` (after main's cards and overlays merged in, so the whole shot is meaningful):
 
-| Scene | Docs build status | Broken links | Search index | Scene's own region |
-| --- | --- | --- | --- | --- |
-| views-board light / dark | 1.99% / 2.58% | 1.25% / 1.23% | 2.90% / 3.32% | |
-| views-brain-waiting | 1.99% / 2.58% | 2.16% / 2.04% | 2.90% / 3.32% | |
-| views-menu | 2.42% / 2.78% | 1.55% / 1.28% | 2.90% / 3.32% | menu 1.68% / 1.51% |
-| views-change | 3.14% / 3.75% | 1.25% / 1.23% | 2.90% / 3.32% | |
-| views-large | | | | modal 0.15% / 0.11% |
-| views-new | | | | dialog 4.48% / 4.67% |
+| Scene (light / dark) | Whole shot | Docs build status | Broken links | Search index | Scene's own region |
+| --- | --- | --- | --- | --- | --- |
+| views-board | 0.49% / 0.49% | 1.80% / 1.75% | 1.25% / 1.23% | 2.79% / 2.76% | |
+| views-brain-waiting | 0.54% / 0.54% | 1.80% / 1.75% | 2.16% / 2.04% | 2.79% / 2.76% | |
+| views-menu | 0.53% / 0.52% | 2.24% / 2.07% | 1.55% / 1.28% | 2.79% / 2.76% | menu 1.57% / 1.24% |
+| views-change | 0.56% / 0.55% | 2.95% / 2.76% | 1.25% / 1.23% | 2.79% / 2.76% | |
+| views-large | 0.13% / 0.10% | | | | modal 0.15% / 0.11% |
+| views-new | 0.09% / 0.08% | | | | dialog 0.28% / 0.28% |
 
 What differs inside the cards is the page's text (WebKit vs Chromium antialiasing and metrics, rows within 1px) and
 GPUI's text (gpui-text). Interaction scenes (`try-*`, looked at, not goldens): every `window.nodus` method round-trips
@@ -90,13 +91,12 @@ VIEW-056/057 (the start rules), 058/059 (placement, edge), 101 (placement), 122/
 - **Windows (unbuilt here; GPUI's build script needs Windows' resource compiler):** WebView2 child webview with
   `https://nodus-view.<id>/` URLs, bounds, visibility, theme and IPC are in; **no snapshots** (`CapturePreview` not
   written: a covered page steps aside and the body shows its background instead), **no rounded clipping or clip to the
-  board** (needs `webview2-com` composition or a window region), **no pointer pass-through** (no `hitTest` there), page
-  scale is WebView2's `ZoomFactor` (Chromium's own minimum font size may apply when zoomed far out; `RasterizationScale`
-  would avoid it), and the activation check is the shell's alone.
+  board** (needs `webview2-com` composition or a window region), **no pointer pass-through** (no `hitTest` there),
+  and the activation check is the shell's alone (the page's scale is the shell's CSS transform, as on macOS).
 - Ink strokes over a live page draw under it while no tool is out (with a tool out the page is a snapshot).
 - Only the card's own tooltips swap the page out; another element's GPUI tooltip over a live page is hidden under it.
 - The New view textarea's placeholder doesn't wrap, and it has no resize grip.
-- WebKit shows its own context menu on a right-click in a page (0.9.4 showed none).
+- A right-click in a page empties WebKit's context menu (`willOpenMenu:withEvent:`), so none opens, as in 0.9.4; the driver doesn't exercise it.
 - An overlay appearing over a live page shows a frame or two later than the overlay, while the snapshot is taken.
 
 ## Notes for the orchestrator

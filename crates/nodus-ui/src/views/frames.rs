@@ -249,6 +249,9 @@ pub fn sync_board(canvas: &mut BoardCanvas, window: &mut Window, cx: &mut Contex
             Some(fr) => {
                 if fr.version != view.version || fr.title != view.title || theme_changed {
                     fr.web.update(view.version, &view.title, t.bg_elevated);
+                    if theme_changed {
+                        fr.web.set_dark(t.dark);
+                    }
                     fr.version = view.version;
                     fr.title.clone_from(&view.title);
                     fr.dirty = true;
@@ -269,13 +272,16 @@ pub fn sync_board(canvas: &mut BoardCanvas, window: &mut Window, cx: &mut Contex
                 );
                 match made {
                     Ok(web) => f.frames.push(Frame {
+                        web: {
+                            web.set_dark(t.dark);
+                            web
+                        },
                         id,
                         project_id: canvas.project_id.clone(),
                         view_id: view.id.clone(),
                         slot,
                         version: view.version,
                         title: view.title.clone(),
-                        web,
                         live: true,
                         snapshot: None,
                         snapshot_at: None,

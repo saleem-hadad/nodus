@@ -1256,7 +1256,14 @@ impl BoardCanvas {
                     true
                 }
                 // BOARD-166, BOARD-167, BOARD-169: the prompt bar and ink (spec 11).
-                "v" => !e.is_held,
+                // BAR-034: record, or stop and transcribe.
+                "v" => {
+                    if e.is_held {
+                        return false;
+                    }
+                    self.bar_toggle_voice(cx);
+                    true
+                }
                 // BAR-033: the bar takes the keyboard, with `/` typed.
                 "/" => {
                     self.bar_focus_from_board(Some("/".to_owned()), cx);

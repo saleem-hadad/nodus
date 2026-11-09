@@ -60,6 +60,9 @@ impl BoardCanvas {
         }
         self.bar_follow_into();
         self.bar_take_focus_request(window, cx);
+        self.bar_mic(window, cx);
+        self.overlays.bar.voice_busy = self.bar_phase(cx) != nodus_voice::controller::Phase::Idle;
+        self.bar_take_heard(window, cx);
         if std::mem::take(&mut self.overlays.bar.clear_pending) {
             self.bar_set_text(String::new(), window, cx);
         }
@@ -128,7 +131,11 @@ impl BoardCanvas {
             motion::ease,
         );
         let pill_w = basis.min(col_w - 62.);
-        let shadow = mix_layers(&t.shadow_md, &t.shadow_lg, lift);
+        let mut shadow = mix_layers(&t.shadow_md, &t.shadow_lg, lift);
+        // BAR-036: a 1.5px red ring while recording.
+        if self.bar_phase(cx) == nodus_voice::controller::Phase::Recording {
+            shadow.push(theme::tokens::ring(1.5, rgba_mix(t.status_waiting, 0.55)));
+        }
         let pill = self.render_pill(pill_w, shadow, window, cx);
         div()
             .w_full()
@@ -154,9 +161,11 @@ impl BoardCanvas {
         let into = self.bar_sends_into();
         let has_token = target.is_some() || into.is_some();
         let text_empty = self.overlays.bar.text.is_empty();
-        let hint = text_empty && !has_token && self.bar_context_count() == 0 && !self.bar_listening();
+        let listening = self.bar_listening_in(cx);
+        let idle = self.bar_phase(cx) == nodus_voice::controller::Phase::Idle;
+        let hint = text_empty && !has_token && self.bar_context_count() == 0 && !listening;
         let can_send = !crate::board::overlays::trimmed_empty(&self.overlays.bar.text)
-            && !self.bar_listening()
+            && idle
             && !self.overlays.bar.sending
             && self.bar_commands().is_empty();
         let token = self.render_token(&t, window, cx);
@@ -202,18 +211,25 @@ impl BoardCanvas {
             }))
             .children(popover)
             .children(token)
+            .when(listening, |d| d.child(self.render_bar_status(&t, window, cx)))
             .child(
+                // Hidden while listening, keeping its value (BAR-037).
                 // XSmall's editor insets are 4px across and none down: taken
                 // back, so the text sits where 0.9.4's textarea puts it.
-                div().flex_1().min_w_0().mx(px(-4.)).child(
-                    Textarea::new(&field)
-                        .appearance(false)
-                        .xsmall()
-                        .text_size(px(14.))
-                        .line_height(px(20.))
-                        .py(px(7.))
-                        .px(px(0.)),
-                ),
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .mx(px(-4.))
+                    .when(listening, |d| d.hidden())
+                    .child(
+                        Textarea::new(&field)
+                            .appearance(false)
+                            .xsmall()
+                            .text_size(px(14.))
+                            .line_height(px(20.))
+                            .py(px(7.))
+                            .px(px(0.)),
+                    ),
             )
             .when(hint, |d| {
                 d.child(
@@ -287,39 +303,6 @@ impl BoardCanvas {
                 })
             })
             .child(glyph)
-            .into_any_element()
-    }
-
-    /// BAR-035: the mic, beside the bar. Recording, its halo and the
-    /// status line come with the voice UI (05); this is its idle look.
-    fn render_orb(&mut self, t: &Tokens, window: &mut Window, cx: &mut Context<'_, Self>) -> AnyElement {
-        let hovered = window.use_keyed_state("bar-orb-hover", cx, |_, _| false);
-        let target = if *hovered.read(cx) {
-            t.text_primary
-        } else {
-            t.text_secondary
-        };
-        let fg = transition(window, cx, "bar-orb-fg", target, DUR_FAST, motion::ease);
-        div()
-            .id("bar-orb")
-            .flex_none()
-            .size(px(52.))
-            .rounded_full()
-            .flex()
-            .items_center()
-            .justify_center()
-            .map(|d| frosted(d, rgba_mix(t.bg_elevated, 0.9), 24., 1.8))
-            .shadow(t.md())
-            .occlude()
-            .tooltip(native_tooltip("Speak a prompt (V)".into()))
-            .on_hover(move |h, _, cx| {
-                hovered.update(cx, |s, cx| {
-                    *s = *h;
-                    cx.notify();
-                })
-            })
-            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .child(ov_icon(OvIcon::Mic, 22., 2., fg))
             .into_any_element()
     }
 

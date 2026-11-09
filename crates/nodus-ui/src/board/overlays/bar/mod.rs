@@ -9,6 +9,7 @@
 mod keys;
 mod popovers;
 mod view;
+mod voice;
 
 use gpui::component::input::{InputEvent, TextareaState};
 use gpui::{AppContext as _, Context, Entity, Focusable as _, Subscription, Window};
@@ -40,11 +41,17 @@ pub(crate) struct Bar {
     pub sending: bool,
     /// The board's `/` key asked for the keyboard, with `/` typed.
     pub focus_request: Option<Option<String>>,
+    /// The bar's mic (spec 05's `voice::Mic`).
+    pub mic: Option<Entity<crate::voice::Mic>>,
+    /// What was said, waiting to land in the field.
+    pub heard: Vec<String>,
     /// A submission went through: the field empties on the next frame.
     pub clear_pending: bool,
     /// The field's value is being set by the bar, not typed.
     setting: bool,
     pub placeholder: &'static str,
+    /// The mic's phase isn't idle (BAR-004), as of this frame.
+    pub voice_busy: bool,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -63,9 +70,12 @@ impl Default for Bar {
             picking: false,
             sending: false,
             focus_request: None,
+            mic: None,
+            heard: Vec::new(),
             clear_pending: false,
             setting: false,
             placeholder: "",
+            voice_busy: false,
             _subscriptions: Vec::new(),
         }
     }
@@ -181,19 +191,15 @@ impl BoardCanvas {
         match_commands(&bar.text)
     }
 
-    /// The voice phase isn't idle (the mic lands with the voice UI, 05).
-    pub(crate) fn bar_listening(&self) -> bool {
-        false
-    }
-
     /// BAR-004.
     pub(crate) fn bar_open(&self) -> bool {
+        // `voice_busy` is the mic's phase not idle, as of this frame.
         let bar = &self.overlays.bar;
         bar.focused
             || !bar.text.is_empty()
             || bar.target.is_some()
             || self.bar_sends_into().is_some()
-            || self.bar_listening()
+            || self.overlays.bar.voice_busy
             || self.bar_context_count() > 0
     }
 
@@ -257,7 +263,11 @@ impl BoardCanvas {
     pub(crate) fn bar_submit(&mut self, cx: &mut Context<'_, Self>) {
         let words = js::trim(&self.overlays.bar.text).to_owned();
         let menu_open = !self.bar_commands().is_empty();
-        if words.is_empty() || self.bar_listening() || self.overlays.bar.sending || menu_open {
+        if words.is_empty()
+            || self.bar_phase(cx) != nodus_voice::controller::Phase::Idle
+            || self.overlays.bar.sending
+            || menu_open
+        {
             return;
         }
         let submission = match self.overlays.bar.target {
@@ -282,6 +292,10 @@ impl BoardCanvas {
             let _ = this.update(cx, |c, cx| {
                 c.overlays.bar.sending = false;
                 if done {
+                    // BAR-012: the voice notice goes too.
+                    if let Some(mic) = &c.overlays.bar.mic {
+                        mic.read(cx).dismiss();
+                    }
                     c.overlays.bar.target = None;
                     c.overlays.bar.picking = false;
                     c.overlays.bar.clear_pending = true;

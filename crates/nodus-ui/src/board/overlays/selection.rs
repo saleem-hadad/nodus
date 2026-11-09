@@ -30,6 +30,9 @@ impl BoardCanvas {
         if let Some(bar) = self.render_selection_bar(window, cx) {
             out.push(bar);
         }
+        if let Some(notice) = self.render_bar_notice(window, cx) {
+            out.push(notice);
+        }
         out
     }
 

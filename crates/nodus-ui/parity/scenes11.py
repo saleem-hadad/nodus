@@ -120,17 +120,17 @@ SCENES = {
                       for i in range(1, 9)]),
     "ink-selected": ([], STOREFRONT + [AWAY, M("click", *AT(470, 652)), AWAY]),
     "board-populated": ([], STOREFRONT + [AWAY]),
-    "bar-focused": ([], STOREFRONT + [AWAY, M("click", *FIELD)]),
+    "bar-focused": ([], STOREFRONT + [AWAY, M("click", *FIELD)] + [AWAY]),
     "bar-typing": ([], STOREFRONT + [AWAY, M("click", *FIELD)] + typed("Add a sort menu to the search results:")
-                   + [K("shift-enter")] + typed("- price, low to high and high to low") + [K("shift-enter")]
+                   + [K("shift-enter")] + typed("- price, low to high and high to low") + [K("shift-enter")] + [AWAY]
                    + typed("- newest first")),
     "bar-slash-menu": ([], STOREFRONT + [AWAY, W(300), K("/")]),
-    "bar-view": ([], STOREFRONT + [AWAY, M("click", *FIELD)] + typed("/view ") + typed("failing tests by file")),
-    "bar-note": ([], STOREFRONT + [AWAY, M("click", *FIELD)] + typed("/note ")
+    "bar-view": ([], STOREFRONT + [AWAY, M("click", *FIELD)] + [AWAY] + typed("/view ") + typed("failing tests by file")),
+    "bar-note": ([], STOREFRONT + [AWAY, M("click", *FIELD)] + [AWAY] + typed("/note ")
                  + typed("Check the coupon edge cases with Sam")),
-    "bar-one-selected": ([], STOREFRONT + [AWAY, M("click", *SF_CART, shift=True), M("click", *FIELD)]),
+    "bar-one-selected": ([], STOREFRONT + [AWAY, M("click", *SF_CART, shift=True), M("click", *FIELD)] + [AWAY]),
     "bar-several-selected": ([], STOREFRONT + [AWAY, M("click", *SF_COUPONS, shift=True),
-                                               M("click", *SF_SEARCH_PLAN, shift=True), M("click", *FIELD)]
+                                               M("click", *SF_SEARCH_PLAN, shift=True), M("click", *FIELD)] + [AWAY]
                              + typed("What do these two have in common?")),
     "search-empty": ([], STOREFRONT + [AWAY, W(300), K("cmd-k"), W(300)]),
     "search-results": ([], STOREFRONT + [AWAY, W(300), K("cmd-k"), W(300)] + typed("coupon") + [W(1500)]),

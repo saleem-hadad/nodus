@@ -54,6 +54,20 @@ pub(crate) fn updated_at(card: &SessionCard) -> f64 {
     card.meta.as_ref().map_or(card.node.created_at, |m| m.updated_at)
 }
 
+/// SRCH-005: live before archived, then the most recently updated first,
+/// at most [`RECENT`] (a stable sort, as `Array.prototype.sort` is).
+pub(crate) fn latest(mut cards: Vec<SessionCard>) -> Vec<SessionCard> {
+    cards.sort_by(|a, b| {
+        a.node.archived.cmp(&b.node.archived).then(
+            updated_at(b)
+                .partial_cmp(&updated_at(a))
+                .unwrap_or(std::cmp::Ordering::Equal),
+        )
+    });
+    cards.truncate(RECENT);
+    cards
+}
+
 impl BoardCanvas {
     /// SRCH-018: the board's cards but terminals (runs and view brains are
     /// already off the board).
@@ -66,19 +80,7 @@ impl BoardCanvas {
         let trimmed = js::trim(&self.search_query);
         let cards = self.searchable();
         if trimmed.is_empty() {
-            let mut cards = cards;
-            cards.sort_by(|a, b| {
-                a.node.archived.cmp(&b.node.archived).then(
-                    updated_at(b)
-                        .partial_cmp(&updated_at(a))
-                        .unwrap_or(std::cmp::Ordering::Equal),
-                )
-            });
-            return cards
-                .into_iter()
-                .take(RECENT)
-                .map(|card| Row { card, hit: None })
-                .collect();
+            return latest(cards).into_iter().map(|card| Row { card, hit: None }).collect();
         }
         let Some((_, hits)) = &self.overlays.search.answer else {
             return Vec::new();
@@ -123,6 +125,9 @@ impl BoardCanvas {
         });
         self.overlays.search._subscriptions.push(sub);
         self.overlays.search.field = Some(field.clone());
+        // Focused now, so the next frame draws it with the keyboard; its
+        // text all selected once drawn.
+        field.update(cx, |s, cx| s.focus(window, cx));
         crate::components::text_field::focus_all(&field, window, cx);
         // An open with a query asks again at once (the answer shown meanwhile is the last one).
         let trimmed = js::trim(&self.search_query).to_owned();
@@ -282,5 +287,60 @@ impl BoardCanvas {
         }
         cx.notify();
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nodus_domain::{BoardNode, SessionStatus};
+    use serde_json::Map;
+
+    fn card(id: &str, archived: bool, created_at: f64) -> SessionCard {
+        SessionCard {
+            node: BoardNode {
+                session_id: id.into(),
+                kind: None,
+                x: 0.0,
+                y: 0.0,
+                archived,
+                title: None,
+                parents: None,
+                created_by_app: None,
+                run_of: None,
+                expanded: None,
+                view_of: None,
+                auto_mode: None,
+                from_view: None,
+                created_at,
+                w: None,
+                h: None,
+                archived_at: None,
+                section_id: None,
+                extra: Map::new(),
+            },
+            meta: None,
+            status: SessionStatus::Done,
+            live: false,
+            agents: None,
+            agent_count: None,
+            usage: None,
+        }
+    }
+
+    #[test]
+    fn lists_live_sessions_first_then_the_latest() {
+        let cards = vec![
+            card("old", false, 1.0),
+            card("gone", true, 9.0),
+            card("new", false, 5.0),
+            card("tie", false, 5.0),
+        ];
+        let ids: Vec<String> = latest(cards).into_iter().map(|c| c.node.session_id).collect();
+        assert_eq!(ids, ["new", "tie", "old", "gone"]);
+        let many: Vec<SessionCard> = (0..40).map(|i| card(&i.to_string(), false, f64::from(i))).collect();
+        let kept = latest(many);
+        assert_eq!(kept.len(), RECENT);
+        assert_eq!(kept[0].node.session_id, "39");
     }
 }

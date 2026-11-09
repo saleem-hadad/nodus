@@ -59,7 +59,7 @@ pub fn size_at(zoom: f64) -> f64 {
 }
 
 pub fn points_of(s: &InkStroke) -> Vec<Pt> {
-    s.points.chunks_exact(2).map(|p| [p[0], p[1]]).collect()
+    s.points.as_chunks::<2>().0.iter().map(|p| [p[0], p[1]]).collect()
 }
 
 pub fn flatten(pts: &[Pt]) -> Vec<f64> {

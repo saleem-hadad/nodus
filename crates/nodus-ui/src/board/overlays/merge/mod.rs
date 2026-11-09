@@ -5,6 +5,7 @@
 //! events, the fields), `view.rs` draws it. The board opens it with
 //! `start_merge` and creates the session in `merge_start` (`board/bar.rs`).
 
+mod grip;
 mod view;
 
 use std::time::Instant;
@@ -37,6 +38,9 @@ pub(crate) struct MergeDialog {
     pub start_error: Option<String>,
     /// When gathering started (the elapsed counter, MERGE-005).
     pub since: Instant,
+    /// The instruction field's height once its grip was dragged, and the drag.
+    pub instruction_h: Option<f32>,
+    pub grip: Option<grip::GripDrag>,
     /// The instruction took the keyboard when review came (MERGE-013).
     focused_review: bool,
     /// The bar is setting the context field, not the user.
@@ -151,6 +155,8 @@ impl BoardCanvas {
             starting: false,
             start_error: None,
             since: Instant::now(),
+            instruction_h: None,
+            grip: None,
             focused_review: false,
             setting: false,
             _tasks: vec![events, tick],

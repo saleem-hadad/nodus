@@ -238,6 +238,8 @@ impl BoardCanvas {
                 .collect();
         let (context, instruction, name) = (d.context.clone(), d.instruction.clone(), d.name.clone());
         let dirty = d.m.dirty;
+        let instruction_h = d.instruction_h;
+        let grip = self.render_instruction_grip(t, cx);
         let focused = |f: &gpui::FocusHandle| f.is_focused(window);
         use gpui::Focusable as _;
         let (cf, inf, nf) = (
@@ -313,13 +315,20 @@ impl BoardCanvas {
                     .gap(px(6.))
                     .child(label("What should the new session do?"))
                     .child(
-                        frame(t, inf).py(px(10.)).pl(px(8.)).child(
-                            Textarea::new(&instruction)
-                                .appearance(false)
-                                .xsmall()
-                                .text_size(TEXT_MD)
-                                .line_height(px(18.85)),
-                        ),
+                        frame(t, inf)
+                            .relative()
+                            .py(px(10.))
+                            .pl(px(8.))
+                            .when_some(instruction_h, |d, h| d.h(px(h)))
+                            .child(
+                                Textarea::new(&instruction)
+                                    .appearance(false)
+                                    .xsmall()
+                                    .when_some(instruction_h, |d, h| d.h(px((h - 21.).max(0.))))
+                                    .text_size(TEXT_MD)
+                                    .line_height(px(18.85)),
+                            )
+                            .child(grip),
                     ),
             )
             .child(

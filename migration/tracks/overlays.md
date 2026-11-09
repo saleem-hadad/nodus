@@ -22,7 +22,20 @@
 
 ## Done (implemented, IDs in the code, checked against the goldens)
 
+- **BAR** (40): 001, 002, 003, 004, 006, 007, 008, 009, 010, 011, 012, 013, 014, 015, 016, 017, 018, 019, 020, 021, 022, 023, 024, 025, 026, 027, 028, 029, 030, 031, 032, 033, 034, 035, 036, 037, 038, 039, 040, 041. The mic, its recording look, status line and notice are spec 05's `voice::Mic`, `voice_status` and `voice_notice` (actions-git-voice-ui); 024–031 are the board's side (`board/bar.rs`).
+- **SRCH** (21): 001…021. 021 is board-canvas's `board/fuzzy.rs` (fuzzy.test.ts ported there), used by the archive stack.
+- **MERGE** (17): 001…017.
+- **INKUI** (23): 001…015, 019…026. 012: GPUI has no pointer cancel; a gesture is dropped when the window lets go of the pointer (deactivation), as the board drops Space.
+- **SEL** (6): 001…006.
+- **BOARD** hooks (16): 037 (the preview opens at the match with `PreviewFind`), 108, 109, 131, 132, 133, 134, 135, 136, 137, 138, 143, 144, 145, 155, 159, 166, 167, 169 (board-canvas implemented 108/109, 131–137, 143–145; they are reached from the bar, search and merge dialog now).
+
 ## Deferred
+
+- BAR-005: the field grows 1–5 lines then scrolls, as 0.9.4's; the spellcheck underline isn't drawn (GPUI's text input has no spellchecker; plan.md's "Decisions for the user" spellcheck row).
+- INKUI-016: hovering a stroke with the pointer finds it, but GPUI has no `move` cursor (`CursorStyle` lacks it and custom cursor images); needs the patched GPUI.
+- INKUI-017: pen, arrow and text show crosshair and I-beam over everything; the eraser's 20px circle cursor needs a custom cursor image (patched GPUI), and shows the crosshair meanwhile.
+- INKUI-018: views have no live pages yet (spec 04's UI); `BoardCx.ink_tool` says when a tool is out, for the view renderer to ignore the pointer and show its snapshot (D3).
+- BOARD-036: the jump selects and centres the card and sets `BoardCx.flash`; the flash is the card's to draw (board-cards).
 
 ## Edits outside the track's files
 

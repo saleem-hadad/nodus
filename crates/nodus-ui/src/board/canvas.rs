@@ -1055,6 +1055,7 @@ impl BoardCanvas {
             moving_archive: self.moving_archive,
             moving_section: self.moving_section,
             scrolling_stack: self.stack_scrolling,
+            ink_tool: self.overlays.ink.tool != super::overlays::ink::InkTool::Select,
             actions: BoardActions {
                 canvas: cx.entity().downgrade(),
                 title_pressed: self.title_pressed.clone(),

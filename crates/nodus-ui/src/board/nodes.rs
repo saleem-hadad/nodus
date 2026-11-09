@@ -173,6 +173,9 @@ pub struct BoardCx {
     /// 800ms rounds of `0 0 0 2px accent, 0 0 0 2px→18px accent 55%→0%`,
     /// eased `cubic-bezier(0.2, 0.8, 0.2, 1)` (BOARD-036).
     pub flash: Option<(SharedString, std::time::Instant)>,
+    /// An ink tool other than the pointer is out (spec 11 INKUI-018): a
+    /// view's live page ignores the pointer then, and shows its snapshot.
+    pub ink_tool: bool,
     pub actions: BoardActions,
 }
 

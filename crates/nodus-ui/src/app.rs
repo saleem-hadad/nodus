@@ -70,6 +70,7 @@ pub fn run(user_data: PathBuf) -> anyhow::Result<()> {
     app.run(move |cx: &mut App| {
         gpui::init(cx);
         theme::fonts::register(cx);
+        crate::board::init(cx);
         cx.set_global(window::Core(nodus.clone()));
         theme::apply_preference(settings.theme, cx);
         menus::install_menus(&settings, cx);

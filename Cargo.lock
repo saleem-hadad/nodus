@@ -4217,6 +4217,7 @@ dependencies = [
  "gpui-kit",
  "image",
  "indexmap",
+ "nodus-board",
  "nodus-core",
  "nodus-domain",
  "nodus-platform",
@@ -4232,6 +4233,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

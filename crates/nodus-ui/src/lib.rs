@@ -10,6 +10,7 @@ extern crate gpui_kit as gpui;
 
 pub mod app;
 pub mod automation;
+pub mod board;
 pub mod components;
 pub mod format;
 #[cfg(target_os = "macos")]

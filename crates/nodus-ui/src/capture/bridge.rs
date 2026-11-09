@@ -292,7 +292,7 @@ impl PanelSlot {
         #[cfg(target_os = "macos")]
         let native = handle
             .update(cx, |_, window, _| {
-                crate::mac::tag_layer_srgb(window);
+                // GPUI tags every window's layer sRGB itself (PATCHES.md 6).
                 if quiet {
                     crate::mac::ignore_real_mouse(window);
                 }

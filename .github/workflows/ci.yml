@@ -1,4 +1,6 @@
-# Typechecks, tests and builds every pull request, and every push to main.
+# Checks every pull request, and every push to main: formatting, lints and
+# tests of the Cargo workspace, on macOS and Windows. Packaging is checked by
+# package.yml.
 name: CI
 
 on:
@@ -16,65 +18,39 @@ concurrency:
 
 jobs:
   check:
-    runs-on: macos-latest
+    strategy:
+      # One platform failing shouldn't hide how the other did.
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
-        with:
-          version: 10
+      # The toolchain rust-toolchain.toml pins, with rustfmt and clippy.
+      - run: rustup toolchain install
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm build
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
 
-  # Builds and installs the Windows app, then drives it (scripts/smoke.mjs).
-  windows:
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          persist-credentials: false
-
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
-        with:
-          version: 10
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      # The suites that cover Windows. Most others start POSIX shells.
-      - run: pnpm exec vitest run src/main/hostProtocol.test.ts src/main/hooks.test.ts src/main/env.test.ts src/renderer/src/platform.test.ts
-      - run: pnpm build
-      - run: pnpm exec electron-builder --win nsis --x64 --publish never
-
-      # Installs it the way a user would, silently, into %LOCALAPPDATA%\Programs.
-      - name: Install
-        shell: pwsh
-        run: Start-Process -Wait -FilePath dist/Nodus-Setup-x64.exe -ArgumentList '/S'
-
-      - run: node scripts/smoke.mjs "$LOCALAPPDATA/Programs/nodus/Nodus.exe" smoke
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
-        with:
-          name: windows
-          path: |
-            smoke
-            dist/Nodus-Setup-x64.exe
-          if-no-files-found: ignore
+      # The patched GPUI (third_party/gpui/PATCHES.md) on a real renderer:
+      # backdrop blur, transforms, group opacity, hit testing through a
+      # rotation and a window capture. On Windows the release build compiles
+      # the HLSL with fxc, and the window draws through DirectX 11 on the
+      # runner's adapter (WARP when there is no GPU). It runs whatever the
+      # tests did, so a failing test doesn't hide the shaders. Required on
+      # macOS, where it has passed; informational on Windows until it has been
+      # seen green there (every shader compiles with DXC, but fxc and WARP
+      # haven't run them yet).
+      - name: Effects example
+        if: ${{ !cancelled() }}
+        run: cargo run -p nodus-ui --example effects --release
+        continue-on-error: ${{ matrix.os == 'windows-latest' }}
+        env:
+          EFFECTS_SECONDS: "4"
+          EFFECTS_STRICT: "1"

@@ -4,7 +4,7 @@
 # replayed through 0.9.4's updater checks and driven through the test driver;
 # Windows installers for x64 and arm64, installed fresh, uninstalled, and
 # taken over from a real 0.9.4 install the way its updater does it.
-name: Rust packages
+name: Packages
 
 on:
   pull_request:
@@ -16,7 +16,7 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'rust-toolchain.toml'
-      - '.github/workflows/rust-package.yml'
+      - '.github/workflows/package.yml'
   push:
     branches: [main]
     paths:
@@ -27,14 +27,14 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'rust-toolchain.toml'
-      - '.github/workflows/rust-package.yml'
+      - '.github/workflows/package.yml'
 
 permissions:
   contents: read
 
 # A newer push to the same branch makes an older run moot.
 concurrency:
-  group: rust-package-${{ github.ref }}
+  group: package-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

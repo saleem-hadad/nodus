@@ -3,11 +3,10 @@
 //! Escape (while the board, not the page, has the keyboard), a press on the
 //! backdrop or ✕ closes it.
 
-use gpui::StyledImage as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Bounds, Context, ElementId, FontWeight, InteractiveElement, IntoElement, KeyDownEvent,
-    MouseButton, ParentElement, Pixels, StatefulInteractiveElement, Styled, Window, anchored, deferred, div, img, px,
+    MouseButton, ParentElement, Pixels, StatefulInteractiveElement, Styled, Window, div, px,
 };
 
 use super::frames::{self, Geometry, Slot};
@@ -51,7 +50,6 @@ fn render_parts(
     });
     let handle = focus.read(cx).clone();
     super::inputs::focus_once("view-modal-focus-once", &handle, window, cx);
-    let shown = frames::shown(&id, Slot::Large, cx);
     let parity = crate::parity::frozen(cx);
     let geometry = move |document: Bounds<Pixels>, clip: Bounds<Pixels>| Geometry {
         document,
@@ -118,31 +116,11 @@ fn render_parts(
                     d.child(frames::probe(id.clone(), Slot::Large, geometry))
                 }),
         );
-    let mut out: Vec<AnyElement> =
-        vec![Modal::new(ElementId::Name("view-modal".into()), width, on_close).render(content, window, cx)];
-    // The snapshot goes over the panel rather than in it: the panel draws in
-    // an effect layer (its enter animation), which an image inside doesn't
-    // survive in the window's capture.
-    let document = frames::existing(cx)
-        .and_then(|f| f.borrow().get(&id, Slot::Large).and_then(|fr| fr.geometry))
-        .map(|g| g.document);
-    if let (Some(image), Some(document)) = (shown.snapshot, document) {
-        out.push(
-            deferred(
-                anchored().position(document.origin).child(
-                    img(image)
-                        .object_fit(gpui::ObjectFit::Fill)
-                        .w(document.size.width)
-                        .h(document.size.height)
-                        .rounded_bl(RADIUS_XL)
-                        .rounded_br(RADIUS_XL),
-                ),
-            )
-            .with_priority(501)
-            .into_any_element(),
-        );
-    }
-    Some(out)
+    // The page's snapshot, while it's behind one, is painted by the probe in
+    // the panel, under its rounded corners and in its enter animation.
+    Some(vec![
+        Modal::new(ElementId::Name("view-modal".into()), width, on_close).render(content, window, cx),
+    ])
 }
 
 /// ✕ (`.card-tool` with `X` 15): `Close`.

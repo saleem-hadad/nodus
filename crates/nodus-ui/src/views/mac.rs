@@ -74,9 +74,16 @@ define_class!(
 
 /// A container view inside GPUI's content view holding one WKWebView: its
 /// frame is the visible part of the card's body, the webview's the whole
-/// body, so a card half off screen doesn't reflow its page.
+/// body, so a card half off screen doesn't reflow its page. Above the
+/// webview, the ink over the page (`mac_ink.rs`).
 pub struct Container {
     view: Retained<HostView>,
+    ink: super::mac_ink::InkOverlay,
+    /// Where the ink's picture goes, in the body's px (x, y, w, h).
+    ink_rect: Cell<Option<(f64, f64, f64, f64)>>,
+    /// The body's top left in the container (from its top), and the
+    /// container's height: what places the ink in it.
+    body: Cell<(f64, f64, f64)>,
 }
 
 impl Container {
@@ -99,13 +106,43 @@ impl Container {
             }
         }
         parent.addSubview(&view);
-        Some(Self { view })
+        let ink = super::mac_ink::InkOverlay::new(mtm);
+        view.addSubview(ink.view());
+        Some(Self {
+            view,
+            ink,
+            ink_rect: Cell::new(None),
+            body: Cell::new((0.0, 0.0, 0.0)),
+        })
     }
 
-    /// Moves a view (the WKWebView) into the container.
+    /// Moves a view (the WKWebView) into the container, under the ink.
     pub fn adopt(&self, child: &NSView) {
         child.removeFromSuperview();
-        self.view.addSubview(child);
+        // SAFETY: both are views; NSWindowBelow (-1) relative to the ink.
+        unsafe {
+            let _: () = msg_send![&*self.view, addSubview: child, positioned: -1isize, relativeTo: self.ink.view()];
+        }
+    }
+
+    /// Shows the ink over the page (None: none crosses it).
+    pub fn set_ink(&self, ink: Option<&super::ink::PageInk>) {
+        let image = ink.and_then(super::mac_ink::render);
+        let rect = ink.filter(|_| image.is_some()).map(|i| i.rect);
+        self.ink_rect.set(rect);
+        let scale = ink.map_or(2.0, |i| i.scale);
+        self.ink.show(image.as_deref(), self.ink_frame(), scale);
+    }
+
+    /// The ink's frame in the container's coordinates.
+    fn ink_frame(&self) -> NSRect {
+        let Some((l, t, w, h)) = self.ink_rect.get() else {
+            return NSRect::new(NSPoint::new(0., 0.), NSSize::new(0., 0.));
+        };
+        let (dx, dy, vh) = self.body.get();
+        let top = dy + t;
+        let y = if self.view.isFlipped() { top } else { vh - top - h };
+        NSRect::new(NSPoint::new(dx + l, y), NSSize::new(w, h))
     }
 
     pub fn set_passthrough(&self, on: bool) {
@@ -156,6 +193,10 @@ impl Container {
         let child_frame = NSRect::new(NSPoint::new(dx, child_y), NSSize::new(cw, ch));
         if child.frame() != child_frame {
             child.setFrame(child_frame);
+        }
+        self.body.set((dx, dy, vh));
+        if self.ink_rect.get().is_some() {
+            self.ink.place(self.ink_frame());
         }
         // Round only the bottom corners that are on screen.
         let eps = gpui::px(0.5);

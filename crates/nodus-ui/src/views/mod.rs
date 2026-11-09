@@ -9,6 +9,8 @@
 //!   the card's body, and swapped for a snapshot whenever GPUI must draw over
 //!   it (decision D3).
 //! - [`webview`]: a frame's webview: the shell page, the custom scheme, IPC.
+//! - [`ink`]: the board's ink over live pages, drawn in a native overlay
+//!   above each page, as 0.9.4's ink layer drew over its iframes.
 //! - [`relay`]: what pages ask for, and what the board tells them.
 //! - [`large`], [`dialog`]: the large window and the New view dialog.
 
@@ -16,10 +18,13 @@ pub mod card;
 pub mod dialog;
 pub mod frames;
 pub mod icons;
+pub mod ink;
 mod inputs;
 pub mod large;
 #[cfg(target_os = "macos")]
 mod mac;
+#[cfg(target_os = "macos")]
+mod mac_ink;
 mod parts;
 pub mod relay;
 mod resize;
@@ -51,6 +56,7 @@ pub fn board_layer(
     cx: &mut Context<'_, BoardCanvas>,
 ) -> Vec<AnyElement> {
     frames::sync_board(canvas, window, cx);
+    ink::sync(canvas, window, cx);
     relay::board_changed(canvas, cx);
     let mut out = Vec::new();
     out.extend(large::render(canvas, window, cx));

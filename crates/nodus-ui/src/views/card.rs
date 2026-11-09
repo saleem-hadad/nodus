@@ -8,12 +8,11 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Duration;
 
-use gpui::StyledImage as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     Animation, AnimationExt as _, AnyElement, App, Bounds, BoxShadow, ElementId, Entity, FontWeight,
     InteractiveElement, IntoElement, MouseButton, ParentElement, Pixels, Rgba, SharedString,
-    StatefulInteractiveElement, Styled, Task, Transformation, Window, canvas, div, img, percentage, px, relative,
+    StatefulInteractiveElement, Styled, Task, Transformation, Window, canvas, div, percentage, px, relative,
 };
 use nodus_domain::{BoardView, SessionStatus};
 
@@ -180,7 +179,6 @@ pub fn render(node: ViewNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut
         board,
         &ui,
         framed,
-        &shown,
         working,
         waiting,
         (resizing, state.dragging),
@@ -365,7 +363,6 @@ fn body(
     board: &BoardCx,
     ui: &Entity<CardUi>,
     framed: bool,
-    shown: &frames::Shown,
     working: bool,
     waiting: bool,
     (resizing, dragging): (bool, bool),
@@ -411,19 +408,8 @@ fn body(
             }
         }
     };
+    // The probe paints the page's snapshot while it's behind one.
     base.bg(t.bg_elevated)
-        .when_some(shown.snapshot.clone(), |d, image| {
-            d.child(
-                img(image)
-                    .object_fit(gpui::ObjectFit::Fill)
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .size_full()
-                    .rounded_bl(px(radius))
-                    .rounded_br(px(radius)),
-            )
-        })
         .child(frames::probe(id, Slot::Card, geometry))
         .into_any_element()
 }

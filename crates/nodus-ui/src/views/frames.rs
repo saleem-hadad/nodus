@@ -11,8 +11,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use gpui::{
-    AnyWindowHandle, App, Bounds, Context, EntityId, Global, Hitbox, HitboxBehavior, IntoElement, Pixels, RenderImage,
-    Styled, Window, canvas,
+    AnyWindowHandle, App, Bounds, Context, Corners, EntityId, Global, Hitbox, HitboxBehavior, IntoElement, Pixels,
+    RenderImage, Styled, Window, canvas, px,
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
@@ -54,6 +54,12 @@ pub struct Frame {
     pub probe: Option<Hitbox>,
     /// Something GPUI drew covers the page (last check).
     pub occluded: bool,
+    /// The page should be behind its snapshot (last check).
+    pub want: bool,
+    /// A snapshot failed: the next try waits until then.
+    pub retry_at: Option<Instant>,
+    /// The ink its overlay shows over the live page (`ink.rs`).
+    pub ink: Option<super::ink::PageInk>,
     /// The pointer is over the page (the shell says, VIEW-128's hover).
     pub hovered: bool,
     /// One of the card's own tooltips is up over the page.
@@ -95,6 +101,8 @@ pub struct Frames {
     dark: Option<bool>,
     pub check_scheduled: bool,
     pub settle_scheduled: bool,
+    /// The board's ink this frame, for the overlays over live pages.
+    pub ink: Option<super::ink::BoardInk>,
 }
 
 #[derive(Clone)]
@@ -120,6 +128,7 @@ pub fn frames(cx: &mut App) -> Rc<RefCell<Frames>> {
         dark: None,
         check_scheduled: false,
         settle_scheduled: false,
+        ink: None,
     }));
     cx.set_global(FramesGlobal(frames.clone()));
     frames
@@ -158,16 +167,17 @@ impl Frames {
         self.large = None;
         self.project_id = None;
         self.canvas = None;
+        self.ink = None;
     }
 }
 
-/// What a card or the large window shows in its body this frame.
+/// What a card or the large window shows in its body this frame. (Its
+/// snapshot, while it's behind one, is the probe's to paint: whether it is
+/// is decided as the frame paints.)
 #[derive(Clone, Default)]
 pub struct Shown {
     /// There's a frame for it.
     pub framed: bool,
-    /// GPUI draws this snapshot (the page is behind it, transparent).
-    pub snapshot: Option<Arc<RenderImage>>,
     /// The pointer is over the page.
     pub hovered: bool,
 }
@@ -180,7 +190,6 @@ pub fn shown(view_id: &str, slot: Slot, cx: &App) -> Shown {
     let frames = frames.borrow();
     frames.get(view_id, slot).map_or_else(Shown::default, |f| Shown {
         framed: true,
-        snapshot: if f.live { None } else { f.snapshot.clone() },
         hovered: f.hovered,
     })
 }
@@ -300,6 +309,9 @@ pub fn sync_board(canvas: &mut BoardCanvas, window: &mut Window, cx: &mut Contex
                         geometry: None,
                         probe: None,
                         occluded: false,
+                        want: false,
+                        retry_at: None,
+                        ink: None,
                         hovered: false,
                         tooltip: false,
                         zoom_changed: None,
@@ -336,6 +348,9 @@ pub fn describe(cx: &App) -> serde_json::Value {
                     "live": fr.live,
                     "snapshot": fr.snapshot.is_some(),
                     "occluded": fr.occluded,
+                    "want": fr.want,
+                    "pending": fr.pending,
+                    "ink": fr.ink.as_ref().map(|i| i.marks.len()),
                     "offscreen": fr.web.offscreen(),
                     "drawn": fr.drawn,
                     "hovered": fr.hovered,
@@ -357,7 +372,8 @@ pub fn describe(cx: &App) -> serde_json::Value {
 
 /// The body's probe: an invisible box over a frame's body, last in its card,
 /// so whatever GPUI hit-tests above it covers the page. Painting it places
-/// the frame's webview there.
+/// the frame's webview there, and paints the page's snapshot in its place
+/// while it's behind one (decided in that same paint, `swap::placed`).
 pub fn probe(
     view_id: String,
     slot: Slot,
@@ -367,7 +383,17 @@ pub fn probe(
         |bounds, window, _| window.insert_hitbox(bounds, HitboxBehavior::Normal),
         move |bounds, hitbox, window, cx| {
             let g = geometry(bounds, window.content_mask().bounds);
-            super::swap::placed(&view_id, slot, g, hitbox, window, cx);
+            if let Some(image) = super::swap::placed(&view_id, slot, g, hitbox, window, cx) {
+                // `object-fit: fill`, the body's rounded bottom corners.
+                let r = px(g.radius);
+                let corners = Corners {
+                    top_left: Pixels::ZERO,
+                    top_right: Pixels::ZERO,
+                    bottom_right: r,
+                    bottom_left: r,
+                };
+                let _ = window.paint_image(bounds, bounds, corners, image, 0, false);
+            }
         },
     )
     .absolute()

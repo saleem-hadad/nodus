@@ -141,7 +141,25 @@ def zoom_setup(zoom, x, y):
     return setup
 
 
-SETUP = {"try-relay": relay_setup, "try-wheel": page_setup(WHEEL_PAGE),
+def ink_setup(world):
+    """Ink across Docs build status (720, 0, 480 × 360 units): a pen line, an
+    arrow and a label, half on the page and half off it."""
+    path = os.path.join(world, "userData", "state.json")
+    state = json.load(open(path))
+    for board in state["boards"].values():
+        if any(v["title"] == "Docs build status" for v in board.get("views", {}).values()):
+            board["ink"] = [
+                {"id": "ink-pen", "kind": "pen", "color": "red", "size": 1.6,
+                 "points": [640, 200, 700, 215, 780, 236, 860, 248, 940, 245, 1010, 230, 1060, 214]},
+                {"id": "ink-arrow", "kind": "arrow", "color": "blue", "size": 1.6, "points": [880, 420, 1080, 140]},
+                {"id": "ink-label", "kind": "text", "color": "graphite", "size": 1.6, "points": [660, 300],
+                 "text": "Why did this one fail?"},
+            ]
+    json.dump(state, open(path, "w"))
+
+
+SETUP = {"try-relay": relay_setup, "try-wheel": page_setup(WHEEL_PAGE), "try-ink": ink_setup,
+         "try-ink-select": ink_setup,
          "try-zoom-in": zoom_setup(1.6, -1100, 40), "try-zoom-out": zoom_setup(0.35, 120, 160)}
 SIZE_PAGE = """<!doctype html><html><body style="margin:0;font:20px -apple-system"><div id="o"></div><script>
 function show(){document.getElementById('o').textContent=innerWidth+'x'+innerHeight+' dpr '+devicePixelRatio+' '+document.documentElement.clientWidth;}
@@ -149,6 +167,17 @@ show();addEventListener('resize',show);
 </script></body></html>"""
 SETUP["try-size"] = page_setup(SIZE_PAGE)
 SCENES["try-size"] = DOCS() + [AWAY]
+# Ink over a live page (INKUI-025): run with VIEWS_LIVE=1 VIEWS_SCREENCAPTURE=<png>
+# to see the page and its overlay; the page stays live and takes the pointer.
+SCENES["try-ink"] = DOCS() + [{"cmd": "wait", "ms": 1500}, {"cmd": "views"}, {"cmd": "hit", "x": 560, "y": 250}]
+# Run with VIEWS_LIVE=1: another element's tooltip over a live page (the
+# note's ⤢ beside Docs build status) puts the page behind its snapshot.
+SCENES["try-tooltip"] = DOCS() + [{"cmd": "wait", "ms": 1500}, M("move", 452, 134), {"cmd": "wait", "ms": 1500},
+                                  {"cmd": "views"}]
+# The pen line selected where it's off the page (x 640 units): its outline
+# crosses the page too.
+SCENES["try-ink-select"] = DOCS() + [{"cmd": "wait", "ms": 1500}, M("click", *AT(641, 200)),
+                                     {"cmd": "wait", "ms": 300}, {"cmd": "views"}]
 SCENES["try-zoom-in"] = DOCS() + [AWAY]
 SCENES["try-zoom-out"] = DOCS() + [AWAY]
 # A scroll the page has no use for pans the board (VIEW-047): the board moves up 200px.

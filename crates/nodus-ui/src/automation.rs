@@ -495,6 +495,15 @@ fn with_window<R>(cx: &mut AsyncApp, f: impl FnOnce(&mut gpui::Window, &mut App)
 /// pixels), drawn again offscreen by the patched GPUI: what GPUI draws and
 /// nothing else, so no traffic lights, as the goldens have none.
 async fn screenshot(cx: &mut AsyncApp, path: &str) -> Result<Value, String> {
+    // Views' pages are WebKit's, which can be slow to start: pages that
+    // should show as pictures get theirs first (up to 5s), or the shot holds
+    // their empty bodies.
+    for _ in 0..100 {
+        if cx.update(|cx| crate::views::swap::pictures_ready(cx)) {
+            break;
+        }
+        cx.background_executor().timer(Duration::from_millis(50)).await;
+    }
     // Let the frame in flight land first.
     cx.background_executor().timer(Duration::from_millis(50)).await;
     let mut image = with_window(cx, |window, _| window.render_to_image().map_err(|e| e.to_string()))??;

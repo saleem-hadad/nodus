@@ -218,6 +218,15 @@ impl PageWebview {
         let _ = self.webview.set_visible(live && !self.offscreen.get());
     }
 
+    /// Shows the board's ink over the live page (`ink.rs`); None hides it.
+    /// WebView2 has no overlay yet: there the ink stays under a live page.
+    pub fn set_ink(&self, ink: Option<&super::ink::PageInk>) {
+        #[cfg(target_os = "macos")]
+        self.container.set_ink(ink);
+        #[cfg(not(target_os = "macos"))]
+        let _ = ink;
+    }
+
     /// The pointer goes to the board instead of the page (VIEW-141).
     pub fn set_passthrough(&self, on: bool) {
         #[cfg(target_os = "macos")]

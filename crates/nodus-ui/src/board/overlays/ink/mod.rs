@@ -203,3 +203,6 @@ mod dock;
 mod draw;
 mod input;
 mod ops;
+// What views draw over their live pages (spec 04, D3).
+mod overlay;
+pub use overlay::{InkMark, InkScene};

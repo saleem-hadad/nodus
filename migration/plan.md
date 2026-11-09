@@ -161,7 +161,7 @@ Tracks after P1 run in parallel where the dependency column allows.
 | P5 | UI foundation: app shell, theme tokens (light/dark), title bar, menus, settings, projects grid, project rail | P1, S1 | ✅ merged (ui-shell) |
 | P6 | Board canvas: pan/zoom/select/drag, cards, sections, archive, notes, edges, controls, context menus, shortcuts | P4, P5 | 🟡 canvas merged; board-cards running |
 | P7 | Terminal: element, modal, expanded cards, transcript preview, agent viewer | P2, P5 | ✅ merged; expanded cards plug in through `terminal::card::CardTerminals` |
-| P8 | Overlays: prompt bar, ⌘K search, merge dialog, ink, selection bar, agent deck | P6 | ☐ |
+| P8 | Overlays: prompt bar, ⌘K search, merge dialog, ink, selection bar, agent deck | P6 | 🟡 overlays running (agent deck is board-cards') |
 | P9 | Views (wry), board tools, actions, voice, git UI | P6 | ☐ |
 | P10 | Capture panel, notifications, Dock badge, updater | P6 | ☐ |
 | P11 | Packaging: .app and DMGs (same bundle id, Info.plist keys, entitlements, signing, notarizing), Windows NSIS (same flags), release workflow; 0.9.4 → Rust update test | P10 | 🟡 merged; waits on Windows CI, the real certificate, and the UI tracks |
@@ -184,8 +184,9 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | actions-voice-git | `rust/actions-voice-git` | nodus-actions, nodus-voice (incl. the recorder), nodus-git | ✅ merged: 97 (GIT 28, ACT 37, VOICE 32); recorder is Core Audio voice processing + Opus/WebM like MediaRecorder |
 | capture | `rust/capture` | nodus-capture backend: double tap, key hook, screen context, guess, submit | ✅ merged: 98 CAP; panel UI and page wiring to the capture-panel track |
 | core | `rust/core` | P4: wire every merged domain into nodus-core (sessions, board, views, updates, events, startup/quit), deferred core IDs, debts, headless end-to-end tests | ✅ merged (6243e7c): every domain composed; git/actions/voice wired; the windowed app launches, runs sessions through `Nodus host` and quits through the core |
+| overlays | `rust/overlays` | P8, spec 11: prompt bar, ⌘K search, merge dialog, ink layer, selection bar, on the board's `board/bar.rs` hooks | 🟡 running |
 | gpui-text | `rust/gpui-text` | patched GPUI text parity with Chromium: sRGB tagging, no SF Pro tracking, hanging trailing spaces, Chromium's rounding; Windows effects CI step | 🟡 running |
-| board-canvas | `rust/board-canvas` | P6, spec 09: the board route and canvas (pan/zoom/select/drag, sections, edges, menus, shortcuts), node plug-in interface | ✅ merged (f2f5747): 151 ticked; 13 deferred to cards/terminal/views/overlays and 13 board-side overlay hooks (`board/bar.rs`) tick when the overlays land |
+| board-canvas | `rust/board-canvas` | P6, spec 09: the board route and canvas (pan/zoom/select/drag, sections, edges, menus, shortcuts), node plug-in interface | ✅ merged (f2f5747): 149 ticked; 13 deferred to cards/terminal/views/overlays and 13 board-side overlay hooks (`board/bar.rs`) tick when the overlays land |
 | board-cards | `rust/board-cards` | P6, spec 10: session cards, expanded card chrome, agent deck, archive stack, notes, pad (`nodus-ui/src/board/cards/`) | 🟡 running |
 | capture-panel | `rust/capture-panel2` (from `rust/capture-panel` at adc385b) | P10, spec 07 UI: the panel window and page, Settings' capture rows, File › Capture…, `nodus.capture()` | 🟡 running (fresh agent on a new branch: two stale worktrees hold `rust/capture-panel`) |
 | packaging | `rust/packaging` | P11: macOS bundle + DMGs, Windows NSIS (electron-builder templates), signing/notarizing, CI packaging + native smoke test, `release-rust.yml` with D12 handoff gates; publishes nothing | ✅ merged (bec0388): `packaging/`, `rust-package.yml`, `release-rust.yml`; arm64 DMG passes 0.9.4's checks locally (ad-hoc); Windows and signing first run in CI / with the certificate |

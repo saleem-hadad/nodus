@@ -49,8 +49,8 @@
 ## Known differences
 
 - Text: GPUI's SF Pro tracking and rounding (gpui-text): labels, the merge context's mono lines (GPUI rounds its line height to device pixels, so 7 lines of 18.6px end ~3px lower).
-- Search highlights: GPUI's text highlights have no corner radius (0.9.4's marks are 3px round) and the title's underline sits where GPUI puts it (0.9.4: 3px below the baseline).
-- Native tooltips are drawn by GPUI in the window, so a shot with the pointer resting on a titled control shows one; 0.9.4's goldens never do.
+- ~~Search highlights~~: rounded marks and the title's underline 3px below the baseline, by gpui-polish (PATCHES 13).
+- Native tooltips are drawn by GPUI in the window, so a shot with the pointer resting on a titled control shows one; 0.9.4's goldens never do. They now wait AppKit's 1.5 s (gpui-polish), so fewer scenes catch one.
 
 ## Deferred
 

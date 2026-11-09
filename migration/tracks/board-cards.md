@@ -76,4 +76,4 @@ Gallery, `cargo run -p nodus-ui --example board_cards -- <dir>` (nodes only: no 
 - Text rasterisation and placement (gpui-text's): SF Pro's tracking, and baselines that round half a device pixel the other way; a few labels sit a device pixel off (the title bar's usage line, the archive and pad header labels, a fan row's tool line).
 - Dashed borders and shadow rings are paths with 4× MSAA where Chromium covers edges analytically: edge pixels can differ by an eighth of coverage.
 - GPUI snaps layout lengths to device pixels where Chromium keeps fractions, so some boxes sit up to a device pixel off (e.g. children of a 1.5px border at 80 %).
-- Tooltips are GPUI-drawn (`components/tooltip.rs`), so they show in shots where the goldens' native ones don't; the pad's top sheet's wraps one word a line.
+- Tooltips are GPUI-drawn (`components/tooltip.rs`), so they show in shots where the goldens' native ones don't. ~~The pad's top sheet's wraps one word a line~~: fixed by gpui-polish (PATCHES 15).

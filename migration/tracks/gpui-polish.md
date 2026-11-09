@@ -23,7 +23,7 @@
 
 ## Checked side by side
 
-Spec 11's scenes through the real app (`crates/nodus-ui/parity/scenes11.py`, Node 22+ first on `PATH`), region diffs with pixelmatch (threshold 0.1):
+The real app through the scene runners (`crates/nodus-ui/parity/scenes11.py`, `scenes.py`, `capture_scenes.py`; Node 22+ first on `PATH`), region diffs with pixelmatch (threshold 0.1) against 0.9.4's goldens:
 
 | Scene | Region | Light | Dark |
 | --- | --- | --- | --- |
@@ -41,11 +41,13 @@ The highlights match the golden row for row (mark 375–402, underline 364–365
 ## Remaining differences
 
 - The transcript preview's marks (`.tp-msg mark`, 3px round) and the diff's changed words (`.diff-word`, 2px) are still square and line-tall: since audit-shell made that text selectable, the selection is drawn through the same run backgrounds, so an inline background there would round the selection too. They need the selection drawn apart from the marks (`components::selectable`).
+- The views dialog's description (views-ui's module) isn't spellchecked yet; it takes `components::spellcheck::spellcheck` and `underlines` like the action dialog's.
+- Windows: the image and `move` cursors and the clipped shadows' HLSL compile (`cargo check --target x86_64-pc-windows-msvc`) but haven't run; spelling there is `ISpellChecker`, where Electron used Hunspell, so a few words may be judged differently.
 - Tooltips are still drawn by GPUI inside the window. 0.9.4's were AppKit's own (Chromium hands `title` text to `NSToolTipManager`): a separate panel that can extend past the window, in AppKit's material. The font, delay and quick mode now match; the panel's padding, corners and the wrap width (320px) are ui-shell's estimates. AppKit's private layout calls crash when called directly, so the wrap width wasn't measured. A native tooltip (Chromium's `setToolTipAtMousePoint:` path) was considered: on this macOS, `addToolTipRect:` no longer goes through `addTrackingRect:owner:…`, which that path relies on, and it can't be checked without activating the app, so it wasn't taken.
 
 ## Log
 
-- Started from main (f4467cd).
+- Started from main (f4467cd); rebased onto the cutover (db61c8f). audit-shell had meanwhile added page zoom as PATCHES 11 (this track's are 12–15) and a first spellcheck (`nodus_platform::spell`, kept; its component replaced by this track's).
 - Item 2: Chromium's spelling behaviour probed with `webContents.insertText` in a hidden Electron 44.5.1 window; NSSpellChecker gives the same words (`Teh` isn't flagged by either).
 - Item 4: AppKit's tooltip timing read from `NSToolTipManager` (ivars and `_getDisplayDelay:inQuickMode:forView:` in a probe with no window shown).
 - Item 1: CoreCursor's move arrow checked on this macOS (24×24, hotspot 12,12, the same picture Chromium shows); `_moveCursor` exists but throws, so it's not used.

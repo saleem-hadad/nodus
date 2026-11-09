@@ -19,29 +19,39 @@ impl ViewsApi<'_> {
     /// described, and starts its brain on building it, once the login
     /// shell's environment is in. `Unknown project <id>`.
     pub async fn create(&self, project_id: &str, opts: &CreateViewOptions) -> CommandResult<BoardView> {
-        self.nodus.inner.views.create(project_id, opts).await.on("views:create")
+        self.nodus
+            .on_core(async { self.nodus.inner.views.create(project_id, opts).await.on("views:create") })
+            .await
     }
 
     /// `views:save` (VIEW-115, VIEW-116): moves, resizes or renames a view.
     pub async fn save(&self, project_id: &str, patch: &ViewPatch) -> CommandResult<()> {
-        self.nodus.inner.views.save(project_id, patch).on("views:save")
+        self.nodus
+            .on_core(async { self.nodus.inner.views.save(project_id, patch).on("views:save") })
+            .await
     }
 
     /// `views:remove` (VIEW-117): takes a view off the board, with its page,
     /// its data and its brain.
     pub async fn remove(&self, project_id: &str, view_id: &str) -> CommandResult<()> {
-        self.nodus.inner.views.remove(project_id, view_id).on("views:remove")
+        self.nodus
+            .on_core(async { self.nodus.inner.views.remove(project_id, view_id).on("views:remove") })
+            .await
     }
 
     /// `views:call` (VIEW-060…071): a request from a view's page
     /// (`window.nodus`), answered for that view only.
     pub async fn call(&self, project_id: &str, view_id: &str, method: &str, args: &Value) -> CommandResult<Value> {
         self.nodus
-            .inner
-            .views
-            .call(project_id, view_id, method, args)
+            .on_core(async {
+                self.nodus
+                    .inner
+                    .views
+                    .call(project_id, view_id, method, args)
+                    .await
+                    .on("views:call")
+            })
             .await
-            .on("views:call")
     }
 
     /// `views:report` (VIEW-119), fire and forget: a JavaScript error the
@@ -55,43 +65,59 @@ impl ViewsApi<'_> {
     /// down, one of a view's commands.
     pub async fn approve(&self, project_id: &str, view_id: &str, name: &str, allow: bool) -> CommandResult<()> {
         self.nodus
-            .inner
-            .views
-            .approve(project_id, view_id, name, allow)
-            .on("views:approve")
+            .on_core(async {
+                self.nodus
+                    .inner
+                    .views
+                    .approve(project_id, view_id, name, allow)
+                    .on("views:approve")
+            })
+            .await
     }
 
     /// `views:refresh` (VIEW-084, VIEW-120): runs the view's commands now, and
     /// asks its brain to refresh it if it has a refresh prompt.
     pub async fn refresh(&self, project_id: &str, view_id: &str) -> CommandResult<Vec<CommandRunResult>> {
         self.nodus
-            .inner
-            .views
-            .refresh(project_id, view_id)
+            .on_core(async {
+                self.nodus
+                    .inner
+                    .views
+                    .refresh(project_id, view_id)
+                    .await
+                    .on("views:refresh")
+            })
             .await
-            .on("views:refresh")
     }
 
     /// `views:ask` (VIEW-093, VIEW-120): passes what the user asked for on to
     /// the view's brain, starting one if it has none.
     pub async fn ask(&self, project_id: &str, view_id: &str, prompt: &str) -> CommandResult<()> {
         self.nodus
-            .inner
-            .views
-            .ask(project_id, view_id, prompt)
+            .on_core(async {
+                self.nodus
+                    .inner
+                    .views
+                    .ask(project_id, view_id, prompt)
+                    .await
+                    .on("views:ask")
+            })
             .await
-            .on("views:ask")
     }
 
     /// `views:brain` (VIEW-092, VIEW-120): the view's brain, started idle if
     /// it has none yet, so its session can be opened.
     pub async fn brain(&self, project_id: &str, view_id: &str) -> CommandResult<String> {
         self.nodus
-            .inner
-            .views
-            .brain(project_id, view_id)
+            .on_core(async {
+                self.nodus
+                    .inner
+                    .views
+                    .brain(project_id, view_id)
+                    .await
+                    .on("views:brain")
+            })
             .await
-            .on("views:brain")
     }
 
     /// The page a view's frame loads from `nodus-view://<id>/` (or WebView2's

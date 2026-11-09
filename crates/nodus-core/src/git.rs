@@ -21,24 +21,36 @@ impl GitApi<'_> {
     /// none when the folder isn't in a git repository. Fails when git can't
     /// run; the window reads that as none too (GIT-021).
     pub async fn status(&self, project_id: &str) -> CommandResult<Option<GitStatus>> {
-        const CHANNEL: &str = "git:status";
-        let (git, repo) = self.git(project_id, CHANNEL).await?;
-        git.status(&repo).await.on(CHANNEL)
+        self.nodus
+            .on_core(async {
+                const CHANNEL: &str = "git:status";
+                let (git, repo) = self.git(project_id, CHANNEL).await?;
+                git.status(&repo).await.on(CHANNEL)
+            })
+            .await
     }
 
     /// `git:diff` (GIT-014…GIT-020): one changed file against HEAD.
     pub async fn diff(&self, project_id: &str, file: &GitFileChange) -> CommandResult<GitFileDiff> {
-        const CHANNEL: &str = "git:diff";
-        let (git, repo) = self.git(project_id, CHANNEL).await?;
-        git.diff(&repo, file).await.on(CHANNEL)
+        self.nodus
+            .on_core(async {
+                const CHANNEL: &str = "git:diff";
+                let (git, repo) = self.git(project_id, CHANNEL).await?;
+                git.diff(&repo, file).await.on(CHANNEL)
+            })
+            .await
     }
 
     /// `git:log` (GIT-011…GIT-013): the newest commits on the branch, newest
     /// first. A whole-number `limit` is kept to 1–50; anything else is 5.
     pub async fn log(&self, project_id: &str, limit: Option<f64>) -> CommandResult<Vec<GitCommit>> {
-        const CHANNEL: &str = "git:log";
-        let (git, repo) = self.git(project_id, CHANNEL).await?;
-        git.log(&repo, clamp_limit(limit)).await.on(CHANNEL)
+        self.nodus
+            .on_core(async {
+                const CHANNEL: &str = "git:log";
+                let (git, repo) = self.git(project_id, CHANNEL).await?;
+                git.log(&repo, clamp_limit(limit)).await.on(CHANNEL)
+            })
+            .await
     }
 
     /// GIT-003: the env first, then the project (`Unknown project <id>`).

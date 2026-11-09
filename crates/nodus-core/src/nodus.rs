@@ -342,16 +342,30 @@ impl Nodus {
     /// `Err` when the user chose Quit over another version's sessions: the
     /// shell has been asked to exit at once (HOST-103).
     pub async fn launch(&self) -> Result<(), QuitAtOnce> {
-        match self.inner.host.connect_host(false).await {
-            Ok(()) => {}
-            Err(ClientError::Quit) => {
-                self.inner.shell.exit_now();
-                return Err(QuitAtOnce);
+        self.on_core(async {
+            match self.inner.host.connect_host(false).await {
+                Ok(()) => {}
+                Err(ClientError::Quit) => {
+                    self.inner.shell.exit_now();
+                    return Err(QuitAtOnce);
+                }
+                Err(ClientError::Failed(err)) => tracing::error!("[host] connect failed {err}"),
             }
-            Err(ClientError::Failed(err)) => tracing::error!("[host] connect failed {err}"),
+            self.inner.notify.arm();
+            Ok(())
+        })
+        .await
+    }
+
+    /// Runs `work` in the core's tokio runtime's context, whichever executor
+    /// polls it: the window awaits commands on GPUI's, and they start tasks,
+    /// timers, processes and HTTP requests on tokio's. Every async command
+    /// goes through this, so the API can be awaited from anywhere.
+    pub(crate) fn on_core<F: Future>(&self, work: F) -> OnCore<F> {
+        OnCore {
+            runtime: self.inner.runtime.clone(),
+            work: Box::pin(work),
         }
-        self.inner.notify.arm();
-        Ok(())
     }
 
     /// What quitting does before the app goes, on every path that quits
@@ -600,6 +614,22 @@ async fn follow_status(core: Weak<Inner>, mut changes: mpsc::UnboundedReceiver<S
             core.board.on_done(&session_id);
         }
         core.views.brain_status(&session_id, status, live);
+    }
+}
+
+/// A future polled inside the core's runtime context ([`Nodus::on_core`]).
+pub(crate) struct OnCore<F: Future> {
+    runtime: Handle,
+    work: Pin<Box<F>>,
+}
+
+impl<F: Future> Future for OnCore<F> {
+    type Output = F::Output;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<F::Output> {
+        let this = &mut *self;
+        let _context = this.runtime.enter();
+        this.work.as_mut().poll(cx)
     }
 }
 

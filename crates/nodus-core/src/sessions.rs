@@ -22,15 +22,19 @@ impl SessionsApi<'_> {
     /// with `That action no longer exists`, the `claude` not found message,
     /// or the session host's error; the card is taken off again then.
     pub async fn create(&self, project_id: &str, opts: &CreateSessionOptions) -> CommandResult<SessionCard> {
-        const CHANNEL: &str = "session:create";
-        self.nodus.env().await;
-        let launcher = CoreLauncher(std::sync::Arc::downgrade(&self.nodus.inner));
         self.nodus
-            .inner
-            .board
-            .create_session(project_id, opts, &launcher)
+            .on_core(async {
+                const CHANNEL: &str = "session:create";
+                self.nodus.env().await;
+                let launcher = CoreLauncher(std::sync::Arc::downgrade(&self.nodus.inner));
+                self.nodus
+                    .inner
+                    .board
+                    .create_session(project_id, opts, &launcher)
+                    .await
+                    .on(CHANNEL)
+            })
             .await
-            .on(CHANNEL)
     }
 
     /// `session:open` (HOST-222, SESS-135, SESS-136): a live session is
@@ -44,39 +48,43 @@ impl SessionsApi<'_> {
         cols: f64,
         rows: f64,
     ) -> CommandResult<OpenSessionResult> {
-        const CHANNEL: &str = "session:open";
-        let inner = &self.nodus.inner;
-        // SESS-135: no project lookup for a live one.
-        if inner.host.is_live(session_id) {
-            inner.host.resize(session_id, cols, rows);
-            return Ok(OpenSessionResult {
-                replay: inner.host.snapshot(session_id),
-                live: true,
-            });
-        }
-        self.nodus.env().await;
-        let project = inner
-            .store
-            .read(|state| state.project(project_id).cloned())
-            .on(CHANNEL)?;
-        let node = inner
-            .store
-            .read(|state| state.board(project_id).and_then(|b| b.nodes.get(session_id).cloned()));
-        let brain_args = node.as_ref().and_then(|node| inner.brain_args(project_id, node));
-        let opts = launch::for_open(
-            project_id,
-            &project.repo_path,
-            session_id,
-            node.as_ref(),
-            inner.board.has_transcript(&project, session_id),
-            brain_args,
-            (cols, rows),
-        );
-        inner.spawn_session(opts).await.on(CHANNEL)?;
-        Ok(OpenSessionResult {
-            replay: String::new(),
-            live: true,
-        })
+        self.nodus
+            .on_core(async {
+                const CHANNEL: &str = "session:open";
+                let inner = &self.nodus.inner;
+                // SESS-135: no project lookup for a live one.
+                if inner.host.is_live(session_id) {
+                    inner.host.resize(session_id, cols, rows);
+                    return Ok(OpenSessionResult {
+                        replay: inner.host.snapshot(session_id),
+                        live: true,
+                    });
+                }
+                self.nodus.env().await;
+                let project = inner
+                    .store
+                    .read(|state| state.project(project_id).cloned())
+                    .on(CHANNEL)?;
+                let node = inner
+                    .store
+                    .read(|state| state.board(project_id).and_then(|b| b.nodes.get(session_id).cloned()));
+                let brain_args = node.as_ref().and_then(|node| inner.brain_args(project_id, node));
+                let opts = launch::for_open(
+                    project_id,
+                    &project.repo_path,
+                    session_id,
+                    node.as_ref(),
+                    inner.board.has_transcript(&project, session_id),
+                    brain_args,
+                    (cols, rows),
+                );
+                inner.spawn_session(opts).await.on(CHANNEL)?;
+                Ok(OpenSessionResult {
+                    replay: String::new(),
+                    live: true,
+                })
+            })
+            .await
     }
 
     /// `session:write` (HOST-223, SESS-138), fire and forget: an action run
@@ -98,13 +106,17 @@ impl SessionsApi<'_> {
     /// Rejects `That session is no longer on the board`, and `It’s waiting
     /// for your answer. Open it to reply.` while it waits on a question.
     pub async fn send(&self, project_id: &str, session_id: &str, text: &str) -> CommandResult<()> {
-        let launcher = CoreLauncher(std::sync::Arc::downgrade(&self.nodus.inner));
         self.nodus
-            .inner
-            .board
-            .send_to_session(project_id, session_id, text, &launcher)
+            .on_core(async {
+                let launcher = CoreLauncher(std::sync::Arc::downgrade(&self.nodus.inner));
+                self.nodus
+                    .inner
+                    .board
+                    .send_to_session(project_id, session_id, text, &launcher)
+                    .await
+                    .on("session:send")
+            })
             .await
-            .on("session:send")
     }
 
     /// `session:resize` (HOST-224, SESS-147), fire and forget: ignored unless
@@ -117,7 +129,11 @@ impl SessionsApi<'_> {
     /// process; done when it has exited or after 4 s, at once when it isn't
     /// live. The card stays, and opening it resumes the session.
     pub async fn kill(&self, session_id: &str) {
-        self.nodus.inner.host.kill(session_id).await;
+        self.nodus
+            .on_core(async {
+                self.nodus.inner.host.kill(session_id).await;
+            })
+            .await;
     }
 
     /// Stopping sessions from the board or the terminal modal (SESS-153):
@@ -125,20 +141,28 @@ impl SessionsApi<'_> {
     /// window picks them with `nodus_board::stoppable` and asks first with
     /// `nodus_board::stop_confirmation`.
     pub async fn stop(&self, session_ids: &[String]) {
-        let host = &self.nodus.inner.host;
-        let kills: Vec<_> = session_ids.iter().map(|id| host.kill(id)).collect();
-        for killed in kills {
-            killed.await;
-        }
+        self.nodus
+            .on_core(async {
+                let host = &self.nodus.inner.host;
+                let kills: Vec<_> = session_ids.iter().map(|id| host.kill(id)).collect();
+                for killed in kills {
+                    killed.await;
+                }
+            })
+            .await;
     }
 
     /// `session:transcript` (SESS-162): the conversation, for the preview.
     pub async fn transcript(&self, project_id: &str, session_id: &str) -> CommandResult<Vec<TranscriptMessage>> {
         self.nodus
-            .inner
-            .board
-            .transcript(project_id, session_id)
-            .on("session:transcript")
+            .on_core(async {
+                self.nodus
+                    .inner
+                    .board
+                    .transcript(project_id, session_id)
+                    .on("session:transcript")
+            })
+            .await
     }
 
     /// `session:summarize` (SESS-165…174): handoff summaries, one per id
@@ -151,39 +175,51 @@ impl SessionsApi<'_> {
         request_id: &str,
         focus: Option<&str>,
     ) -> CommandResult<Vec<SummaryResult>> {
-        let env = self.nodus.env().await;
         self.nodus
-            .inner
-            .board
-            .summarize(project_id, session_ids, request_id, focus, &env)
+            .on_core(async {
+                let env = self.nodus.env().await;
+                self.nodus
+                    .inner
+                    .board
+                    .summarize(project_id, session_ids, request_id, focus, &env)
+                    .await
+                    .on("session:summarize")
+            })
             .await
-            .on("session:summarize")
     }
 
     /// `session:search` (SESS-175): the board's sessions whose transcripts
     /// hold every word of the query, best first.
     pub async fn search(&self, project_id: &str, query: &str) -> CommandResult<Vec<SessionSearchHit>> {
         self.nodus
-            .inner
-            .board
-            .search(project_id, query)
+            .on_core(async {
+                self.nodus
+                    .inner
+                    .board
+                    .search(project_id, query)
+                    .await
+                    .on("session:search")
+            })
             .await
-            .on("session:search")
     }
 
     /// `session:agents` (SESS-164, HOST-198): every subagent the session has
     /// started, oldest first.
     pub async fn agents(&self, project_id: &str, session_id: &str) -> CommandResult<Vec<AgentInfo>> {
-        let inner = &self.nodus.inner;
-        let project = inner
-            .store
-            .read(|state| state.project(project_id).cloned())
-            .on("session:agents")?;
-        let files = inner
-            .board
-            .transcripts()
-            .list_agent_files(&project.repo_path, session_id);
-        Ok(inner.agents.read_agents(&inner.status, session_id, &files))
+        self.nodus
+            .on_core(async {
+                let inner = &self.nodus.inner;
+                let project = inner
+                    .store
+                    .read(|state| state.project(project_id).cloned())
+                    .on("session:agents")?;
+                let files = inner
+                    .board
+                    .transcripts()
+                    .list_agent_files(&project.repo_path, session_id);
+                Ok(inner.agents.read_agents(&inner.status, session_id, &files))
+            })
+            .await
     }
 
     /// `session:agent-transcript` (SESS-163, HOST-200): a subagent's steps.
@@ -195,9 +231,13 @@ impl SessionsApi<'_> {
         agent_id: &str,
     ) -> CommandResult<Vec<TranscriptMessage>> {
         self.nodus
-            .inner
-            .board
-            .agent_transcript(project_id, session_id, agent_id)
-            .on("session:agent-transcript")
+            .on_core(async {
+                self.nodus
+                    .inner
+                    .board
+                    .agent_transcript(project_id, session_id, agent_id)
+                    .on("session:agent-transcript")
+            })
+            .await
     }
 }

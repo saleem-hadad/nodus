@@ -418,6 +418,46 @@ async fn host_212_213_a_card_to_open_waits_for_a_window_that_was_closed() {
     assert!(events.try_recv().is_err());
 }
 
+/// Polls a future to its end on this thread, outside any tokio runtime, as
+/// GPUI's executor polls the window's commands.
+fn block_on<F: Future>(future: F) -> F::Output {
+    struct Unpark(std::thread::Thread);
+    impl std::task::Wake for Unpark {
+        fn wake(self: Arc<Self>) {
+            self.0.unpark();
+        }
+    }
+    let waker = std::task::Waker::from(Arc::new(Unpark(std::thread::current())));
+    let mut cx = std::task::Context::from_waker(&waker);
+    let mut future = std::pin::pin!(future);
+    loop {
+        if let std::task::Poll::Ready(output) = future.as_mut().poll(&mut cx) {
+            return output;
+        }
+        std::thread::park_timeout(Duration::from_millis(50));
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn commands_can_be_awaited_from_another_executor() {
+    let world = world();
+    let nodus = world.nodus.clone();
+    // A plain thread, with no tokio runtime of its own: the updater's lookup
+    // (timers, HTTP), a kill's 4 s wait and Quit and Stop Sessions still run.
+    let states = std::thread::spawn(move || {
+        assert!(tokio::runtime::Handle::try_current().is_err());
+        block_on(nodus.updates().check());
+        block_on(nodus.sessions().kill("not-live"));
+        block_on(nodus.sessions().stop(&["a".into(), "b".into()]));
+        block_on(nodus.menu().quit_and_stop_sessions());
+        block_on(nodus.updates().status()).state
+    })
+    .join()
+    .unwrap();
+    assert_eq!(states, UpdateState::Latest);
+    assert_eq!(world.shell.quits.load(Ordering::SeqCst), 1);
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn act_001_015_actions_are_saved_moved_and_removed() {
     let world = world();

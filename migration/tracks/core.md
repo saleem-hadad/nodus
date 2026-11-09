@@ -21,9 +21,15 @@
 | API areas: board, sessions, views, updates, menu; projects.stats with real counts; take_open_request | ✅ merged (7cf6661) |
 | Unit tests for the fan-out order and the glue | ✅ merged (4266dca) |
 | Headless end-to-end tests (`crates/nodus-core/tests/headless.rs`) | ✅ merged (3cd11cf) |
-| Phase 2a: `git.*`, `actions.*`, `voice.*` in the core; views' `nodus.git()`; nodus-actions' `run_args` | ✅ |
-| Phase 2b: app wiring in nodus-ui (AppShell, launch, host launcher, notifications, updater) | ☐ |
-| Phase 2c: Settings voice-key and update rows, live counts and badges, Check for Updates…, Quit and Stop Sessions | ☐ |
+| Phase 2a: `git.*`, `actions.*`, `voice.*` in the core; views' `nodus.git()`; nodus-actions' `run_args` | ✅ 0fc208b |
+| Every async command runs in the core's runtime context, so GPUI's executor can await it (`Nodus::on_core`) | ✅ 8adbe00 |
+| Phase 2b: app wiring in nodus-ui (AppShell, launch, host launcher, notifications, updater, quit paths) | ✅ 9e68a21 |
+| Phase 2c: Settings voice-key and update rows, title bar Restart to Update; live counts and badges | ✅ 8aa1b43 |
+
+Phase 2 was checked by driving the built app through its test driver (`NODUS_AUTOMATION`) on a scratch userData with
+a stand-in `claude` and a stand-in login shell: a project, a Claude card through a host the app started, `1 running`
+in the title bar and the working badge on the folder, Settings' voice and update rows, then ⌥⌘Q: the app exited 0
+and no host or session was left running. The script is `drive.py` in the core session's scratchpad.
 
 ## How to resume
 
@@ -39,6 +45,11 @@ Read this file, then `git log --oneline main..rust/core`. The next unchecked row
 - 05 (phase 2a): GIT-003 (env wait and project lookup), VOICE-002, ACT-042 (takeover → `claim_run` before each
   `session:write`, since phase 1); `git:*`, `actions:*`, `voice:*` commands with 0.9.4's channels.
 - 01 (core side): PLAT-032 (steps 2–5), PLAT-034, PLAT-046 (core side), PLAT-075, PLAT-077, PLAT-114, PLAT-128.
+- Phase 2b/2c (nodus-ui): PLAT-010 steps 8–11 and PLAT-011 (the window opens after `launch`), PLAT-034 (⌥⌘Q),
+  PLAT-046 and UPD-079 (menu check), HOST-102/HOST-103 (the other-version box: an app-modal NSAlert on a Mac, the
+  window's prompt elsewhere; Quit exits at once), HOST-205's background test (window flags), UPD-066 (Windows'
+  question before installing), UPD-080 (status fetched as the window and Settings open), UI-102…UI-105, UI-234,
+  UI-258 (they render the core's real stats), UI-106…UI-108, UI-139…UI-151.
 
 ## Deferred
 
@@ -47,6 +58,12 @@ Read this file, then `git log --oneline main..rust/core`. The next unchecked row
   `syncShortcut` on settings).
 - nodus-terminal's `Sessions` (open, write, resize) is the terminal-ui track's to implement over
   `nodus.sessions()`; it needs nothing more from the core.
+- Windows: the other-version box and UPD-066's question use GPUI's window prompt, which has only been compiled; and
+  `cargo clippy --target x86_64-pc-windows-msvc` runs with `--exclude nodus-ui --exclude nodus` from a Mac, since
+  GPUI's build script needs Windows' resource compiler (as the actions-voice-git track found). The Windows CI job
+  checks them.
+- Real notification delivery and the Dock badge need a packaged, signed build (platform-updater's note); a dev build
+  reports notifications unsupported.
 
 ## Integration debts resolved
 
@@ -77,6 +94,15 @@ Read this file, then `git log --oneline main..rust/core`. The next unchecked row
 - `nodus_platform::Env::with_vars(vars, home)`: an environment resolved as the login shell's is (a server's own, tests).
 - `nodus_platform::permissions::ask_for_microphone` lets go of its block before waiting, so `voice:microphone`'s
   future is `Send`.
+
+## Edits in nodus-ui (phase 2)
+
+- New `shell/core_shell.rs`: `UiShell` (`AppShell`), the window flags, the main-thread request loop, HOST-102's box,
+  `install_update`, `check_for_updates`, `quit_and_stop_sessions`.
+- `app.rs`: `NodusConfig { shell, notifications: System, .. }`, `launch()` before the window. `window.rs`: the
+  flags, the update status on open. `menus.rs`: Check for Updates… and Quit and Stop Sessions handlers only.
+  `title_bar.rs`: Restart to Update. `settings/mod.rs`: the voice key and update rows. `automation.rs`: a few core
+  methods for the driver. Nothing under `board/` or the capture panel.
 
 ## Edits in ui-shell's files (one line each)
 

@@ -1222,13 +1222,14 @@ impl BoardCanvas {
         }
     }
 
-    /// BOARD-106.
+    /// BOARD-106. MODAL-029: the run's terminal is disposed, and its window
+    /// closes if it shows the run.
     pub fn run_finished(&mut self, run: &ActionRunResult, cx: &mut Context<'_, Self>) {
         if run.project_id != self.project_id {
             return;
         }
-        // The terminal registry disposes the run's terminal (spec 12).
         let id = run.session_id.clone();
+        crate::terminal::store::dispose(&id, cx);
         self.state.update(cx, |s, cx| {
             if s.terminal_session_id.as_deref() == Some(id.as_str()) {
                 s.terminal_session_id = None;

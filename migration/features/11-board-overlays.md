@@ -628,7 +628,7 @@ Risks:
 - [x] BAR-002 Stack order (toast, selection bar, voice notice, row) and rise-in
 - [x] BAR-003 Row: pill + mic, widths 520/600, shrink, transitions
 - [x] BAR-004 Open-state conditions
-- [ ] BAR-005 Field auto-grow 1–5 lines, then scroll; spellcheck on
+- [x] BAR-005 Field auto-grow 1–5 lines, then scroll; spellcheck on
 - [x] BAR-006 Placeholder table
 - [x] BAR-007 `/ view or note` hint conditions
 - [x] BAR-008 Pill background mouse-down focuses field
@@ -718,8 +718,8 @@ Risks:
 - [x] INKUI-013 Text labels: place, Return/blur commit, Esc discard, empty dropped
 - [x] INKUI-014 Double-click label edits; change/delete/no-op
 - [x] INKUI-015 Pointer tool select/move (3px), clears card selection, pass-through
-- [ ] INKUI-016 Move cursor on hover over ink
-- [ ] INKUI-017 Tool cursors incl. eraser circle
+- [x] INKUI-016 Move cursor on hover over ink
+- [x] INKUI-017 Tool cursors incl. eraser circle
 - [x] INKUI-018 Views ignore pointer while a tool is out
 - [x] INKUI-019 No new session on double-click while drawing / on a line
 - [x] INKUI-020 Space held → ink ignores presses

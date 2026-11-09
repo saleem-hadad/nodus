@@ -144,7 +144,7 @@ One file per domain in `migration/features/`. Each lists every behavior with an 
 | 08-projects-shell-ui.md | App, title bar, settings, projects grid, project rail, tokens and global styles, menus, modals | ✅ 305 | 303/305 |
 | 09-board-canvas.md | BoardView: pan/zoom, selection, drag, shortcuts, context menus, sections, archive, layout, edges | ✅ 177 | 177/177 |
 | 10-board-cards-notes.md | session cards, expanded cards, agent deck, archive stack, notes and the pad | ✅ 203 | 203/203 |
-| 11-board-overlays.md | prompt bar (sidekick), ⌘K search, merge dialog, ink layer, selection bar | ✅ 111 | 108/111 |
+| 11-board-overlays.md | prompt bar (sidekick), ⌘K search, merge dialog, ink layer, selection bar | ✅ 111 | 111/111 |
 | 12-terminal-ui.md | terminal registry, modal, transcript preview, agent viewer, xterm behavior | ✅ 185 | 185/185 |
 
 ## Phases
@@ -189,7 +189,7 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | cutover | `rust/cutover` | PROTOCOL → 2 (U1), Rust-only CI and release workflow, README and how-it-works for the Rust app, Electron sources removed, version 1.0.0 | ✅ merged (db61c8f) with the user's approval: `main` is Rust-only |
 | views-polish | `rust/views-polish` | ink over live view pages, tooltips as coverage, overlay timing, New view dialog wrap + grip, one git status source, `render_to_image` blank-menu bug | 🟡 running |
 | cross-wiring | `rust/cross-wiring` | BOARD-037 (transcript preview at the search match), MODAL-028…031 (session windows closing with their card, run or view; shortcuts and ⌘K while one is open) | ✅ merged (875ce8c): all five, with app checks in `parity/cross_wiring.py` |
-| gpui-polish | `rust/gpui-polish` | GPUI/UI gaps: custom cursors (ink move, eraser circle), spellcheck underline + suggestions, rounded search highlights and underline offset, Chromium-style tooltips, shadows outside see-through boxes | 🟡 running |
+| gpui-polish | `rust/gpui-polish` | GPUI/UI gaps: cursors, spellcheck, search highlights, tooltips, outside-only shadows | ✅ merged (1896e0d): PATCHES 12–15; BAR-005, INKUI-016/017; tooltips on AppKit's timing; pad-hover 1.11% → 0.64% |
 | overlays | `rust/overlays` | P8, spec 11: prompt bar, ⌘K search, merge dialog, ink layer, selection bar, on the board's `board/bar.rs` hooks | ✅ merged (f4467cd): 107 of 111 + 19 board hooks; BAR-005 (spellcheck underline), INKUI-016/017 (cursors) to gpui-polish, INKUI-018 to views-ui; overlay regions 0–1.6% off the goldens |
 | gpui-text | `rust/gpui-text` | patched GPUI text parity with Chromium: sRGB tagging, no SF Pro tracking, hanging trailing spaces, Chromium's rounding; Windows effects CI step | ✅ merged: PATCHES 6–10; 69/71 text cases pixel-identical to Electron 44.5.1; shell scenes now 0.04–0.8% off the goldens |
 | board-canvas | `rust/board-canvas` | P6, spec 09: the board route and canvas (pan/zoom/select/drag, sections, edges, menus, shortcuts), node plug-in interface | ✅ merged (f2f5747): 149 ticked; 13 deferred to cards/terminal/views/overlays and 13 board-side overlay hooks (`board/bar.rs`) tick when the overlays land |
@@ -224,6 +224,7 @@ Follow-ups a merge left for when the tracks meet in `nodus-core` (P4). Strike th
 - Thumbnails of copied images are encoded differently from Chromium's, so an image 0.9.4 already offered is offered once more after the upgrade; a non-ASCII host shows as written on a tab tile, where 0.9.4 shows punycode.
 - Changed files sort with root collation; 0.9.4 used ICU `localeCompare` in the user's locale.
 - ~~Keep one global for the core's runtime~~ (done in f2f5747). ~~Keep one wheel arbiter~~ (board-cards: one arbiter, the terminals' wheel gate).
+- Tooltips are drawn inside the window (0.9.4's were AppKit's own panel); padding, corners and the 320 px wrap width are estimates. The transcript preview's and diff's search marks stay square because that text is selectable. The view dialog isn't spellchecked yet. Windows spelling uses the system checker where Electron used Hunspell.
 - **Views (from views-ui):** ink strokes over a view hide under its live page while no ink tool is out (0.9.4 always drew ink on top); another element's tooltip over a live page is hidden; the New view box's placeholder doesn't wrap and it has no resize grip; a menu or overlay over a live page appears a frame or two late; `render_to_image` sometimes leaves a menu's contents blank when view snapshots are in the frame (GPUI fork, test-only); views poll `git status` every 4 s themselves until they use the git UI's model. Windows: WebView2 never run; no snapshots, rounded clipping, clip to board or pass-through there yet.
 - ~~Text selection~~ (audit-shell: `components/selectable.rs`, used where 0.9.4's CSS allowed selection; the expanded card, view dialog and merge dialog are checked in the final sweep). ~~Action-name paste~~ (cut to 40 UTF-16 units).
 - **Edit › Delete** with nothing selected deletes the next character; Chromium did nothing. Match it.
@@ -289,6 +290,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-10: First CI on the Rust-only main: macOS green (CI and Packages, incl. the DMG handoff gates and smoke); Windows failed on an example's unused variable and on NSIS's mixed-separator include path — both fixed (72e48e1). gpui-polish merged (1896e0d).
 - 2026-11-10: **Cutover merged (db61c8f): `main` is Rust-only.** PROTOCOL 2, `ci.yml`/`package.yml`/`release.yml` for Rust, docs for the Rust workspace, `src/` and the Electron toolchain removed, version 1.0.0; fixture generators and the parity harness read tag v0.9.4.
 - 2026-11-10: The user approved the cutover, version 1.0.0 for the first Rust release, and running the release workflow.
 - 2026-11-10: audit-shell merged (67aa3fe): every unticked ID in specs 01–03 and 05–08 resolved; also fixed two Windows CI breakers (the installer script's sed on `D:\\a\\nodus`, program lookup on the child's PATH); 1,290+ tests.

@@ -33,7 +33,7 @@ pub fn border(size: (f32, f32), radius: f32, stroke: Stroke, z: Z) -> impl IntoE
     canvas(
         |_, _, _| {},
         move |bounds: Bounds<Pixels>, _, window: &mut Window, _: &mut App| {
-            paint(bounds.origin, size, radius, stroke, z, window);
+            paint(bounds.origin, (0.0, 0.0), size, radius, stroke, z, window);
         },
     )
     .absolute()
@@ -211,7 +211,45 @@ pub fn dashes(length: f32, width: f32) -> Vec<(f32, f32)> {
     out
 }
 
-fn paint(origin: Point<Pixels>, size: (f32, f32), radius: f32, stroke: Stroke, z: Z, window: &mut Window) {
+/// The `box-shadow` rings (no blur, no offset: `0 0 0 <spread> <colour>`)
+/// round a box `size` (CSS px) with corners `radius` round, bottom layer
+/// first, drawn as CSS draws them: outside the box, `spread` wide at their
+/// exact width, the corners `radius + spread` round. GPUI keeps the box's
+/// radius for a spread shadow and snaps it outward to whole device pixels,
+/// so a 2px selection ring at 80% came out 4 device pixels wide and
+/// squarer at the corners. It fills its parent, the box.
+pub fn rings(radius: f32, rings: Vec<(f32, Rgba)>, z: Z) -> impl IntoElement {
+    canvas(
+        |_, _, _| {},
+        move |bounds: Bounds<Pixels>, _, window: &mut Window, _: &mut App| {
+            let size = (f32::from(bounds.size.width) / z.0, f32::from(bounds.size.height) / z.0);
+            for &(spread, color) in &rings {
+                let band = (size.0 + 2.0 * spread, size.1 + 2.0 * spread);
+                let r = if radius > 0.0 { radius + spread } else { 0.0 };
+                let stroke = Stroke {
+                    width: spread,
+                    color,
+                    dashed: false,
+                };
+                paint(bounds.origin, (-spread, -spread), band, r, stroke, z, window);
+            }
+        },
+    )
+    .absolute()
+    .inset_0()
+}
+
+/// Paints the border of a box `size` (CSS px) whose corner is `offset` from
+/// `origin` (in CSS px at the board's scale).
+fn paint(
+    origin: Point<Pixels>,
+    offset: (f32, f32),
+    size: (f32, f32),
+    radius: f32,
+    stroke: Stroke,
+    z: Z,
+    window: &mut Window,
+) {
     if stroke.color.a <= 0.0 || stroke.width <= 0.0 {
         return;
     }
@@ -222,7 +260,10 @@ fn paint(origin: Point<Pixels>, size: (f32, f32), radius: f32, stroke: Stroke, z
     } else {
         vec![(0.0, length)]
     };
-    let (ox, oy) = (f32::from(origin.x), f32::from(origin.y));
+    let (ox, oy) = (
+        f32::from(origin.x) + offset.0 * z.0,
+        f32::from(origin.y) + offset.1 * z.0,
+    );
     let to_screen = |(x, y): (f32, f32)| point(px(ox + x * z.0), px(oy + y * z.0));
     let mut path = PathBuilder::fill();
     for (s0, s1) in runs {

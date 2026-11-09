@@ -47,7 +47,8 @@ pub fn sticker(
     let left = width - (18.0 + 30.0 * index as f32) - STICKER_W;
     let top = 6.0 - STICKER_H;
 
-    // NOTEUI-034/035: 3° at rest, 1° and 2px up pointed at.
+    // NOTEUI-034, NOTEUI-035: 3° at rest, 1° and 2px up pointed at, the
+    // lifted shadow.
     let ease = motion::ease_out as fn(f32) -> f32;
     let rot = transition(
         window,

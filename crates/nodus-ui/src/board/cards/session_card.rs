@@ -161,6 +161,8 @@ pub fn surface(
 ) -> Surface {
     let lifted_top = stack.is_some_and(|s| !s.result && s.depth == 0 && s.lifted);
     let md = &t.shadow_md;
+    // ARCH-016/017 (the lifted top card), CARD-006 (dragging), CARD-005
+    // (selected beats waiting), CARD-004 (waiting), CARD-003 (hover), CARD-002.
     let shadow = if lifted_top {
         Shadow::with(&[], md)
     } else if dragging {
@@ -443,7 +445,8 @@ fn compact(
         .pb(z.px(11.))
         .rounded(z.px(14.))
         .bg(brightness(t.bg_elevated, s.bright))
-        .shadow(s.shadow.brightness(s.bright).gpui(z))
+        .shadow(s.shadow.brightness(s.bright).soft(z))
+        .children(s.shadow.brightness(s.bright).rings(14.0, z))
         .text_size(z.px(13.))
         .line_height(z.px(18.2))
         // CARD-009
@@ -504,7 +507,9 @@ fn compact(
     let has_chip = chip.is_some();
     body = body.when_some(chip, ParentElement::child);
 
-    // CARD-026…CARD-032
+    // CARD-026…CARD-032: the kinds (CARD-026), 12px secondary collapsed and
+    // clamped to 4 (CARD-028), 3 after a chip (CARD-029), the prompt italic
+    // (CARD-030), the empty one tertiary (CARD-031), a path mono 11px (CARD-032).
     let pv = preview(card, env.repo_path.as_deref());
     let preview_el = match pv.kind {
         PreviewKind::Path => para(
@@ -579,6 +584,7 @@ fn corner(
         let env = env.clone();
         let id = id.clone();
         buttons.push((
+            // CARD-022
             "corner-archive",
             CardIcon::Archive,
             format!("Archive ({})", env.platform.keys("⌫")),
@@ -807,6 +813,7 @@ struct TitleEditor {
     _subscriptions: Vec<Subscription>,
 }
 
+/// CARD-044…CARD-048; the field looks as CARD-045 says.
 fn title_editor(env: &Rc<BoardEnv>, card: &SessionCard, window: &mut Window, cx: &mut App) -> AnyElement {
     let z = env.z();
     let t = theme::tokens(cx);
@@ -851,7 +858,7 @@ fn title_editor(env: &Rc<BoardEnv>, card: &SessionCard, window: &mut Window, cx:
         .px(z.px(5.))
         .rounded(z.px(5.))
         .bg(t.bg_window)
-        .shadow(Shadow::of(&[Shade::ring(2.0, t.accent)]).gpui(z))
+        .children(Shadow::of(&[Shade::ring(2.0, t.accent)]).rings(5.0, z))
         .font_family(fonts::DISPLAY)
         .text_size(z.px(15.))
         .font_weight(FontWeight::SEMIBOLD)

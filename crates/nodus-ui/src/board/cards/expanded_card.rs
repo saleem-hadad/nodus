@@ -263,7 +263,7 @@ pub fn body(
         .overflow_hidden()
         .clip_rounded()
         .bg(t.bg_elevated)
-        .shadow(shadow.gpui(z))
+        .shadow(shadow.soft(z))
         .text_size(z.px(13.))
         .line_height(z.px(18.2))
         .cursor(if node.dragging {
@@ -289,7 +289,16 @@ pub fn body(
                 .text_color(rgba(255, 255, 255, 0.32 * grip)),
         );
     card_el = apply(card_el, &s, z, None);
-    card_el.into_any_element()
+    // The rings go outside the card, which clips what's in it.
+    div()
+        .absolute()
+        .left_0()
+        .top_0()
+        .w(z.px(w))
+        .h(z.px(h))
+        .child(card_el)
+        .children(shadow.rings(14.0, z))
+        .into_any_element()
 }
 
 /// Resize zones on every edge and corner (XCARD-029, XCARD-030).
@@ -742,7 +751,8 @@ fn btn(
         .border(z.px(0.5))
         .border_color(if primary { transparent() } else { t.border_strong })
         .bg(bg)
-        .shadow(super::Shadow::with(&[], &t.shadow_sm).gpui(z))
+        .shadow(super::Shadow::with(&[], &t.shadow_sm).soft(z))
+        .children(super::Shadow::with(&[], &t.shadow_sm).rings(6.0, z))
         .text_size(z.px(13.))
         .line_height(z.px(18.2))
         .font_weight(FontWeight::MEDIUM)
@@ -814,7 +824,8 @@ fn loading_pill(env: &Rc<BoardEnv>, node: &str, label: &'static str, window: &mu
                 .px(z.px(14.))
                 .rounded_full()
                 .bg(rgba(255, 255, 255, 0.07))
-                .shadow(super::Shadow::of(&[super::Shade::ring(0.5, rgba(255, 255, 255, 0.1))]).gpui(z))
+                .relative()
+                .children(super::Shadow::of(&[super::Shade::ring(0.5, rgba(255, 255, 255, 0.1))]).rings(15.0, z))
                 .text_color(rgba(255, 255, 255, 0.72))
                 .text_size(z.px(12.))
                 .line_height(z.px(16.8))

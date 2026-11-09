@@ -23,6 +23,7 @@ pub fn status_dot(
     let color = t.status(status);
     let size = if small { 7.0 } else { 10.0 };
     let (spread, share) = match status {
+        // CARD-013: no ring, still.
         SessionStatus::Done => (0.0, 0.0),
         // CARD-012, CARD-015: 1.6s ease-in-out each way.
         SessionStatus::Working => breathe_at(anim::cycle(window, cx, key, Duration::from_millis(1600)), small),

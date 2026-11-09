@@ -71,7 +71,8 @@ pub fn archive(
     let w = transition(window, cx, anim::key(ID, "w"), size.0, ms(460), motion::ease_out);
     let h = transition(window, cx, anim::key(ID, "h"), size.1, ms(460), motion::ease_out);
 
-    // ARCH-002…ARCH-004 (open wins where both apply).
+    // ARCH-002 folded, ARCH-003 hot (solid accent, `Drop to archive`),
+    // ARCH-004 open (open wins where both apply).
     let (bg, border, dashed) = if open {
         (t.archive_panel, t.border, false)
     } else if hot {
@@ -254,6 +255,7 @@ pub fn archive(
         .w(z.px(w))
         .h(z.px(h))
         .children(super::outer_shadow(&shadow, w, h, 24.0, z))
+        .children(shadow.rings(24.0, z))
         .child(frame)
         .child(super::border::border(
             (w, h),
@@ -468,7 +470,8 @@ fn search(env: &Rc<BoardEnv>, count: usize, visible: bool, window: &mut Window, 
         .pr(z.px(9.))
         .rounded(z.px(10.))
         .bg(t.bg_elevated)
-        .shadow(ring.gpui(z))
+        .shadow(ring.soft(z))
+        .children(ring.rings(10.0, z))
         .text_color(t.text_primary)
         .font_family(fonts::UI)
         .text_size(z.px(13.))
@@ -502,6 +505,7 @@ fn search(env: &Rc<BoardEnv>, count: usize, visible: bool, window: &mut Window, 
                         env_key.actions.close_stack(cx);
                         window.blur(cx);
                     }
+                    // ARCH-024
                     SearchKey::Submit => {
                         cx.stop_propagation();
                         env_key.actions.submit_stack(window, cx);

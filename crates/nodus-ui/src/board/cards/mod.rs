@@ -162,6 +162,37 @@ impl Shadow {
             .collect()
     }
 
+    /// Whether a layer is a ring: `0 0 0 <spread> <colour>`.
+    fn is_ring(l: &Shade) -> bool {
+        !l.inset && l.blur == 0.0 && l.x == 0.0 && l.y == 0.0 && l.spread > 0.0 && l.color.a > 0.0
+    }
+
+    /// GPUI's shadows for the blurred and inset layers; the rings are
+    /// [`Shadow::rings`]'s to draw.
+    pub fn soft(&self, z: Z) -> Vec<BoxShadow> {
+        let mut soft = *self;
+        for l in &mut soft.0 {
+            if Self::is_ring(l) {
+                *l = Shade::NONE;
+            }
+        }
+        soft.gpui(z)
+    }
+
+    /// The ring layers drawn exactly round the box they're put in, whose
+    /// corners are `radius` round (CSS px); `None` without rings.
+    pub fn rings(&self, radius: f32, z: Z) -> Option<AnyElement> {
+        // CSS paints its last layer first.
+        let rings: Vec<(f32, Rgba)> = self
+            .0
+            .iter()
+            .rev()
+            .filter(|l| Self::is_ring(l))
+            .map(|l| (l.spread, l.color))
+            .collect();
+        (!rings.is_empty()).then(|| gpui::IntoElement::into_any_element(border::rings(radius, rings, z)))
+    }
+
     /// Every colour multiplied by `factor`, as `filter: brightness()` does.
     pub fn brightness(mut self, factor: f32) -> Self {
         for l in &mut self.0 {
@@ -258,7 +289,7 @@ pub fn mix(a: Rgba, p: f32, b: Rgba) -> Rgba {
 /// part inside the box only reaches the panel through its backdrop blur.
 pub fn outer_shadow(shadow: &Shadow, w: f32, h: f32, radius: f32, z: Z) -> Option<AnyElement> {
     use gpui::{ParentElement as _, Styled as _};
-    let layers = shadow.gpui(z);
+    let layers = shadow.soft(z);
     if layers.is_empty() {
         return None;
     }

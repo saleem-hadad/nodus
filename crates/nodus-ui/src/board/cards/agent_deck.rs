@@ -190,6 +190,7 @@ pub fn deck(
             motion::ease_stack,
         );
         let e = edge(&t, agent.status);
+        // DECK-003: the card's shape with a 3px strip in the agent's colour.
         let rest = Shadow::with(&[Shade::inset(0.0, -3.0, e)], &t.shadow_sm);
         // DECK-007: a waiting agent's layer glows, 1.1s ease-out.
         let shadow = if agent.status == SessionStatus::Waiting {
@@ -219,7 +220,8 @@ pub fn deck(
                 .inset_0()
                 .rounded(z.px(14.))
                 .bg(brightness(t.bg_elevated, bright))
-                .shadow(shadow.brightness(bright).gpui(z))
+                .shadow(shadow.brightness(bright).soft(z))
+                .children(shadow.brightness(bright).rings(14.0, z))
                 .transform_origin(0.5, 1.0)
                 .translate(px(0.), z.px(ty))
                 .scale(scale)
@@ -382,7 +384,8 @@ pub fn fan(
                 .py(z.px(4.))
                 .rounded(z.px(12.))
                 .bg(t.bg_elevated)
-                .shadow(Shadow::with(&[], &t.shadow_sm).gpui(z))
+                .shadow(Shadow::with(&[], &t.shadow_sm).soft(z))
+                .children(Shadow::with(&[], &t.shadow_sm).rings(12.0, z))
         })
         .child(
             div()
@@ -439,6 +442,14 @@ pub fn fan(
         motion::ease_stack,
     );
     let pill_hover = window.use_keyed_state(anim::key(node, "fan-all-hover"), cx, |_, _| false);
+    let pill_shadow = Shadow::with(
+        &[],
+        if *pill_hover.read(cx) {
+            &t.shadow_md
+        } else {
+            &t.shadow_sm
+        },
+    );
     let ph = pill_hover.clone();
     let opening = handles.clone();
     let env_all = env.clone();
@@ -453,17 +464,8 @@ pub fn fan(
         .px(z.px(10.))
         .rounded(z.px(13.))
         .bg(t.bg_elevated)
-        .shadow(
-            Shadow::with(
-                &[],
-                if *pill_hover.read(cx) {
-                    &t.shadow_md
-                } else {
-                    &t.shadow_sm
-                },
-            )
-            .gpui(z),
-        )
+        .shadow(pill_shadow.soft(z))
+        .children(pill_shadow.rings(13.0, z))
         .text_color(t.accent)
         .text_size(z.px(11.))
         .line_height(z.px(15.4))
@@ -531,6 +533,7 @@ fn fan_row(
         Duration::from_millis(120),
         motion::ease,
     );
+    // DECK-022
     let step = agent_step(agent);
     let dot = status_dot(anim::key_n(node, "fan-dot", i), agent.status, true, z, window, cx);
     let mono = font(fonts::MONO, FontWeight::NORMAL, false);
@@ -591,7 +594,8 @@ fn fan_row(
         .pb(z.px(11.))
         .rounded(z.px(10.))
         .bg(t.bg_elevated)
-        .shadow(shadow.gpui(z))
+        .shadow(shadow.soft(z))
+        .children(shadow.rings(10.0, z))
         .text_color(t.text_secondary)
         .text_size(z.px(13.))
         .line_height(z.px(18.2))

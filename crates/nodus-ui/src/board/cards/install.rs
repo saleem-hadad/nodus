@@ -317,6 +317,7 @@ impl NodeRenderers for CardRenderers {
         super::expanded_card::wake_card_terminal(session_id, cx);
     }
 
+    /// XCARD-017: a click on the title bar focuses the terminal.
     fn focus_terminal(&self, session_id: &str, window: &mut Window, cx: &mut App) {
         // BOARD-042, XCARD-017: `focus` needs no board (only `element` does).
         CardTerminals::new("", 1.0, cx).focus(session_id, window, cx);

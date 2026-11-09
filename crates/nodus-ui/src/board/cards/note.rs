@@ -89,6 +89,8 @@ pub fn note(
     let ease = motion::ease_out as fn(f32) -> f32;
     let ms = Duration::from_millis;
     let shadow = transition(window, cx, anim::key(&id, "note-shadow"), target, ms(220), ease);
+    // NOTEUI-006: dragged, −1.5° and 1.02 about the centre; NOTEUI-044: the
+    // pad's top sheet peels −2° and 2px up about its bottom-left corner.
     let (rot, ty, scale) = if dragging {
         (-1.5, 0.0, 1.02)
     } else if draft && hovered {
@@ -152,7 +154,8 @@ pub fn note(
         .px(z.px(18.))
         .rounded(z.px(4.))
         .bg(paper)
-        .shadow(shadow.gpui(z))
+        .shadow(shadow.soft(z))
+        .children(shadow.rings(4.0, z))
         .text_color(t.note_ink)
         .font_family(fonts::UI)
         .cursor(if draft {
@@ -164,6 +167,8 @@ pub fn note(
         } else {
             CursorStyle::Arrow
         })
+        // NOTEUI-004: padding 16/18, radius 4, the note shadow, the ink;
+        // NOTEUI-043: the top sheet's grab cursor and tooltip.
         .when(draft, |d| {
             d.tooltip(native_tooltip(
                 "Drag a note onto the board, or click for one beside the pad".into(),
@@ -237,6 +242,8 @@ pub fn size(note: &BoardNote) -> (f32, f32) {
 }
 
 /// The signature along the bottom (NOTEUI-018…NOTEUI-021).
+/// NOTEUI-020: 18px in, 46px from the right, 13px up, faint, underlined
+/// and inked on hover.
 fn signature_el(env: &Rc<BoardEnv>, id: &str, sig: Signature, window: &mut Window, cx: &mut App) -> AnyElement {
     let z = env.z();
     let t = theme::tokens(cx);
@@ -286,6 +293,8 @@ fn signature_el(env: &Rc<BoardEnv>, id: &str, sig: Signature, window: &mut Windo
 
 /// ▶: start a session on the note (NOTEUI-022…NOTEUI-024).
 #[allow(clippy::too_many_arguments)]
+/// NOTEUI-023: the 28px circle, the paper-coloured ▶, accent on hover,
+/// 0.92 pressed.
 fn play(
     env: &Rc<BoardEnv>,
     note: &BoardNote,

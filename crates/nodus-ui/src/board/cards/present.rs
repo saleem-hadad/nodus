@@ -762,7 +762,8 @@ pub struct StackLook {
 }
 
 /// The card's transform in the stack: (translate y, scale, brightness,
-/// opacity, contents shown).
+/// opacity, contents shown): ARCH-013, ARCH-016, and ARCH-014's opacity
+/// (1 in the stack and among the results, 0 sinking at depth 3).
 pub fn stack_visual(look: &StackLook) -> (f32, f32, f32, f32, bool) {
     if look.result {
         return (0.0, 1.0, 1.0, 1.0, true);

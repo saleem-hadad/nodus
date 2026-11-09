@@ -133,9 +133,12 @@ impl AppState {
         }
         let gone: Vec<String> = gone.into_iter().map(str::to_owned).collect();
         self.selection.retain(|id| !gone.contains(id));
-        // The terminal registry (spec 12) disposes `gone`'s terminals.
         let project_id = board.project.id.clone();
         cx.notify();
+        // UI-054: the sessions that left take their terminals with them.
+        for id in &gone {
+            crate::terminal::store::dispose(id, cx);
+        }
         let nodus = self.nodus.clone();
         let rt = crate::board::core_rt(cx);
         cx.spawn(async move |_, _| {
@@ -179,6 +182,8 @@ impl AppState {
         self.selection.retain(|id| id != session_id);
         let project_id = board.project.id.clone();
         cx.notify();
+        // UI-059: its terminal goes before the core removes it.
+        crate::terminal::store::dispose(session_id, cx);
         let nodus = self.nodus.clone();
         let rt = crate::board::core_rt(cx);
         let session_id = session_id.to_owned();
@@ -362,6 +367,10 @@ impl AppState {
         }
         let project_id = board.project.id.clone();
         cx.notify();
+        // UI-069: the brain's terminal goes with its card.
+        if let Some(brain) = &brain {
+            crate::terminal::store::dispose(brain, cx);
+        }
         let nodus = self.nodus.clone();
         let rt = crate::board::core_rt(cx);
         let view_id = view_id.to_owned();
@@ -435,8 +444,11 @@ impl AppState {
         cx.notify();
     }
 
-    /// `openPreview`: the transcript preview, closing the terminal modal.
+    /// `openPreview` with no search (UI-076): the transcript preview,
+    /// closing the terminal modal. A search's preview opens through
+    /// `terminal::actions::open_preview`, which records it.
     pub fn open_preview(&mut self, session_id: &str, cx: &mut Context<'_, Self>) {
+        cx.set_global(crate::terminal::actions::PreviewFindState(None));
         self.preview_session_id = Some(session_id.to_owned());
         self.terminal_session_id = None;
         cx.notify();

@@ -4161,11 +4161,13 @@ version = "0.9.4"
 dependencies = [
  "indexmap",
  "nodus-domain",
+ "objc2-foundation 0.3.2",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
  "tracing",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

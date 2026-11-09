@@ -14,8 +14,11 @@
 
 pub mod app;
 pub mod env;
+pub mod instance;
 pub mod notify;
 pub mod permissions;
+#[cfg(windows)]
+pub mod pipe;
 pub mod process;
 pub mod secrets;
 pub mod shell;

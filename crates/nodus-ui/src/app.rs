@@ -35,6 +35,12 @@ impl Dialogs for WindowDialogs {
 /// Runs the app until it quits. `user_data` is the data folder (PLAT-003,
 /// PLAT-004).
 pub fn run(user_data: PathBuf) -> anyhow::Result<()> {
+    // PLAT-007: off a Mac, one app per data folder; a second launch tells
+    // the first and leaves with 0, before anything of its own starts.
+    let second_launches = match nodus_platform::instance::acquire(&user_data) {
+        nodus_platform::instance::Instance::Second => return Ok(()),
+        nodus_platform::instance::Instance::First(launches) => launches,
+    };
     // PLAT-002: Windows' AppUserModelID, before any window or notification.
     nodus_platform::app::set_app_user_model_id();
     // The core's own work (the login shell, later the host) runs on tokio.
@@ -129,6 +135,21 @@ pub fn run(user_data: PathBuf) -> anyhow::Result<()> {
         })
         .detach();
 
+        // PLAT-008: a second launch shows the window, once the app has
+        // started; before that it's ignored.
+        let started = std::rc::Rc::new(std::cell::Cell::new(false));
+        if let Some(mut launches) = second_launches {
+            let started = std::rc::Rc::clone(&started);
+            cx.spawn(async move |cx| {
+                while launches.recv().await.is_some() {
+                    if started.get() {
+                        cx.update(window::show_window);
+                    }
+                }
+            })
+            .detach();
+        }
+
         // PLAT-010 steps 8–11: the sessions a running host has are adopted
         // and notifications armed before the window opens (PLAT-011). Quit
         // in HOST-102's box has already left (HOST-103).
@@ -136,6 +157,7 @@ pub fn run(user_data: PathBuf) -> anyhow::Result<()> {
             if nodus.launch().await.is_err() {
                 return;
             }
+            started.set(true);
             cx.update(|cx| {
                 // HOST-102's box off a Mac may have opened it already.
                 if window::main_window(cx).is_none() {

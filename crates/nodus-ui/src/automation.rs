@@ -1,5 +1,5 @@
 //! The test driver (decision D11), off unless `NODUS_AUTOMATION` names a
-//! Unix socket. It takes one JSON command per line and answers each with one
+//! Unix socket (a named pipe on Windows). It takes one JSON command per line and answers each with one
 //! JSON line: `{"ok":true,…}` or `{"ok":false,"error":"…"}`.
 //!
 //! ```text
@@ -69,41 +69,66 @@ pub fn start(cx: &mut App) {
     .detach();
 }
 
+/// Takes clients one at a time: a Unix socket at `path`, or on Windows the
+/// named pipe `path` names (`\\.\pipe\<name>`, as `packaging/smoke.py`
+/// opens it).
 fn listen(path: &std::ffi::OsStr, tx: &tokio::sync::mpsc::UnboundedSender<(Value, Reply)>) {
     #[cfg(unix)]
     {
-        use std::io::{BufRead, BufReader, Write};
         let _ = std::fs::remove_file(path);
         let Ok(listener) = std::os::unix::net::UnixListener::bind(path) else {
             return;
         };
         for stream in listener.incoming().flatten() {
-            let Ok(mut writer) = stream.try_clone() else { continue };
-            for line in BufReader::new(stream).lines() {
-                let Ok(line) = line else { break };
-                if line.trim().is_empty() {
-                    continue;
-                }
-                let answer = match serde_json::from_str::<Value>(&line) {
-                    Ok(command) => {
-                        let (reply, answer) = std::sync::mpsc::channel();
-                        if tx.send((command, reply)).is_err() {
-                            return;
-                        }
-                        answer
-                            .recv()
-                            .unwrap_or_else(|_| json!({ "ok": false, "error": "app gone" }))
-                    }
-                    Err(err) => json!({ "ok": false, "error": err.to_string() }),
-                };
-                if writeln!(writer, "{answer}").is_err() {
-                    break;
-                }
+            let Ok(writer) = stream.try_clone() else { continue };
+            if !serve(stream, writer, tx) {
+                return;
             }
         }
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    for pipe in nodus_platform::pipe::serve(&path.to_string_lossy()) {
+        let Ok(pipe) = pipe else { continue };
+        let Ok(writer) = pipe.try_clone() else { continue };
+        if !serve(pipe, writer, tx) {
+            return;
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
     let _ = (path, tx);
+}
+
+/// Answers one client's commands, a JSON line for each line, until it goes.
+/// False once the app has gone.
+#[cfg(any(unix, windows))]
+fn serve(
+    reader: impl std::io::Read,
+    mut writer: impl std::io::Write,
+    tx: &tokio::sync::mpsc::UnboundedSender<(Value, Reply)>,
+) -> bool {
+    use std::io::BufRead as _;
+    for line in std::io::BufReader::new(reader).lines() {
+        let Ok(line) = line else { break };
+        if line.trim().is_empty() {
+            continue;
+        }
+        let answer = match serde_json::from_str::<Value>(&line) {
+            Ok(command) => {
+                let (reply, answer) = std::sync::mpsc::channel();
+                if tx.send((command, reply)).is_err() {
+                    return false;
+                }
+                answer
+                    .recv()
+                    .unwrap_or_else(|_| json!({ "ok": false, "error": "app gone" }))
+            }
+            Err(err) => json!({ "ok": false, "error": err.to_string() }),
+        };
+        if writeln!(writer, "{answer}").and_then(|()| writer.flush()).is_err() {
+            break;
+        }
+    }
+    true
 }
 
 fn num(v: &Value, key: &str) -> f32 {

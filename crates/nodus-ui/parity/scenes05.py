@@ -24,6 +24,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 NOW = 1792508400000  # 2026-10-20 15:00 UTC, the harness's frozen clock
 SOCK = "nodus-parity05.sock"  # relative: macOS caps socket paths at 104 bytes
+# The stand-ins are ES modules without .mjs: they need Node 22 or newer, which
+# the seed links into the world as <work>/bin/node (an older one makes every
+# session, a run's too, exit at once).
+NODE = os.environ.get("PARITY_NODE") or next(
+    (p for p in ["/opt/homebrew/bin/node", "/usr/local/bin/node"] if os.path.exists(p)), "node"
+)
 
 
 def M(kind, x, y, **kw):
@@ -82,7 +88,7 @@ seed(work, { theme, responses: JSON.parse(responses) })
 
 def run(scene, theme, opts):
     responses, steps = SCENES[scene]
-    subprocess.run(["node", "--input-type=module", "-e", SEED, opts["harness"], opts["world"], theme,
+    subprocess.run([NODE, "--input-type=module", "-e", SEED, opts["harness"], opts["world"], theme,
                     json.dumps(responses)], check=True, capture_output=True)
     world = opts["world"]
     env = dict(os.environ, NODUS_USER_DATA=os.path.join(world, "userData"), NODUS_AUTOMATION=SOCK,

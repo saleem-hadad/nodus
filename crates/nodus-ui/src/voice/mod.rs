@@ -584,6 +584,32 @@ pub fn session_mic(id: impl Into<ElementId>, props: SessionMicProps, window: &mu
     view.into_any_element()
 }
 
+/// VOICE-041: the mic in an expanded Claude card's header (`variant="card"`),
+/// drawn at the board's `zoom`, for board-cards' `TerminalHost::mic`.
+/// `type_in` types what was said at the session's prompt, as the card's
+/// terminal does (`CardTerminals::type_in(id, text, !live)`, waking a
+/// stopped session to take it).
+pub fn card_mic(
+    session_id: &str,
+    project_id: &str,
+    zoom: f32,
+    type_in: OnText,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
+    session_mic(
+        SharedString::from(format!("card-mic-{session_id}")),
+        SessionMicProps {
+            project_id: project_id.to_owned(),
+            variant: MicVariant::Card,
+            scale: zoom,
+            on_text: type_in,
+        },
+        window,
+        cx,
+    )
+}
+
 /// `SessionMic.tsx`.
 pub struct SessionMic {
     id: ElementId,

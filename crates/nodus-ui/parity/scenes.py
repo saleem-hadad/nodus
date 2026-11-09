@@ -185,6 +185,10 @@ def run(scene, theme, opts):
             drive(f, step)
             drive(f, {"cmd": "wait", "ms": 120})
         drive(f, {"cmd": "idle"})
+        # A frame drawn now: macOS stops asking a covered window for frames,
+        # so a transition (the archive panel's 460ms growth) may not have
+        # been drawn to its end.
+        drive(f, {"cmd": "terminal", "action": "draw"})
         out = os.path.join(opts["golden"], f"{scene}.{theme}.rust.png")
         drive(f, {"cmd": "screenshot", "path": out})
         print("shot", out)

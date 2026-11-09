@@ -7,6 +7,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
 
+use gpui::component::Sizable as _;
 use gpui::component::input::{InputEvent, Position, Textarea, TextareaState};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -483,16 +484,94 @@ fn editor(env: &Rc<BoardEnv>, note: &BoardNote, window: &mut Window, cx: &mut Ap
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .on_click(|_, _, cx| cx.stop_propagation())
         .on_scroll(|_, _, cx| cx.stop_propagation())
+        // The field's own 4px side padding (its smallest) sits outside the note's.
         .child(
-            Textarea::new(&field)
-                .appearance(false)
-                .bordered(false)
-                .h(gpui::relative(1.))
-                .p(px(0.))
-                .text_size(z.px(15.))
-                .line_height(z.px(21.))
-                .font_family(fonts::UI)
-                .text_color(t.note_ink),
+            div().size_full().mx(px(-4.)).child(WithCaret {
+                color: t.note_ink.into(),
+                child: Textarea::new(&field)
+                    .appearance(false)
+                    .bordered(false)
+                    .xsmall()
+                    .h(gpui::relative(1.))
+                    .text_size(z.px(15.))
+                    .line_height(z.px(21.))
+                    .font_family(fonts::UI)
+                    .text_color(t.note_ink)
+                    .into_any_element(),
+            }),
         )
         .into_any_element()
+}
+
+/// Lays a field out with the text caret in `color` (NOTEUI-011: the
+/// note's ink): gpui-component takes the caret's colour from its theme as
+/// the field renders, so the theme's is swapped for that moment.
+struct WithCaret {
+    color: gpui::Hsla,
+    child: AnyElement,
+}
+
+impl IntoElement for WithCaret {
+    type Element = Self;
+    fn into_element(self) -> Self {
+        self
+    }
+}
+
+impl gpui::Element for WithCaret {
+    type RequestLayoutState = ();
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<gpui::ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _: Option<&gpui::GlobalElementId>,
+        _: Option<&gpui::InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (gpui::LayoutId, ()) {
+        use gpui::component::theme::Theme;
+        let saved = Theme::global(cx).caret;
+        // Parity shots hide the caret.
+        Theme::global_mut(cx).caret = if crate::parity::frozen(cx) {
+            gpui::transparent_black()
+        } else {
+            self.color
+        };
+        let id = self.child.request_layout(window, cx);
+        Theme::global_mut(cx).caret = saved;
+        (id, ())
+    }
+
+    fn prepaint(
+        &mut self,
+        _: Option<&gpui::GlobalElementId>,
+        _: Option<&gpui::InspectorElementId>,
+        _: gpui::Bounds<gpui::Pixels>,
+        _: &mut (),
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        self.child.prepaint(window, cx);
+    }
+
+    fn paint(
+        &mut self,
+        _: Option<&gpui::GlobalElementId>,
+        _: Option<&gpui::InspectorElementId>,
+        _: gpui::Bounds<gpui::Pixels>,
+        _: &mut (),
+        _: &mut (),
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        self.child.paint(window, cx);
+    }
 }

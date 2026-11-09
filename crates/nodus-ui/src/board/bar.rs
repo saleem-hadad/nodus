@@ -223,7 +223,8 @@ impl BoardCanvas {
         let rt = crate::board::core_rt(cx);
         let project_id = self.project_id.clone();
         cx.spawn(async move |this, cx| {
-            let created = crate::board::on_core(&rt, async move { nodus.sessions().create(&project_id, &opts).await }).await;
+            let created =
+                crate::board::on_core(&rt, async move { nodus.sessions().create(&project_id, &opts).await }).await;
             let _ = this.update(cx, |c, cx| match created {
                 Ok(card) => {
                     let id = card.node.session_id.clone();
@@ -256,7 +257,10 @@ impl BoardCanvas {
                     c.state.update(cx, |s, cx| s.save_note(note, cx));
                     c.ensure_visible(pos, NOTE_SIZE, cx);
                     c.show_toast(
-                        format!("Couldn't start a session, so your prompt is on a note: {}", message(&err)),
+                        format!(
+                            "Couldn't start a session, so your prompt is on a note: {}",
+                            message(&err)
+                        ),
                         cx,
                     );
                 }
@@ -267,11 +271,7 @@ impl BoardCanvas {
 
     /// `sendToSession` (BOARD-135).
     fn send_to_session(&mut self, session_id: String, text: String, cx: &mut Context<'_, Self>) -> Task<bool> {
-        let card = self
-            .cards()
-            .iter()
-            .find(|c| c.node.session_id == session_id)
-            .cloned();
+        let card = self.cards().iter().find(|c| c.node.session_id == session_id).cloned();
         let Some(card) = card.filter(|c| !c.node.archived) else {
             self.show_toast("That session is no longer on the board.".to_owned(), cx);
             return Task::ready(false);
@@ -380,12 +380,7 @@ impl BoardCanvas {
         let all = self.cards().to_vec();
         let sources: Vec<&nodus_domain::SessionCard> = all
             .iter()
-            .filter(|c| {
-                self.merge
-                    .iter()
-                    .flatten()
-                    .any(|s| s.session_id == c.node.session_id)
-            })
+            .filter(|c| self.merge.iter().flatten().any(|s| s.session_id == c.node.session_id))
             .collect();
         let others = self.notes_in_the_way();
         let preferred = if sources.is_empty() {
@@ -412,7 +407,8 @@ impl BoardCanvas {
         let rt = crate::board::core_rt(cx);
         let project_id = self.project_id.clone();
         cx.spawn(async move |this, cx| {
-            let card = crate::board::on_core(&rt, async move { nodus.sessions().create(&project_id, &opts).await }).await?;
+            let card =
+                crate::board::on_core(&rt, async move { nodus.sessions().create(&project_id, &opts).await }).await?;
             let _ = this.update(cx, |c, cx| {
                 let id = card.node.session_id.clone();
                 c.state.update(cx, |s, cx| s.upsert_card(card, cx));

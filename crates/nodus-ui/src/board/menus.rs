@@ -96,7 +96,9 @@ impl BoardCanvas {
             ),
             disabled(
                 // The New view dialog is spec 04's.
-                item(&me, "New view here…", Icon::LayoutDashboard, move |c, cx| c.open_view_dialog(Some(p), cx)),
+                item(&me, "New view here…", Icon::LayoutDashboard, move |c, cx| {
+                    c.open_view_dialog(Some(p), cx)
+                }),
                 in_archive,
             ),
             MenuItem::Separator,

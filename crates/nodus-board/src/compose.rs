@@ -87,7 +87,13 @@ pub enum ContextItem {
 fn quote(text: &str) -> String {
     js::trim(text)
         .split('\n')
-        .map(|line| if line.is_empty() { ">".to_owned() } else { format!("> {line}") })
+        .map(|line| {
+            if line.is_empty() {
+                ">".to_owned()
+            } else {
+                format!("> {line}")
+            }
+        })
         .collect::<Vec<_>>()
         .join("\n")
 }

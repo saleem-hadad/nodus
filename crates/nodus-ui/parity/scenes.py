@@ -88,6 +88,9 @@ SCENES = {
     "try-drag-out": ([], STOREFRONT_LIVE + [
         M("down", 1030, 300), M("drag", 1031, 301), M("drag", 1080, 500), M("drag", 1130, 640),
         M("up", 1130, 640), {"cmd": "wait", "ms": 600}, AWAY]),
+    "try-click1": ([], STOREFRONT_LIVE + [M("click", 497, 300)]),
+    "try-click2": ([], STOREFRONT_LIVE + [M("down", 497, 300), M("up", 497, 300)]),
+    "try-click3": ([], OPEN("storefront") + [M("click", 497, 300, shift=True)]),
     "try-select-all": ([], STOREFRONT_LIVE + [{"cmd": "key", "keystroke": "cmd-a"}, AWAY]),
     "try-wait": ([], OPEN("storefront") + [{"cmd": "wait", "ms": 4000}, AWAY]),
     "try-pane-note": ([], STOREFRONT_LIVE + [M("right", *EMPTY), {"cmd": "wait", "ms": 200},

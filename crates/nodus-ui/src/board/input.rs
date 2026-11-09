@@ -195,6 +195,7 @@ impl BoardCanvas {
     /// BOARD-076: a press anywhere on the board but the archive and its
     /// cards folds the open stack (capture phase).
     pub(crate) fn capture_mouse_down(&mut self, e: &MouseDownEvent, cx: &mut Context<'_, Self>) {
+        eprintln!("DEBUG capture down {:?} bounds={:?} at={:?}", e.position, self.bounds, self.node_at(self.to_flow(e.position)).map(|n| n.id.clone()));
         if !self.stack_open() || !self.bounds.contains(&e.position) {
             return;
         }

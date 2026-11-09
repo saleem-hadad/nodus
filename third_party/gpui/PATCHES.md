@@ -157,11 +157,18 @@ GPUI filled a text run's background over the whole line height with square corne
 
 Checked on `search-results` against 0.9.4's golden, both themes: the snippet's mark covers the same 28 device rows (375–402) with the same rounded ends, and the title's underline the same two rows (364–365; the golden's underline is one CSS pixel thick, though `search.css` asks for 2px).
 
-### 13. Shadows drawn only outside their box (Nodus, track gpui-polish)
+### 14. Shadows drawn only outside their box (Nodus, track gpui-polish)
 
 CSS clips an outer `box-shadow` to outside the element's border box; GPUI drew the whole blurred rectangle under the element, so a see-through box (0.9.4's frosted menus, rail, prompt bar pill, toasts, selection bar, ink dock, the open archive panel, the capture panel's "N more" pill, a terminal's loading pill) showed its own shadow through its fill, and a backdrop blur blurred it into the panel. `Styled::shadow_outside()` (`Style::box_shadow_outside`) asks for CSS's behaviour: `Window::paint_drop_shadows_clipped(…, outside: true)` marks the `Shadow` primitives `inset: 2`, and the shadow fragment shader (Metal, HLSL, WGSL) multiplies the shadow's coverage by one minus the element's rounded-box coverage (`saturate(0.5 + sdf)`), with the same one-pixel anti-aliased edge as the box. `paint_drop_shadows` keeps its signature (unclipped) for other callers. Opt-in, because a Rust element may carry a shadow for a box drawn by a child with other corners; nodus-ui's `frosted()` sets it for every frosted surface. board-cards' sliced `outer_shadow` (the open archive panel) is now one element with it.
 
 Checked against the goldens: `board-archive-open` (0.41% / 0.40% of the frame; the panel's edges and shadow show no differing pixels, what's left is card text), `capture-recents` (the "N more" pill: 0 pixels differ, both themes), `bar-focused` (the frosted pill: 0.02%).
+
+### 15. Tooltips: laid out at max-content, shown on AppKit's clock (Nodus, track gpui-polish)
+
+- **Layout.** GPUI lays a tooltip (and a drag preview) out as a root with `AvailableSpace::min_size()`. Before patch 10 a min-content probe of text answered its whole line, so that worked; with CSS's min-content (the widest word) every tooltip wrapped one word to a line. Both are now laid out at max-content (`max_content_size` in `window.rs`): as wide as the text, wrapping only at the tooltip's own `max_w`.
+- **Timing.** `App::set_tooltip_timing(Some(TooltipTiming))` sets when tooltips without a delay of their own show (an element's `tooltip_show_delay` still wins; `None` keeps upstream's 500 ms). `TooltipTiming::APPKIT` is what 0.9.4's `title` tooltips used on a Mac, since Chromium shows them through AppKit: read from this macOS's `NSToolTipManager` (`_toolTipDelay` is 1.5 s, and `_getDisplayDelay:inQuickMode:forView:` answers 0.5 s while the window's last tooltip left the screen under 0.5 s before, 1.5 s otherwise). The window notes when a tooltip stops being drawn (`tooltip_on_screen`, `tooltip_left_screen`), and `default_tooltip_show_delay` picks the delay when a hover starts.
+
+nodus-ui sets the AppKit timing on macOS (`components::tooltip::init`); off a Mac it keeps 500 ms. The pad's tooltip ("Drag a note onto the board, or click for one beside the pad") now runs on one 320px line and wraps only its last word.
 
 ## Verification
 

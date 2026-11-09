@@ -51,6 +51,48 @@ type StackSafe<T> = T;
 
 const DRAG_THRESHOLD: f64 = 2.;
 const DEFAULT_TOOLTIP_SHOW_DELAY: Duration = Duration::from_millis(500);
+
+/// Nodus patch: when tooltips show, set for the app with
+/// [`App::set_tooltip_timing`] (an element's own `tooltip_show_delay` still
+/// wins). AppKit's (what Chromium's `title` tooltips used on a Mac): 1.5 s,
+/// or 0.5 s when a tooltip in the same window left the screen less than
+/// 0.5 s before (`NSToolTipManager`'s quick mode).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TooltipTiming {
+    /// The wait before a tooltip shows.
+    pub delay: Duration,
+    /// The wait while in quick mode.
+    pub quick_delay: Duration,
+    /// How soon after a tooltip went away the next one is quick.
+    pub quick_within: Duration,
+}
+
+impl TooltipTiming {
+    /// AppKit's `NSToolTipManager` timing (macOS 27: `_toolTipDelay` 1.5 s;
+    /// `_getDisplayDelay:inQuickMode:forView:` answers 0.5 s while the last
+    /// tooltip was removed from the window under 0.5 s ago).
+    pub const APPKIT: TooltipTiming = TooltipTiming {
+        delay: Duration::from_millis(1500),
+        quick_delay: Duration::from_millis(500),
+        quick_within: Duration::from_millis(500),
+    };
+}
+
+/// The wait before a tooltip with no delay of its own shows.
+fn default_tooltip_show_delay(window: &Window, cx: &App) -> Duration {
+    let Some(timing) = cx.tooltip_timing else {
+        return DEFAULT_TOOLTIP_SHOW_DELAY;
+    };
+    let quick = window.tooltip_on_screen
+        || window
+            .tooltip_left_screen
+            .is_some_and(|at| at.elapsed() < timing.quick_within);
+    if quick {
+        timing.quick_delay
+    } else {
+        timing.delay
+    }
+}
 const HOVERABLE_TOOLTIP_HIDE_DELAY: Duration = Duration::from_millis(500);
 
 /// The styling information for a given group.
@@ -3785,7 +3827,6 @@ pub(crate) fn register_tooltip_mouse_handlers(
     window: &mut Window,
 ) {
     let current_view = window.current_view();
-    let show_delay = show_delay.unwrap_or(DEFAULT_TOOLTIP_SHOW_DELAY);
 
     window.on_mouse_event({
         let active_tooltip = active_tooltip.clone();
@@ -3884,7 +3925,7 @@ fn handle_tooltip_mouse_move(
     tooltip_id: Option<TooltipId>,
     current_view: EntityId,
     phase: DispatchPhase,
-    show_delay: Duration,
+    show_delay: Option<Duration>,
     window: &mut Window,
     cx: &mut App,
 ) {
@@ -3944,6 +3985,8 @@ fn handle_tooltip_mouse_move(
             active_tooltip.borrow_mut().take();
         }
         Action::ScheduleShow => {
+            // Nodus patch: the app's timing when the element has no delay.
+            let show_delay = show_delay.unwrap_or_else(|| default_tooltip_show_delay(window, cx));
             let delayed_show_task = window.spawn(cx, {
                 let weak_active_tooltip = Rc::downgrade(active_tooltip);
                 let build_tooltip = build_tooltip.clone();

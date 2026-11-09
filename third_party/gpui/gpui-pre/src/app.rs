@@ -972,6 +972,8 @@ pub struct App {
     pub(crate) text_rendering_mode: Rc<Cell<TextRenderingMode>>,
     /// Nodus patch: CSS `-webkit-font-smoothing`, for every window.
     pub(crate) font_smoothing: Rc<Cell<FontSmoothing>>,
+    /// Nodus patch: when tooltips without a delay of their own show.
+    pub(crate) tooltip_timing: Option<crate::TooltipTiming>,
 
     pub(crate) window_update_stack: Vec<WindowId>,
     pub(crate) mode: GpuiMode,
@@ -1027,6 +1029,7 @@ impl App {
                 text_system,
                 text_rendering_mode: Rc::new(Cell::new(TextRenderingMode::default())),
                 font_smoothing: Rc::new(Cell::new(FontSmoothing::default())),
+                tooltip_timing: None,
                 mode: GpuiMode::Production,
                 actions: Rc::new(ActionRegistry::default()),
                 pending_updates: 0,
@@ -1878,6 +1881,12 @@ impl App {
     /// Nodus patch: whether glyphs get the platform's font smoothing.
     pub fn font_smoothing(&self) -> FontSmoothing {
         self.font_smoothing.get()
+    }
+
+    /// Nodus patch: when tooltips show (those without a delay of their
+    /// own), for every window; `None` is upstream's fixed 500 ms.
+    pub fn set_tooltip_timing(&mut self, timing: Option<crate::TooltipTiming>) {
+        self.tooltip_timing = timing;
     }
 
     /// Returns the operating system's power mode, or [`PowerMode::Unknown`]

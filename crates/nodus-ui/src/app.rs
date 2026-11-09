@@ -83,6 +83,7 @@ pub fn run(user_data: PathBuf) -> anyhow::Result<()> {
     app.run(move |cx: &mut App| {
         gpui::init(cx);
         theme::fonts::register(cx);
+        crate::components::tooltip::init(cx);
         cx.set_global(crate::board::CoreRuntime(core_runtime));
         crate::board::init(cx);
         cx.set_global(window::Core(nodus.clone()));

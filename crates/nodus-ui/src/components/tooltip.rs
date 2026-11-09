@@ -1,7 +1,10 @@
 //! Native-looking tooltips. 0.9.4's tooltips are HTML `title`s, which
 //! Chromium shows as the OS's own tooltip after the OS's hover delay; GPUI
 //! draws its tooltips itself, so this one is drawn to look like macOS's
-//! (spec 08, Rust mapping risk 4).
+//! (spec 08, Rust mapping risk 4): AppKit's tooltip font (11pt system),
+//! as wide as its text up to a maximum before it wraps (the patched GPUI
+//! lays tooltips out at max-content, PATCHES 15), below and right of the
+//! pointer, after AppKit's delay ([`init`]).
 
 use gpui::{
     AnyView, App, AppContext as _, Context, Entity, IntoElement, ParentElement as _, Render, SharedString, Styled,
@@ -9,6 +12,16 @@ use gpui::{
 };
 
 use crate::theme::{self, fonts, tokens::*};
+
+/// Tooltips show when AppKit's do (what Chromium's were on a Mac): 1.5 s
+/// after the pointer settles, 0.5 s when one was on screen in the window
+/// under 0.5 s before. Elsewhere GPUI's 500 ms, close to Windows' own
+/// (the double-click time).
+pub fn init(cx: &mut App) {
+    if cfg!(target_os = "macos") {
+        cx.set_tooltip_timing(Some(gpui::TooltipTiming::APPKIT));
+    }
+}
 
 /// What a `.tooltip(…)` takes to show `text` (lines split on `\n`).
 pub fn native_tooltip(text: SharedString) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {

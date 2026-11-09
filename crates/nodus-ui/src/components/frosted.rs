@@ -9,7 +9,7 @@
 //! Chromium does, and the surface colour is drawn over it.
 //!
 //! A frosted surface is see-through, so its shadows are drawn only outside
-//! it (`shadow_outside`, PATCHES 13), as CSS clips an outer `box-shadow`:
+//! it (`shadow_outside`, PATCHES 14), as CSS clips an outer `box-shadow`:
 //! otherwise GPUI draws them under the whole box, where they'd darken the
 //! fill and be blurred into the backdrop.
 

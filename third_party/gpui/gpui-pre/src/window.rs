@@ -737,6 +737,16 @@ type FrameCallback = Box<dyn FnOnce(&mut Window, &mut App)>;
 pub(crate) type AnyMouseListener =
     Box<dyn FnMut(&dyn Any, DispatchPhase, &mut Window, &mut App) + 'static>;
 
+/// Nodus patch: the space a free-floating overlay (a tooltip, a drag
+/// preview) is laid out in: shrink-to-fit with nothing to fit into, so
+/// CSS's max-content.
+fn max_content_size() -> Size<AvailableSpace> {
+    Size {
+        width: AvailableSpace::MaxContent,
+        height: AvailableSpace::MaxContent,
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct CursorStyleRequest {
     pub(crate) hitbox_id: Option<HitboxId>,
@@ -1315,6 +1325,11 @@ pub struct Window {
     pub(crate) pending_input_observers: SingleSubscriberSet<AnyObserver>,
     prompt: Option<RenderablePromptHandle>,
     pub(crate) client_inset: Option<Pixels>,
+    /// Nodus patch: a tooltip was drawn in the last frame.
+    pub(crate) tooltip_on_screen: bool,
+    /// Nodus patch: when the last tooltip left the window, for
+    /// [`crate::TooltipTiming`]'s quick mode.
+    pub(crate) tooltip_left_screen: Option<std::time::Instant>,
     /// The hitbox that has captured the pointer, if any.
     /// While captured, mouse events route to this hitbox regardless of hit testing.
     captured_hitbox: Option<HitboxId>,
@@ -2440,6 +2455,8 @@ impl Window {
             pending_input_observers: SingleSubscriberSet::new(),
             prompt: None,
             client_inset: None,
+            tooltip_on_screen: false,
+            tooltip_left_screen: None,
             image_cache_stack: Vec::new(),
             captured_hitbox: None,
             #[cfg(any(feature = "inspector", debug_assertions))]
@@ -4011,12 +4028,19 @@ impl Window {
         } else if let Some(active_drag) = cx.active_drag.take() {
             let mut element = active_drag.view.clone().into_any_element();
             let offset = self.mouse_position() - active_drag.cursor_offset;
-            element.prepaint_as_root(offset, AvailableSpace::min_size(), self, cx);
+            // Nodus patch: laid out at max-content (see prepaint_tooltip).
+            element.prepaint_as_root(offset, max_content_size(), self, cx);
             active_drag_element = Some(element);
             cx.active_drag = Some(active_drag);
         } else {
             tooltip_element = self.prepaint_tooltip(cx);
         }
+        // Nodus patch: when a tooltip leaves the screen (TooltipTiming).
+        let tooltip_shown = tooltip_element.is_some();
+        if self.tooltip_on_screen && !tooltip_shown {
+            self.tooltip_left_screen = Some(std::time::Instant::now());
+        }
+        self.tooltip_on_screen = tooltip_shown;
 
         self.mouse_hit_test = self.next_frame.hit_test(self.mouse_position);
 
@@ -4092,7 +4116,11 @@ impl Window {
             };
             let mut element = tooltip_request.tooltip.view.clone().into_any_element();
             let mouse_position = tooltip_request.tooltip.mouse_position;
-            let tooltip_size = element.layout_as_root(AvailableSpace::min_size(), self, cx);
+            // Nodus patch: a tooltip is as wide as its content, wrapping only
+            // at its own max width. Since min-content became CSS's (the
+            // widest word, PATCHES 10), a min-content layout wrapped every
+            // word onto a line of its own.
+            let tooltip_size = element.layout_as_root(max_content_size(), self, cx);
 
             let mut tooltip_bounds =
                 Bounds::new(mouse_position + point(px(1.), px(1.)), tooltip_size);

@@ -11,8 +11,8 @@
 | 1. Custom cursors: the ink's `move` and the eraser's circle | ✅ PATCHES 12; INKUI-016, INKUI-017 |
 | 2. Spellcheck underline in text fields | ☐ |
 | 3. Search highlights: rounded marks, the title's underline offset | ✅ PATCHES 13; SRCH-019, SRCH-020 as 0.9.4 draws them; also the transcript preview's marks and the diff's words |
-| 4. Tooltips as Chromium showed them | ☐ |
-| 5. Shadows drawn only outside a see-through box | ✅ PATCHES 13: `shadow_outside()`; every frosted surface, the archive panel, the "N more" pill, the terminal's loading pill, the note's play button |
+| 4. Tooltips as Chromium showed them | ✅ PATCHES 15: no more one word a line (max-content layout); AppKit's 1.5 s / quick 0.5 s timing on macOS; 11pt system font as `toolTipsFontOfSize:` |
+| 5. Shadows drawn only outside a see-through box | ✅ PATCHES 14: `shadow_outside()`; every frosted surface, the archive panel, the "N more" pill, the terminal's loading pill, the note's play button |
 
 ## Done (behavior IDs)
 
@@ -30,10 +30,16 @@ Spec 11's scenes through the real app (`crates/nodus-ui/parity/scenes11.py`, Nod
 | capture-recents | the "N more" pill (250,690 800×80) | 0.00% | 0.00% |
 | board-archive-open | the whole frame / the open panel (60,240 1680×960) | 0.41% / 0.81% (text only) | 0.40% / 0.78% |
 | bar-focused | the prompt bar (400,1580 2080×220) | 0.02% | 0.02% |
+| board-pad-hover | the whole frame (GPUI draws the pad's tooltip, the golden's native one isn't in the shot) | 0.64% (was 1.11%) | |
 
 The highlights match the golden row for row (mark 375–402, underline 364–365 at x 1150–1250). What's left in the modal is text: the monospace snippet line and the footer's key hints sit a little off (not this track's).
+
+## Remaining differences
+
+- Tooltips are still drawn by GPUI inside the window. 0.9.4's were AppKit's own (Chromium hands `title` text to `NSToolTipManager`): a separate panel that can extend past the window, in AppKit's material. The font, delay and quick mode now match; the panel's padding, corners and the wrap width (320px) are ui-shell's estimates. AppKit's private layout calls crash when called directly, so the wrap width wasn't measured. A native tooltip (Chromium's `setToolTipAtMousePoint:` path) was considered: on this macOS, `addToolTipRect:` no longer goes through `addTrackingRect:owner:…`, which that path relies on, and it can't be checked without activating the app, so it wasn't taken.
 
 ## Log
 
 - Started from main (f4467cd).
+- Item 4: AppKit's tooltip timing read from `NSToolTipManager` (ivars and `_getDisplayDelay:inQuickMode:forView:` in a probe with no window shown).
 - Item 1: CoreCursor's move arrow checked on this macOS (24×24, hotspot 12,12, the same picture Chromium shows); `_moveCursor` exists but throws, so it's not used.

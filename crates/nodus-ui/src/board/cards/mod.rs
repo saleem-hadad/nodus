@@ -285,7 +285,7 @@ pub fn mix(a: Rgba, p: f32, b: Rgba) -> Rgba {
 /// `w`×`h` (flow units) with corners `radius` round. GPUI fills a shadow in
 /// under the whole box, which shows through a translucent one (the open
 /// archive panel, ARCH-004), so this one is drawn with the patched GPUI's
-/// `shadow_outside` (PATCHES 13), to sit under the box.
+/// `shadow_outside` (PATCHES 14), to sit under the box.
 pub fn outer_shadow(shadow: &Shadow, w: f32, h: f32, radius: f32, z: Z) -> Option<AnyElement> {
     use gpui::Styled as _;
     let layers = shadow.soft(z);

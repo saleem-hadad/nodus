@@ -1,9 +1,10 @@
 //! The session host's wire protocol: one JSON object per line over a Unix
 //! socket, or a named pipe on Windows, between the app and the session host.
 //!
-//! It must stay byte-compatible with the 0.9.4 host (same `PROTOCOL` number,
-//! same messages, same socket and pipe names), so the Rust app adopts the
-//! sessions a running Node host holds, and a Node app adopts a Rust host's.
+//! The messages, and the socket and pipe names, are byte-compatible with the
+//! 0.9.4 host. Only the [`PROTOCOL`] number differs: 0.9.4 says 1 and this
+//! says 2 (decision U1), so an app that finds the other kind of host running
+//! asks to stop its sessions instead of adopting them.
 //!
 //! Ports `src/main/hostProtocol.ts`: the messages ([`message`]), reading them
 //! off a socket ([`reader`]), where the host's files live and who may use
@@ -30,9 +31,17 @@ pub use reader::{MessageReader, Utf8Decoder};
 /// speaks its version. `hello`, `welcome.protocol` and `shutdown` never change,
 /// so any app can tell an older host apart and stop it. (HOST-013)
 ///
-/// Whether the first Rust release bumps it is decision U1, settled at
-/// packaging; until then it stays 0.9.4's.
-pub const PROTOCOL: u32 = 1;
+/// 2 since the first Rust release (decision U1, default (a)). 0.9.4's Node
+/// host says 1 and sends the same messages, but it starts every session
+/// through node-pty's `spawn-helper` inside the installed bundle, which the
+/// update replaces, so new sessions on it would fail with `posix_spawnp
+/// failed.` A Rust app that finds it running treats it as another version
+/// and asks to stop its sessions (HOST-102), which resume from their cards;
+/// a 0.9.4 app that finds a Rust host does the same.
+pub const PROTOCOL: u32 = 2;
+
+/// What the 0.9.4 Node host and app say in `hello` and `welcome`.
+pub const PROTOCOL_0_9_4: u32 = 1;
 
 /// The event name Claude's status line reports arrive under, beside the hooks.
 /// They come after every reply, so only the latest is kept, apart from history.
@@ -56,6 +65,41 @@ pub fn is_status_key(data: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// U1: the first Rust release is a protocol change, so a 0.9.4 host or
+    /// app is another version, whose sessions are stopped, not adopted.
+    #[test]
+    fn the_rust_app_speaks_another_protocol_than_0_9_4() {
+        assert_eq!(PROTOCOL, 2);
+        assert_eq!(PROTOCOL_0_9_4, 1);
+    }
+
+    /// HOST-013: `hello` and `welcome.protocol` keep 0.9.4's shape across the
+    /// bump, so each side reads the other's number and can stop its host.
+    #[test]
+    fn hello_and_welcome_carry_the_number_as_0_9_4_did() {
+        assert_eq!(
+            encode(&ClientMessage::Hello {
+                protocol: f64::from(PROTOCOL),
+            }),
+            "{\"type\":\"hello\",\"protocol\":2}\n"
+        );
+        let hello: ClientMessage = nodus_domain::json::from_str(r#"{"type":"hello","protocol":1}"#).unwrap();
+        assert_eq!(
+            hello,
+            ClientMessage::Hello {
+                protocol: f64::from(PROTOCOL_0_9_4),
+            }
+        );
+        let welcome: HostMessage = nodus_domain::json::from_str(
+            r#"{"type":"welcome","protocol":1,"hookPort":52341,"hookToken":"tok","sessions":[],"mcp":true,"hookAuthHeader":true}"#,
+        )
+        .unwrap();
+        let HostMessage::Welcome(welcome) = welcome else {
+            panic!("a welcome");
+        };
+        assert_eq!(welcome.protocol, f64::from(PROTOCOL_0_9_4));
+    }
 
     #[test]
     fn status_keys_are_single_keystrokes() {

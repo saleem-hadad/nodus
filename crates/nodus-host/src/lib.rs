@@ -9,8 +9,9 @@
 //!
 //! The app starts it detached as `Nodus host <socket> <key>` and talks to it
 //! over a Unix socket, or a named pipe on Windows (`nodus-host-proto`). It
-//! speaks the same protocol as the 0.9.4 Node host, so either app can adopt
-//! either host.
+//! sends the same messages as the 0.9.4 Node host under protocol number 2
+//! (0.9.4 says 1, decision U1), so an app of either kind that finds the other
+//! kind's host asks to stop its sessions rather than adopting them.
 //!
 //! Ports `src/main/host.ts`.
 

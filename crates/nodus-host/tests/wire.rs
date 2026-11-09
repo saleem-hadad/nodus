@@ -5,14 +5,20 @@
 //! probe, kill and shutdown — runs against a host, and everything the host
 //! says (on the socket, over HTTP and in its log) is written down with the
 //! parts that change between runs (port, token, times) replaced. The Rust
-//! host has to produce exactly `fixtures/wire-transcript.txt`.
+//! host has to produce exactly `fixtures/wire-transcript.txt`, but for the
+//! protocol number in its welcomes: 2 where 0.9.4 says 1 (decision U1). The
+//! apps in the conversation say the number of the host they talk to.
 //!
-//! The fixture was recorded from the real 0.9.4 Node host. To check it
-//! against Node again, build the Electron app and point the test at it:
+//! The fixture was recorded from the real 0.9.4 Node host. The Electron app
+//! is no longer in this repo; to check the fixture against Node again, build
+//! it from a checkout of tag `v0.9.4` beside this one (Node 22+, pnpm) and
+//! point the test at it (relative paths are from this repo's root):
 //!
 //! ```sh
-//! NODUS_NODE_HOST_JS=node_modules/.cache/host/main/host.js \
-//! NODUS_NODE_BIN=node_modules/electron/dist/Electron.app/Contents/MacOS/Electron \
+//! git worktree add ../nodus-0.9.4 v0.9.4
+//! (cd ../nodus-0.9.4 && pnpm install && pnpm build)
+//! NODUS_NODE_HOST_JS=../nodus-0.9.4/out/main/host.js \
+//! NODUS_NODE_BIN=../nodus-0.9.4/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron \
 //!   cargo test -p nodus-host --test wire -- --nocapture
 //! ```
 //!
@@ -25,7 +31,7 @@ use std::time::Duration;
 
 use nodus_host::Logger;
 use nodus_host::transport::{ClientStream, connect};
-use nodus_host_proto::MessageReader;
+use nodus_host_proto::{MessageReader, PROTOCOL, PROTOCOL_0_9_4};
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -93,18 +99,34 @@ struct Transcript {
     lines: Vec<String>,
     token: String,
     port: u16,
+    /// The protocol the host speaks: 0.9.4's, or the Rust host's.
+    protocol: u32,
 }
 
 impl Transcript {
+    fn new(protocol: u32) -> Self {
+        Self {
+            protocol,
+            ..Self::default()
+        }
+    }
+
     fn note(&mut self, line: String) {
         self.lines.push(line);
     }
 
+    /// Written down as 0.9.4 would say it: a welcome's protocol must be the
+    /// host's, and is written as 0.9.4's number.
     fn got(&mut self, conn: &Conn, msg: &Value) {
+        let mut msg = normalize(msg);
+        if msg["type"] == "welcome" {
+            assert_eq!(msg["protocol"], json!(self.protocol), "{} got {msg}", conn.name);
+            msg["protocol"] = json!(PROTOCOL_0_9_4);
+        }
         self.note(format!(
             "{}← {}",
             conn.name,
-            nodus_domain::json::to_string(&normalize(msg)).unwrap()
+            nodus_domain::json::to_string(&msg).unwrap()
         ));
     }
 
@@ -230,9 +252,9 @@ fn normalize_log(lines: &[String], socket: &Path, port: u16) -> Vec<String> {
         .collect()
 }
 
-/// The conversation. Returns the transcript.
-async fn converse(socket: &Path, workdir: &Path) -> Transcript {
-    let mut t = Transcript::default();
+/// The conversation with a host on this protocol. Returns the transcript.
+async fn converse(socket: &Path, workdir: &Path, protocol: u32) -> Transcript {
+    let mut t = Transcript::new(protocol);
     let cwd = workdir.to_string_lossy().into_owned();
     let env = json!({"PATH": "/usr/bin:/bin", "A": "1"});
     let spawn = |id: u32, session: &str, args: Value| {
@@ -242,7 +264,7 @@ async fn converse(socket: &Path, workdir: &Path) -> Transcript {
 
     // HOST-036–038: hello, welcome.
     let mut a = Conn::open("A", socket).await;
-    a.send(json!({"type": "hello", "protocol": 1})).await;
+    a.send(json!({"type": "hello", "protocol": protocol})).await;
     let welcome = t.expect(&mut a, "welcome").await;
     t.token = welcome["hookToken"].as_str().unwrap().to_owned();
     t.port = u16::try_from(welcome["hookPort"].as_u64().unwrap()).unwrap();
@@ -291,7 +313,7 @@ async fn converse(socket: &Path, workdir: &Path) -> Transcript {
     a.send(json!({"type": "resize", "sessionId": "s2", "cols": 0, "rows": 40}))
         .await;
     a.send(json!({"type": "something-new"})).await;
-    a.send(json!({"type": "hello", "protocol": 1})).await;
+    a.send(json!({"type": "hello", "protocol": protocol})).await;
     a.quiet().await;
 
     // HOST-068–078: hooks.
@@ -343,7 +365,7 @@ async fn converse(socket: &Path, workdir: &Path) -> Transcript {
 
     // HOST-037, HOST-046: a second app gets the session with its history.
     let mut b = Conn::open("B", socket).await;
-    b.send(json!({"type": "hello", "protocol": 1})).await;
+    b.send(json!({"type": "hello", "protocol": protocol})).await;
     t.expect(&mut b, "welcome").await;
 
     // HOST-079–089: the board tools' relay.
@@ -487,7 +509,7 @@ async fn the_rust_host_says_what_the_node_host_says() {
     let host = tokio::spawn(async move { nodus_host::run(&args, log).await });
     wait_for_socket(&socket).await;
 
-    let mut transcript = converse(&socket, dir.path()).await;
+    let mut transcript = converse(&socket, dir.path(), PROTOCOL).await;
     let code = tokio::time::timeout(TIMEOUT, host)
         .await
         .expect("the host exits")
@@ -532,7 +554,7 @@ async fn the_node_host_says_what_the_fixture_says() {
         .expect("the Node host starts");
     wait_for_socket(&socket).await;
 
-    let mut transcript = converse(&socket, dir.path()).await;
+    let mut transcript = converse(&socket, dir.path(), PROTOCOL_0_9_4).await;
     let status = tokio::time::timeout(TIMEOUT, node.wait())
         .await
         .expect("the host exits")

@@ -46,7 +46,7 @@ Build for the Node runs: `corepack pnpm install --frozen-lockfile && npx electro
 ## Deferred
 
 - Windows behaviours (HOST-005, 029, 051, 052, 063, ConPTY output/exit timing) are compiled and clippy-clean for `x86_64-pc-windows-msvc`, with tests in `pty_windows.rs`, `windows_host.rs` and `nodus/tests/host_subcommand.rs`, but have not run yet: there's no Windows machine here. First run is the Windows CI job.
-- Decision U1 (adopting a 0.9.4 Node host across the bundle swap): unchanged, `PROTOCOL` stays 1.
+- Decision U1 (adopting a 0.9.4 Node host across the bundle swap): default (a) since the cutover, `PROTOCOL` is 2; a 0.9.4 host or app is another version (`migration/tracks/cutover.md`).
 
 ## Where 0.9.4 and the spec differ (the port follows 0.9.4)
 

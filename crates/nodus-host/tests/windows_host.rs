@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use nodus_host::Logger;
 use nodus_host::transport::connect;
-use nodus_host_proto::{MessageReader, Platform, host_paths, trusts_host};
+use nodus_host_proto::{MessageReader, PROTOCOL, Platform, host_paths, trusts_host};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[tokio::test]
@@ -41,7 +41,7 @@ async fn host_029_writes_a_key_and_welcomes_with_it() {
     }
     let mut stream = stream.expect("the host listens on its pipe");
     stream
-        .write_all(b"{\"type\":\"hello\",\"protocol\":1}\n")
+        .write_all(format!("{{\"type\":\"hello\",\"protocol\":{PROTOCOL}}}\n").as_bytes())
         .await
         .unwrap();
     let mut reader = MessageReader::new();

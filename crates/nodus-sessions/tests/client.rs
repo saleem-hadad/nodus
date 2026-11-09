@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use nodus_domain::{Event, EventSink, SessionStatus};
-use nodus_host_proto::{HostPaths, MessageReader};
+use nodus_host_proto::{HostPaths, MessageReader, PROTOCOL, PROTOCOL_0_9_4};
 use nodus_sessions::client::{
     BoardTools, BoxFuture, ClientError, HostClient, HostInfo, HostLauncher, HostPrompt, ProcessLauncher, ReplaceChoice,
     Wiring,
@@ -281,13 +281,13 @@ impl FakeConn {
 
     /// Answers the hello with this welcome.
     async fn greet(&mut self, welcome: Value) {
-        assert_eq!(self.recv().await, Some(json!({"type": "hello", "protocol": 1})));
+        assert_eq!(self.recv().await, Some(json!({"type": "hello", "protocol": PROTOCOL})));
         self.send(&[welcome]).await;
     }
 }
 
 fn welcome(sessions: Value) -> Value {
-    let mut welcome = json!({"type": "welcome", "protocol": 1, "hookPort": 4000, "hookToken": "tok_en-1",
+    let mut welcome = json!({"type": "welcome", "protocol": PROTOCOL, "hookPort": 4000, "hookToken": "tok_en-1",
                              "sessions": [], "mcp": true, "hookAuthHeader": true});
     welcome["sessions"] = sessions;
     welcome
@@ -334,7 +334,7 @@ async fn host_096_100_108_adopts_every_session_with_its_history_in_order() {
         async move { client.connect_host(false).await }
     });
     let mut conn = host.accept().await;
-    assert_eq!(conn.recv().await, Some(json!({"type": "hello", "protocol": 1})));
+    assert_eq!(conn.recv().await, Some(json!({"type": "hello", "protocol": PROTOCOL})));
     let s1 = json!({"sessionId": "s1", "projectId": "p1", "initial": "working", "buffer": "old output",
         "history": [{"hook": "UserPromptSubmit", "payload": {"n": 1}, "at": 1000}, {"input": "\u{1b}", "at": 2000}],
         "statusLine": {"payload": {"model": {"display_name": "M"}}, "at": 3000}});
@@ -385,7 +385,7 @@ async fn host_105_an_older_host_gets_no_curl_config_and_no_board_tools() {
         async move { client.connect_host(false).await }
     });
     let mut conn = host.accept().await;
-    conn.greet(json!({"type": "welcome", "protocol": 1, "hookPort": 4001, "hookToken": "a\"b", "sessions": []}))
+    conn.greet(json!({"type": "welcome", "protocol": PROTOCOL, "hookPort": 4001, "hookToken": "a\"b", "sessions": []}))
         .await;
     connecting.await.unwrap().unwrap();
     let env = setup.endpoint.env("s1");
@@ -407,7 +407,7 @@ async fn host_105_a_token_that_cant_go_in_a_config_leaves_hooks_on_the_url() {
         async move { client.connect_host(false).await }
     });
     let mut conn = host.accept().await;
-    conn.greet(json!({"type": "welcome", "protocol": 1, "hookPort": 1, "hookToken": "x\"y", "sessions": [], "hookAuthHeader": true}))
+    conn.greet(json!({"type": "welcome", "protocol": PROTOCOL, "hookPort": 1, "hookToken": "x\"y", "sessions": [], "hookAuthHeader": true}))
         .await;
     connecting.await.unwrap().unwrap();
     assert_eq!(setup.endpoint.env("s").get("NODUS_HOOK_CONFIG"), None);
@@ -456,7 +456,7 @@ async fn host_099_102_104_stops_a_host_on_another_protocol_then_starts_one() {
         async move { client.connect_host(true).await }
     });
     let mut old = host.accept().await;
-    old.greet(json!({"type": "welcome", "protocol": 2, "hookPort": 1, "hookToken": "t", "sessions": []}))
+    old.greet(json!({"type": "welcome", "protocol": PROTOCOL + 1, "hookPort": 1, "hookToken": "t", "sessions": []}))
         .await;
     assert_eq!(old.recv().await, Some(json!({"type": "shutdown"})));
     // The old host goes, and its socket with it.
@@ -482,6 +482,58 @@ async fn host_103_quit_closes_the_connection_and_says_so() {
     old.greet(json!({"type": "hello-back"})).await;
     assert_eq!(connecting.await.unwrap(), Err(ClientError::Quit));
     assert_eq!(old.recv().await, None);
+}
+
+/// The welcome a 0.9.4 Node host sends with one session running, as
+/// `nodus-host/tests/fixtures/wire-transcript.txt` recorded it.
+fn welcome_0_9_4() -> Value {
+    json!({"type": "welcome", "protocol": PROTOCOL_0_9_4, "hookPort": 52341, "hookToken": "tok",
+           "sessions": [{"sessionId": "s1", "projectId": "p1", "initial": "working", "buffer": "recent output\r\n",
+                         "history": [{"hook": "UserPromptSubmit", "payload": {"session_id": "s1"}, "at": 1000}]}],
+           "mcp": true, "hookAuthHeader": true})
+}
+
+/// U1: the first launch after the update finds 0.9.4's Node host still
+/// running. It's another version (HOST-099), so the user is asked (HOST-102),
+/// and Stop Sessions shuts it down (HOST-104) without adopting a session.
+#[tokio::test]
+async fn host_099_102_104_a_0_9_4_host_is_another_version_and_its_sessions_are_stopped() {
+    let setup = Setup::new();
+    let host = setup.fake_host();
+    let client = setup.client(Arc::new(Nothing));
+    let connecting = tokio::spawn({
+        let client = client.clone();
+        async move { client.connect_host(false).await }
+    });
+    let mut old = host.accept().await;
+    old.greet(welcome_0_9_4()).await;
+    assert_eq!(old.recv().await, Some(json!({"type": "shutdown"})));
+    drop(old);
+    connecting.await.unwrap().unwrap();
+    assert_eq!(setup.prompt.asked.load(Ordering::SeqCst), 1);
+    assert!(client.live_session_ids().is_empty());
+    assert!(setup.record.lines().is_empty(), "{:?}", setup.record.lines());
+    // Its hook port and token weren't taken on.
+    assert_eq!(setup.endpoint.env("s1")["NODUS_PORT"], "0");
+    assert!(!setup.paths().hook_config.exists());
+}
+
+/// U1, HOST-103: Quit leaves 0.9.4's host and its sessions running.
+#[tokio::test]
+async fn host_103_quit_leaves_a_0_9_4_host_running() {
+    let setup = Setup::new().with_choice(ReplaceChoice::Quit);
+    let host = setup.fake_host();
+    let client = setup.client(Arc::new(Nothing));
+    let connecting = tokio::spawn({
+        let client = client.clone();
+        async move { client.connect_host(true).await }
+    });
+    let mut old = host.accept().await;
+    old.greet(welcome_0_9_4()).await;
+    assert_eq!(connecting.await.unwrap(), Err(ClientError::Quit));
+    assert_eq!(old.recv().await, None);
+    assert!(client.live_session_ids().is_empty());
+    assert!(setup.record.lines().is_empty());
 }
 
 #[tokio::test(start_paused = true)]
@@ -963,16 +1015,19 @@ async fn a_session_runs_in_the_rust_host_and_a_relaunched_app_adopts_it() {
 // ---------------------------------------------------------------------------
 // The 0.9.4 Node host
 
-/// The Rust client against the real 0.9.4 Node host, started as 0.9.4
-/// starts it, when the Electron app has been built:
+/// U1 against the real 0.9.4 Node host, started as 0.9.4 starts it, with a
+/// session a 0.9.4 app started on it: the Rust app asks, Quit leaves the host
+/// and its session running, Stop Sessions shuts them down, and nothing is
+/// adopted. Runs when the Electron app has been built from a checkout of tag
+/// `v0.9.4` (how: nodus-host's `tests/wire.rs`):
 ///
 /// ```sh
-/// NODUS_NODE_HOST_JS=node_modules/.cache/host/main/host.js \
-/// NODUS_NODE_BIN=node_modules/electron/dist/Electron.app/Contents/MacOS/Electron \
+/// NODUS_NODE_HOST_JS=../nodus-0.9.4/out/main/host.js \
+/// NODUS_NODE_BIN=../nodus-0.9.4/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron \
 ///   cargo test -p nodus-sessions --test client node_host
 /// ```
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn node_host_runs_adopts_and_stops_sessions_for_the_rust_client() {
+async fn node_host_a_running_0_9_4_host_is_offered_to_be_stopped() {
     let (Some(host_js), Some(bin)) = (
         std::env::var_os("NODUS_NODE_HOST_JS"),
         std::env::var_os("NODUS_NODE_BIN"),
@@ -984,66 +1039,62 @@ async fn node_host_runs_adopts_and_stops_sessions_for_the_rust_client() {
         let path = PathBuf::from(path);
         if path.is_absolute() { path } else { root.join(path) }
     };
-    let node = Arc::new(ProcessLauncher::new(
-        resolve(bin),
-        [resolve(host_js)],
-        [("ELECTRON_RUN_AS_NODE", "1")],
-    ));
-    let setup = Setup::new();
-    let client = setup.client(Arc::clone(&node) as Arc<dyn HostLauncher>);
-
-    client
-        .spawn_session(
-            &opts("s1"),
-            shell("printf 'ready\\n'; read line; printf 'got %s\\n' \"$line\"; sleep 30"),
-        )
-        .await
-        .unwrap();
+    let node = ProcessLauncher::new(resolve(bin), [resolve(host_js)], [("ELECTRON_RUN_AS_NODE", "1")]);
+    let setup = Setup::new().with_choice(ReplaceChoice::Quit);
+    let paths = setup.paths();
+    node.start(&paths).unwrap();
     let deadline = Instant::now() + TIMEOUT;
-    while !client.snapshot("s1").contains("ready\r\n") {
-        assert!(Instant::now() < deadline);
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    client.write("s1", "\r");
-    client.resize("s1", 100.0, 30.0);
-    while !client.snapshot("s1").contains("got \r\n") {
-        assert!(Instant::now() < deadline, "{:?}", client.snapshot("s1"));
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    // The Node host's welcome set the endpoint and the curl config.
-    let env = setup.endpoint.env("s1");
-    assert_eq!(env["NODUS_HOOK_CONFIG"], setup.paths().hook_config.to_string_lossy());
-    assert!(client.relays_mcp());
+    let open = || async {
+        loop {
+            if let Ok(stream) = UnixStream::connect(&paths.socket).await {
+                break FakeConn {
+                    stream,
+                    reader: MessageReader::new(),
+                    queue: VecDeque::new(),
+                };
+            }
+            assert!(Instant::now() < deadline, "the Node host didn't start");
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    };
 
-    // A relaunched Rust app adopts the session from the Node host, history and all.
-    client.disconnect();
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    // A 0.9.4 app starts a session, then quits for the update.
+    let mut app = open().await;
+    app.send(&[json!({"type": "hello", "protocol": PROTOCOL_0_9_4})]).await;
+    let welcome = app.recv().await.unwrap();
+    assert_eq!((&welcome["type"], &welcome["protocol"]), (&json!("welcome"), &json!(1)));
+    app.send(&[
+        json!({"type": "spawn", "id": 1, "sessionId": "s1", "projectId": "p1", "initial": "done",
+                      "file": "/bin/sleep", "args": ["30"], "env": {"PATH": "/usr/bin:/bin"}, "cwd": "/tmp",
+                      "cols": 80, "rows": 24}),
+    ])
+    .await;
+    assert_eq!(app.recv().await, Some(json!({"type": "spawned", "id": 1})));
+    drop(app);
+
+    // Quit: the Rust app goes, the host and its session stay.
+    let quitting = setup.client(Arc::new(Nothing));
+    assert_eq!(quitting.connect_host(false).await, Err(ClientError::Quit));
+    assert!(quitting.live_session_ids().is_empty());
+    let mut probe = open().await;
+    probe.send(&[json!({"type": "hello", "protocol": 0})]).await;
+    assert_eq!(probe.recv().await.unwrap()["sessions"][0]["sessionId"], "s1");
+    drop(probe);
+
+    // Stop Sessions: the host stops the session and leaves; nothing is adopted.
     let again = Setup {
-        record: Arc::default(),
+        user_data: setup.user_data.clone(),
         ..Setup::new()
     };
-    let adopting = HostClient::new(
-        &setup.user_data,
-        Wiring {
-            events: Arc::new(Sink(Arc::clone(&again.record))),
-            status: Arc::new(Status(Arc::clone(&again.record))),
-            endpoint: Arc::new(HookEndpoint::new()),
-            board_tools: Arc::new(Tools),
-            prompt: Arc::clone(&again.prompt) as Arc<dyn HostPrompt>,
-            launcher: Arc::new(Nothing),
-        },
-    );
-    adopting.connect_host(false).await.unwrap();
-    assert_eq!(adopting.live_session_ids(), vec!["s1"]);
-    assert_eq!(adopting.snapshot("s1"), "ready\r\n\r\ngot \r\n");
-    let lines = again.record.lines();
-    assert_eq!(lines[0], "started s1 done");
-    assert!(lines[1].starts_with("input s1 \"\\r\" Some("), "{lines:?}");
-
-    adopting.kill("s1").await;
-    again.record.wait_for("exit s1 0").await;
-    adopting.stop_all().await;
-    assert!(
-        !adopting.paths().socket.exists() || nodus_host::transport::connect(&adopting.paths().socket).await.is_err()
-    );
+    let client = again.client(Arc::new(Nothing));
+    client.connect_host(false).await.unwrap();
+    assert_eq!(again.prompt.asked.load(Ordering::SeqCst), 1);
+    assert!(client.live_session_ids().is_empty());
+    assert!(again.record.lines().is_empty(), "{:?}", again.record.lines());
+    while UnixStream::connect(&paths.socket).await.is_ok() {
+        assert!(Instant::now() < deadline, "the Node host is still there");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let log = std::fs::read_to_string(&paths.log).unwrap();
+    assert!(log.contains("stopping every session"), "{log}");
 }

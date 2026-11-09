@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use nodus_host::Logger;
 use nodus_host::transport::{ClientStream, connect};
-use nodus_host_proto::MessageReader;
+use nodus_host_proto::{MessageReader, PROTOCOL, PROTOCOL_0_9_4};
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::task::JoinHandle;
@@ -97,7 +97,7 @@ impl Conn {
 
     async fn app(socket: &Path) -> (Self, Value) {
         let mut conn = Self::open(socket).await;
-        conn.send(json!({"type": "hello", "protocol": 1})).await;
+        conn.send(json!({"type": "hello", "protocol": PROTOCOL})).await;
         let welcome = conn.recv().await.expect("a welcome");
         (conn, welcome)
     }
@@ -208,7 +208,7 @@ async fn host_036_closes_a_connection_that_doesnt_start_with_hello() {
     // Lines that aren't JSON don't count as a first message.
     let mut conn = Conn::open(&host.socket).await;
     conn.send_raw("not json\n\n").await;
-    conn.send(json!({"type": "hello", "protocol": 1})).await;
+    conn.send(json!({"type": "hello", "protocol": PROTOCOL})).await;
     assert_eq!(conn.recv().await.unwrap()["type"], "welcome");
 }
 
@@ -217,7 +217,7 @@ async fn host_040_logs_a_message_that_fails_and_carries_on() {
     let host = TestHost::start().await;
     let mut conn = Conn::open(&host.socket).await;
     conn.send_raw("null\n").await;
-    conn.send(json!({"type": "hello", "protocol": 1})).await;
+    conn.send(json!({"type": "hello", "protocol": PROTOCOL})).await;
     assert_eq!(conn.recv().await.unwrap()["type"], "welcome");
     assert!(
         host.logged()
@@ -255,6 +255,47 @@ async fn host_047_a_host_with_live_sessions_outlives_its_apps() {
     // A live app keeps it running with no sessions.
     assert!(host.still_running().await);
     drop(b);
+    assert_eq!(host.exit_code().await, 0);
+}
+
+/// U1, HOST-038/039: a 0.9.4 app says protocol 1. The Rust host welcomes it
+/// with protocol 2, so it asks its user to stop the sessions; until it sends
+/// `shutdown` it can't touch them, and `shutdown` stops them and the host.
+#[tokio::test]
+async fn host_038_039_a_0_9_4_app_is_another_version_and_may_only_stop_the_host() {
+    let host = TestHost::start().await;
+    let (mut app, _) = Conn::app(&host.socket).await;
+    app.send(spawn_msg(1, "s1", "/bin/sleep", &["30"])).await;
+    assert_eq!(app.recv_event().await.unwrap(), json!({"type": "spawned", "id": 1}));
+
+    let mut old = Conn::open(&host.socket).await;
+    old.send(json!({"type": "hello", "protocol": PROTOCOL_0_9_4})).await;
+    let welcome = old.recv().await.unwrap();
+    assert_eq!(
+        (
+            &welcome["type"],
+            &welcome["protocol"],
+            &welcome["sessions"][0]["sessionId"]
+        ),
+        (&json!("welcome"), &json!(2), &json!("s1"))
+    );
+    old.send(spawn_msg(2, "s2", "/bin/sleep", &["30"])).await;
+    old.send(json!({"type": "kill", "sessionId": "s1"})).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let mut buffer = [0u8; 64];
+    assert!(
+        tokio::time::timeout(Duration::from_millis(200), old.stream.read(&mut buffer))
+            .await
+            .is_err(),
+        "the 0.9.4 app heard something"
+    );
+    assert!(host.logged().contains(&"app connected (protocol 1)".to_owned()));
+
+    old.send(json!({"type": "shutdown"})).await;
+    assert_eq!(
+        app.recv_event().await.unwrap(),
+        json!({"type": "exit", "sessionId": "s1", "exitCode": 0})
+    );
     assert_eq!(host.exit_code().await, 0);
 }
 

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use nodus_domain::{Event, EventSink, SessionStatus};
-use nodus_host_proto::{HostPaths, MessageReader, Platform, host_paths};
+use nodus_host_proto::{HostPaths, MessageReader, PROTOCOL, Platform, host_paths};
 use nodus_sessions::client::{
     BoardTools, BoxFuture, ClientError, HostClient, HostLauncher, HostPrompt, ReplaceChoice, Wiring,
 };
@@ -80,7 +80,7 @@ async fn answer(mut pipe: NamedPipeServer, welcome: Value) -> NamedPipeServer {
 }
 
 fn welcome(key: Option<&str>) -> Value {
-    let mut welcome = json!({"type": "welcome", "protocol": 1, "hookPort": 1, "hookToken": "t", "sessions": []});
+    let mut welcome = json!({"type": "welcome", "protocol": PROTOCOL, "hookPort": 1, "hookToken": "t", "sessions": []});
     if let Some(key) = key {
         welcome["key"] = json!(key);
     }

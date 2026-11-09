@@ -1,0 +1,396 @@
+//! The store's board actions (`store.ts`: `loadBoard`, `patchCards`,
+//! `upsertCard`, `removeCard`, `setArchive`, `saveSection`,
+//! `removeSection`, `saveNote`, `removeNotes`, `upsertView`, `patchView`,
+//! `removeView`, `setStatus`, `setAgentStatus`, `setUsage`, and the modal
+//! openers): each changes the window's copy of the board at once, then
+//! saves through the core.
+
+use gpui::{Context, Task};
+use nodus_domain::{BoardNote, BoardSection, NodePatch, Rect, SessionCard, SessionStatus, SessionUsage, ViewPatch};
+
+use crate::state::AppState;
+
+/// `unstickNotes`: stickers on cards leaving the board fall off, onto the
+/// board where an active card was, or back where they were from an archived one.
+fn unstick_notes(notes: &mut [BoardNote], leaving: &[SessionCard]) {
+    for note in notes {
+        let Some(card) = note
+            .session_id
+            .as_deref()
+            .and_then(|sid| leaving.iter().find(|c| c.node.session_id == sid))
+        else {
+            continue;
+        };
+        note.session_id = None;
+        if !card.node.archived {
+            note.x = card.node.x;
+            note.y = card.node.y;
+        }
+    }
+}
+
+impl AppState {
+    /// `loadBoard` (UI-050, UI-051, BOARD-006): shows the spinner only when
+    /// another project's board is up, ignores a stale answer, and closes the
+    /// terminal modal when its session came back archived.
+    pub fn fetch_board(&mut self, project_id: &str, cx: &mut Context<'_, Self>) {
+        self.board_loading = self.board.as_ref().is_none_or(|b| b.project.id != project_id);
+        cx.notify();
+        let nodus = self.nodus.clone();
+        let project_id = project_id.to_owned();
+        cx.spawn(async move |this, cx| {
+            let loaded = nodus.board().load(&project_id).await;
+            let _ = this.update(cx, |state, cx| {
+                if let Ok(board) = loaded
+                    && state.route.project_id() == Some(project_id.as_str())
+                {
+                    let archived = state.terminal_session_id.as_ref().is_some_and(|open| {
+                        board
+                            .cards
+                            .iter()
+                            .any(|c| &c.node.session_id == open && c.node.archived)
+                    });
+                    if archived {
+                        state.terminal_session_id = None;
+                    }
+                    state.board = Some(board);
+                }
+                state.board_loading = false;
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// `patchCards`: a session nothing was said in leaves the board rather
+    /// than being archived (BOARD-111); archived cards read as done, are
+    /// stamped, leave their section and fold back.
+    pub fn patch_cards(&mut self, patches: Vec<NodePatch>, cx: &mut Context<'_, Self>) {
+        let Some(board) = self.board.as_mut() else { return };
+        if patches.is_empty() {
+            return;
+        }
+        let patch_of = |id: &str| patches.iter().rev().find(|p| p.session_id == id);
+        let dropped: Vec<SessionCard> = board
+            .cards
+            .iter()
+            .filter(|c| {
+                patch_of(&c.node.session_id).is_some_and(|p| p.archived == Some(true))
+                    && !c.node.archived
+                    && !crate::board::layout::is_terminal(c)
+                    && nodus_board::is_empty_session(c.meta.as_ref())
+            })
+            .cloned()
+            .collect();
+        let gone: Vec<&str> = dropped.iter().map(|c| c.node.session_id.as_str()).collect();
+        unstick_notes(&mut board.notes, &dropped);
+        let now = crate::parity::now_ms(cx);
+        board.cards.retain(|c| !gone.contains(&c.node.session_id.as_str()));
+        for card in &mut board.cards {
+            let Some(p) = patch_of(&card.node.session_id) else {
+                continue;
+            };
+            let was_archived = card.node.archived;
+            if let Some(x) = p.x {
+                card.node.x = x;
+            }
+            if let Some(y) = p.y {
+                card.node.y = y;
+            }
+            if let Some(archived) = p.archived {
+                card.node.archived = archived;
+            }
+            if let Some(title) = &p.title {
+                card.node.title = Some(title.clone());
+            }
+            if let Some(section) = &p.section_id {
+                card.node.section_id.clone_from(section);
+            }
+            if let Some(expanded) = p.expanded {
+                card.node.expanded = Some(expanded);
+            }
+            if let Some(w) = p.w {
+                card.node.w = Some(w);
+            }
+            if let Some(h) = p.h {
+                card.node.h = Some(h);
+            }
+            if p.archived == Some(true) {
+                card.status = SessionStatus::Done;
+                if !was_archived {
+                    card.node.archived_at = Some(now);
+                }
+            }
+            if card.node.archived {
+                card.node.section_id = None;
+                card.node.expanded = None;
+            }
+        }
+        let gone: Vec<String> = gone.into_iter().map(str::to_owned).collect();
+        self.selection.retain(|id| !gone.contains(id));
+        // The terminal registry (spec 12) disposes `gone`'s terminals.
+        let project_id = board.project.id.clone();
+        cx.notify();
+        let nodus = self.nodus.clone();
+        cx.spawn(async move |_, _| {
+            let _ = nodus.board().save_nodes(&project_id, &patches).await;
+        })
+        .detach();
+    }
+
+    /// `upsertCard`.
+    pub fn upsert_card(&mut self, card: SessionCard, cx: &mut Context<'_, Self>) {
+        let Some(board) = self.board.as_mut() else { return };
+        match board
+            .cards
+            .iter_mut()
+            .find(|c| c.node.session_id == card.node.session_id)
+        {
+            Some(existing) => *existing = card,
+            None => board.cards.push(card),
+        }
+        cx.notify();
+    }
+
+    /// `removeCard`: off the board at once, then removed in the core (which
+    /// waits for its process to stop).
+    pub fn remove_card(&mut self, session_id: &str, cx: &mut Context<'_, Self>) -> Task<()> {
+        let Some(board) = self.board.as_mut() else {
+            return Task::ready(());
+        };
+        let leaving: Vec<SessionCard> = board
+            .cards
+            .iter()
+            .filter(|c| c.node.session_id == session_id)
+            .cloned()
+            .collect();
+        board.cards.retain(|c| c.node.session_id != session_id);
+        unstick_notes(&mut board.notes, &leaving);
+        self.selection.retain(|id| id != session_id);
+        let project_id = board.project.id.clone();
+        cx.notify();
+        let nodus = self.nodus.clone();
+        let session_id = session_id.to_owned();
+        cx.spawn(async move |_, _| nodus.board().remove_node(&project_id, &session_id).await)
+    }
+
+    /// `setArchive`.
+    pub fn set_archive(&mut self, rect: Rect, cx: &mut Context<'_, Self>) {
+        let Some(board) = self.board.as_mut() else { return };
+        board.archive = rect;
+        let project_id = board.project.id.clone();
+        cx.notify();
+        let nodus = self.nodus.clone();
+        cx.spawn(async move |_, _| nodus.board().save_archive(&project_id, rect).await)
+            .detach();
+    }
+
+    /// `saveSection`.
+    pub fn save_section(&mut self, section: BoardSection, cx: &mut Context<'_, Self>) {
+        let Some(board) = self.board.as_mut() else { return };
+        match board.sections.iter_mut().find(|s| s.id == section.id) {
+            Some(existing) => *existing = section.clone(),
+            None => board.sections.push(section.clone()),
+        }
+        let project_id = board.project.id.clone();
+        cx.notify();
+        let nodus = self.nodus.clone();
+        cx.spawn(async move |_, _| nodus.board().save_section(&project_id, &section).await)
+            .detach();
+    }
+
+    /// `removeSection`: its cards stay where they are, ungrouped.
+    pub fn remove_section(&mut self, section_id: &str, cx: &mut Context<'_, Self>) {
+        let Some(board) = self.board.as_mut() else { return };
+        board.sections.retain(|s| s.id != section_id);
+        for card in &mut board.cards {
+            if card.node.section_id.as_deref() == Some(section_id) {
+                card.node.section_id = None;
+            }
+        }
+        let project_id = board.project.id.clone();
+        cx.notify();
+        let nodus = self.nodus.clone();
+        let section_id = section_id.to_owned();
+        cx.spawn(async move |_, _| nodus.board().remove_section(&project_id, &section_id).await)
+            .detach();
+    }
+
+    /// `saveNote`.
+    pub fn save_note(&mut self, note: BoardNote, cx: &mut Context<'_, Self>) {
+        let Some(board) = self.board.as_mut() else { return };
+        match board.notes.iter_mut().find(|n| n.id == note.id) {
+            Some(existing) => *existing = note.clone(),
+            None => board.notes.push(note.clone()),
+        }
+        let project_id = board.project.id.clone();
+        cx.notify();
+        let nodus = self.nodus.clone();
+        cx.spawn(async move |_, _| nodus.board().save_note(&project_id, &note).await)
+            .detach();
+    }
+
+    /// `removeNotes`.
+    pub fn remove_notes(&mut self, ids: Vec<String>, cx: &mut Context<'_, Self>) {
+        let Some(board) = self.board.as_mut() else { return };
+        if ids.is_empty() {
+            return;
+        }
+        board.notes.retain(|n| !ids.contains(&n.id));
+        let project_id = board.project.id.clone();
+        cx.notify();
+        let nodus = self.nodus.clone();
+        cx.spawn(async move |_, _| nodus.board().remove_notes(&project_id, &ids).await)
+            .detach();
+    }
+
+    /// `upsertView`.
+    pub fn upsert_view(&mut self, view: nodus_domain::BoardView, cx: &mut Context<'_, Self>) {
+        let Some(board) = self.board.as_mut() else { return };
+        match board.views.iter_mut().find(|v| v.id == view.id) {
+            Some(existing) => *existing = view,
+            None => board.views.push(view),
+        }
+        cx.notify();
+    }
+
+    /// `patchView`.
+    pub fn patch_view(&mut self, patch: ViewPatch, cx: &mut Context<'_, Self>) {
+        let Some(board) = self.board.as_mut() else { return };
+        if let Some(view) = board.views.iter_mut().find(|v| v.id == patch.id) {
+            if let Some(x) = patch.x {
+                view.x = x;
+            }
+            if let Some(y) = patch.y {
+                view.y = y;
+            }
+            if let Some(w) = patch.w {
+                view.w = Some(w);
+            }
+            if let Some(h) = patch.h {
+                view.h = Some(h);
+            }
+            if let Some(title) = &patch.title {
+                view.title.clone_from(title);
+            }
+            if let Some(starts) = patch.starts_sessions {
+                view.starts_sessions = Some(starts);
+            }
+        }
+        let project_id = board.project.id.clone();
+        cx.notify();
+        let nodus = self.nodus.clone();
+        cx.spawn(async move |_, _| {
+            let _ = nodus.views().save(&project_id, &patch).await;
+        })
+        .detach();
+    }
+
+    /// `removeView`: the view, and its brain's card, go at once.
+    pub fn remove_view(&mut self, view_id: &str, cx: &mut Context<'_, Self>) -> Task<()> {
+        let Some(board) = self.board.as_mut() else {
+            return Task::ready(());
+        };
+        let brain = board
+            .views
+            .iter()
+            .find(|v| v.id == view_id)
+            .and_then(|v| v.session_id.clone());
+        board.views.retain(|v| v.id != view_id);
+        if let Some(brain) = &brain {
+            board.cards.retain(|c| &c.node.session_id != brain);
+            if self.terminal_session_id.as_ref() == Some(brain) {
+                self.terminal_session_id = None;
+            }
+        }
+        let project_id = board.project.id.clone();
+        cx.notify();
+        let nodus = self.nodus.clone();
+        let view_id = view_id.to_owned();
+        cx.spawn(async move |_, _| {
+            let _ = nodus.views().remove(&project_id, &view_id).await;
+        })
+    }
+
+    /// `setStatus`: archived cards always read as done; a process that's gone
+    /// takes its agents with it.
+    pub fn set_status(&mut self, session_id: &str, status: SessionStatus, live: bool, cx: &mut Context<'_, Self>) {
+        let Some(board) = self.board.as_mut() else { return };
+        let Some(card) = board.cards.iter_mut().find(|c| c.node.session_id == session_id) else {
+            return;
+        };
+        card.status = if card.node.archived {
+            SessionStatus::Done
+        } else {
+            status
+        };
+        card.live = live;
+        if !live && let Some(agents) = card.agents.as_mut() {
+            for agent in agents {
+                agent.status = SessionStatus::Done;
+            }
+        }
+        cx.notify();
+    }
+
+    /// `setAgentStatus`.
+    pub fn set_agent_status(
+        &mut self,
+        session_id: &str,
+        agent_id: &str,
+        status: SessionStatus,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let Some(board) = self.board.as_mut() else { return };
+        let Some(agent) = board
+            .cards
+            .iter_mut()
+            .find(|c| c.node.session_id == session_id)
+            .and_then(|c| c.agents.as_mut())
+            .and_then(|a| a.iter_mut().find(|a| a.agent_id == agent_id))
+        else {
+            return;
+        };
+        if agent.status != status {
+            agent.status = status;
+            cx.notify();
+        }
+    }
+
+    /// `setUsage`.
+    pub fn set_usage(&mut self, session_id: &str, usage: SessionUsage, cx: &mut Context<'_, Self>) {
+        let Some(board) = self.board.as_mut() else { return };
+        if let Some(card) = board.cards.iter_mut().find(|c| c.node.session_id == session_id) {
+            card.usage = Some(usage);
+            cx.notify();
+        }
+    }
+
+    /// `openTerminal`: the terminal modal, over the preview.
+    pub fn open_terminal(&mut self, session_id: &str, cx: &mut Context<'_, Self>) {
+        self.terminal_session_id = Some(session_id.to_owned());
+        self.preview_session_id = None;
+        cx.notify();
+    }
+
+    /// `openPreview`: the transcript preview, closing the terminal modal.
+    pub fn open_preview(&mut self, session_id: &str, cx: &mut Context<'_, Self>) {
+        self.preview_session_id = Some(session_id.to_owned());
+        self.terminal_session_id = None;
+        cx.notify();
+    }
+
+    /// `openAgents`.
+    pub fn open_agents(&mut self, session_id: &str, agent_id: Option<&str>, cx: &mut Context<'_, Self>) {
+        self.agent_view = Some((session_id.to_owned(), agent_id.map(str::to_owned)));
+        cx.notify();
+    }
+
+    /// `setSelection`: the selected session cards (BOARD-…, store sync).
+    pub fn set_selection(&mut self, ids: Vec<String>, cx: &mut Context<'_, Self>) {
+        if self.selection != ids {
+            self.selection = ids;
+            cx.notify();
+        }
+    }
+}

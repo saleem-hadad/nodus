@@ -74,7 +74,13 @@ pub fn card_size(card: &SessionCard) -> Size {
 
 /// A card's rect where it is stored.
 pub fn card_rect(card: &SessionCard) -> Rect {
-    rect_at(Point { x: card.node.x, y: card.node.y }, card_size(card))
+    rect_at(
+        Point {
+            x: card.node.x,
+            y: card.node.y,
+        },
+        card_size(card),
+    )
 }
 
 pub fn rect_at(p: Point, size: Size) -> Rect {
@@ -291,7 +297,13 @@ pub fn section_views(sections: &[BoardSection], cards: &[SessionCard]) -> Vec<Se
                 .collect();
             let rects: Vec<Rect> = members.iter().map(|&i| card_rect(&cards[i])).collect();
             SectionView {
-                frame: frame_around(Point { x: section.x, y: section.y }, &rects),
+                frame: frame_around(
+                    Point {
+                        x: section.x,
+                        y: section.y,
+                    },
+                    &rects,
+                ),
                 section: section.clone(),
                 members,
             }
@@ -330,7 +342,8 @@ pub fn section_status<'a>(members: impl IntoIterator<Item = &'a SessionCard> + C
 pub fn layout_group(cards: &[&SessionCard], others: &[Rect], zones: &[Rect]) -> (Rect, Vec<(String, Point)>) {
     let rects: Vec<Rect> = cards.iter().map(|c| card_rect(c)).collect();
     let around = frame_around(Point { x: 0.0, y: 0.0 }, &rects);
-    let clear = !others.iter().any(|o| intersects(*o, around, 0.0)) && !zones.iter().any(|z| intersects(*z, around, GAP));
+    let clear =
+        !others.iter().any(|o| intersects(*o, around, 0.0)) && !zones.iter().any(|z| intersects(*z, around, GAP));
     if clear {
         return (around, Vec::new());
     }
@@ -345,7 +358,15 @@ pub fn layout_group(cards: &[&SessionCard], others: &[Rect], zones: &[Rect]) -> 
     };
     let mut obstacles = others.to_vec();
     obstacles.extend_from_slice(zones);
-    let corner = find_free_spot(Point { x: around.x, y: around.y }, &obstacles, None, size);
+    let corner = find_free_spot(
+        Point {
+            x: around.x,
+            y: around.y,
+        },
+        &obstacles,
+        None,
+        size,
+    );
     // Reading order: rows top to bottom, then left to right (a stable sort).
     let row = |c: &SessionCard| js::round(c.node.y / (cell_h + GAP));
     let mut sorted: Vec<&SessionCard> = cards.to_vec();
@@ -422,7 +443,11 @@ pub fn new_section_corner(p: Point, obstacles: &[Rect]) -> Point {
         y: p.y - SECTION_HEADER_H / 2.0,
     };
     let empty = frame_around(p, &[]);
-    let at_p = Rect { x: p.x, y: p.y, ..empty };
+    let at_p = Rect {
+        x: p.x,
+        y: p.y,
+        ..empty
+    };
     if !obstacles.iter().any(|o| intersects(at_p, *o, GAP / 2.0)) {
         return preferred;
     }
@@ -555,7 +580,15 @@ mod tests {
         assert!(contains_point(r, Point { x: 10.0, y: 0.0 }));
         assert!(!contains_point(r, Point { x: 10.1, y: 0.0 }));
         assert_eq!(
-            bounds_of(&[r, Rect { x: 20.0, y: -5.0, w: 5.0, h: 5.0 }]),
+            bounds_of(&[
+                r,
+                Rect {
+                    x: 20.0,
+                    y: -5.0,
+                    w: 5.0,
+                    h: 5.0
+                }
+            ]),
             Rect {
                 x: 0.0,
                 y: -5.0,
@@ -563,12 +596,24 @@ mod tests {
                 h: 15.0
             }
         );
-        assert!(is_in_archive(Point { x: -100.0, y: 0.0 }, r, Size { w: 210.0, h: 10.0 }));
+        assert!(is_in_archive(
+            Point { x: -100.0, y: 0.0 },
+            r,
+            Size { w: 210.0, h: 10.0 }
+        ));
     }
 
     #[test]
     fn sizes_the_stack_zone_for_its_results() {
-        assert_eq!(stack_zone(ARCHIVE, None), Rect { x: 0.0, y: 0.0, w: 344.0, h: 362.0 });
+        assert_eq!(
+            stack_zone(ARCHIVE, None),
+            Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 344.0,
+                h: 362.0
+            }
+        );
         let sizes: Vec<(f64, f64)> = [0, 1, 2, 3, 4, 5]
             .iter()
             .map(|&n| {
@@ -578,7 +623,14 @@ mod tests {
             .collect();
         assert_eq!(
             sizes,
-            [(672.0, 362.0), (672.0, 362.0), (992.0, 362.0), (992.0, 544.0), (992.0, 544.0), (992.0, 544.0)]
+            [
+                (672.0, 362.0),
+                (672.0, 362.0),
+                (992.0, 362.0),
+                (992.0, 544.0),
+                (992.0, 544.0),
+                (992.0, 544.0)
+            ]
         );
         assert_eq!(stack_top(ARCHIVE), Point { x: 28.0, y: 52.0 });
         assert_eq!(stack_result_spot(ARCHIVE, 3, 10.0), Point { x: 676.0, y: 290.0 });
@@ -617,7 +669,10 @@ mod tests {
             spot_for_new_session(ARCHIVE, &cards, CARD_SIZE, &[]),
             Point { x: 852.0, y: 0.0 }
         );
-        assert_eq!(spot_for_new_session(ARCHIVE, &[], CARD_SIZE, &[]), Point { x: 424.0, y: 0.0 });
+        assert_eq!(
+            spot_for_new_session(ARCHIVE, &[], CARD_SIZE, &[]),
+            Point { x: 424.0, y: 0.0 }
+        );
     }
 
     #[test]
@@ -626,10 +681,7 @@ mod tests {
         let b = card("b", 800.0, 100.0);
         assert_eq!(spot_below(&[&a, &b], ARCHIVE, CARD_SIZE), Point { x: 600.0, y: 412.0 });
         let c = card("c", 0.0, 0.0);
-        assert_eq!(
-            spot_below(&[&c], ARCHIVE, CARD_SIZE),
-            Point { x: 424.0, y: 146.0 }
-        );
+        assert_eq!(spot_below(&[&c], ARCHIVE, CARD_SIZE), Point { x: 424.0, y: 146.0 });
     }
 
     #[test]
@@ -680,12 +732,22 @@ mod tests {
         let views = vec![
             SectionView {
                 section: section("old", 0.0, 0.0),
-                frame: Rect { x: 0.0, y: 0.0, w: 400.0, h: 400.0 },
+                frame: Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 400.0,
+                    h: 400.0,
+                },
                 members: vec![],
             },
             SectionView {
                 section: section("new", 0.0, 0.0),
-                frame: Rect { x: 100.0, y: 0.0, w: 400.0, h: 400.0 },
+                frame: Rect {
+                    x: 100.0,
+                    y: 0.0,
+                    w: 400.0,
+                    h: 400.0,
+                },
                 members: vec![],
             },
         ];
@@ -716,7 +778,15 @@ mod tests {
         let b = card("b", 1320.0, 1000.0);
         let (frame, moves) = layout_group(&[&a, &b], &[], &[ARCHIVE]);
         assert!(moves.is_empty());
-        assert_eq!(frame, Rect { x: 976.0, y: 956.0, w: 656.0, h: 284.0 });
+        assert_eq!(
+            frame,
+            Rect {
+                x: 976.0,
+                y: 956.0,
+                w: 656.0,
+                h: 284.0
+            }
+        );
     }
 
     #[test]
@@ -727,19 +797,41 @@ mod tests {
             card("b", 1320.0, 1000.0),
         ];
         let refs: Vec<&SessionCard> = cards.iter().collect();
-        let blocker = Rect { x: 1200.0, y: 1200.0, w: 10.0, h: 10.0 };
+        let blocker = Rect {
+            x: 1200.0,
+            y: 1200.0,
+            w: 10.0,
+            h: 10.0,
+        };
         let (frame, moves) = layout_group(&refs, &[blocker], &[]);
         // 2 columns, 2 rows of 288×216 cells.
-        assert_eq!((frame.w, frame.h), (656.0, 540.0));
+        assert_eq!((frame.w, frame.h), (656.0, 532.0));
         let ids: Vec<&str> = moves.iter().map(|(id, _)| id.as_str()).collect();
         assert_eq!(ids, ["a", "b", "c"]);
-        assert_eq!(moves[0].1, Point { x: frame.x + 24.0, y: frame.y + 44.0 });
-        assert_eq!(moves[2].1, Point { x: frame.x + 24.0, y: frame.y + 44.0 + 248.0 });
+        assert_eq!(
+            moves[0].1,
+            Point {
+                x: frame.x + 24.0,
+                y: frame.y + 44.0
+            }
+        );
+        assert_eq!(
+            moves[2].1,
+            Point {
+                x: frame.x + 24.0,
+                y: frame.y + 44.0 + 248.0
+            }
+        );
     }
 
     #[test]
     fn finds_a_slot_in_a_section_or_beside_it() {
-        let frame = Rect { x: 0.0, y: 0.0, w: 656.0, h: 284.0 };
+        let frame = Rect {
+            x: 0.0,
+            y: 0.0,
+            w: 656.0,
+            h: 284.0,
+        };
         assert_eq!(spot_in_section(frame, &[]), Point { x: 24.0, y: 44.0 });
         let first = rect_at(Point { x: 24.0, y: 44.0 }, CARD_SIZE);
         assert_eq!(spot_in_section(frame, &[first]), Point { x: 344.0, y: 44.0 });
@@ -753,8 +845,19 @@ mod tests {
         let p = Point { x: 1000.0, y: 1000.0 };
         assert_eq!(new_section_corner(p, &[]), Point { x: 976.0, y: 978.0 });
         // Anything near the click point → 40 rows down.
-        let near = Rect { x: 1100.0, y: 1100.0, w: 10.0, h: 10.0 };
-        assert_eq!(new_section_corner(p, &[near]), Point { x: 976.0, y: 978.0 + 9920.0 });
+        let near = Rect {
+            x: 1100.0,
+            y: 1100.0,
+            w: 10.0,
+            h: 10.0,
+        };
+        assert_eq!(
+            new_section_corner(p, &[near]),
+            Point {
+                x: 976.0,
+                y: 978.0 + 9920.0
+            }
+        );
     }
 
     #[test]

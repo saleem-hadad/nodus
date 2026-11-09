@@ -49,7 +49,12 @@ pub fn run(user_data: PathBuf) -> anyhow::Result<()> {
         dialogs: Some(Arc::new(WindowDialogs { requests })),
         runtime: runtime.handle().clone(),
         home: std::env::home_dir().unwrap_or_default(),
+        // The rest as a headless core has them until the app wires its
+        // window, notifications and host in.
+        ..NodusConfig::new(PathBuf::new(), runtime.handle().clone())
     })?;
+    // PLAT-010: adopt a running session host before the window opens.
+    let _ = runtime.block_on(nodus.launch());
 
     // UI-004: the saved settings, read before the window exists.
     let settings = runtime.block_on(nodus.settings().get());

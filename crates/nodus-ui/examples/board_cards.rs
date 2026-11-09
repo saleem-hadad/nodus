@@ -745,11 +745,9 @@ fn main() {
                 let scene = scene.clone();
                 move |window, cx| {
                     #[cfg(target_os = "macos")]
-                    {
-                        nodus_ui::mac::tag_layer_srgb(window);
-                        // Only the simulated pointer counts.
-                        nodus_ui::mac::ignore_real_mouse(window);
-                    }
+                    // Only the simulated pointer counts (the patched GPUI tags
+                    // the layer sRGB itself).
+                    nodus_ui::mac::ignore_real_mouse(window);
                     cx.new(|_| Gallery { scene })
                 }
             })

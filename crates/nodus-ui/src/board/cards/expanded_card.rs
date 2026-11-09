@@ -9,8 +9,8 @@ use std::time::{Duration, Instant};
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, CursorStyle, FontWeight, Global, InteractiveElement, IntoElement, MouseButton, ParentElement,
-    Rgba, ScrollEvent, StatefulInteractiveElement, Styled, Window, div, radians, svg,
+    AnyElement, App, CursorStyle, DispatchPhase, FontWeight, Global, InteractiveElement, IntoElement, MouseButton,
+    ParentElement, Rgba, ScrollEvent, StatefulInteractiveElement, Styled, Window, canvas, div, radians, svg,
 };
 use nodus_domain::{AgentInfo, SessionUsage};
 
@@ -49,7 +49,8 @@ pub fn wake_card_terminal(session_id: &str, cx: &mut App) {
     cx.refresh_windows();
 }
 
-/// The board's wheel gestures (XCARD-027), shared with the terminal.
+/// The board's wheel gestures (XCARD-027): the one arbiter, which the card
+/// terminals ask through their wheel gate (install.rs).
 #[derive(Default)]
 pub struct Wheel(pub WheelArbiter);
 
@@ -134,7 +135,15 @@ pub fn body(
     let hovered = *hover.read(cx);
     let s = surface(&t, card, hovered, node.selected, node.dragging, None, true);
     let ms = Duration::from_millis;
-    let shadow = transition(window, cx, anim::key(&id, "shadow"), s.shadow, ms(220), motion::ease_out);
+    let shadow = transition(
+        window,
+        cx,
+        anim::key(&id, "shadow"),
+        s.shadow,
+        ms(220),
+        motion::ease_out,
+    );
+    let shadow = super::session_card::flash_shadow(&t, node.flash, window).unwrap_or(shadow);
     let grip = transition(
         window,
         cx,
@@ -158,7 +167,15 @@ pub fn body(
         .children(heading(env, node, true, window, cx));
     if !shell && head_w > 440.0 {
         // XCARD-005, XCARD-006: the container query on the bar's content box.
-        head = head.child(usage(env, &id, card.usage.as_ref(), card.live, head_w > 560.0, window, cx));
+        head = head.child(usage(
+            env,
+            &id,
+            card.usage.as_ref(),
+            card.live,
+            head_w > 560.0,
+            window,
+            cx,
+        ));
     }
     head = head.child(tools(env, node, agents, handles, resumable, window, cx));
 
@@ -179,7 +196,6 @@ pub fn body(
     };
     let focusing = host.clone();
     let focus_id = id.clone();
-    let wheel_id = id.clone();
     let term_body = div()
         .id(anim::key(&id, "term"))
         .relative()
@@ -198,16 +214,36 @@ pub fn body(
             }
         })
         .on_click(|_, _, cx| cx.stop_propagation())
-        // XCARD-027, XCARD-028: a gesture that began here scrolls the terminal.
+        // XCARD-027, XCARD-028: a gesture that began over a terminal scrolls
+        // it, not the board (the terminal asks the same in its own content
+        // box, through its wheel gate); a disabled one never claims.
         .on_scroll(move |e: &ScrollEvent, _, cx| {
-            let claims = cx.default_global::<Wheel>().0.wheel(
-                Instant::now(),
-                enabled.then_some(wheel_id.as_str()),
-                e.modifiers.control,
-            );
-            if claims {
+            if enabled
+                && cx
+                    .default_global::<Wheel>()
+                    .0
+                    .claims(Instant::now(), e.modifiers.control)
+            {
                 cx.stop_propagation();
             }
+        })
+        .when(enabled, |d| {
+            // The window sees every wheel event before anything under the
+            // pointer does, and marks where gestures begin.
+            d.child(
+                canvas(
+                    |_, _, _| {},
+                    |_, _, window, _| {
+                        window.on_mouse_event(|_: &ScrollEvent, phase, _, cx| {
+                            if phase == DispatchPhase::Capture {
+                                cx.default_global::<Wheel>().0.saw(Instant::now());
+                            }
+                        });
+                    },
+                )
+                .absolute()
+                .size_0(),
+            )
         })
         .when_some(term, |d, el| d.child(div().size_full().child(el)))
         .when_some(overlay, ParentElement::child);
@@ -275,6 +311,7 @@ pub fn chrome_extras(env: &Rc<BoardEnv>, node: &SessionNode, window: &mut Window
 }
 
 /// A title-bar tool button (XCARD-008).
+#[allow(clippy::too_many_arguments)]
 fn tool(
     env: &Rc<BoardEnv>,
     node: &str,
@@ -298,7 +335,14 @@ fn tool(
     } else {
         transparent()
     };
-    let bg = transition(window, cx, anim::key_n(node, part, 2), target, Duration::from_millis(120), motion::ease);
+    let bg = transition(
+        window,
+        cx,
+        anim::key_n(node, part, 2),
+        target,
+        Duration::from_millis(120),
+        motion::ease,
+    );
     let color = if on || expanded_flag || labelled {
         t.text_primary
     } else {
@@ -376,7 +420,16 @@ fn tools(
     if !agents.is_empty() {
         // XCARD-009
         let open = handles.open(cx);
-        let (b, color) = tool(env, &id, "tool-agents", false, open, Some(agent_deck::trigger_hover(handles, "tool-agents")), window, cx);
+        let (b, color) = tool(
+            env,
+            &id,
+            "tool-agents",
+            false,
+            open,
+            Some(agent_deck::trigger_hover(handles, "tool-agents")),
+            window,
+            cx,
+        );
         let run = running(agents);
         let mut b = b
             .px(z.px(7.))
@@ -408,15 +461,13 @@ fn tools(
     }
     if !shell {
         // XCARD-010: the mic is voice's (05); without it, its idle look.
-        let mic = env
-            .terminals
-            .as_ref()
-            .and_then(|h| h.mic(&id, z.0, window, cx));
+        let mic = env.terminals.as_ref().and_then(|h| h.mic(&id, z.0, window, cx));
         group = group.child(match mic {
             Some(el) => el,
             None => {
                 let (b, color) = tool(env, &id, "tool-mic", false, false, None, window, cx);
-                b.child(card_icon(CardIcon::Mic, z.f(14.), 2.0, color)).into_any_element()
+                b.child(card_icon(CardIcon::Mic, z.f(14.), 2.0, color))
+                    .into_any_element()
             }
         });
     }
@@ -443,7 +494,13 @@ fn tools(
                 2.2,
                 color,
             ))
-            .child(super::text(z, if shell { "Restart" } else { "Resume" }, 12.0, FontWeight::MEDIUM, color)),
+            .child(super::text(
+                z,
+                if shell { "Restart" } else { "Resume" },
+                12.0,
+                FontWeight::MEDIUM,
+                color,
+            )),
         );
     }
     if !shell && card.live {
@@ -543,11 +600,7 @@ fn usage(
         if live {
             anim::tick(window, cx, anim::key(node, "usage-tick"), Duration::from_secs(1));
         }
-        let since = if live {
-            (env.now_ms - usage.at).max(0.0)
-        } else {
-            0.0
-        };
+        let since = if live { (env.now_ms - usage.at).max(0.0) } else { 0.0 };
         format_duration(ms + since)
     });
     let item = |part: &'static str| div().id(anim::key(node, part)).flex().items_center().gap(z.px(5.));
@@ -594,7 +647,13 @@ fn usage(
                                     .bg(color),
                             ),
                     )
-                    .child(super::text_tab(z, format!("Ctx {}%", nodus_domain::js::round(p)), 11.0, FontWeight::NORMAL, color)),
+                    .child(super::text_tab(
+                        z,
+                        format!("Ctx {}%", nodus_domain::js::round(p)),
+                        11.0,
+                        FontWeight::NORMAL,
+                        color,
+                    )),
             )
         })
         .when_some(running, |d, text| {
@@ -608,7 +667,13 @@ fn usage(
             d.child(
                 item("usage-cost")
                     .tooltip(native_tooltip("Cost so far".into()))
-                    .child(super::text_tab(z, format_cost(cost), 11.0, FontWeight::NORMAL, t.text_tertiary)),
+                    .child(super::text_tab(
+                        z,
+                        format_cost(cost),
+                        11.0,
+                        FontWeight::NORMAL,
+                        t.text_tertiary,
+                    )),
             )
         })
         .into_any_element()
@@ -702,12 +767,22 @@ fn start_button(env: &Rc<BoardEnv>, node: &str, shell: bool, window: &mut Window
             wake_card_terminal(&sid, cx);
         })
         .child(card_icon(
-            if shell { CardIcon::SquareTerminal } else { CardIcon::Play },
+            if shell {
+                CardIcon::SquareTerminal
+            } else {
+                CardIcon::Play
+            },
             z.f(13.),
             2.0,
             t.text_primary,
         ))
-        .child(super::text(z, if shell { "Start shell" } else { "Resume session" }, 13.0, FontWeight::MEDIUM, t.text_primary))
+        .child(super::text(
+            z,
+            if shell { "Start shell" } else { "Resume session" },
+            13.0,
+            FontWeight::MEDIUM,
+            t.text_primary,
+        ))
         .into_any_element()
 }
 
@@ -748,9 +823,20 @@ fn loading_pill(env: &Rc<BoardEnv>, node: &str, label: &'static str, window: &mu
                     div()
                         .flex()
                         .rotate(radians(spin * std::f32::consts::TAU))
-                        .child(card_icon(CardIcon::LoaderCircle, z.f(14.), 2.0, rgba(255, 255, 255, 0.72))),
+                        .child(card_icon(
+                            CardIcon::LoaderCircle,
+                            z.f(14.),
+                            2.0,
+                            rgba(255, 255, 255, 0.72),
+                        )),
                 )
-                .child(super::text(z, label, 12.0, FontWeight::NORMAL, rgba(255, 255, 255, 0.72))),
+                .child(super::text(
+                    z,
+                    label,
+                    12.0,
+                    FontWeight::NORMAL,
+                    rgba(255, 255, 255, 0.72),
+                )),
         )
         .into_any_element()
 }
@@ -774,7 +860,13 @@ fn error_column(
                 h.reattach(&sid, cx);
             }
         })
-        .child(super::text(z, "Try again", 13.0, FontWeight::MEDIUM, theme::tokens(cx).text_on_accent));
+        .child(super::text(
+            z,
+            "Try again",
+            13.0,
+            FontWeight::MEDIUM,
+            theme::tokens(cx).text_on_accent,
+        ));
     div()
         .flex()
         .flex_col()

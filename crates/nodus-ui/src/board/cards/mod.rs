@@ -270,7 +270,13 @@ pub fn text(z: Z, s: impl Into<gpui::SharedString>, size: f32, weight: gpui::Fon
 }
 
 /// [`text`] with tabular figures.
-pub fn text_tab(z: Z, s: impl Into<gpui::SharedString>, size: f32, weight: gpui::FontWeight, color: Rgba) -> para::Para {
+pub fn text_tab(
+    z: Z,
+    s: impl Into<gpui::SharedString>,
+    size: f32,
+    weight: gpui::FontWeight,
+    color: Rgba,
+) -> para::Para {
     let mut font = ui_font(weight);
     font.features = crate::theme::fonts::tabular();
     para::label(s, font, size, size * 1.4, color, z.0)

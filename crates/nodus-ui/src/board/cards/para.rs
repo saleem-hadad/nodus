@@ -16,8 +16,8 @@ use std::rc::Rc;
 
 use gpui::{
     App, AvailableSpace, Bounds, Element, ElementId, Font, FontStyle, FontWeight, GlobalElementId, Hsla,
-    InspectorElementId, IntoElement, LayoutId, Pixels, ShapedLine, SharedString, Size, Style, TextRun,
-    UnderlineStyle, Window, point, px, relative,
+    InspectorElementId, IntoElement, LayoutId, Pixels, ShapedLine, SharedString, Size, Style, TextRun, UnderlineStyle,
+    Window, point, px, relative,
 };
 use unicode_linebreak::{BreakOpportunity, linebreaks};
 use unicode_segmentation::UnicodeSegmentation;
@@ -164,7 +164,7 @@ pub fn break_lines(
         let s = line.start;
         let mut e = trim(s, line.end);
         while e > s && w(s, e) + ellipsis > width + EPS {
-            e = graphemes.iter().copied().filter(|&g| g >= s && g < e).last().unwrap_or(s);
+            e = graphemes.iter().copied().rfind(|&g| g >= s && g < e).unwrap_or(s);
             e = trim(s, e);
         }
         line.end = e;
@@ -262,7 +262,9 @@ pub fn break_opportunities(prepared: &Prepared) -> Vec<(usize, bool)> {
         .map(|(b, op)| (byte_to_char[b], op == BreakOpportunity::Mandatory))
         // Chromium keeps `src/cart/store.ts` and `/v2/legacy` whole: no
         // break after a slash that a word follows (UAX #14 allows one).
-        .filter(|&(k, forced)| forced || k == 0 || k >= chars.len() || !(chars[k - 1] == '/' && !is_css_space(chars[k])))
+        .filter(|&(k, forced)| {
+            forced || k == 0 || k >= chars.len() || !(chars[k - 1] == '/' && !is_css_space(chars[k]))
+        })
         .collect();
     // Chromium breaks after any space, even before a `/` (UAX #14 says no).
     for k in 1..chars.len() {
@@ -317,12 +319,28 @@ struct Config {
 /// One line of text at the board's scale: `size` and `line_height` in CSS
 /// px, laid out at that size and drawn `z` times as big (so it measures as
 /// Chromium measures it), as wide as its text.
-pub fn label(text: impl Into<SharedString>, font: Font, size: f32, line_height: f32, color: impl Into<Hsla>, z: f32) -> Para {
-    para(text, font, px(size * z), px(line_height * z), color).zoom(z).space(Space::NoWrap).hug()
+pub fn label(
+    text: impl Into<SharedString>,
+    font: Font,
+    size: f32,
+    line_height: f32,
+    color: impl Into<Hsla>,
+    z: f32,
+) -> Para {
+    para(text, font, px(size * z), px(line_height * z), color)
+        .zoom(z)
+        .space(Space::NoWrap)
+        .hug()
 }
 
 /// A paragraph of `text` in `font` at `size`, lines `line_height` apart.
-pub fn para(text: impl Into<SharedString>, font: Font, size: Pixels, line_height: Pixels, color: impl Into<Hsla>) -> Para {
+pub fn para(
+    text: impl Into<SharedString>,
+    font: Font,
+    size: Pixels,
+    line_height: Pixels,
+    color: impl Into<Hsla>,
+) -> Para {
     Para {
         cfg: Rc::new(Config {
             text: text.into(),
@@ -602,7 +620,7 @@ impl Element for Para {
                 AvailableSpace::MinContent => Some(0.0),
                 AvailableSpace::MaxContent => None,
             });
-            let max = cfg.max_width.map(f32::from).unwrap_or(f32::INFINITY);
+            let max = cfg.max_width.map_or(f32::INFINITY, f32::from);
             let natural = (cfg.natural_width(window) * z).min(max);
             let width = width.map_or(natural, |w| w.min(max));
             let layout = cfg.lay_out(width / z, window);
@@ -806,14 +824,20 @@ mod tests {
         // Before a slash after a space, never after a slash inside a path.
         assert_eq!(lay("calls /v2/x", 6.0, Space::Normal, None), ["calls", "/v2/x"]);
         // A path too long for a line breaks anywhere, not at its slashes.
-        assert_eq!(lay("in src/cart/store", 9.0, Space::Normal, None), ["in", "src/cart/", "store"]);
+        assert_eq!(
+            lay("in src/cart/store", 9.0, Space::Normal, None),
+            ["in", "src/cart/", "store"]
+        );
     }
 
     #[test]
     fn clamps_with_an_ellipsis_cutting_characters_to_fit() {
         // "yyyy" fits a line, "yyyy…" doesn't: "yyy…".
         assert_eq!(lay("aaa yyyy b", 4.0, Space::Normal, Some(2)), ["aaa", "yyy…"]);
-        assert_eq!(lay("aaa bb cc dd ee", 6.0, Space::Normal, Some(2)), ["aaa bb", "cc dd…"]);
+        assert_eq!(
+            lay("aaa bb cc dd ee", 6.0, Space::Normal, Some(2)),
+            ["aaa bb", "cc dd…"]
+        );
         // Fits without being cut: no ellipsis.
         assert_eq!(lay("aaa bb", 6.0, Space::Normal, Some(2)), ["aaa bb"]);
         // The ellipsis follows the last word, not the space after it.
@@ -835,10 +859,10 @@ mod tests {
     #[test]
     fn highlights_runs_of_matched_characters() {
         // CARD-018
-        assert_eq!(highlight_runs("Fix rounding", &[0, 1, 2]), [0..3]);
+        assert_eq!(highlight_runs("Fix rounding", &[0, 1, 2]), vec![0..3]);
         assert_eq!(highlight_runs("abcde", &[0, 2, 3]), [0..1, 2..4]);
         assert!(highlight_runs("abc", &[]).is_empty());
         // UTF-16 indices: the emoji is two units.
-        assert_eq!(highlight_runs("😀ab", &[2]), [4..5]);
+        assert_eq!(highlight_runs("😀ab", &[2]), vec![4..5]);
     }
 }

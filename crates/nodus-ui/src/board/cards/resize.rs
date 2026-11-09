@@ -33,6 +33,10 @@ pub struct Handles {
 
 const EDGE: f32 = 10.0;
 
+/// A grab zone: the edges it moves, its box (x, y, w, h), its cursor, and
+/// whether it is a corner.
+type Zone = (ResizeEdges, (f32, f32, f32, f32), CursorStyle, bool);
+
 /// The zones for the node `node` at `rect` (flow units), relative to the
 /// node's own corner, never smaller than `min`.
 #[allow(clippy::too_many_arguments)]
@@ -58,15 +62,55 @@ pub fn resize_zones(
         bottom: b,
     };
     // Edges, then corners above them (z 2 and 3).
-    let zones: [(ResizeEdges, (f32, f32, f32, f32), CursorStyle, bool); 8] = [
-        (edge(true, false, false, false), (-EDGE / 2.0, 0.0, EDGE, h), CursorStyle::ResizeLeftRight, false),
-        (edge(false, true, false, false), (w - EDGE / 2.0, 0.0, EDGE, h), CursorStyle::ResizeLeftRight, false),
-        (edge(false, false, true, false), (0.0, -EDGE / 2.0, w, EDGE), CursorStyle::ResizeUpDown, false),
-        (edge(false, false, false, true), (0.0, h - EDGE / 2.0, w, EDGE), CursorStyle::ResizeUpDown, false),
-        (edge(true, false, true, false), (-corner / 2.0, -corner / 2.0, corner, corner), CursorStyle::ResizeUpLeftDownRight, true),
-        (edge(false, true, true, false), (w - corner / 2.0, -corner / 2.0, corner, corner), CursorStyle::ResizeUpRightDownLeft, true),
-        (edge(true, false, false, true), (-corner / 2.0, h - corner / 2.0, corner, corner), CursorStyle::ResizeUpRightDownLeft, true),
-        (edge(false, true, false, true), (w - corner / 2.0, h - corner / 2.0, corner, corner), CursorStyle::ResizeUpLeftDownRight, true),
+    let zones: [Zone; 8] = [
+        (
+            edge(true, false, false, false),
+            (-EDGE / 2.0, 0.0, EDGE, h),
+            CursorStyle::ResizeLeftRight,
+            false,
+        ),
+        (
+            edge(false, true, false, false),
+            (w - EDGE / 2.0, 0.0, EDGE, h),
+            CursorStyle::ResizeLeftRight,
+            false,
+        ),
+        (
+            edge(false, false, true, false),
+            (0.0, -EDGE / 2.0, w, EDGE),
+            CursorStyle::ResizeUpDown,
+            false,
+        ),
+        (
+            edge(false, false, false, true),
+            (0.0, h - EDGE / 2.0, w, EDGE),
+            CursorStyle::ResizeUpDown,
+            false,
+        ),
+        (
+            edge(true, false, true, false),
+            (-corner / 2.0, -corner / 2.0, corner, corner),
+            CursorStyle::ResizeUpLeftDownRight,
+            true,
+        ),
+        (
+            edge(false, true, true, false),
+            (w - corner / 2.0, -corner / 2.0, corner, corner),
+            CursorStyle::ResizeUpRightDownLeft,
+            true,
+        ),
+        (
+            edge(true, false, false, true),
+            (-corner / 2.0, h - corner / 2.0, corner, corner),
+            CursorStyle::ResizeUpRightDownLeft,
+            true,
+        ),
+        (
+            edge(false, true, false, true),
+            (w - corner / 2.0, h - corner / 2.0, corner, corner),
+            CursorStyle::ResizeUpLeftDownRight,
+            true,
+        ),
     ];
     for (i, (edges, (x, y, zw, zh), cursor, is_corner)) in zones.into_iter().enumerate() {
         let drag = drag.clone();

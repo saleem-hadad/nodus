@@ -5,15 +5,15 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use gpui::{
-    AnyElement, App, CursorStyle, InteractiveElement, IntoElement, MouseButton, ParentElement, StatefulInteractiveElement,
-    Styled, Window, div, linear_color_stop, linear_gradient, px, radians,
+    AnyElement, App, CursorStyle, InteractiveElement, IntoElement, MouseButton, ParentElement,
+    StatefulInteractiveElement, Styled, Window, div, linear_color_stop, linear_gradient, px, radians,
 };
 use nodus_domain::BoardNote;
 
 use super::agent_deck::DeckHandles;
 use super::icons::{CardIcon, card_icon};
-use super::para::{Space, para};
 use super::paper::paper;
+use super::para::{Space, para};
 use super::{BoardEnv, Shadow, anim, ui_font};
 use crate::components::tooltip::native_tooltip;
 use crate::components::tween::transition;
@@ -49,8 +49,22 @@ pub fn sticker(
 
     // NOTEUI-034/035: 3° at rest, 1° and 2px up pointed at.
     let ease = motion::ease_out as fn(f32) -> f32;
-    let rot = transition(window, cx, key("sticker-rot"), if hovered { 1.0 } else { 3.0 }, Duration::from_millis(220), ease);
-    let ty = transition(window, cx, key("sticker-ty"), if hovered { -2.0 } else { 0.0 }, Duration::from_millis(220), ease);
+    let rot = transition(
+        window,
+        cx,
+        key("sticker-rot"),
+        if hovered { 1.0 } else { 3.0 },
+        Duration::from_millis(220),
+        ease,
+    );
+    let ty = transition(
+        window,
+        cx,
+        key("sticker-ty"),
+        if hovered { -2.0 } else { 0.0 },
+        Duration::from_millis(220),
+        ease,
+    );
     let shadow = transition(
         window,
         cx,
@@ -59,18 +73,36 @@ pub fn sticker(
         Duration::from_millis(220),
         ease,
     );
-    let x_opacity = transition(window, cx, key("sticker-x"), if hovered { 1.0 } else { 0.0 }, Duration::from_millis(120), motion::ease);
+    let x_opacity = transition(
+        window,
+        cx,
+        key("sticker-x"),
+        if hovered { 1.0 } else { 0.0 },
+        Duration::from_millis(120),
+        motion::ease,
+    );
 
     // NOTEUI-038: a session just started from the note, 520ms on the spring.
     let land = if landing && !cx.reduce_motion() {
-        anim::enter(window, cx, key("sticker-land"), Duration::ZERO, Duration::from_millis(520), motion::ease_spring)
+        anim::enter(
+            window,
+            cx,
+            key("sticker-land"),
+            Duration::ZERO,
+            Duration::from_millis(520),
+            motion::ease_spring,
+        )
     } else {
         Some(1.0)
     };
     let p = land.unwrap_or(0.0);
     let k = 1.0 - p;
     let (land_ty, land_rot, land_scale) = (-14.0 * k, -6.0 * k + rot * p, 1.35 * k + p);
-    let (final_rot, final_ty, scale) = if p < 1.0 { (land_rot, land_ty + ty * p, land_scale) } else { (rot, ty, 1.0) };
+    let (final_rot, final_ty, scale) = if p < 1.0 {
+        (land_rot, land_ty + ty * p, land_scale)
+    } else {
+        (rot, ty, 1.0)
+    };
 
     let hs = hover_state.clone();
     let parts = handles.clone();
@@ -114,9 +146,16 @@ pub fn sticker(
         )
         // NOTEUI-036
         .child(
-            para(note.text.clone(), ui_font(gpui::FontWeight::NORMAL), z.px(11.), z.px(13.75), t.note_ink).zoom(z.0)
-                .space(Space::PreWrap)
-                .clamp(3),
+            para(
+                note.text.clone(),
+                ui_font(gpui::FontWeight::NORMAL),
+                z.px(11.),
+                z.px(13.75),
+                t.note_ink,
+            )
+            .zoom(z.0)
+            .space(Space::PreWrap)
+            .clamp(3),
         )
         // NOTEUI-037: × deletes at once.
         .child(

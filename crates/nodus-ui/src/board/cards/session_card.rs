@@ -5,7 +5,7 @@
 
 use std::cell::Cell;
 use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use gpui::component::input::{InputEvent, InputState};
 use gpui::prelude::FluentBuilder as _;
@@ -47,6 +47,8 @@ pub struct SessionNode {
     pub stack: Option<StackLook>,
     /// The node's size in flow units: 288×216, or the expanded card's.
     pub size: (f32, f32),
+    /// When a search jump started flashing this card (BOARD-036).
+    pub flash: Option<Instant>,
 }
 
 impl RenderOnce for SessionNode {
@@ -205,7 +207,7 @@ pub fn surface(
 
 /// The surface's values, transitioning as the CSS says: 220ms on the
 /// board, the stack's own timings in it (CARD-007, ARCH-015).
-fn animate(node: &str, s: Surface, stacked: bool, window: &mut Window, cx: &mut App) -> Surface {
+fn animate(node: &str, s: &Surface, stacked: bool, window: &mut Window, cx: &mut App) -> Surface {
     let out = motion::ease_out as fn(f32) -> f32;
     let (transform_ms, transform_ease, fade_ms): (u64, fn(f32) -> f32, u64) = if stacked {
         (560, motion::ease_stack, 260)
@@ -215,10 +217,38 @@ fn animate(node: &str, s: Surface, stacked: bool, window: &mut Window, cx: &mut 
     let ms = Duration::from_millis;
     Surface {
         shadow: transition(window, cx, anim::key(node, "shadow"), s.shadow, ms(220), out),
-        ty: transition(window, cx, anim::key(node, "ty"), s.ty, ms(transform_ms), transform_ease),
-        scale: transition(window, cx, anim::key(node, "scale"), s.scale, ms(transform_ms), transform_ease),
-        bright: transition(window, cx, anim::key(node, "bright"), s.bright, ms(fade_ms), motion::ease),
-        opacity: transition(window, cx, anim::key(node, "opacity"), s.opacity, ms(fade_ms), motion::ease),
+        ty: transition(
+            window,
+            cx,
+            anim::key(node, "ty"),
+            s.ty,
+            ms(transform_ms),
+            transform_ease,
+        ),
+        scale: transition(
+            window,
+            cx,
+            anim::key(node, "scale"),
+            s.scale,
+            ms(transform_ms),
+            transform_ease,
+        ),
+        bright: transition(
+            window,
+            cx,
+            anim::key(node, "bright"),
+            s.bright,
+            ms(fade_ms),
+            motion::ease,
+        ),
+        opacity: transition(
+            window,
+            cx,
+            anim::key(node, "opacity"),
+            s.opacity,
+            ms(fade_ms),
+            motion::ease,
+        ),
         content: transition(window, cx, anim::key(node, "content"), s.content, ms(200), motion::ease),
     }
 }
@@ -242,6 +272,24 @@ pub fn apply<E: Styled>(el: E, s: &Surface, z: Z, rise: Option<(f32, f32, f32)>)
         el = el.group_opacity(opacity.max(0.0));
     }
     el
+}
+
+/// BOARD-036's flash: for two rounds of 800ms (eased `--ease-out`) the
+/// card's shadow is `0 0 0 2px accent, 0 0 0 2px→18px accent 55%→0%`, in
+/// place of its own (a Web Animation replaces the property). `None` once
+/// it's over.
+pub fn flash_shadow(t: &Tokens, started: Option<Instant>, window: &mut Window) -> Option<Shadow> {
+    const ROUND: f32 = 0.8;
+    let elapsed = started?.elapsed().as_secs_f32();
+    if elapsed >= 2.0 * ROUND {
+        return None;
+    }
+    window.request_animation_frame();
+    let p = motion::ease_out((elapsed % ROUND) / ROUND);
+    Some(Shadow::of(&[
+        Shade::ring(2.0, t.accent),
+        Shade::ring(2.0 + 16.0 * p, fade(t.accent, 0.55 * (1.0 - p))),
+    ]))
 }
 
 /// The heading's dot (or shell glyph), title (or rename field) and live
@@ -303,7 +351,8 @@ pub fn heading(
             .collect();
         let size = if expanded { 13.0 } else { 15.0 };
         let face = font(fonts::DISPLAY, FontWeight::SEMIBOLD, false);
-        let p = para(title.clone(), face, z.px(size), z.px(size * 1.3), t.text_primary).zoom(z.0)
+        let p = para(title.clone(), face, z.px(size), z.px(size * 1.3), t.text_primary)
+            .zoom(z.0)
             .spacing(z.px(-0.01 * size))
             .marks(marks);
         let p = if expanded { p.ellipsis() } else { p.clamp(2) };
@@ -352,8 +401,19 @@ fn compact(
     let shell = is_terminal(card);
     let hover = window.use_keyed_state(anim::key(&id, "hover"), cx, |_, _| false);
     let hovered = *hover.read(cx);
-    let s = surface(&t, card, hovered, node.selected, node.dragging, node.stack.as_ref(), false);
-    let s = animate(&id, s, node.stack.is_some(), window, cx);
+    let s = surface(
+        &t,
+        card,
+        hovered,
+        node.selected,
+        node.dragging,
+        node.stack.as_ref(),
+        false,
+    );
+    let mut s = animate(&id, &s, node.stack.is_some(), window, cx);
+    if let Some(flash) = flash_shadow(&t, node.flash, window) {
+        s.shadow = flash;
+    }
     let rise = node.stack.and_then(|l| l.rise).map(|(fx, fy, slot)| {
         let p = anim::enter(
             window,
@@ -433,7 +493,13 @@ fn compact(
             .opacity(content)
             .tooltip(native_tooltip("Started from the context of earlier sessions".into()))
             .child(card_icon(CardIcon::GitMerge, z.f(11.), 2.2, t.accent))
-            .child(super::text(z, format!("merged from {}", parents.len()), 11.0, FontWeight::MEDIUM, t.accent))
+            .child(super::text(
+                z,
+                format!("merged from {}", parents.len()),
+                11.0,
+                FontWeight::MEDIUM,
+                t.accent,
+            ))
     });
     let has_chip = chip.is_some();
     body = body.when_some(chip, ParentElement::child);
@@ -441,8 +507,15 @@ fn compact(
     // CARD-026…CARD-032
     let pv = preview(card, env.repo_path.as_deref());
     let preview_el = match pv.kind {
-        PreviewKind::Path => para(pv.text, font(fonts::MONO, FontWeight::NORMAL, false), z.px(11.), z.px(15.95), t.text_secondary).zoom(z.0)
-            .clamp(2),
+        PreviewKind::Path => para(
+            pv.text,
+            font(fonts::MONO, FontWeight::NORMAL, false),
+            z.px(11.),
+            z.px(15.95),
+            t.text_secondary,
+        )
+        .zoom(z.0)
+        .clamp(2),
         kind => {
             let italic = kind == PreviewKind::Prompt;
             let color = if kind == PreviewKind::Empty {
@@ -450,8 +523,15 @@ fn compact(
             } else {
                 t.text_secondary
             };
-            para(pv.text, font(fonts::UI, FontWeight::NORMAL, italic), z.px(12.), z.px(17.4), color).zoom(z.0)
-                .clamp(if has_chip { 3 } else { 4 })
+            para(
+                pv.text,
+                font(fonts::UI, FontWeight::NORMAL, italic),
+                z.px(12.),
+                z.px(17.4),
+                color,
+            )
+            .zoom(z.0)
+            .clamp(if has_chip { 3 } else { 4 })
         }
     };
     body = body.child(div().flex_none().min_h_0().opacity(content).child(preview_el));
@@ -461,8 +541,18 @@ fn compact(
     body.into_any_element()
 }
 
+/// A corner button: its part, icon, tooltip and action.
+type CornerButton = (&'static str, CardIcon, String, Rc<dyn Fn(&mut App)>);
+
 /// The corner's Archive and Expand buttons, shown on hover (CARD-020…CARD-024).
-fn corner(env: &Rc<BoardEnv>, card: &SessionCard, hovered: bool, content: f32, window: &mut Window, cx: &mut App) -> AnyElement {
+fn corner(
+    env: &Rc<BoardEnv>,
+    card: &SessionCard,
+    hovered: bool,
+    content: f32,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
     let z = env.z();
     let t = theme::tokens(cx);
     let id = card.node.session_id.clone();
@@ -484,7 +574,7 @@ fn corner(env: &Rc<BoardEnv>, card: &SessionCard, hovered: bool, content: f32, w
         .opacity(content)
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .on_click(|_, _, cx| cx.stop_propagation());
-    let mut buttons: Vec<(&'static str, CardIcon, String, Rc<dyn Fn(&mut App)>)> = Vec::new();
+    let mut buttons: Vec<CornerButton> = Vec::new();
     if !is_terminal(card) {
         let env = env.clone();
         let id = id.clone();
@@ -512,8 +602,19 @@ fn corner(env: &Rc<BoardEnv>, card: &SessionCard, hovered: bool, content: f32, w
         let bg = transition(
             window,
             cx,
-            anim::key(&id, if part == "corner-archive" { "corner-archive-bg" } else { "corner-expand-bg" }),
-            if on { mix(t.text_primary, 0.07, t.bg_elevated) } else { t.bg_elevated },
+            anim::key(
+                &id,
+                if part == "corner-archive" {
+                    "corner-archive-bg"
+                } else {
+                    "corner-expand-bg"
+                },
+            ),
+            if on {
+                mix(t.text_primary, 0.07, t.bg_elevated)
+            } else {
+                t.bg_elevated
+            },
             Duration::from_millis(120),
             motion::ease,
         );
@@ -767,7 +868,13 @@ fn title_editor(env: &Rc<BoardEnv>, card: &SessionCard, window: &mut Window, cx:
         .on_key_down(|_, _, cx| cx.stop_propagation())
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .on_click(|_, _, cx| cx.stop_propagation())
-        .child(super::field_line(&field, z.px(24.), z.px(15.), fonts::DISPLAY, FontWeight::SEMIBOLD))
+        .child(super::field_line(
+            &field,
+            z.px(24.),
+            z.px(15.),
+            fonts::DISPLAY,
+            FontWeight::SEMIBOLD,
+        ))
         .into_any_element()
 }
 

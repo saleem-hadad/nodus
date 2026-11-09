@@ -20,7 +20,10 @@ pub fn key(node: &str, part: &'static str) -> ElementId {
 
 /// The id of a node's numbered part.
 pub fn key_n(node: &str, part: &'static str, n: usize) -> ElementId {
-    child_id(ElementId::NamedInteger(SharedString::from(node.to_owned()), n as u64), part)
+    child_id(
+        ElementId::NamedInteger(SharedString::from(node.to_owned()), n as u64),
+        part,
+    )
 }
 
 struct Delayed<T> {
@@ -131,7 +134,11 @@ pub fn cycle(window: &mut Window, cx: &mut App, key: impl Into<ElementId>, perio
 /// it is at `t`, `ease` running on each half from that half's start to its
 /// end (spec 10, Easings).
 pub fn half_way(t: f32, ease: fn(f32) -> f32) -> f32 {
-    if t < 0.5 { ease(t * 2.0) } else { 1.0 - ease(t * 2.0 - 1.0) }
+    if t < 0.5 {
+        ease(t * 2.0)
+    } else {
+        1.0 - ease(t * 2.0 - 1.0)
+    }
 }
 
 /// Requests a re-render in `every`, once per pending tick (a clock that

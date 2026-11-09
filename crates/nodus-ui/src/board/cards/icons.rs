@@ -180,13 +180,15 @@ mod tests {
     #[test]
     fn serves_every_icon() {
         for icon in CardIcon::ALL {
-            let svg = load(&format!("{}@2.2.svg", icon.name())).expect(icon.name());
+            let svg = load(&format!("{}@2.2.svg", icon.name())).unwrap_or_else(|| panic!("{}", icon.name()));
             let text = String::from_utf8(svg.into_owned()).unwrap();
             assert!(text.contains(r#"stroke-width="2.2""#));
         }
-        assert!(String::from_utf8(load("play-filled@2.5.svg").unwrap().into_owned())
-            .unwrap()
-            .contains(r#"fill="black""#));
+        assert!(
+            String::from_utf8(load("play-filled@2.5.svg").unwrap().into_owned())
+                .unwrap()
+                .contains(r#"fill="black""#)
+        );
         assert!(load("nope@2.svg").is_none());
     }
 }

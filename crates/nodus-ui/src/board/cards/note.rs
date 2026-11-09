@@ -11,15 +11,15 @@ use gpui::component::Sizable as _;
 use gpui::component::input::{InputEvent, Position, Textarea, TextareaState};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, AppContext as _, Context, CursorStyle, Entity, FontWeight, InteractiveElement, IntoElement, KeyDownEvent,
-    MouseButton, ParentElement, StatefulInteractiveElement, Styled, Subscription, Task, Window, div,
+    AnyElement, App, AppContext as _, Context, CursorStyle, Entity, FontWeight, InteractiveElement, IntoElement,
+    KeyDownEvent, MouseButton, ParentElement, StatefulInteractiveElement, Styled, Subscription, Task, Window, div,
     linear_color_stop, linear_gradient, px, radians,
 };
 use nodus_domain::BoardNote;
 
 use super::icons::{CardIcon, card_icon};
-use super::para::{Space, para};
 use super::paper::paper;
+use super::para::{Space, para};
 use super::present::{NOTE_MIN, Signature, SignatureTarget, can_start, note_size};
 use super::resize::{Handles, resize_zones};
 use super::{BoardEnv, Resized, Shade, Shadow, anim, ui_font};
@@ -36,13 +36,23 @@ const SAVE_DELAY: Duration = Duration::from_millis(500);
 /// signed by `signature` if Claude wrote it.
 pub fn render(
     env: &Rc<BoardEnv>,
-    node: NoteNode<'_>,
+    node: &NoteNode<'_>,
     signature: Option<Signature>,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
     let size = (node.node.size.width, node.node.size.height);
-    note(env, node.note, node.draft, node.node.selected, node.node.dragging, size, signature, window, cx)
+    note(
+        env,
+        node.note,
+        node.draft,
+        node.node.selected,
+        node.node.dragging,
+        size,
+        signature,
+        window,
+        cx,
+    )
 }
 
 /// The note box.
@@ -98,7 +108,11 @@ pub fn note(
         // NOTEUI-008, NOTEUI-009
         let empty = note.text.is_empty();
         let text = if empty {
-            if draft { String::new() } else { "Double-click to write".into() }
+            if draft {
+                String::new()
+            } else {
+                "Double-click to write".into()
+            }
         } else {
             note.text.clone()
         };
@@ -119,7 +133,8 @@ pub fn note(
                     z.px(15.),
                     z.px(21.),
                     if empty { t.note_ink_faint } else { t.note_ink },
-                ).zoom(z.0)
+                )
+                .zoom(z.0)
                 .space(Space::PreWrap),
             )
             .into_any_element()
@@ -141,7 +156,11 @@ pub fn note(
         .text_color(t.note_ink)
         .font_family(fonts::UI)
         .cursor(if draft {
-            if dragging { CursorStyle::ClosedHand } else { CursorStyle::OpenHand }
+            if dragging {
+                CursorStyle::ClosedHand
+            } else {
+                CursorStyle::OpenHand
+            }
         } else {
             CursorStyle::Arrow
         })
@@ -257,7 +276,8 @@ fn signature_el(env: &Rc<BoardEnv>, id: &str, sig: Signature, window: &mut Windo
             }
         })
         .child(
-            para(sig.text, ui_font(FontWeight::NORMAL), z.px(12.), z.px(16.), color).zoom(z.0)
+            para(sig.text, ui_font(FontWeight::NORMAL), z.px(12.), z.px(16.), color)
+                .zoom(z.0)
                 .ellipsis()
                 .underline(on.then_some(color.into())),
         )
@@ -284,7 +304,14 @@ fn play(
     let down = *pressed.read(cx);
     let ms = Duration::from_millis;
     let shown = node_hovered && !dragging;
-    let opacity = transition(window, cx, anim::key(&id, "play-o"), if shown { 1.0 } else { 0.0 }, ms(120), motion::ease);
+    let opacity = transition(
+        window,
+        cx,
+        anim::key(&id, "play-o"),
+        if shown { 1.0 } else { 0.0 },
+        ms(120),
+        motion::ease,
+    );
     let scale = transition(
         window,
         cx,
@@ -322,13 +349,15 @@ fn play(
         .justify_center()
         .rounded_full()
         .bg(bg)
-        .shadow(Shadow::of(&[Shade {
-            y: 2.0,
-            blur: 6.0,
-            color: rgba(0, 0, 0, 0.18),
-            ..Shade::NONE
-        }])
-        .gpui(z))
+        .shadow(
+            Shadow::of(&[Shade {
+                y: 2.0,
+                blur: 6.0,
+                color: rgba(0, 0, 0, 0.18),
+                ..Shade::NONE
+            }])
+            .gpui(z),
+        )
         .opacity(opacity)
         .when(scale != 1.0, |d| d.scale(scale))
         .cursor(CursorStyle::Arrow)
@@ -396,7 +425,9 @@ fn editor(env: &Rc<BoardEnv>, note: &BoardNote, window: &mut Window, cx: &mut Ap
         move |window, cx: &mut Context<'_, NoteEditor>| {
             let text = note.text.clone();
             let field = cx.new(|cx| {
-                let mut state = TextareaState::new(window, cx).placeholder("Type a note…").context_menu(false);
+                let mut state = TextareaState::new(window, cx)
+                    .placeholder("Type a note…")
+                    .context_menu(false);
                 state.set_value(text.clone(), window, cx);
                 // Caret at the end, focused.
                 let lines: Vec<&str> = text.split('\n').collect();

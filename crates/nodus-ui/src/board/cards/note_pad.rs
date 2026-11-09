@@ -5,7 +5,10 @@
 
 use std::rc::Rc;
 
-use gpui::{AnyElement, App, Div, FontWeight, IntoElement, ParentElement, Styled, Window, div, linear_color_stop, linear_gradient, px};
+use gpui::{
+    AnyElement, App, Div, FontWeight, IntoElement, ParentElement, Styled, Window, div, linear_color_stop,
+    linear_gradient, px,
+};
 
 use super::icons::{CardIcon, card_icon};
 use super::paper::paper;
@@ -57,11 +60,13 @@ pub fn pad(env: &Rc<BoardEnv>, size: (f32, f32), _window: &mut Window, cx: &mut 
             label_row(z, env.zoom)
                 .child(card_icon(CardIcon::StickyNote, z.f(15.), 2.0, label))
                 .child(label_text("Notes", z, 13.0, FontWeight::SEMIBOLD, label))
-                .child(
-                    div()
-                        .ml(z.px(6.))
-                        .child(label_text("Drag one onto the board", z, 12.0, FontWeight::NORMAL, label)),
-                ),
+                .child(div().ml(z.px(6.)).child(label_text(
+                    "Drag one onto the board",
+                    z,
+                    12.0,
+                    FontWeight::NORMAL,
+                    label,
+                ))),
         );
     // NOTEUI-042: two sheets peek out under the top one, like a block of paper.
     let yellow = paper(NOTE_COLOR, &t);

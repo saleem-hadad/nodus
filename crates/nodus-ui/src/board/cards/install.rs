@@ -8,8 +8,8 @@ use std::rc::Rc;
 use gpui::{AnyElement, App, Bounds, IntoElement, Window, point, px, size};
 use nodus_domain::{BoardNote, NodePatch, OpenCardRequest, Rect};
 
-use super::present::StackLook;
-use super::{BoardEnv, CardActions, Resized, StackView, Z, archive_zone, note, note_pad, session_card};
+use super::present::{Phase, StackLook};
+use super::{BoardEnv, CardActions, Resized, StackView, TerminalHost, Z, archive_zone, note, note_pad, session_card};
 use crate::board::nodes::{
     self, ArchiveNode, BoardActions, BoardCx, CardNode, NodeRenderers, NoteNode, PadNode, StackPlace,
 };
@@ -17,6 +17,8 @@ use crate::parity;
 use crate::platform::Platform;
 use crate::shell::window::Core;
 use crate::state::AppState;
+use crate::terminal::card::CardTerminals;
+use nodus_terminal::host::Phase as TermPhase;
 
 /// Installs the renderers (from `board::init`).
 pub fn install(cx: &mut App) {
@@ -43,13 +45,8 @@ impl CardActions for CanvasActions {
         self.0.set_renaming(id, cx);
     }
     fn expand(&self, session_ids: &[String], expanded: bool, cx: &mut App) {
+        // CARD-023: the canvas wakes the cards it expands (`NodeRenderers::wake`).
         self.0.expand(session_ids, expanded, cx);
-        if expanded {
-            // CARD-023: expanding also wakes the card's terminal.
-            for id in session_ids {
-                super::expanded_card::wake_card_terminal(id, cx);
-            }
-        }
     }
     fn archive(&self, session_ids: &[String], cx: &mut App) {
         self.0.archive(session_ids, cx);
@@ -73,8 +70,11 @@ impl CardActions for CanvasActions {
                 text: text.to_owned(),
                 ..note.clone()
             };
-            cx.spawn(async move |_| core.board().save_note(&project, &note).await)
-                .detach();
+            let rt = crate::board::core_rt(cx);
+            cx.spawn(async move |_| {
+                crate::board::on_core(&rt, async move { core.board().save_note(&project, &note).await }).await;
+            })
+            .detach();
         }
     }
     fn start_note(&self, note_id: &str, cx: &mut App) {
@@ -176,12 +176,8 @@ impl CardActions for CanvasActions {
 }
 
 /// The board's context as the cards read it.
-pub fn env(board: &BoardCx, zoom: f32, window: &Window, cx: &App) -> Rc<BoardEnv> {
-    let state = board
-        .actions
-        .canvas
-        .upgrade()
-        .map(|c| c.read(cx).state.clone());
+pub fn env(board: &BoardCx, zoom: f32, window: &Window, cx: &mut App) -> Rc<BoardEnv> {
+    let state = board.actions.canvas.upgrade().map(|c| c.read(cx).state.clone());
     let state = state.as_ref().map(|s| s.read(cx));
     let repo_path = state
         .and_then(|s| s.board.as_ref())
@@ -193,7 +189,7 @@ pub fn env(board: &BoardCx, zoom: f32, window: &Window, cx: &App) -> Rc<BoardEnv
         zoom: board.zoom,
         project_id: board.project_id.to_string(),
         repo_path,
-        renaming: board.renaming.as_ref().map(|r| r.to_string()),
+        renaming: board.renaming.as_ref().map(ToString::to_string),
         archive_hot: board.archive_hot,
         stack: StackView {
             open: board.stack.open,
@@ -210,8 +206,53 @@ pub fn env(board: &BoardCx, zoom: f32, window: &Window, cx: &App) -> Rc<BoardEnv
         terminal_modal: state.and_then(|s| s.terminal_session_id.clone()),
         platform: Platform::CURRENT,
         actions: Rc::new(CanvasActions(board.actions.clone())),
-        terminals: None,
+        terminals: Some(Rc::new(card_terminals(&board.project_id, zoom, cx))),
     })
+}
+
+/// The expanded cards' terminals (spec 12's `CardTerminals`), the card's
+/// wheel arbiter deciding who a gesture belongs to (XCARD-027, XCARD-028).
+fn card_terminals(project_id: &str, zoom: f32, cx: &mut App) -> CardTerminals {
+    CardTerminals::new(project_id.to_owned(), zoom, cx).with_wheel_gate(Rc::new(|_, ctrl, cx| {
+        cx.default_global::<super::expanded_card::Wheel>()
+            .0
+            .claims(std::time::Instant::now(), ctrl)
+    }))
+}
+
+impl TerminalHost for CardTerminals {
+    fn needs_open(&self, session_id: &str) -> bool {
+        CardTerminals::needs_open(self, session_id)
+    }
+    fn set_enabled(&self, session_id: &str, kind_terminal: bool, enabled: bool, cx: &mut App) {
+        CardTerminals::set_enabled(self, session_id, kind_terminal, enabled, cx);
+    }
+    fn phase(&self, session_id: &str, cx: &App) -> Phase {
+        match CardTerminals::phase(self, session_id, cx) {
+            None => Phase::Idle,
+            Some(p) => match p.phase {
+                TermPhase::Loading => Phase::Loading,
+                TermPhase::Ready => Phase::Ready,
+                TermPhase::Error => Phase::Error(p.error),
+            },
+        }
+    }
+    fn reattach(&self, session_id: &str, cx: &mut App) {
+        CardTerminals::reattach(self, session_id, cx);
+    }
+    fn focus(&self, session_id: &str, window: &mut Window, cx: &mut App) {
+        CardTerminals::focus(self, session_id, window, cx);
+    }
+    fn type_in(&self, session_id: &str, text: &str, starting: bool, cx: &mut App) {
+        CardTerminals::type_in(self, session_id, text, starting, cx);
+    }
+    fn element(&self, session_id: &str, window: &mut Window, cx: &mut App) -> Option<AnyElement> {
+        CardTerminals::element(self, session_id, window, cx)
+    }
+    fn mic(&self, _: &str, _: f32, _: &mut Window, _: &mut App) -> Option<AnyElement> {
+        // The session mic is the voice UI's (spec 05).
+        None
+    }
 }
 
 /// BOARD-015 → the look of an archived card in the stack.
@@ -246,6 +287,12 @@ impl NodeRenderers for CardRenderers {
                 .stack
                 .map(|s| stack_look(s.place, s.rise, board.stack_lift && !board.stack.open)),
             size: (node.node.size.width, node.node.size.height),
+            // BOARD-036: a search jump's flash.
+            flash: board
+                .flash
+                .as_ref()
+                .filter(|(id, _)| id.as_ref() == node.card.node.session_id)
+                .map(|(_, at)| *at),
         }
         .into_any_element()
     }
@@ -253,7 +300,7 @@ impl NodeRenderers for CardRenderers {
     fn note(&self, node: NoteNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut App) -> AnyElement {
         let env = env(board, node.node.zoom, window, cx);
         let signature = signature_for(node.note, board, cx);
-        note::render(&env, node, signature, window, cx)
+        note::render(&env, &node, signature, window, cx)
     }
 
     fn archive(&self, node: ArchiveNode, board: &BoardCx, window: &mut Window, cx: &mut App) -> AnyElement {
@@ -264,6 +311,15 @@ impl NodeRenderers for CardRenderers {
     fn pad(&self, node: PadNode, board: &BoardCx, window: &mut Window, cx: &mut App) -> AnyElement {
         let env = env(board, node.node.zoom, window, cx);
         note_pad::render(&env, &node, window, cx)
+    }
+
+    fn wake(&self, session_id: &str, cx: &mut App) {
+        super::expanded_card::wake_card_terminal(session_id, cx);
+    }
+
+    fn focus_terminal(&self, session_id: &str, window: &mut Window, cx: &mut App) {
+        // BOARD-042, XCARD-017: `focus` needs no board (only `element` does).
+        CardTerminals::new("", 1.0, cx).focus(session_id, window, cx);
     }
 }
 

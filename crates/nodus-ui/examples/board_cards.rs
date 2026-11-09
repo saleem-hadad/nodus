@@ -61,9 +61,9 @@ impl CardActions for NoActions {
 }
 
 fn merge(mut base: serde_json::Value, extra: serde_json::Value) -> serde_json::Value {
-    if let (Some(b), Some(e)) = (base.as_object_mut(), extra.as_object()) {
+    if let (Some(b), serde_json::Value::Object(e)) = (base.as_object_mut(), extra) {
         for (k, v) in e {
-            b.insert(k.clone(), v.clone());
+            b.insert(k, v);
         }
     }
     base
@@ -95,7 +95,17 @@ fn card(
     serde_json::from_value(merge(base, extra)).expect("card")
 }
 
-fn agent(id: &str, desc: &str, kind: &str, status: &str, started_ago: f64, tools: u32, tool: Option<&str>, activity: &str) -> AgentInfo {
+#[allow(clippy::too_many_arguments)]
+fn agent(
+    id: &str,
+    desc: &str,
+    kind: &str,
+    status: &str,
+    started_ago: f64,
+    tools: u32,
+    tool: Option<&str>,
+    activity: &str,
+) -> AgentInfo {
     serde_json::from_value(serde_json::json!({
         "agentId": id, "agentType": kind, "description": desc, "status": status, "toolCount": tools,
         "startedAt": NOW - started_ago, "updatedAt": NOW - started_ago + 60_000.0,
@@ -106,27 +116,103 @@ fn agent(id: &str, desc: &str, kind: &str, status: &str, started_ago: f64, tools
 
 fn storefront_cards() -> Vec<SessionCard> {
     let agents = vec![
-        agent("a3", "Check how other lists show loading states", "Explore", "done", 110_000.0, 1, None,
-            "The order history and the wishlist both use a pulsing grey block with the final layout; neither shares a component."),
-        agent("a1", "Find every place the grid fetches products", "Explore", "working", 90_000.0, 2, Some("Read"), "Results.tsx"),
-        agent("a2", "Write the skeleton component and its story", "general-purpose", "working", 70_000.0, 1, Some("Write"), "ProductSkeleton.tsx"),
+        agent(
+            "a3",
+            "Check how other lists show loading states",
+            "Explore",
+            "done",
+            110_000.0,
+            1,
+            None,
+            "The order history and the wishlist both use a pulsing grey block with the final layout; neither shares a component.",
+        ),
+        agent(
+            "a1",
+            "Find every place the grid fetches products",
+            "Explore",
+            "working",
+            90_000.0,
+            2,
+            Some("Read"),
+            "Results.tsx",
+        ),
+        agent(
+            "a2",
+            "Write the skeleton component and its story",
+            "general-purpose",
+            "working",
+            70_000.0,
+            1,
+            Some("Write"),
+            "ProductSkeleton.tsx",
+        ),
     ];
     vec![
-        card("sf-skeleton", 400., 40., "Add skeleton loading to the product grid", "feat/product-grid", 2.0 * MIN,
+        card(
+            "sf-skeleton",
+            400.,
+            40.,
+            "Add skeleton loading to the product grid",
+            "feat/product-grid",
+            2.0 * MIN,
             "The grid renders nothing until `useProducts` resolves, so the footer jumps up and back. I'll look at how the other lists handle loading before adding a shared skeleton.",
-            2, "working", true, serde_json::json!({ "agents": agents, "agentCount": 3 })),
-        card("sf-tax", 752., 40., "Fix rounding in checkout tax totals", "fix/tax-rounding", 6.0 * MIN,
+            2,
+            "working",
+            true,
+            serde_json::json!({ "agents": agents, "agentCount": 3 }),
+        ),
+        card(
+            "sf-tax",
+            752.,
+            40.,
+            "Fix rounding in checkout tax totals",
+            "fix/tax-rounding",
+            6.0 * MIN,
             "I need to run the checkout tests to confirm the totals now agree. May I run `pnpm test src/checkout`?",
-            3, "waiting", true, serde_json::json!({})),
-        card("sf-cart", 1072., 40., "Migrate the cart store to Zustand", "refactor/cart-store", 48.0 * MIN,
+            3,
+            "waiting",
+            true,
+            serde_json::json!({}),
+        ),
+        card(
+            "sf-cart",
+            1072.,
+            40.,
+            "Migrate the cart store to Zustand",
+            "refactor/cart-store",
+            48.0 * MIN,
             "**Done.** The cart now lives in `src/cart/store.ts`. `useCart` and `useCartCount` read from the store with selectors, so the header badge no longer re-renders on every cart change. All 31 cart tests pass.",
-            2, "done", true, serde_json::json!({})),
-        card("sf-coupons", 400., 380., "Write e2e tests for coupon codes", "test/coupons", 3.5 * HOUR,
+            2,
+            "done",
+            true,
+            serde_json::json!({}),
+        ),
+        card(
+            "sf-coupons",
+            400.,
+            380.,
+            "Write e2e tests for coupon codes",
+            "test/coupons",
+            3.5 * HOUR,
             "Added `e2e/coupons.spec.ts` with three tests. The sale-only case caught a bug: the code was accepted for full-price items too. I left the test failing and noted it in the file so you can decide how strict it should be.",
-            2, "done", false, serde_json::json!({})),
-        card("sf-search-plan", 752., 380., "Plan the v2 search page", "main", 26.0 * HOUR,
+            2,
+            "done",
+            false,
+            serde_json::json!({}),
+        ),
+        card(
+            "sf-search-plan",
+            752.,
+            380.,
+            "Plan the v2 search page",
+            "main",
+            26.0 * HOUR,
             "## Plan\n\n1. Reuse the skeleton tiles from the grid.\n2. Filters as a sheet on mobile, a sidebar on desktop.\n3. An empty state that suggests removing the last filter.\n\nThe cart store pattern works for the filter state too.",
-            2, "done", false, serde_json::json!({ "parents": ["sf-cart", "sf-coupons"] })),
+            2,
+            "done",
+            false,
+            serde_json::json!({ "parents": ["sf-cart", "sf-coupons"] }),
+        ),
         serde_json::from_value(serde_json::json!({
             "sessionId": "sf-terminal", "kind": "terminal", "x": 1072, "y": 380, "archived": false,
             "createdAt": NOW - 3.0 * HOUR, "status": "done", "live": true
@@ -136,15 +222,51 @@ fn storefront_cards() -> Vec<SessionCard> {
 }
 
 fn archived(id: &str, title: &str, ago: f64, branch: &str, reply: &str) -> SessionCard {
-    card(id, 0., 0., title, branch, ago, reply, 2, "done", false, serde_json::json!({ "archived": true, "archivedAt": NOW - ago }))
+    card(
+        id,
+        0.,
+        0.,
+        title,
+        branch,
+        ago,
+        reply,
+        2,
+        "done",
+        false,
+        serde_json::json!({ "archived": true, "archivedAt": NOW - ago }),
+    )
 }
 
 fn storefront_archive() -> Vec<SessionCard> {
     vec![
-        archived("sf-arch-01", "Add Apple Pay to checkout", 2.0 * DAY, "feat/apple-pay", "Apple Pay now shows on Safari when the device supports it. The button sits above the card form and falls back to the card form on other browsers."),
-        archived("sf-arch-02", "Fix flaky cart drawer test", 2.0 * DAY + 5.0 * HOUR, "main", "The drawer test raced the slide-in animation. It now waits for the drawer to be visible before clicking, and passed 50 runs in a row."),
-        archived("sf-arch-03", "Lazy-load product images below the fold", 3.0 * DAY, "perf/images", "Images below the first two rows load lazily now. Largest Contentful Paint on the category page went from 2.9s to 1.8s on a throttled connection."),
-        archived("sf-arch-04", "Translate checkout copy to German", 3.0 * DAY + 7.0 * HOUR, "i18n/de", "Added `de.json` for checkout with 64 strings. Three strings need a native speaker to check the tone; I marked them with TODO."),
+        archived(
+            "sf-arch-01",
+            "Add Apple Pay to checkout",
+            2.0 * DAY,
+            "feat/apple-pay",
+            "Apple Pay now shows on Safari when the device supports it. The button sits above the card form and falls back to the card form on other browsers.",
+        ),
+        archived(
+            "sf-arch-02",
+            "Fix flaky cart drawer test",
+            2.0 * DAY + 5.0 * HOUR,
+            "main",
+            "The drawer test raced the slide-in animation. It now waits for the drawer to be visible before clicking, and passed 50 runs in a row.",
+        ),
+        archived(
+            "sf-arch-03",
+            "Lazy-load product images below the fold",
+            3.0 * DAY,
+            "perf/images",
+            "Images below the first two rows load lazily now. Largest Contentful Paint on the category page went from 2.9s to 1.8s on a throttled connection.",
+        ),
+        archived(
+            "sf-arch-04",
+            "Translate checkout copy to German",
+            3.0 * DAY + 7.0 * HOUR,
+            "i18n/de",
+            "Added `de.json` for checkout with 64 strings. Three strings need a native speaker to check the tone; I marked them with TODO.",
+        ),
     ]
 }
 
@@ -205,7 +327,11 @@ impl Scene {
 
     /// The viewport: (x, y, zoom).
     fn viewport(self) -> (f32, f32, f32) {
-        if self.infra() { (30., 80., 0.72) } else { (60., 96., 0.8) }
+        if self.infra() {
+            (30., 80., 0.72)
+        } else {
+            (60., 96., 0.8)
+        }
     }
 
     /// Where the pointer rests (flow units), if over something.
@@ -268,10 +394,13 @@ impl Render for Gallery {
                     while y < H {
                         let mut x = x0 - gap;
                         while x < W {
-                            window.paint_quad(fill(
-                                Bounds::new(point(px(x - r), px(y - r)), size(px(2. * r), px(2. * r))),
-                                dot,
-                            ).corner_radii(px(r)));
+                            window.paint_quad(
+                                fill(
+                                    Bounds::new(point(px(x - r), px(y - r)), size(px(2. * r), px(2. * r))),
+                                    dot,
+                                )
+                                .corner_radii(px(r)),
+                            );
                             x += gap;
                         }
                         y += gap;
@@ -285,33 +414,79 @@ impl Render for Gallery {
         if scene.infra() {
             let e = env(zoom, StackView::default(), None, false);
             let live = scene == Scene::Expanded;
-            let mut certs = card("in-certs", 400., 0., "Rotate staging TLS certificates", "main", 35.0 * MIN,
+            let mut certs = card(
+                "in-certs",
+                400.,
+                0.,
+                "Rotate staging TLS certificates",
+                "main",
+                35.0 * MIN,
                 "Renewed all four staging certificates. Every ingress serves the new chain; the oldest expires on 18 January.",
-                4, "done", live, serde_json::json!({ "expanded": true }));
+                4,
+                "done",
+                live,
+                serde_json::json!({ "expanded": true }),
+            );
             if live {
-                certs.usage = Some(serde_json::from_value(serde_json::json!({
-                    "model": "Opus 5.5", "contextPercent": 42.0, "contextTokens": 84000, "contextSize": 200000,
-                    "costUsd": 1.84, "durationMs": 1_394_000, "at": NOW
-                })).expect("usage"));
+                certs.usage = Some(
+                    serde_json::from_value(serde_json::json!({
+                        "model": "Opus 5.5", "contextPercent": 42.0, "contextTokens": 84000, "contextSize": 200000,
+                        "costUsd": 1.84, "durationMs": 1_394_000, "at": NOW
+                    }))
+                    .expect("usage"),
+                );
             }
             let shell: SessionCard = serde_json::from_value(serde_json::json!({
                 "sessionId": "in-shell", "kind": "terminal", "x": 1152, "y": 0, "archived": false, "expanded": true,
                 "createdAt": NOW - 5.0 * HOUR, "status": "done", "live": live
-            })).expect("shell");
-            let alerts = card("in-alerts", 400., 520., "Tidy up noisy disk alerts", "feat/alerts", 4.0 * HOUR,
-                "Added `for: 30m` to the three disk alerts and a separate warning at 90% that never pages.", 2, "done", false,
-                serde_json::json!({}));
-            let budget = card("in-budget", 28., 52., "Add a cost budget alarm", "main", 2.0 * DAY,
-                "Budget and alarm added in `budgets.tf`. The alarm emails the infra list.", 2, "done", false,
-                serde_json::json!({ "archived": true }));
+            }))
+            .expect("shell");
+            let alerts = card(
+                "in-alerts",
+                400.,
+                520.,
+                "Tidy up noisy disk alerts",
+                "feat/alerts",
+                4.0 * HOUR,
+                "Added `for: 30m` to the three disk alerts and a separate warning at 90% that never pages.",
+                2,
+                "done",
+                false,
+                serde_json::json!({}),
+            );
+            let budget = card(
+                "in-budget",
+                28.,
+                52.,
+                "Add a cost budget alarm",
+                "main",
+                2.0 * DAY,
+                "Budget and alarm added in `budgets.tf`. The alarm emails the infra list.",
+                2,
+                "done",
+                false,
+                serde_json::json!({ "archived": true }),
+            );
             root = root
-                .child(place(0., 0., archive_zone::archive(&e, 1, (344., 362.), false, window, cx)))
+                .child(place(
+                    0.,
+                    0.,
+                    archive_zone::archive(&e, 1, (344., 362.), false, window, cx),
+                ))
                 .child(place(0., 386., note_pad::pad(&e, (344., 296.), window, cx)))
-                .child(place(28., 52., node(&e, budget, false, Some(look(0, false)), (288., 216.))))
+                .child(place(
+                    28.,
+                    52.,
+                    node(&e, budget, false, Some(look(0, false)), (288., 216.)),
+                ))
                 .child(place(400., 0., node(&e, certs, false, None, (720., 480.))))
                 .child(place(1152., 0., node(&e, shell, false, None, (720., 480.))))
                 .child(place(400., 520., node(&e, alerts, false, None, (288., 216.))))
-                .child(place(64., 438., note::note(&e, &draft(), true, false, false, (216., 216.), None, window, cx)));
+                .child(place(
+                    64.,
+                    438.,
+                    note::note(&e, &draft(), true, false, false, (216., 216.), None, window, cx),
+                ));
             return root;
         }
 
@@ -328,7 +503,11 @@ impl Render for Gallery {
         let renaming = (scene == Scene::NoteEditing).then_some("sf-empty-states");
         let e = env(zoom, stack, renaming, false);
         let lift = scene == Scene::ArchiveHover;
-        let size = if open { present::archive_size(Some(16)) } else { present::archive_size(None) };
+        let size = if open {
+            present::archive_size(Some(16))
+        } else {
+            present::archive_size(None)
+        };
         let frame = place(0., 0., archive_zone::archive(&e, 16, size, false, window, cx));
         let mut raised = Vec::new();
         if open {
@@ -341,11 +520,36 @@ impl Render for Gallery {
         if open {
             for (slot, c) in archive.iter().enumerate() {
                 let (x, y) = (356. + (slot % 2) as f32 * 320., 52. + (slot / 2) as f32 * 248.);
-                raised.push(place(x, y, node(&e, c.clone(), false, Some(StackLook { depth: 0, result: true, lifted: false, rise: None }), (288., 216.))));
+                raised.push(place(
+                    x,
+                    y,
+                    node(
+                        &e,
+                        c.clone(),
+                        false,
+                        Some(StackLook {
+                            depth: 0,
+                            result: true,
+                            lifted: false,
+                            rise: None,
+                        }),
+                        (288., 216.),
+                    ),
+                ));
             }
         } else {
             for depth in (0..3).rev() {
-                root = root.child(place(28., 52., node(&e, archive[depth].clone(), false, Some(look(depth as u8, lift)), (288., 216.))));
+                root = root.child(place(
+                    28.,
+                    52.,
+                    node(
+                        &e,
+                        archive[depth].clone(),
+                        false,
+                        Some(look(depth as u8, lift)),
+                        (288., 216.),
+                    ),
+                ));
             }
         }
         let selected = |id: &str| scene == Scene::Selected && (id == "sf-cart" || id == "sf-coupons");
@@ -359,18 +563,28 @@ impl Render for Gallery {
         }
         for c in cards {
             let (x, y) = (c.node.x as f32, c.node.y as f32);
-            let stickers = if c.node.session_id == "sf-skeleton" { vec![sticker.clone()] } else { vec![] };
+            let stickers = if c.node.session_id == "sf-skeleton" {
+                vec![sticker.clone()]
+            } else {
+                vec![]
+            };
             let sel = selected(&c.node.session_id);
-            root = root.child(place(x, y, SessionNode {
-                env: e.clone(),
-                card: c,
-                matched: vec![],
-                stickers,
-                selected: sel,
-                dragging: false,
-                stack: None,
-                size: (288., 216.),
-            }.into_any_element()));
+            root = root.child(place(
+                x,
+                y,
+                SessionNode {
+                    env: e.clone(),
+                    card: c,
+                    matched: vec![],
+                    stickers,
+                    selected: sel,
+                    dragging: false,
+                    stack: None,
+                    size: (288., 216.),
+                    flash: None,
+                }
+                .into_any_element(),
+            ));
         }
         let yellow = note_of(serde_json::json!({
             "id": "sf-empty-states", "text": "Ask design about empty states for the grid and search",
@@ -384,12 +598,35 @@ impl Render for Gallery {
         }));
         let docs: Project = serde_json::from_value(serde_json::json!({
             "id": "docs-site", "name": "docs-site", "repoPath": "/r", "color": "purple", "createdAt": 0
-        })).expect("project");
+        }))
+        .expect("project");
         let signature = present::signature(&blue, &[], &[docs]);
         root = root
-            .child(place(1400., 40., note::note(&e, &yellow, false, false, false, (216., 216.), None, window, cx)))
-            .child(place(1400., 300., note::note(&e, &blue, false, scene == Scene::NoteSelected, false, (240., 216.), signature, window, cx)))
-            .child(place(64., 438., note::note(&e, &draft(), true, false, false, (216., 216.), None, window, cx)));
+            .child(place(
+                1400.,
+                40.,
+                note::note(&e, &yellow, false, false, false, (216., 216.), None, window, cx),
+            ))
+            .child(place(
+                1400.,
+                300.,
+                note::note(
+                    &e,
+                    &blue,
+                    false,
+                    scene == Scene::NoteSelected,
+                    false,
+                    (240., 216.),
+                    signature,
+                    window,
+                    cx,
+                ),
+            ))
+            .child(place(
+                64.,
+                438.,
+                note::note(&e, &draft(), true, false, false, (216., 216.), None, window, cx),
+            ));
         root.children(raised)
     }
 }
@@ -399,10 +636,21 @@ fn draft() -> BoardNote {
 }
 
 fn look(depth: u8, lifted: bool) -> StackLook {
-    StackLook { depth, result: false, lifted, rise: None }
+    StackLook {
+        depth,
+        result: false,
+        lifted,
+        rise: None,
+    }
 }
 
-fn node(env: &Rc<BoardEnv>, card: SessionCard, selected: bool, stack: Option<StackLook>, size: (f32, f32)) -> AnyElement {
+fn node(
+    env: &Rc<BoardEnv>,
+    card: SessionCard,
+    selected: bool,
+    stack: Option<StackLook>,
+    size: (f32, f32),
+) -> AnyElement {
     SessionNode {
         env: env.clone(),
         card,
@@ -412,6 +660,7 @@ fn node(env: &Rc<BoardEnv>, card: SessionCard, selected: bool, stack: Option<Sta
         dragging: false,
         stack,
         size,
+        flash: None,
     }
     .into_any_element()
 }
@@ -444,7 +693,11 @@ fn to_p3(image: &mut image::RgbaImage) {
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let out = PathBuf::from(args.first().cloned().unwrap_or_else(|| std::env::temp_dir().display().to_string()));
+    let out = PathBuf::from(
+        args.first()
+            .cloned()
+            .unwrap_or_else(|| std::env::temp_dir().display().to_string()),
+    );
     let mut themes = vec![ThemePreference::Light, ThemePreference::Dark];
     let mut scenes: Vec<Scene> = Vec::new();
     let mut i = 1;
@@ -469,11 +722,17 @@ fn main() {
     application().with_assets(Assets).run(move |cx: &mut App| {
         init(cx);
         theme::fonts::register(cx);
-        cx.set_global(Parity { frozen: true, now_ms: Some(NOW) });
+        cx.set_global(Parity {
+            frozen: true,
+            now_ms: Some(NOW),
+        });
         set_theme(themes[0], cx);
         let scene = Rc::new(RefCell::new(scenes[0]));
         let options = WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(Bounds::new(point(px(40.), px(40.)), size(px(W), px(H))))),
+            window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+                point(px(40.), px(40.)),
+                size(px(W), px(H)),
+            ))),
             titlebar: None,
             kind: WindowKind::PopUp,
             focus: false,
@@ -497,8 +756,12 @@ fn main() {
             .expect("window");
         cx.spawn(async move |cx| {
             for theme_pref in themes {
-                let name = if theme_pref == ThemePreference::Dark { "dark" } else { "light" };
-                let _ = cx.update(|cx| set_theme(theme_pref, cx));
+                let name = if theme_pref == ThemePreference::Dark {
+                    "dark"
+                } else {
+                    "light"
+                };
+                cx.update(|cx| set_theme(theme_pref, cx));
                 for s in &scenes {
                     *scene.borrow_mut() = *s;
                     let (vx, vy, zoom) = s.viewport();
@@ -508,11 +771,14 @@ fn main() {
                     let _ = in_window(cx, handle, |window, cx| {
                         window.refresh();
                         window.draw(cx).clear(cx);
-                        window.dispatch_event(PlatformInput::MouseMove(MouseMoveEvent {
-                            position: point(px(720.), px(20.)),
-                            pressed_button: None,
-                            modifiers: Modifiers::default(),
-                        }), cx);
+                        window.dispatch_event(
+                            PlatformInput::MouseMove(MouseMoveEvent {
+                                position: point(px(720.), px(20.)),
+                                pressed_button: None,
+                                modifiers: Modifiers::default(),
+                            }),
+                            cx,
+                        );
                         window.refresh();
                         window.draw(cx).clear(cx);
                     });
@@ -522,11 +788,14 @@ fn main() {
                         let _ = in_window(cx, handle, |window, cx| {
                             window.refresh();
                             window.draw(cx).clear(cx);
-                            window.dispatch_event(PlatformInput::MouseMove(MouseMoveEvent {
-                                position,
-                                pressed_button: None,
-                                modifiers: Modifiers::default(),
-                            }), cx);
+                            window.dispatch_event(
+                                PlatformInput::MouseMove(MouseMoveEvent {
+                                    position,
+                                    pressed_button: None,
+                                    modifiers: Modifiers::default(),
+                                }),
+                                cx,
+                            );
                             window.refresh();
                             window.draw(cx).clear(cx);
                         });
@@ -550,7 +819,7 @@ fn main() {
                     }
                 }
             }
-            let _ = cx.update(|cx| cx.quit());
+            cx.update(|cx| cx.quit());
         })
         .detach();
     });

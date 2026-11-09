@@ -89,7 +89,10 @@ pub fn preview(card: &SessionCard, repo_path: Option<&str>) -> Preview {
         };
     }
     let meta = card.meta.as_ref();
-    if let Some(reply) = meta.and_then(|m| m.last_assistant_text.as_deref()).filter(|t| !t.is_empty()) {
+    if let Some(reply) = meta
+        .and_then(|m| m.last_assistant_text.as_deref())
+        .filter(|t| !t.is_empty())
+    {
         return Preview {
             text: strip_markdown(reply),
             kind: PreviewKind::Reply,
@@ -314,7 +317,10 @@ pub fn deck_tooltip(agents: &[AgentInfo]) -> String {
 
 /// CARD-038.
 pub fn agents_viewer_tooltip(count: u32) -> String {
-    format!("{count} {}: show what they did", if count == 1 { "agent" } else { "agents" })
+    format!(
+        "{count} {}: show what they did",
+        if count == 1 { "agent" } else { "agents" }
+    )
 }
 
 /// DECK-002: the agents peeking out under the card, deepest first, each with
@@ -361,7 +367,10 @@ pub fn fan_all_text(listed: usize, run: usize, total: u32) -> String {
     if run > listed {
         format!("{} more, and every agent so far", run - listed)
     } else {
-        format!("All {total} {} of this session", if total == 1 { "agent" } else { "agents" })
+        format!(
+            "All {total} {} of this session",
+            if total == 1 { "agent" } else { "agents" }
+        )
     }
 }
 
@@ -586,30 +595,56 @@ impl ExpandedStart {
     }
 }
 
-/// Who a scroll gesture belongs to (XCARD-027, XCARD-028).
+/// Who a scroll gesture belongs to (XCARD-027, XCARD-028), as 0.9.4's
+/// module-level `gestureStart`/`boardScrolls` decided: the window sees every
+/// wheel event first ([`WheelArbiter::saw`]), and a card terminal under one
+/// asks whether it scrolls ([`WheelArbiter::claims`]). A gesture pans the
+/// board unless its first event lands over an enabled card terminal; then
+/// every card terminal it crosses scrolls instead.
 #[derive(Debug, Clone, Default)]
 pub struct WheelArbiter {
     last: Option<Instant>,
-    /// The terminal the gesture began over, if it did.
-    owner: Option<String>,
+    /// When the gesture under way began.
+    start: Option<Instant>,
+    board_scrolls: bool,
 }
 
 pub const GESTURE_GAP: Duration = Duration::from_millis(250);
 
+/// Calls about one wheel event come within this of each other (the window's
+/// capture listener, then the terminal under the pointer); the next event
+/// of a gesture comes a frame later at the soonest.
+const SAME_EVENT: Duration = Duration::from_millis(4);
+
 impl WheelArbiter {
-    /// Records a wheel event at `now`, over the enabled card terminal
-    /// `over` (if any), and says whether that terminal scrolls with it (the
-    /// board doesn't) — false: the board pans.
-    pub fn wheel(&mut self, now: Instant, over: Option<&str>, ctrl: bool) -> bool {
-        let new_gesture = self.last.is_none_or(|t| now.duration_since(t) > GESTURE_GAP);
-        self.last = Some(now);
-        if new_gesture {
-            self.owner = if ctrl { None } else { over.map(str::to_owned) };
+    /// The window saw a wheel event at `now`, before anything under the
+    /// pointer did. Seeing it twice (several listeners) changes nothing.
+    pub fn saw(&mut self, now: Instant) {
+        if self.last.is_none_or(|t| now.saturating_duration_since(t) > GESTURE_GAP) {
+            self.start = Some(now);
+            self.board_scrolls = true;
         }
+        self.last = Some(now);
+    }
+
+    /// The wheel event at `now` is over an enabled card terminal: whether
+    /// it scrolls the terminal rather than the board. A pinch (Ctrl) never
+    /// does.
+    pub fn claims(&mut self, now: Instant, ctrl: bool) -> bool {
         if ctrl {
             return false;
         }
-        matches!((&self.owner, over), (Some(o), Some(t)) if o == t)
+        if self.start.is_none() {
+            // No window listener saw it: this event starts the gesture.
+            self.saw(now);
+        }
+        if self
+            .start
+            .is_some_and(|s| now.saturating_duration_since(s) <= SAME_EVENT)
+        {
+            self.board_scrolls = false;
+        }
+        !self.board_scrolls
     }
 }
 
@@ -755,10 +790,7 @@ pub const LANDING_MS: f64 = 4000.0;
 
 /// NOTEUI-001
 pub fn note_size(note: &BoardNote) -> (f32, f32) {
-    (
-        note.w.map_or(NOTE_W, |w| w as f32),
-        note.h.map_or(NOTE_H, |h| h as f32),
-    )
+    (note.w.map_or(NOTE_W, |w| w as f32), note.h.map_or(NOTE_H, |h| h as f32))
 }
 
 /// NOTEUI-032: notes on the board, and those stuck on cards, by session.
@@ -797,7 +829,10 @@ pub enum SignatureTarget {
     /// The writer's card is on this board.
     Here { session_id: String },
     /// It wrote from another project's board.
-    Away { project_id: String, session_id: Option<String> },
+    Away {
+        project_id: String,
+        session_id: Option<String>,
+    },
 }
 
 pub fn signature(note: &BoardNote, cards: &[SessionCard], projects: &[Project]) -> Option<Signature> {
@@ -849,7 +884,13 @@ pub struct ResizeEdges {
     pub bottom: bool,
 }
 
-pub fn resize(rect: (f32, f32, f32, f32), edges: ResizeEdges, dx: f32, dy: f32, min: (f32, f32)) -> (f32, f32, f32, f32) {
+pub fn resize(
+    rect: (f32, f32, f32, f32),
+    edges: ResizeEdges,
+    dx: f32,
+    dy: f32,
+    min: (f32, f32),
+) -> (f32, f32, f32, f32) {
     let (mut x, mut y, mut w, mut h) = rect;
     if edges.right {
         w = (rect.2 + dx).max(min.0);
@@ -878,7 +919,7 @@ pub fn rounded(rect: (f32, f32, f32, f32)) -> (f64, f64, f64, f64) {
 mod tests {
     use super::*;
 
-    fn card(json: serde_json::Value) -> SessionCard {
+    fn card(json: &serde_json::Value) -> SessionCard {
         let mut base = serde_json::json!({
             "sessionId": "s", "x": 0, "y": 0, "archived": false, "createdAt": 1000,
             "status": "done", "live": false
@@ -891,7 +932,7 @@ mod tests {
         serde_json::from_value(base).unwrap()
     }
 
-    fn meta(json: serde_json::Value) -> serde_json::Value {
+    fn meta(json: &serde_json::Value) -> serde_json::Value {
         let mut base = serde_json::json!({
             "sessionId": "s", "title": "", "messageCount": 0, "createdAt": 0, "updatedAt": 0,
             "transcriptPath": "/t"
@@ -931,7 +972,7 @@ mod tests {
     #[test]
     fn chooses_the_preview() {
         // CARD-026
-        let t = card(serde_json::json!({ "kind": "terminal" }));
+        let t = card(&serde_json::json!({ "kind": "terminal" }));
         assert_eq!(
             preview(&t, Some("/Users/example/repos/shop")),
             Preview {
@@ -940,12 +981,12 @@ mod tests {
             }
         );
         assert_eq!(preview(&t, None).text, "");
-        let c = card(serde_json::json!({ "meta": meta(serde_json::json!({
+        let c = card(&serde_json::json!({ "meta": meta(&serde_json::json!({
             "lastAssistantText": "**Hi**", "firstPrompt": "Do it" })) }));
         assert_eq!(preview(&c, None).text, "Hi");
-        let c = card(serde_json::json!({ "meta": meta(serde_json::json!({ "firstPrompt": "Do it" })) }));
+        let c = card(&serde_json::json!({ "meta": meta(&serde_json::json!({ "firstPrompt": "Do it" })) }));
         assert_eq!(preview(&c, None).kind, PreviewKind::Prompt);
-        let c = card(serde_json::json!({}));
+        let c = card(&serde_json::json!({}));
         assert_eq!(
             preview(&c, None),
             Preview {
@@ -978,9 +1019,9 @@ mod tests {
 
     #[test]
     fn labels_cards() {
-        let c = card(serde_json::json!({ "status": "waiting" }));
+        let c = card(&serde_json::json!({ "status": "waiting" }));
         assert_eq!(aria_label(&c), "New session, Needs you");
-        let t = card(serde_json::json!({ "kind": "terminal", "live": true }));
+        let t = card(&serde_json::json!({ "kind": "terminal", "live": true }));
         assert_eq!(aria_label(&t), "Terminal, Running");
         // CARD-044/046
         assert_eq!(rename_initial(&t), "");
@@ -1097,19 +1138,31 @@ mod tests {
 
     #[test]
     fn hands_wheel_gestures_to_one_owner() {
+        // XCARD-027, XCARD-028
         let t0 = Instant::now();
         let ms = |n| t0 + Duration::from_millis(n);
         let mut w = WheelArbiter::default();
         // Starts over the terminal: it scrolls the whole gesture.
-        assert!(w.wheel(ms(0), Some("a"), false));
-        assert!(w.wheel(ms(100), Some("a"), false));
+        w.saw(ms(0));
+        assert!(w.claims(ms(0), false));
+        w.saw(ms(100));
+        assert!(w.claims(ms(100), false));
+        // Off the card mid-gesture the board takes those events; back over
+        // a terminal (any card's), it scrolls again.
+        w.saw(ms(150));
+        w.saw(ms(200));
+        assert!(w.claims(ms(200), false));
         // Starts on the board: keeps panning across the terminal.
-        assert!(!w.wheel(ms(400), None, false));
-        assert!(!w.wheel(ms(500), Some("a"), false));
-        // A 250ms gap starts a new gesture.
-        assert!(w.wheel(ms(800), Some("a"), false));
+        w.saw(ms(500));
+        w.saw(ms(600));
+        assert!(!w.claims(ms(600), false));
+        // A 250ms gap starts a new gesture; seen twice, it's one event.
+        w.saw(ms(900));
+        w.saw(ms(900));
+        assert!(w.claims(ms(900), false));
         // A pinch always goes to the board.
-        assert!(!w.wheel(ms(850), Some("a"), true));
+        w.saw(ms(950));
+        assert!(!w.claims(ms(950), true));
     }
 
     #[test]
@@ -1158,7 +1211,7 @@ mod tests {
         assert_eq!(stack_visual(&look(3, false)).3, 0.0);
     }
 
-    fn note(json: serde_json::Value) -> BoardNote {
+    fn note(json: &serde_json::Value) -> BoardNote {
         let mut base = serde_json::json!({ "id": "n", "text": "", "color": "yellow", "x": 0, "y": 0, "createdAt": 0 });
         if let (Some(b), Some(extra)) = (base.as_object_mut(), json.as_object()) {
             for (k, v) in extra {
@@ -1170,37 +1223,40 @@ mod tests {
 
     #[test]
     fn splits_and_signs_notes() {
-        let cards = [card(serde_json::json!({ "sessionId": "c1", "title": "Plan it" }))];
+        let cards = [card(&serde_json::json!({ "sessionId": "c1", "title": "Plan it" }))];
         let notes = [
-            note(serde_json::json!({ "id": "a", "sessionId": "c1" })),
-            note(serde_json::json!({ "id": "b", "sessionId": "gone" })),
-            note(serde_json::json!({ "id": "c" })),
+            note(&serde_json::json!({ "id": "a", "sessionId": "c1" })),
+            note(&serde_json::json!({ "id": "b", "sessionId": "gone" })),
+            note(&serde_json::json!({ "id": "c" })),
         ];
         let (free, stuck) = split_notes(&notes, &cards);
         assert_eq!(free.iter().map(|n| n.id.as_str()).collect::<Vec<_>>(), ["b", "c"]);
         assert_eq!(stuck["c1"][0].id, "a");
 
-        let here = note(serde_json::json!({ "from": "c1" }));
+        let here = note(&serde_json::json!({ "from": "c1" }));
         let sig = signature(&here, &cards, &[]).unwrap();
         assert_eq!(sig.text, "— Plan it");
-        assert_eq!(sig.tooltip, "Written by Claude in “Plan it”. Click to open that session.");
+        assert_eq!(
+            sig.tooltip,
+            "Written by Claude in “Plan it”. Click to open that session."
+        );
         let project: Project = serde_json::from_value(serde_json::json!({
             "id": "p2", "name": "docs-site", "repoPath": "/r", "color": "blue", "createdAt": 0
         }))
         .unwrap();
-        let away = note(serde_json::json!({ "from": "x", "fromProject": "p2", "fromTitle": "Update docs" }));
+        let away = note(&serde_json::json!({ "from": "x", "fromProject": "p2", "fromTitle": "Update docs" }));
         let sig = signature(&away, &cards, std::slice::from_ref(&project)).unwrap();
         assert_eq!(sig.text, "— Update docs · docs-site");
         assert_eq!(
             sig.tooltip,
             "Written by Claude in “Update docs”, on the docs-site board. Click to open that session."
         );
-        assert!(signature(&note(serde_json::json!({})), &cards, &[project]).is_none());
+        assert!(signature(&note(&serde_json::json!({})), &cards, &[project]).is_none());
         assert!(sticker_lands(1000.0, 4999.0));
         assert!(!sticker_lands(1000.0, 5000.0));
-        assert!(can_start(&note(serde_json::json!({ "text": "x" })), false, false));
-        assert!(!can_start(&note(serde_json::json!({ "text": "  " })), false, false));
-        assert!(!can_start(&note(serde_json::json!({ "text": "x" })), true, false));
+        assert!(can_start(&note(&serde_json::json!({ "text": "x" })), false, false));
+        assert!(!can_start(&note(&serde_json::json!({ "text": "  " })), false, false));
+        assert!(!can_start(&note(&serde_json::json!({ "text": "x" })), true, false));
     }
 
     #[test]
@@ -1212,8 +1268,14 @@ mod tests {
             bottom: b,
         };
         let r = (100.0, 100.0, 400.0, 300.0);
-        assert_eq!(resize(r, all(false, true, false, true), 20.0, -10.0, (360.0, 240.0)), (100.0, 100.0, 420.0, 290.0));
-        assert_eq!(resize(r, all(true, false, true, false), 100.0, 100.0, (360.0, 240.0)), (140.0, 160.0, 360.0, 240.0));
+        assert_eq!(
+            resize(r, all(false, true, false, true), 20.0, -10.0, (360.0, 240.0)),
+            (100.0, 100.0, 420.0, 290.0)
+        );
+        assert_eq!(
+            resize(r, all(true, false, true, false), 100.0, 100.0, (360.0, 240.0)),
+            (140.0, 160.0, 360.0, 240.0)
+        );
         assert_eq!(rounded((0.5, -0.5, 1.4, 2.6)), (1.0, -0.0, 1.0, 3.0));
     }
 }

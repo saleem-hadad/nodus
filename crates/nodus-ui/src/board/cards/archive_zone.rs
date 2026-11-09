@@ -9,8 +9,8 @@ use std::time::Duration;
 use gpui::component::input::{InputEvent, InputState};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, Context, CursorStyle, Entity, FontWeight, InteractiveElement, IntoElement, KeyDownEvent,
-    Focusable as _, MouseButton, ParentElement, StatefulInteractiveElement, Styled, Subscription, Window, div, px,
+    AnyElement, App, Context, CursorStyle, Entity, Focusable as _, FontWeight, InteractiveElement, IntoElement,
+    KeyDownEvent, MouseButton, ParentElement, StatefulInteractiveElement, Styled, Subscription, Window, div, px,
 };
 
 use super::icons::{CardIcon, card_icon};
@@ -29,9 +29,22 @@ use crate::theme::{self, fonts, motion};
 
 const ID: &str = "__archive__";
 
-pub fn render(env: &Rc<BoardEnv>, node: &ArchiveNode, board: &BoardCx, window: &mut Window, cx: &mut App) -> AnyElement {
+pub fn render(
+    env: &Rc<BoardEnv>,
+    node: &ArchiveNode,
+    board: &BoardCx,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
     let _ = board;
-    archive(env, node.count, (node.node.size.width, node.node.size.height), node.node.dragging, window, cx)
+    archive(
+        env,
+        node.count,
+        (node.node.size.width, node.node.size.height),
+        node.node.dragging,
+        window,
+        cx,
+    )
 }
 
 /// The frame, `size` big (the folded stack or the open panel), holding
@@ -113,22 +126,22 @@ pub fn archive(
             label_row(z, env.zoom)
                 .child(card_icon(CardIcon::Archive, z.f(15.), 2.0, label_color))
                 .child(label_text("Archive", z, 13.0, FontWeight::SEMIBOLD, label_color))
-                .child(
-                    div().px(z.px(7.)).rounded_full().bg(t.bg_sunken).child({
-                        let mut font = ui_font(FontWeight::SEMIBOLD);
-                        font.features = fonts::tabular();
-                        super::para::label(count.to_string(), font, 11.0, 18.0, label_color, z.0).spacing(z.px(0.13))
-                    }),
-                )
-                .child(
-                    div().ml(z.px(6.)).opacity(hint).child(label_text(
-                        if hot { "Drop to archive" } else { "Drag cards out to reactivate" },
-                        z,
-                        12.0,
-                        FontWeight::NORMAL,
-                        label_color,
-                    )),
-                ),
+                .child(div().px(z.px(7.)).rounded_full().bg(t.bg_sunken).child({
+                    let mut font = ui_font(FontWeight::SEMIBOLD);
+                    font.features = fonts::tabular();
+                    super::para::label(count.to_string(), font, 11.0, 18.0, label_color, z.0).spacing(z.px(0.13))
+                }))
+                .child(div().ml(z.px(6.)).opacity(hint).child(label_text(
+                    if hot {
+                        "Drop to archive"
+                    } else {
+                        "Drag cards out to reactivate"
+                    },
+                    z,
+                    12.0,
+                    FontWeight::NORMAL,
+                    label_color,
+                ))),
         );
 
     let env_click = env.clone();
@@ -144,12 +157,10 @@ pub fn archive(
         .shadow(shadow.gpui(z))
         .font_family(fonts::UI)
         .cursor(CursorStyle::Arrow)
-        .when(dashed, |d| d.border_dashed())
+        .when(dashed, Styled::border_dashed)
         .when(open, |d| d.backdrop_blur(z.px(30.)).backdrop_saturate(1.8))
         // ARCH-011: a click on the folded frame opens the panel.
-        .when(!open, |d| {
-            d.on_click(move |_, _, cx| env_click.actions.open_stack(cx))
-        })
+        .when(!open, |d| d.on_click(move |_, _, cx| env_click.actions.open_stack(cx)))
         .child(header);
 
     // Children are placed from the padding box, inside the 1.5px border.
@@ -199,8 +210,15 @@ pub fn archive(
                 .justify_center()
                 .opacity(fade)
                 .child(
-                    para(no_match_text(&stack.query), ui_font(FontWeight::NORMAL), z.px(13.), z.px(18.2), t.text_tertiary).zoom(z.0)
-                        .center(),
+                    para(
+                        no_match_text(&stack.query),
+                        ui_font(FontWeight::NORMAL),
+                        z.px(13.),
+                        z.px(18.2),
+                        t.text_tertiary,
+                    )
+                    .zoom(z.0)
+                    .center(),
                 ),
         );
     }
@@ -256,16 +274,41 @@ fn placeholder(env: &Rc<BoardEnv>, dealt: Option<usize>, window: &mut Window, cx
         .line_height(z.px(16.8));
     match dealt {
         None => outline
-            .child(super::text(z, "Drag a card here to archive it", 12.0, FontWeight::NORMAL, t.archive_label))
+            .child(super::text(
+                z,
+                "Drag a card here to archive it",
+                12.0,
+                FontWeight::NORMAL,
+                t.archive_label,
+            ))
             .into_any_element(),
         Some(count) => {
-            let fade = anim::enter(window, cx, anim::key(ID, "dealt"), Duration::from_millis(200), Duration::from_millis(240), motion::ease)
-                .unwrap_or(0.0);
+            let fade = anim::enter(
+                window,
+                cx,
+                anim::key(ID, "dealt"),
+                Duration::from_millis(200),
+                Duration::from_millis(240),
+                motion::ease,
+            )
+            .unwrap_or(0.0);
             outline
                 .gap(z.px(3.))
                 .opacity(fade)
-                .child(super::text(z, dealt_title(count), 13.0, FontWeight::SEMIBOLD, t.archive_label))
-                .child(super::text(z, dealt_hint(env.stack.scroll_max), 12.0, FontWeight::NORMAL, t.archive_label))
+                .child(super::text(
+                    z,
+                    dealt_title(count),
+                    13.0,
+                    FontWeight::SEMIBOLD,
+                    t.archive_label,
+                ))
+                .child(super::text(
+                    z,
+                    dealt_hint(env.stack.scroll_max),
+                    12.0,
+                    FontWeight::NORMAL,
+                    t.archive_label,
+                ))
                 .into_any_element()
         }
     }
@@ -315,7 +358,9 @@ fn search(env: &Rc<BoardEnv>, count: usize, visible: bool, window: &mut Window, 
     if state.read(cx).count != count {
         state.update(cx, |s, _| s.count = count);
         let f = field.clone();
-        window.defer(cx, move |window, cx| f.update(cx, |f, cx| f.set_placeholder(placeholder, window, cx)));
+        window.defer(cx, move |window, cx| {
+            f.update(cx, |f, cx| f.set_placeholder(placeholder, window, cx));
+        });
     }
     // The query is the board's: follow it when it changes elsewhere (closing clears it).
     if field.read(cx).value().as_ref() != stack.query {
@@ -339,13 +384,34 @@ fn search(env: &Rc<BoardEnv>, count: usize, visible: bool, window: &mut Window, 
         let f = field.clone();
         window.defer(cx, move |window, cx| f.update(cx, |f, cx| f.focus(window, cx)));
     } else if !visible && focused {
-        window.defer(cx, |window, cx| window.blur(cx));
+        window.defer(cx, Window::blur);
     }
 
     let ms = Duration::from_millis;
-    let opacity = transition(window, cx, anim::key(ID, "search-o"), if visible { 1.0 } else { 0.0 }, ms(180), motion::ease);
-    let ty = transition(window, cx, anim::key(ID, "search-ty"), if visible { 0.0 } else { -6.0 }, ms(360), motion::ease_stack);
-    let scale = transition(window, cx, anim::key(ID, "search-s"), if visible { 1.0 } else { 0.97 }, ms(360), motion::ease_stack);
+    let opacity = transition(
+        window,
+        cx,
+        anim::key(ID, "search-o"),
+        if visible { 1.0 } else { 0.0 },
+        ms(180),
+        motion::ease,
+    );
+    let ty = transition(
+        window,
+        cx,
+        anim::key(ID, "search-ty"),
+        if visible { 0.0 } else { -6.0 },
+        ms(360),
+        motion::ease_stack,
+    );
+    let scale = transition(
+        window,
+        cx,
+        anim::key(ID, "search-s"),
+        if visible { 1.0 } else { 0.97 },
+        ms(360),
+        motion::ease_stack,
+    );
     // ARCH-028
     let ring = transition(
         window,

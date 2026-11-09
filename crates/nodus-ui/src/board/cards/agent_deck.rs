@@ -31,6 +31,9 @@ use crate::theme::{self, fonts, motion};
 #[derive(Debug, Default)]
 pub struct NodeParts(pub HashSet<SharedString>);
 
+/// Told when a card's fan opens (true) or folds.
+type OnOpen = Rc<dyn Fn(bool, &mut App)>;
+
 /// The node's deck state and hover parts.
 #[derive(Clone)]
 pub struct DeckHandles {
@@ -39,7 +42,7 @@ pub struct DeckHandles {
     /// Where the node was on screen last frame (DECK-015).
     pub bounds: Entity<Option<Bounds<Pixels>>>,
     /// Told when the fan opens or folds, after the event (DECK-014).
-    on_open: Rc<dyn Fn(bool, &mut App)>,
+    on_open: OnOpen,
 }
 
 impl DeckHandles {
@@ -190,7 +193,12 @@ pub fn deck(
         let rest = Shadow::with(&[Shade::inset(0.0, -3.0, e)], &t.shadow_sm);
         // DECK-007: a waiting agent's layer glows, 1.1s ease-out.
         let shadow = if agent.status == SessionStatus::Waiting {
-            let phase = anim::cycle(window, cx, anim::key_n(node, "deck-glow", depth), Duration::from_millis(1100));
+            let phase = anim::cycle(
+                window,
+                cx,
+                anim::key_n(node, "deck-glow", depth),
+                Duration::from_millis(1100),
+            );
             let peak = Shadow::of(&[
                 Shade::inset(0.0, -3.0, e),
                 Shade {
@@ -252,14 +260,17 @@ pub fn deck(
 
 /// A trigger that fans the deck: the footer's agent count, the title bar's
 /// Agents tool (CARD-037, XCARD-009).
-pub fn trigger<E: InteractiveElement + StatefulInteractiveElement + Styled + 'static>(el: E, handles: &DeckHandles) -> E {
+pub fn trigger<E: InteractiveElement + StatefulInteractiveElement + Styled + 'static>(
+    el: E,
+    handles: &DeckHandles,
+) -> E {
     let toggling = handles.clone();
     el.on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-    .on_click(move |_, window, cx| {
-        cx.stop_propagation();
-        // Every click toggles, both of a double-click too, as in 0.9.4.
-        toggling.toggle(window, cx);
-    })
+        .on_click(move |_, window, cx| {
+            cx.stop_propagation();
+            // Every click toggles, both of a double-click too, as in 0.9.4.
+            toggling.toggle(window, cx);
+        })
 }
 
 /// What pointing at a trigger does (DECK-008), for the trigger's own hover
@@ -299,12 +310,7 @@ fn side(env: &BoardEnv, handles: &DeckHandles, cx: &mut App) -> FanSide {
 
 /// The fan's deal-in (DECK-026): from `translate(dx, 10px) scale(0.92)
 /// rotate(-2.5deg)` and transparent to rest, `delay` in, on the spring.
-fn dealt<E: Styled + IntoElement + ParentElement>(
-    el: E,
-    z: Z,
-    dx: f32,
-    p: Option<f32>,
-) -> E {
+fn dealt<E: Styled + IntoElement + ParentElement>(el: E, z: Z, dx: f32, p: Option<f32>) -> E {
     let Some(p) = p else {
         return el.group_opacity(0.0);
     };
@@ -385,7 +391,13 @@ pub fn fan(
             div()
                 .flex_none()
                 .mt(px(f32::from(b_title - b_count).max(0.)))
-                .child(text_tab(z, fan_count(agents), 11.0, FontWeight::NORMAL, t.text_tertiary)),
+                .child(text_tab(
+                    z,
+                    fan_count(agents),
+                    11.0,
+                    FontWeight::NORMAL,
+                    t.text_tertiary,
+                )),
         );
     let mut column = div()
         .id(anim::key(node, "fan"))
@@ -439,7 +451,15 @@ pub fn fan(
         .rounded(z.px(13.))
         .bg(t.bg_elevated)
         .shadow(
-            Shadow::with(&[], if *pill_hover.read(cx) { &t.shadow_md } else { &t.shadow_sm }).gpui(z),
+            Shadow::with(
+                &[],
+                if *pill_hover.read(cx) {
+                    &t.shadow_md
+                } else {
+                    &t.shadow_sm
+                },
+            )
+            .gpui(z),
         )
         .text_color(t.accent)
         .text_size(z.px(11.))
@@ -454,7 +474,13 @@ pub fn fan(
             opening.close(window, cx);
             env_all.actions.open_agents(&node_all, None, cx);
         })
-        .child(text(z, fan_all_text(shown.len(), agents.len(), total), 11.0, FontWeight::MEDIUM, t.accent))
+        .child(text(
+            z,
+            fan_all_text(shown.len(), agents.len(), total),
+            11.0,
+            FontWeight::MEDIUM,
+            t.accent,
+        ))
         .child(card_icon(CardIcon::ArrowRight, z.f(12.), 2.2, t.accent));
     column = column.child(dealt(pill, z, dx, p));
 
@@ -486,7 +512,10 @@ fn fan_row(
     let e = edge(&t, agent.status);
     let hover = window.use_keyed_state(anim::key_n(node, "fan-row-hover", i), cx, |_, _| false);
     let target = if *hover.read(cx) {
-        Shadow::with(&[Shade::inset(3.0, 0.0, e), Shade::ring(1.0, t.border_strong)], &t.shadow_lg)
+        Shadow::with(
+            &[Shade::inset(3.0, 0.0, e), Shade::ring(1.0, t.border_strong)],
+            &t.shadow_lg,
+        )
     } else {
         Shadow::with(&[Shade::inset(3.0, 0.0, e)], &t.shadow_md)
     };
@@ -505,23 +534,34 @@ fn fan_row(
     let step_line = (step.tool.is_some() || step.text.is_some()).then(|| {
         let mut line = div().flex().items_start().gap(z.px(6.)).pl(z.px(14.)).min_w_0();
         if let Some(tool) = step.tool.clone() {
-            line = line.child(
-                div()
-                    .flex_none()
-                    .child(super::para::label(tool, mono.clone(), 11.0, 15.4, t.text_primary, z.0)),
-            );
+            line = line.child(div().flex_none().child(super::para::label(
+                tool,
+                mono.clone(),
+                11.0,
+                15.4,
+                t.text_primary,
+                z.0,
+            )));
         }
         if let Some(text) = step.text.clone() {
             line = line.child(if step.tool.is_some() {
-                para(text, mono.clone(), z.px(11.), z.px(15.4), t.text_tertiary).zoom(z.0)
+                para(text, mono.clone(), z.px(11.), z.px(15.4), t.text_tertiary)
+                    .zoom(z.0)
                     .ellipsis()
                     .grow()
                     .into_any_element()
             } else {
-                para(text, ui_font(FontWeight::NORMAL), z.px(11.), z.px(15.4), t.text_secondary).zoom(z.0)
-                    .clamp(2)
-                    .grow()
-                    .into_any_element()
+                para(
+                    text,
+                    ui_font(FontWeight::NORMAL),
+                    z.px(11.),
+                    z.px(15.4),
+                    t.text_secondary,
+                )
+                .zoom(z.0)
+                .clamp(2)
+                .grow()
+                .into_any_element()
             });
         }
         line
@@ -564,23 +604,18 @@ fn fan_row(
             env_row.actions.open_agents(&node_row, Some(&agent_id), cx);
         })
         .child(
-            div()
-                .flex()
-                .items_center()
-                .gap(z.px(7.))
-                .min_w_0()
-                .child(dot)
-                .child(
-                    para(
-                        agent.description.clone(),
-                        ui_font(FontWeight::SEMIBOLD),
-                        z.px(13.),
-                        z.px(18.2),
-                        t.text_primary,
-                    ).zoom(z.0)
-                    .ellipsis()
-                    .grow(),
-                ),
+            div().flex().items_center().gap(z.px(7.)).min_w_0().child(dot).child(
+                para(
+                    agent.description.clone(),
+                    ui_font(FontWeight::SEMIBOLD),
+                    z.px(13.),
+                    z.px(18.2),
+                    t.text_primary,
+                )
+                .zoom(z.0)
+                .ellipsis()
+                .grow(),
+            ),
         )
         .when_some(step_line, ParentElement::child)
         .child(
@@ -594,7 +629,13 @@ fn fan_row(
                 .text_color(t.text_tertiary)
                 .font_features(fonts::tabular())
                 .children(meta.into_iter().enumerate().map(|(k, s)| {
-                    text_tab(z, s, 11.0, FontWeight::NORMAL, if k == 0 { status_color } else { t.text_tertiary })
+                    text_tab(
+                        z,
+                        s,
+                        11.0,
+                        FontWeight::NORMAL,
+                        if k == 0 { status_color } else { t.text_tertiary },
+                    )
                 })),
         )
 }

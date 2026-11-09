@@ -246,6 +246,6 @@ fn link(id: &'static str, label: &'static str, ink: Inks) -> gpui::Stateful<Div>
         .font_weight(FontWeight::MEDIUM)
         .text_color(ink.into)
         .cursor_pointer()
-        .hover(|s| s.underline())
+        .hover(Styled::underline)
         .child(label)
 }

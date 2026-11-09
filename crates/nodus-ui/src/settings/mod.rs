@@ -545,7 +545,7 @@ impl Render for SettingsDialog {
                                 let this = this.clone();
                                 cx.spawn(async move |cx| {
                                     let shortcut = nodus.capture().allow().await;
-                                    let _ = this.update(cx, |s, cx| {
+                                    this.update(cx, |s, cx| {
                                         s.shortcut = Some(shortcut);
                                         cx.notify();
                                     });

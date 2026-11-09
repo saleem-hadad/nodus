@@ -16,6 +16,7 @@ use nodus_core::capture_service::page::{self, bytes, host, kind_copy};
 use nodus_domain::{
     CaptureAttachment, CaptureKind, CaptureRecent, CaptureShortcut, ClipboardOffer, FolderColor, SessionStatus,
 };
+use nodus_voice::controller::{MICROPHONE_SETTINGS_LABEL, Phase, bar_scale, clock};
 
 use super::icons::{CapIcon, cap_icon};
 use super::panel::CapturePanel;
@@ -117,7 +118,7 @@ impl CapturePanel {
         let head = self.render_head(t, window, cx);
         let field = self.render_field(window, cx);
         let tiles = self.render_tiles(t, window, cx);
-        let foot = self.render_foot(t, cx);
+        let foot = self.render_foot(t, window, cx);
         let menu = self.menu_open.then(|| self.render_menu(t, ink, window, cx));
         let error = self.error.clone().map(|e| {
             div()
@@ -128,6 +129,7 @@ impl CapturePanel {
                 .child(e)
         });
         let notice = self.shot_blocked.then(|| self.render_shot_notice(t, cx));
+        let voice_notice = self.render_voice_notice(t, cx);
         let dropping = style::card_shadow(&t, true);
         div()
             .id("cap-card")
@@ -159,6 +161,7 @@ impl CapturePanel {
             .children(tiles)
             .children(error)
             .children(notice)
+            .children(voice_notice)
             .child(foot)
             .children(menu)
             .into_any_element()
@@ -439,7 +442,7 @@ impl CapturePanel {
                 hovered.update(cx, |h, cx| {
                     *h = *over;
                     cx.notify();
-                })
+                });
             }
         });
         let tile = match attachment {
@@ -576,7 +579,8 @@ impl CapturePanel {
     }
 
     /// The footer (`.cap-foot`): screenshot, files, mic, the hint and send.
-    fn render_foot(&mut self, t: Tokens, cx: &mut Context<'_, Self>) -> AnyElement {
+    fn render_foot(&mut self, t: Tokens, window: &mut Window, cx: &mut Context<'_, Self>) -> AnyElement {
+        self.sync_voice_project();
         let route = self.route();
         let frozen = parity::frozen(cx);
         let enabled = self.has_text() && !self.sending && !self.no_projects();
@@ -636,16 +640,21 @@ impl CapturePanel {
                     .justify_center()
                     .child(SharedString::from(Platform::CURRENT.keys("↩"))),
             );
-        // CAP-105
-        let hint = div()
-            .flex()
-            .flex_none()
-            .items_center()
-            .mr(px(10.))
-            .text_size(px(12.))
-            .text_color(t.text_tertiary)
-            .child(kbd(Platform::CURRENT.keys("⇧↩"), t))
-            .child(div().child("\u{a0}new line"));
+        // CAP-105, CAP-103: the hint, or what the mic is doing.
+        let hint = if self.voice_state.phase == Phase::Idle {
+            div()
+                .flex()
+                .flex_none()
+                .items_center()
+                .mr(px(10.))
+                .text_size(px(12.))
+                .text_color(t.text_tertiary)
+                .child(kbd(Platform::CURRENT.keys("⇧↩"), t))
+                .child(div().child("\u{a0}new line"))
+                .into_any_element()
+        } else {
+            self.render_voice_status(t, frozen, window)
+        };
         div()
             .flex()
             .items_center()
@@ -662,12 +671,209 @@ impl CapturePanel {
                 icon_button("cap-files", CapIcon::Paperclip, 16., "Attach files", t)
                     .on_click(cx.listener(|p, _, window, cx| p.pick_files(window, cx))),
             )
-            // CAP-103: the mic (its recording comes with the core's voice API).
-            .child(icon_button("cap-mic", CapIcon::Mic, 16., "Speak", t))
+            .child(self.render_mic(t, cx))
             .child(div().flex_1().min_w_0())
             .child(hint)
             .child(send)
             .into_any_element()
+    }
+
+    /// CAP-103: the mic. `Speak`; while recording `Stop and transcribe` on
+    /// red with a filled square; off while it opens or transcribes.
+    fn render_mic(&self, t: Tokens, cx: &mut Context<'_, Self>) -> AnyElement {
+        let phase = self.voice_state.phase;
+        let recording = phase == Phase::Recording;
+        let enabled = !matches!(phase, Phase::Opening | Phase::Transcribing);
+        if !recording {
+            let button = icon_button("cap-mic", CapIcon::Mic, 16., "Speak", t);
+            return if enabled {
+                button
+                    .on_click(cx.listener(|p, _, _, cx| p.press_mic(cx)))
+                    .into_any_element()
+            } else {
+                // Disabled: no hover, nothing else changes.
+                div()
+                    .id("cap-mic")
+                    .flex()
+                    .flex_none()
+                    .items_center()
+                    .justify_center()
+                    .size(px(32.))
+                    .rounded(px(8.))
+                    .cursor_pointer()
+                    .tooltip(native_tooltip("Speak".into()))
+                    .child(cap_icon(CapIcon::Mic, 16., t.text_secondary))
+                    .into_any_element()
+            };
+        }
+        div()
+            .id("cap-mic")
+            .flex()
+            .flex_none()
+            .items_center()
+            .justify_center()
+            .size(px(32.))
+            .rounded(px(8.))
+            .cursor_pointer()
+            .bg(t.status_waiting)
+            .tooltip(native_tooltip("Stop and transcribe".into()))
+            .child(cap_icon(CapIcon::SquareFilled, 13., style::WHITE))
+            .on_click(cx.listener(|p, _, _, cx| p.press_mic(cx)))
+            .into_any_element()
+    }
+
+    /// 05's `VoiceStatus` in the hint's place (`.voice-status`, margin-right
+    /// 10): the blinking dot, the clock and the meter while recording,
+    /// `Transcribing…` while transcribing, nothing while the mic opens.
+    fn render_voice_status(&self, t: Tokens, frozen: bool, window: &mut Window) -> AnyElement {
+        let row = div()
+            .flex()
+            .flex_none()
+            .items_center()
+            .gap(px(8.))
+            .mr(px(10.))
+            .text_size(px(12.))
+            .text_color(t.text_secondary)
+            .whitespace_nowrap();
+        match self.voice_state.phase {
+            Phase::Recording => {
+                // The meter moves every frame while it listens.
+                window.request_animation_frame();
+                let bars = self.voice.levels().map(|(bars, _)| bars).unwrap_or_default();
+                let dot = div().flex_none().size(px(8.)).rounded_full().bg(t.status_waiting);
+                let dot = if frozen {
+                    dot.into_any_element()
+                } else {
+                    dot.with_animation(
+                        "cap-voice-blink",
+                        Animation::new(Duration::from_millis(1200)).repeat(),
+                        |d, delta| {
+                            let half = if delta < 0.5 { delta * 2.0 } else { (1.0 - delta) * 2.0 };
+                            d.opacity(1.0 - 0.7 * motion::ease_in_out(half))
+                        },
+                    )
+                    .into_any_element()
+                };
+                row.child(dot)
+                    .child(
+                        div()
+                            .min_w(px(28.))
+                            .text_color(t.text_primary)
+                            .font_weight(FontWeight::MEDIUM)
+                            .child(clock(self.voice_state.elapsed)),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(2.))
+                            .h(px(16.))
+                            .children(bars.map(|level| {
+                                let scale = bar_scale(level) as f32;
+                                div().w(px(3.)).h(px(16. * scale)).rounded(px(2.)).bg(t.text_secondary)
+                            })),
+                    )
+                    .into_any_element()
+            }
+            Phase::Transcribing => row
+                .child(spinner("cap-voice-spin", 13., t.text_secondary, frozen))
+                .child("Transcribing…")
+                .into_any_element(),
+            Phase::Idle | Phase::Opening => row.into_any_element(),
+        }
+    }
+
+    /// 05's `VoiceNotice` inside the card, under the error and the
+    /// screenshot notice. The panel gives `.voice-notice` no layout of its
+    /// own (its pill is `.sidekick`'s and `.session-mic`'s): the icon, the
+    /// words and the buttons run on in a line, and the dismiss button, a
+    /// grid, takes the line under them (spec 07, "UI details").
+    fn render_voice_notice(&self, t: Tokens, cx: &mut Context<'_, Self>) -> Option<AnyElement> {
+        let notice = self.voice_state.notice.clone()?;
+        let action = |id: &'static str, glyph: Option<CapIcon>, label: &'static str| {
+            div()
+                .id(id)
+                .flex()
+                .flex_none()
+                .items_center()
+                .gap(px(4.))
+                .h(px(24.))
+                .px(px(8.))
+                .rounded(px(6.))
+                .border(px(0.5))
+                .border_color(t.border_strong)
+                .bg(t.bg_elevated)
+                .shadow(t.sm())
+                .text_size(px(12.))
+                .font_weight(FontWeight::MEDIUM)
+                .whitespace_nowrap()
+                .hover(|s| s.bg(t.bg_hover))
+                .active(|s| s.bg(t.bg_pressed))
+                .children(glyph.map(|g| cap_icon(g, 12., t.text_primary)))
+                .child(label)
+        };
+        let mut line = div()
+            .flex()
+            .flex_wrap()
+            .items_center()
+            .child(cap_icon(CapIcon::CircleAlert, 14., t.status_waiting))
+            .child(
+                div()
+                    .min_w_0()
+                    .line_height(relative(1.35))
+                    .text_color(t.text_primary)
+                    .child(notice.message.clone()),
+            );
+        if notice.settings {
+            line = line.child(
+                action("cap-voice-settings", Some(CapIcon::Settings), "Settings").on_click(cx.listener(
+                    |p, _, _, cx| {
+                        let nodus = p.nodus.clone();
+                        cx.spawn(async move |_, _| nodus.capture().open_settings().await)
+                            .detach();
+                    },
+                )),
+            );
+        }
+        if notice.microphone {
+            line = line.child(
+                action("cap-voice-mic", None, MICROPHONE_SETTINGS_LABEL).on_click(cx.listener(|p, _, _, cx| {
+                    let nodus = p.nodus.clone();
+                    cx.spawn(async move |_, _| nodus.voice().open_microphone_settings().await)
+                        .detach();
+                })),
+            );
+        }
+        if notice.retry {
+            line = line.child(
+                action("cap-voice-retry", Some(CapIcon::RotateCcw), "Retry")
+                    .tooltip(native_tooltip("Send the same recording again".into()))
+                    .on_click(cx.listener(|p, _, _, cx| p.retry_voice(cx))),
+            );
+        }
+        let dismiss = div()
+            .id("cap-voice-dismiss")
+            .flex()
+            .items_center()
+            .justify_center()
+            .size(px(24.))
+            .rounded_full()
+            .text_color(t.text_tertiary)
+            .hover(|s| s.bg(t.bg_hover).text_color(t.text_primary))
+            .tooltip(native_tooltip("Dismiss".into()))
+            .child(icon(Icon::X, 13., 2., t.text_tertiary))
+            .on_click(cx.listener(|p, _, _, cx| {
+                p.voice.dismiss();
+                cx.notify();
+            }));
+        Some(
+            div()
+                .mx(px(12.))
+                .mb(px(10.))
+                .child(line)
+                .child(dismiss)
+                .into_any_element(),
+        )
     }
 
     /// CAP-117: the banner under the card.
@@ -748,15 +954,13 @@ impl CapturePanel {
                 .shadow(t.sm())
                 .text_size(px(12.))
                 .text_color(t.text_secondary)
-                .child(
-                    gpui::StyledText::new(format!("{more} · ↑ for earlier captures")).with_highlights([(
-                        more.len()..more.len() + " · ↑ for earlier captures".len(),
-                        gpui::HighlightStyle {
-                            color: Some(t.text_tertiary.into()),
-                            ..Default::default()
-                        },
-                    )]),
-                )
+                .child(style::spans(
+                    window,
+                    &[
+                        (&more, t.text_secondary, None),
+                        (" · ↑ for earlier captures", t.text_tertiary, None),
+                    ],
+                ))
         });
         Some(
             div()

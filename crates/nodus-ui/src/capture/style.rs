@@ -133,6 +133,26 @@ pub fn elevated_at(t: &Tokens, share: f32) -> Rgba {
     }
 }
 
+/// Text in parts of their own colour and weight, as `<strong>` and
+/// `<span class="cap-faint">` inside a line: each part's colour is its own,
+/// where GPUI's highlights would blend it over the line's.
+pub fn spans(window: &gpui::Window, parts: &[(&str, Rgba, Option<gpui::FontWeight>)]) -> gpui::StyledText {
+    let base = window.text_style();
+    let text: String = parts.iter().map(|(part, ..)| *part).collect();
+    let runs = parts
+        .iter()
+        .map(|&(part, color, weight)| {
+            let mut style = base.clone();
+            style.color = color.into();
+            if let Some(weight) = weight {
+                style.font_weight = weight;
+            }
+            style.to_run(part.len())
+        })
+        .collect();
+    gpui::StyledText::new(text).with_runs(runs)
+}
+
 /// `--status-*` at 28%: the working and waiting dots' rings.
 pub fn ring_of(color: Rgba) -> Rgba {
     Rgba { a: 0.28, ..color }

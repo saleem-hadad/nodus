@@ -5,6 +5,7 @@
 //! {"cmd":"capture","action":"show"}                       File › Capture…
 //! {"cmd":"capture","action":"hide"}
 //! {"cmd":"capture","stub":"screenshot","value":"needs-permission"}   files | clipboard | submit | pickFiles
+//! {"cmd":"capture","stub":"trusted","value":true}         Accessibility granted (ready within 3 s)
 //! {"cmd":"type","text":"Fix the coupon field","window":"capture"}    typed key by key
 //! {"cmd":"emit","event":"captureContext","payload":{"tab":{…}}}      what main tells the panel late
 //! ```
@@ -94,13 +95,17 @@ async fn capture(command: &Value, nodus: &Nodus, cx: &mut AsyncApp) -> Result<Va
                 let handle = PanelSlot::live(cx).ok_or("no capture panel")?;
                 handle
                     .update(cx, |_, window, cx| {
-                        view.update(cx, |p, cx| match control.as_str() {
-                            "screenshot" => Ok(p.screenshot(window, cx)),
-                            "files" => Ok(p.pick_files(window, cx)),
-                            "offer" => Ok(p.take_offer(window, cx)),
-                            "route" => Ok(p.toggle_menu(window, cx)),
-                            "send" => Ok(p.send(window, cx)),
-                            other => Err(format!("no capture control {other}")),
+                        view.update(cx, |p, cx| {
+                            match control.as_str() {
+                                "screenshot" => p.screenshot(window, cx),
+                                "files" => p.pick_files(window, cx),
+                                "offer" => p.take_offer(window, cx),
+                                "route" => p.toggle_menu(window, cx),
+                                "send" => p.send(window, cx),
+                                "mic" => p.press_mic(cx),
+                                other => return Err(format!("no capture control {other}")),
+                            }
+                            Ok(())
                         })
                     })
                     .map_err(|e| e.to_string())?

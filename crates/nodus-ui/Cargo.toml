@@ -21,6 +21,8 @@ nodus-platform.workspace = true
 nodus-sessions.workspace = true
 nodus-terminal.workspace = true
 nodus-transcripts.workspace = true
+# The capture panel's mic (07 CAP-103): 05's voice controller.
+nodus-voice.workspace = true
 resvg.workspace = true
 # Local time, as `Intl.DateTimeFormat` shows it (localtime_r / localtime_s).
 libc.workspace = true

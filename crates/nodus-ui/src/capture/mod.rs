@@ -37,10 +37,14 @@ pub fn register(nodus: &Nodus, cx: &mut App) {
     let sizes = Arc::clone(&bridge);
     let window_size: WindowSize = Arc::new(move || sizes.board_window_size());
     let system = if window::quiet() {
-        cx.set_global(stubs::Stubs::default());
+        let stubs = stubs::Stubs::default();
+        let trusted = Arc::clone(&stubs.trusted);
+        cx.set_global(stubs);
         CaptureSystem {
             panel: bridge,
             window_size,
+            permissions: Arc::new(stubs::DriverPermissions(trusted)),
+            hook: Arc::new(stubs::DriverHook),
             ..CaptureSystem::headless()
         }
     } else {

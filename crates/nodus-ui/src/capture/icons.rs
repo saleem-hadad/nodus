@@ -15,13 +15,17 @@ pub enum CapIcon {
     LoaderCircle,
     Mic,
     Paperclip,
+    /// The voice notice's Retry (05's `VoiceNotice`).
+    RotateCcw,
     Scan,
+    /// The voice notice's Settings.
+    Settings,
     /// `Square` with `fill="currentColor"` (the mic while recording).
     SquareFilled,
 }
 
 impl CapIcon {
-    const ALL: [Self; 10] = [
+    const ALL: [Self; 12] = [
         Self::CircleAlert,
         Self::CornerDownRight,
         Self::FileText,
@@ -30,7 +34,9 @@ impl CapIcon {
         Self::LoaderCircle,
         Self::Mic,
         Self::Paperclip,
+        Self::RotateCcw,
         Self::Scan,
+        Self::Settings,
         Self::SquareFilled,
     ];
 
@@ -44,7 +50,9 @@ impl CapIcon {
             Self::LoaderCircle => "loader-circle",
             Self::Mic => "mic",
             Self::Paperclip => "paperclip",
+            Self::RotateCcw => "rotate-ccw",
             Self::Scan => "scan",
+            Self::Settings => "settings",
             Self::SquareFilled => "square-filled",
         }
     }
@@ -71,6 +79,10 @@ impl CapIcon {
             }
             Self::Paperclip => {
                 r#"<path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/>"#
+            }
+            Self::RotateCcw => r#"<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>"#,
+            Self::Settings => {
+                r#"<path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/>"#
             }
             Self::Scan => {
                 r#"<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>"#

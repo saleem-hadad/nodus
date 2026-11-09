@@ -3,15 +3,15 @@
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, Div, ElementId, FontWeight, HighlightStyle, InteractiveElement, IntoElement, MouseDownEvent,
-    ParentElement, ScrollHandle, SharedString, StatefulInteractiveElement, Styled, StyledText, Window, canvas, div, px,
+    AnyElement, Context, Div, ElementId, FontWeight, InteractiveElement, IntoElement, MouseDownEvent, ParentElement,
+    ScrollHandle, SharedString, StatefulInteractiveElement, Styled, Window, canvas, div, px,
 };
 use nodus_core::capture_service::page::{self, kind_copy, sendable, sessions_count};
 use nodus_domain::{CaptureKind, CaptureTargets};
 
 use super::panel::CapturePanel;
 use super::render::{dot, kbd, kind_icon, swatch, who_dot};
-use super::style::Inks;
+use super::style::{self, Inks};
 use crate::components::icon::{Icon, icon};
 use crate::components::tooltip::native_tooltip;
 use crate::components::tween::enter;
@@ -122,7 +122,6 @@ impl CapturePanel {
             }))
             .children(reason.map(|reason| {
                 let lead = "Claude's guess:";
-                let text = format!("{lead} {reason}");
                 div()
                     .flex()
                     .items_start()
@@ -135,14 +134,13 @@ impl CapturePanel {
                     .line_height(px(17.))
                     .text_color(t.text_secondary)
                     .child(div().mt(px(6.)).child(who_dot(t, false, true)))
-                    .child(div().flex_1().min_w_0().child(StyledText::new(text).with_highlights([(
-                        0..lead.len(),
-                        HighlightStyle {
-                            color: Some(t.text_primary.into()),
-                            font_weight: Some(FontWeight::SEMIBOLD),
-                            ..HighlightStyle::default()
-                        },
-                    )])))
+                    .child(div().flex_1().min_w_0().child(style::spans(
+                        window,
+                        &[
+                            (lead, t.text_primary, Some(FontWeight::SEMIBOLD)),
+                            (&format!(" {reason}"), t.text_secondary, None),
+                        ],
+                    )))
             }))
             .child(
                 div()
@@ -358,7 +356,7 @@ fn option(id: impl Into<ElementId>, selected: bool, disabled: bool, t: Tokens) -
 
 /// The tick on what's picked (`Check` 14 in `--into-ink`).
 fn check(t: Tokens) -> impl IntoElement {
-    let ink = super::style::inks(&t);
+    let ink = style::inks(&t);
     icon(Icon::Check, 14., 2., ink.into)
 }
 

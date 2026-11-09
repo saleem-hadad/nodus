@@ -121,7 +121,8 @@ pub fn run(user_data: PathBuf) -> anyhow::Result<()> {
         cx.on_window_closed(|cx, _| {
             let open = window::main_window(cx).is_some();
             cx.global::<Flags>().0.set_open(open);
-            if cfg!(not(target_os = "macos")) && cx.windows().is_empty() {
+            // CAP-175: not once capture's panel has been made.
+            if cfg!(not(target_os = "macos")) && cx.windows().is_empty() && !crate::capture::PanelSlot::made(cx) {
                 cx.quit();
             }
         })

@@ -127,14 +127,26 @@ impl PanelWindow for PanelBridge {
     }
 
     fn work_area_under_pointer(&self) -> Rect {
-        self.call(platform::default_work_area(), |_| {
+        self.call(platform::default_work_area(), |cx| {
             #[cfg(target_os = "macos")]
             {
+                let _ = cx;
                 platform::work_area_under_pointer().unwrap_or_else(platform::default_work_area)
             }
+            // GPUI doesn't say where the pointer is outside a window: the
+            // primary display's work area.
             #[cfg(not(target_os = "macos"))]
             {
-                platform::default_work_area()
+                cx.primary_display()
+                    .map_or_else(platform::default_work_area, |display| {
+                        let area = display.visible_bounds();
+                        Rect {
+                            x: f64::from(f32::from(area.origin.x)),
+                            y: f64::from(f32::from(area.origin.y)),
+                            w: f64::from(f32::from(area.size.width)),
+                            h: f64::from(f32::from(area.size.height)),
+                        }
+                    })
             }
         })
     }
@@ -194,6 +206,8 @@ pub struct PanelSlot {
     bounds: Rect,
     /// Whether it's up, as capture last showed or hid it.
     visible: bool,
+    /// Whether capture has made it at all this run (CAP-175).
+    made: bool,
 }
 
 impl Global for PanelSlot {}
@@ -208,7 +222,15 @@ impl PanelSlot {
             native: None,
             bounds: default_bounds(),
             visible: false,
+            made: false,
         }
+    }
+
+    /// CAP-174, CAP-175: once capture has made the panel, 0.9.4 counts it
+    /// among the app's windows for good: off a Mac, closing the board window
+    /// then leaves Nodus running. (Elsewhere the panel closes as it hides.)
+    pub fn made(cx: &App) -> bool {
+        cx.try_global::<Self>().is_some_and(|slot| slot.made)
     }
 
     /// Whether capture has it up (resting with the receipt included).
@@ -284,6 +306,7 @@ impl PanelSlot {
         slot.handle = Some(handle);
         slot.view = view;
         slot.visible = false;
+        slot.made = true;
         #[cfg(target_os = "macos")]
         {
             slot.native = native;

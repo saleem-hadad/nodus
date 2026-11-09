@@ -7,7 +7,7 @@
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use gpui::component::input::{InputEvent, TextareaState};
@@ -15,18 +15,19 @@ use gpui::{
     App, AppContext as _, Bounds, Context, Entity, EntityInputHandler as _, Focusable as _, KeystrokeEvent, Pixels,
     RenderImage, Subscription, Task, Window,
 };
-use nodus_core::Nodus;
 use nodus_core::capture_service::Screenshot;
 use nodus_core::capture_service::page::{
     self, GuessState, POLL_MS, RECEIPT_MS, Route, cycle_kind, history_down, history_up, offer_key, pick_kind,
     pick_project, pick_session, remember_sent, route, with_tab,
 };
+use nodus_core::{Nodus, VoiceController};
 use nodus_domain::js;
 use nodus_domain::{
     CaptureAttachment, CaptureContext, CaptureContextPatch, CaptureGuess, CaptureKind, CaptureReceipt, CaptureSession,
     CaptureShortcut, CaptureSubmission, CaptureTargets, ClipboardOffer, Event, OpenCardRequest,
 };
-use tokio::sync::watch;
+use nodus_voice::controller::{EscTarget, Phase, VoiceSlot, VoiceState};
+use tokio::sync::{mpsc, watch};
 
 use super::bridge::PanelSlot;
 use super::stubs::Stubs;
@@ -86,6 +87,13 @@ pub struct CapturePanel {
     pub(super) receipt_epoch: u64,
     /// Thumbnails, decoded once.
     thumbs: HashMap<String, Option<Arc<RenderImage>>>,
+    /// CAP-103: the mic (05's voice hook), the panel window's only one.
+    pub(super) voice: Arc<VoiceController>,
+    pub(super) voice_state: VoiceState,
+    /// The project a transcript is hinted with: the route's, or none (`''`).
+    voice_project: Arc<Mutex<Option<String>>>,
+    _voice: Task<()>,
+    _said: Task<()>,
     _poll: Task<()>,
     _events: Task<()>,
     _subscriptions: Vec<Subscription>,
@@ -95,6 +103,12 @@ impl CapturePanel {
     /// CAP-081, CAP-082: subscribes to the panel coming up and to what
     /// arrives after, then asks whether it's already up.
     pub fn new(nodus: Nodus, window: &mut Window, cx: &mut Context<'_, Self>) -> Self {
+        // CAP-082, CAP-157: the draft, its attachments, what was sent and
+        // the clipboard already offered, as the page last left them.
+        let text: String = stored(&nodus, DRAFT).unwrap_or_default();
+        let attachments: Vec<CaptureAttachment> = stored(&nodus, ATTACHMENTS).unwrap_or_default();
+        let history: Vec<String> = stored(&nodus, HISTORY).unwrap_or_default();
+        let offer_done: Option<String> = stored(&nodus, CLIPBOARD_DONE);
         let field = cx.new(|cx| {
             TextareaState::new(window, cx)
                 // CAP-089, CAP-090: 3 rows, growing to 8, then scrolling.
@@ -102,6 +116,11 @@ impl CapturePanel {
                 .placeholder("Ask Claude to do something, or jot a note")
                 .context_menu(false)
         });
+        if !text.is_empty() {
+            let value = text.clone();
+            field.update(cx, |s, cx| s.set_value(value, window, cx));
+        }
+        let (voice, voice_project, voice_task, said_task) = mic(&nodus, window, cx);
         let mut rx = nodus.subscribe();
         let events = cx.spawn_in(window, async move |this, cx| {
             loop {
@@ -129,7 +148,7 @@ impl CapturePanel {
             loop {
                 cx.background_executor().timer(Duration::from_millis(POLL_MS)).await;
                 let visible = cx.update(|cx| cx.try_global::<PanelSlot>().is_some_and(PanelSlot::is_up));
-                if visible && this.update(cx, |p, cx| p.refresh(cx)).is_err() {
+                if visible && this.update(cx, Self::refresh).is_err() {
                     break;
                 }
             }
@@ -170,7 +189,7 @@ impl CapturePanel {
                 })
             },
         ];
-        let panel = Self {
+        let mut panel = Self {
             nodus: nodus.clone(),
             targets: None,
             context: CaptureContext {
@@ -180,8 +199,8 @@ impl CapturePanel {
                 shortcut: CaptureShortcut::Ready,
             },
             field,
-            text: String::new(),
-            attachments: Vec::new(),
+            text,
+            attachments,
             guess: GuessState::default(),
             pending: None,
             guess_timer: None,
@@ -192,8 +211,8 @@ impl CapturePanel {
             shot_blocked: false,
             receipt: None,
             receipt_timer: None,
-            offer_done: None,
-            history: Vec::new(),
+            offer_done,
+            history,
             history_at: -1,
             placeholder: "Ask Claude to do something, or jot a note",
             setting_text: false,
@@ -206,10 +225,17 @@ impl CapturePanel {
             menu_epoch: 0,
             receipt_epoch: 0,
             thumbs: HashMap::new(),
+            voice_state: voice.state(),
+            voice,
+            voice_project,
+            _voice: voice_task,
+            _said: said_task,
             _poll: poll,
             _events: events,
             _subscriptions: subscriptions,
         };
+        // A draft restored asks Claude once the page is up, as typing it would.
+        panel.reschedule_guess(cx);
         // The panel came up while this page was being made.
         cx.spawn_in(window, async move |this, cx| {
             if let Some(context) = nodus.capture().ready().await {
@@ -309,6 +335,7 @@ impl CapturePanel {
                 let attachments = with_tab(&self.attachments, &tab);
                 if attachments != self.attachments {
                     self.attachments = attachments;
+                    self.save_attachments();
                     self.reschedule_guess(cx);
                 }
             }
@@ -364,6 +391,7 @@ impl CapturePanel {
             return;
         }
         self.text = value;
+        self.save_draft();
         self.history_at = -1;
         self.error = None;
         self.reschedule_guess(cx);
@@ -378,6 +406,7 @@ impl CapturePanel {
         self.field.update(cx, |s, cx| s.set_value(value, window, cx));
         self.setting_text = false;
         self.text = text;
+        self.save_draft();
         self.reschedule_guess(cx);
         self.note_recents();
         cx.notify();
@@ -436,6 +465,12 @@ impl CapturePanel {
     /// the menu or the panel, ↑/↓ go through what was sent; nothing while an
     /// input method is composing.
     fn on_key(&mut self, event: &KeystrokeEvent, window: &mut Window, cx: &mut Context<'_, Self>) {
+        // CAP-104: Esc while the mic is busy cancels it, and goes no further.
+        // The field is the panel's own, so its Esc counts too.
+        if event.keystroke.key == "escape" && self.voice.on_escape(EscTarget::OwnField) {
+            cx.stop_propagation();
+            return;
+        }
         if self.receipt.is_some() || !self.field.read(cx).focus_handle(cx).is_focused(window) {
             return;
         }
@@ -553,6 +588,7 @@ impl CapturePanel {
     fn attach(&mut self, more: Vec<CaptureAttachment>, window: &mut Window, cx: &mut Context<'_, Self>) {
         if !more.is_empty() {
             self.attachments.extend(more);
+            self.save_attachments();
             self.reschedule_guess(cx);
         }
         self.focus_field(window, cx);
@@ -563,6 +599,7 @@ impl CapturePanel {
     pub(super) fn detach(&mut self, index: usize, window: &mut Window, cx: &mut Context<'_, Self>) {
         if index < self.attachments.len() {
             self.attachments.remove(index);
+            self.save_attachments();
             self.reschedule_guess(cx);
         }
         self.focus_field(window, cx);
@@ -580,7 +617,7 @@ impl CapturePanel {
                 None => nodus.capture().clipboard().await,
             };
             let _ = this.update_in(cx, |p, window, cx| {
-                p.offer_done = Some(offer_key(&offer));
+                p.mark_offer_done(offer_key(&offer));
                 p.attach(taken.into_iter().collect(), window, cx);
             });
         })
@@ -743,11 +780,13 @@ impl CapturePanel {
     /// receipt up for 2.6 s (CAP-147).
     fn sent(&mut self, receipt: CaptureReceipt, text: String, window: &mut Window, cx: &mut Context<'_, Self>) {
         self.history = remember_sent(&self.history, &text);
+        store(&self.nodus, HISTORY, Some(&self.history));
         // What was on the clipboard was seen, taken or not.
-        if let Some(clipboard) = &self.context.clipboard {
-            self.offer_done = Some(offer_key(clipboard));
+        if let Some(key) = self.context.clipboard.as_ref().map(offer_key) {
+            self.mark_offer_done(key);
         }
         self.attachments.clear();
+        self.save_attachments();
         self.choice = None;
         self.history_at = -1;
         self.receipt = Some(Shown { receipt, text });
@@ -785,6 +824,68 @@ impl CapturePanel {
             .detach();
     }
 
+    // ---- the mic (CAP-103) ----------------------------------------------------------
+
+    /// What the mic hints a transcript with: the route's project.
+    pub(super) fn sync_voice_project(&self) {
+        let project = self.route().project_id;
+        *self.voice_project.lock().unwrap_or_else(PoisonError::into_inner) = project;
+    }
+
+    /// The mic's button: stops and transcribes while recording, else listens.
+    pub(super) fn press_mic(&mut self, cx: &mut Context<'_, Self>) {
+        let voice = Arc::clone(&self.voice);
+        let recording = self.voice_state.phase == Phase::Recording;
+        let work = self.nodus.voice().run(async move {
+            if recording {
+                voice.stop().await;
+            } else {
+                voice.record().await;
+            }
+        });
+        cx.spawn(async move |_, _| work.await).detach();
+    }
+
+    /// The voice notice's Retry: the same recording again.
+    pub(super) fn retry_voice(&mut self, cx: &mut Context<'_, Self>) {
+        let voice = Arc::clone(&self.voice);
+        let work = self.nodus.voice().run(async move { voice.retry().await });
+        cx.spawn(async move |_, _| work.await).detach();
+    }
+
+    /// What was said, after what's typed (`page::append_transcript`), and
+    /// the keyboard back in the field.
+    fn on_said(&mut self, said: &str, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let text = page::append_transcript(&self.text, said);
+        self.history_at = -1;
+        self.error = None;
+        self.set_text(text, window, cx);
+        self.focus_field_at_end(window, cx);
+        self.focus_field(window, cx);
+    }
+
+    // ---- what outlives the panel (CAP-157) -------------------------------------------
+
+    /// The draft, removed when empty.
+    fn save_draft(&self) {
+        store(&self.nodus, DRAFT, Some(&self.text).filter(|t| !t.is_empty()));
+    }
+
+    /// The draft's attachments, thumbnails included (CAP-172), removed when none.
+    fn save_attachments(&self) {
+        store(
+            &self.nodus,
+            ATTACHMENTS,
+            Some(&self.attachments).filter(|a| !a.is_empty()),
+        );
+    }
+
+    /// CAP-098, CAP-167: this clipboard isn't offered again, after a restart either.
+    fn mark_offer_done(&mut self, key: String) {
+        store(&self.nodus, CLIPBOARD_DONE, Some(&key));
+        self.offer_done = Some(key);
+    }
+
     /// Whether the banner under the card shows (CAP-117).
     pub(super) fn banner(&self) -> Option<CaptureShortcut> {
         let shortcut = self.context.shortcut;
@@ -795,6 +896,79 @@ impl CapturePanel {
             ))
         .then_some(shortcut)
     }
+}
+
+/// The mic, the project it hints with, and the tasks bringing back what it
+/// shows and what was said.
+type Mic = (Arc<VoiceController>, Arc<Mutex<Option<String>>>, Task<()>, Task<()>);
+
+/// The panel's mic (CAP-103): 05's voice hook on the core's voice commands,
+/// its own slot (the panel is a window of its own), a transcript hinted with
+/// the route's project, and a missing key opening Settings in the board
+/// window (`capture:settings`, CAP-159). What it shows and what was said
+/// come back to the page.
+fn mic(nodus: &Nodus, window: &mut Window, cx: &mut Context<'_, CapturePanel>) -> Mic {
+    let project = Arc::new(Mutex::new(None::<String>));
+    let hint = Arc::clone(&project);
+    let settings = nodus.clone();
+    let backend = nodus.voice().backend(
+        Arc::new(move || hint.lock().unwrap_or_else(PoisonError::into_inner).clone()),
+        Arc::new(move || {
+            let nodus = settings.clone();
+            drop(tokio::spawn(async move { nodus.capture().open_settings().await }));
+        }),
+    );
+    let (said_tx, mut said_rx) = mpsc::unbounded_channel::<String>();
+    let voice = Arc::new(VoiceController::new(backend, VoiceSlot::default(), move |said| {
+        let _ = said_tx.send(said);
+    }));
+    let mut states = voice.subscribe();
+    let shows = cx.spawn(async move |this, cx| {
+        while states.changed().await.is_ok() {
+            let state = states.borrow_and_update().clone();
+            if this
+                .update(cx, |p, cx| {
+                    p.voice_state = state;
+                    cx.notify();
+                })
+                .is_err()
+            {
+                return;
+            }
+        }
+    });
+    let said = cx.spawn_in(window, async move |this, cx| {
+        while let Some(said) = said_rx.recv().await {
+            if this
+                .update_in(cx, |p, window, cx| p.on_said(&said, window, cx))
+                .is_err()
+            {
+                return;
+            }
+        }
+    });
+    (voice, project, shows, said)
+}
+
+/// The page's `localStorage` keys (CAP-157).
+const DRAFT: &str = "capture.draft";
+const ATTACHMENTS: &str = "capture.attachments";
+const HISTORY: &str = "capture.history";
+const CLIPBOARD_DONE: &str = "capture.clipboardDone";
+
+/// `store.get(key, fallback)`: the value saved under `key`, none when it's
+/// missing or unreadable.
+fn stored<T: serde::de::DeserializeOwned>(nodus: &Nodus, key: &str) -> Option<T> {
+    nodus
+        .local_storage()
+        .get(key)
+        .and_then(|text| nodus_domain::json::from_str(&text).ok())
+}
+
+/// `store.set(key, value)`: none removes it.
+fn store<T: serde::Serialize + ?Sized>(nodus: &Nodus, key: &str, value: Option<&T>) {
+    let text = value.and_then(|v| nodus_domain::json::to_string(v).ok());
+    nodus.local_storage().set(key, text.as_deref());
 }
 
 /// Where the caret goes to be at the end of `text`: its last line and column

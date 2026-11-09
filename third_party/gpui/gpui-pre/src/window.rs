@@ -4980,6 +4980,19 @@ impl Window {
         corner_radii: Corners<Pixels>,
         shadows: &[BoxShadow],
     ) {
+        self.paint_drop_shadows_clipped(bounds, corner_radii, shadows, false);
+    }
+
+    /// Nodus patch: [`Self::paint_drop_shadows`], drawn only outside the
+    /// rounded `bounds` when `outside` is set, as CSS clips an outer
+    /// `box-shadow` to outside the border box.
+    pub fn paint_drop_shadows_clipped(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        corner_radii: Corners<Pixels>,
+        shadows: &[BoxShadow],
+        outside: bool,
+    ) {
         self.invalidator.debug_assert_paint();
 
         let scale_factor = self.scale_factor();
@@ -5001,7 +5014,7 @@ impl Window {
                 color: shadow.color.opacity(opacity),
                 element_bounds,
                 element_corner_radii,
-                inset: 0,
+                inset: if outside { 2 } else { 0 },
                 pad: 0,
             });
         }

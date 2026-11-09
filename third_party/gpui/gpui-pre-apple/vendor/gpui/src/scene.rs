@@ -710,7 +710,8 @@ pub struct Shadow {
     pub color: Hsla,
     pub element_bounds: Bounds<ScaledPixels>,
     pub element_corner_radii: Corners<ScaledPixels>,
-    /// 0 = drop shadow (rendered outside the element), 1 = inset shadow (rendered inside).
+    /// 0 = drop shadow (rendered outside the element), 1 = inset shadow (rendered inside),
+    /// 2 = drop shadow clipped to outside the element's rounded box, as CSS does (Nodus patch).
     pub inset: u32,
     pub pad: u32, // align to 8 bytes
 }

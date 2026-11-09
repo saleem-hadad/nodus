@@ -12,7 +12,7 @@
 | 2. Spellcheck underline in text fields | ☐ |
 | 3. Search highlights: rounded marks, the title's underline offset | ✅ PATCHES 13; SRCH-019, SRCH-020 as 0.9.4 draws them; also the transcript preview's marks and the diff's words |
 | 4. Tooltips as Chromium showed them | ☐ |
-| 5. Shadows drawn only outside a see-through box | ☐ |
+| 5. Shadows drawn only outside a see-through box | ✅ PATCHES 13: `shadow_outside()`; every frosted surface, the archive panel, the "N more" pill, the terminal's loading pill, the note's play button |
 
 ## Done (behavior IDs)
 
@@ -27,6 +27,9 @@ Spec 11's scenes through the real app (`crates/nodus-ui/parity/scenes11.py`, Nod
 | Scene | Region | Light | Dark |
 | --- | --- | --- | --- |
 | search-results | the modal (760,200 1360×580) | 0.77% | 1.15% |
+| capture-recents | the "N more" pill (250,690 800×80) | 0.00% | 0.00% |
+| board-archive-open | the whole frame / the open panel (60,240 1680×960) | 0.41% / 0.81% (text only) | 0.40% / 0.78% |
+| bar-focused | the prompt bar (400,1580 2080×220) | 0.02% | 0.02% |
 
 The highlights match the golden row for row (mark 375–402, underline 364–365 at x 1150–1250). What's left in the modal is text: the monospace snippet line and the footer's key hints sit a little off (not this track's).
 

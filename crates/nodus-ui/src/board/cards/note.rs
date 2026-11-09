@@ -368,6 +368,8 @@ fn play(
             }])
             .gpui(z),
         )
+        // `.note-play`'s ink is see-through: its shadow only outside it.
+        .shadow_outside()
         .opacity(opacity)
         .when(scale != 1.0, |d| d.scale(scale))
         .cursor(CursorStyle::Arrow)

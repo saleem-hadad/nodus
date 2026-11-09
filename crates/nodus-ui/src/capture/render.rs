@@ -919,6 +919,8 @@ impl CapturePanel {
                 .rounded_full()
                 .bg(style::elevated_at(&t, 0.86))
                 .shadow(t.sm())
+                // See-through: its shadow only outside it, as CSS draws it.
+                .shadow_outside()
                 .text_size(px(12.))
                 .text_color(t.text_secondary)
                 .child(style::spans(

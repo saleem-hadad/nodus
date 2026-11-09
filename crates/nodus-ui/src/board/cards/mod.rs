@@ -284,55 +284,25 @@ pub fn mix(a: Rgba, p: f32, b: Rgba) -> Rgba {
 /// A `box-shadow` as CSS draws it, outside the border box only, for a box
 /// `w`×`h` (flow units) with corners `radius` round. GPUI fills a shadow in
 /// under the whole box, which shows through a translucent one (the open
-/// archive panel, ARCH-004), so this draws it in slices around the box, to
-/// sit under it: four clipped bands outside, and the corner squares, whose
-/// part inside the box only reaches the panel through its backdrop blur.
+/// archive panel, ARCH-004), so this one is drawn with the patched GPUI's
+/// `shadow_outside` (PATCHES 13), to sit under the box.
 pub fn outer_shadow(shadow: &Shadow, w: f32, h: f32, radius: f32, z: Z) -> Option<AnyElement> {
-    use gpui::{ParentElement as _, Styled as _};
+    use gpui::Styled as _;
     let layers = shadow.soft(z);
     if layers.is_empty() {
         return None;
     }
-    let reach = shadow
-        .0
-        .iter()
-        .filter(|l| l.color.a > 0.0)
-        .map(|l| l.x.abs().max(l.y.abs()) + 1.5 * l.blur + l.spread.max(0.0) + 2.0)
-        .fold(0.0, f32::max);
-    let r = radius;
-    let slices = [
-        (-reach, -reach, w + 2.0 * reach, reach),
-        (-reach, h, w + 2.0 * reach, reach),
-        (-reach, 0.0, reach, h),
-        (w, 0.0, reach, h),
-        (0.0, 0.0, r, r),
-        (w - r, 0.0, r, r),
-        (0.0, h - r, r, r),
-        (w - r, h - r, r, r),
-    ];
-    let mut out = gpui::div().absolute().left_0().top_0().size_0();
-    for (x, y, sw, sh) in slices {
-        out = out.child(
-            gpui::div()
-                .absolute()
-                .left(z.px(x))
-                .top(z.px(y))
-                .w(z.px(sw))
-                .h(z.px(sh))
-                .overflow_hidden()
-                .child(
-                    gpui::div()
-                        .absolute()
-                        .left(z.px(-x))
-                        .top(z.px(-y))
-                        .w(z.px(w))
-                        .h(z.px(h))
-                        .rounded(z.px(radius))
-                        .shadow(layers.clone()),
-                ),
-        );
-    }
-    Some(gpui::IntoElement::into_any_element(out))
+    Some(gpui::IntoElement::into_any_element(
+        gpui::div()
+            .absolute()
+            .left_0()
+            .top_0()
+            .w(z.px(w))
+            .h(z.px(h))
+            .rounded(z.px(radius))
+            .shadow(layers)
+            .shadow_outside(),
+    ))
 }
 
 pub fn hsla(c: Rgba) -> Hsla {

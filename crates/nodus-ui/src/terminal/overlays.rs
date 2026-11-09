@@ -62,6 +62,8 @@ pub fn loading_pill(id: impl Into<ElementId>, label: &str, window: &mut Window, 
                 .rounded(px(999.))
                 .bg(white(0.07))
                 .shadow(vec![ring(0.5, white(0.1))])
+                // See-through: the ring only outside it, as CSS draws it.
+                .shadow_outside()
                 .text_color(white(0.72))
                 .text_size(TEXT_SM)
                 .opacity(opacity)

@@ -157,6 +157,12 @@ GPUI filled a text run's background over the whole line height with square corne
 
 Checked on `search-results` against 0.9.4's golden, both themes: the snippet's mark covers the same 28 device rows (375–402) with the same rounded ends, and the title's underline the same two rows (364–365; the golden's underline is one CSS pixel thick, though `search.css` asks for 2px).
 
+### 13. Shadows drawn only outside their box (Nodus, track gpui-polish)
+
+CSS clips an outer `box-shadow` to outside the element's border box; GPUI drew the whole blurred rectangle under the element, so a see-through box (0.9.4's frosted menus, rail, prompt bar pill, toasts, selection bar, ink dock, the open archive panel, the capture panel's "N more" pill, a terminal's loading pill) showed its own shadow through its fill, and a backdrop blur blurred it into the panel. `Styled::shadow_outside()` (`Style::box_shadow_outside`) asks for CSS's behaviour: `Window::paint_drop_shadows_clipped(…, outside: true)` marks the `Shadow` primitives `inset: 2`, and the shadow fragment shader (Metal, HLSL, WGSL) multiplies the shadow's coverage by one minus the element's rounded-box coverage (`saturate(0.5 + sdf)`), with the same one-pixel anti-aliased edge as the box. `paint_drop_shadows` keeps its signature (unclipped) for other callers. Opt-in, because a Rust element may carry a shadow for a box drawn by a child with other corners; nodus-ui's `frosted()` sets it for every frosted surface. board-cards' sliced `outer_shadow` (the open archive panel) is now one element with it.
+
+Checked against the goldens: `board-archive-open` (0.41% / 0.40% of the frame; the panel's edges and shadow show no differing pixels, what's left is card text), `capture-recents` (the "N more" pill: 0 pixels differ, both themes), `bar-focused` (the frosted pill: 0.02%).
+
 ## Verification
 
 - `crates/nodus-ui/examples/effects.rs` (see `migration/tracks/gpui-fork.md`): frosted panels at blur 30/saturate 1.8 and 20/1.6 over moving cards, a note rotated 3–7° with CoreText-rendered text, a 3° sticker, the pad's sheet turning about its top edge, `group_opacity` beside `.opacity`, hit testing through the rotation (synthetic mouse moves; the window never takes focus), and a capture written to PNG. `EFFECTS_STRICT=1` exits 1 if a check fails; CI runs it on macOS and Windows.

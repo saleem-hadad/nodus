@@ -173,6 +173,13 @@ pub trait Styled: Sized {
         self
     }
 
+    /// Nodus patch: draw this box's outer shadows only outside its rounded
+    /// border box, as CSS does, so a see-through fill doesn't show them.
+    fn shadow_outside(mut self) -> Self {
+        self.style().box_shadow_outside = Some(true);
+        self
+    }
+
     /// Nodus patch: underlines `offset` below the baseline (their top edge),
     /// as CSS `text-underline-offset`.
     fn underline_offset(mut self, offset: Pixels) -> Self {

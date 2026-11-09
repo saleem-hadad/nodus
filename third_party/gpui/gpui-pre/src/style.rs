@@ -291,6 +291,11 @@ pub struct Style {
     /// Box shadow of the element
     pub box_shadow: Vec<BoxShadow>,
 
+    /// Nodus patch: draw the outer shadows only outside the element's
+    /// rounded border box, as CSS always does, so a see-through box doesn't
+    /// show its own shadow through its fill (or blur it into its backdrop).
+    pub box_shadow_outside: bool,
+
     /// A second fill painted over `background`, the way CSS paints
     /// `background-image` over `background-color`.
     pub background_image: Option<Background>,
@@ -875,7 +880,12 @@ impl Style {
         continuation: impl FnOnce(&mut Window, &mut App),
     ) {
         let rem_size = window.rem_size();
-        window.paint_drop_shadows(bounds, corner_radii, &self.box_shadow);
+        window.paint_drop_shadows_clipped(
+            bounds,
+            corner_radii,
+            &self.box_shadow,
+            self.box_shadow_outside,
+        );
 
         let background_color = self.background.as_ref().and_then(Fill::color);
         if background_color.is_some_and(|color| !color.is_transparent()) {
@@ -999,6 +1009,7 @@ impl Default for Style {
             border_style: BorderStyle::default(),
             corner_radii: Corners::default(),
             box_shadow: Default::default(),
+            box_shadow_outside: false,
             background_image: None,
             background_blend_mode: BlendMode::Normal,
             effects: LayerEffects::default(),

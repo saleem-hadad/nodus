@@ -112,6 +112,23 @@ SCENES = {
         {"noCaptures": True},
         lambda ids: show() + [context({"shortcut": "needs-permission"}), wait(300)],
     ),
+    # Settings' Floating capture rows (spec 08 UI-131…UI-135), shot in the
+    # board window: Accessibility not allowed yet, then allowed.
+    "settings": ({"capture": True}, lambda ids: [{"cmd": "menu", "command": "settings"}, wait(400)]),
+    "settings-ready": (
+        {"capture": True},
+        lambda ids: [
+            stub("trusted", True),
+            # Capture looks again every 3 s while it isn't allowed (CAP-037).
+            wait(3500),
+            {"cmd": "emit", "event": "updateStatus",
+             "payload": {"state": "downloading", "version": "0.9.5", "percent": 42, "current": "0.9.4"}},
+            {"cmd": "menu", "command": "settings"},
+            wait(400),
+            {"cmd": "scroll", "x": 720, "y": 500, "dx": 0, "dy": -3000},
+            wait(300),
+        ],
+    ),
     "capture-screen-permission": (
         {"noCaptures": True},
         lambda ids: [stub("screenshot", "needs-permission")] + show() + [press("screenshot"), wait(300),
@@ -165,7 +182,8 @@ def run(scene, theme, opts):
         if not scene.startswith("capture-receipt"):
             drive(f, {"cmd": "idle"})
         out = os.path.join(opts["golden"], f"{scene}.{theme}.rust.png")
-        drive(f, {"cmd": "screenshot", "path": out, **P})
+        where = {} if scene.startswith("settings") else P
+        drive(f, {"cmd": "screenshot", "path": out, **where})
         print("shot", out)
         try:
             f.write(json.dumps({"cmd": "quit"}) + "\n")

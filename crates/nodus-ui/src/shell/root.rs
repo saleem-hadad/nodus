@@ -207,7 +207,7 @@ impl Render for Shell {
                     std::rc::Rc::new(move |action: &nodus_domain::ProjectAction, cx: &mut gpui::App| {
                         let (id, name) = (action.id.clone(), action.name.clone());
                         board.update(cx, |c, cx| c.run_action(id, name, cx));
-                    }) as std::rc::Rc<dyn Fn(&nodus_domain::ProjectAction, &mut gpui::App)>
+                    }) as crate::actions::RunHook
                 }),
             };
             crate::actions::action_rail(&self.state, &self.menus, hooks, window, cx)

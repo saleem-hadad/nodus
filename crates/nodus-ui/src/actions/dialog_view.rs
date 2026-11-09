@@ -347,7 +347,7 @@ impl ActionDialogView {
                 .ghost()
                 .label(b.label)
                 .disabled(!b.enabled)
-                .on_click(move |_, _, cx| view.update(cx, |v, cx| v.back(cx)))
+                .on_click(move |_, _, cx| view.update(cx, ActionDialogView::back))
         });
         let cancel = {
             let view = cx.entity();

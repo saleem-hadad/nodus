@@ -56,8 +56,11 @@ pub struct RailHooks {
     /// session card would take, kept for the run in case it's taken over,
     /// puts its card in the store and toasts `Couldn't run …` when it fails.
     /// Without it, the rail starts it at the board's origin itself.
-    pub run: Option<Rc<dyn Fn(&ProjectAction, &mut App)>>,
+    pub run: Option<RunHook>,
 }
+
+/// Starts a run of an action (the board canvas's `run_action`).
+pub type RunHook = Rc<dyn Fn(&ProjectAction, &mut App)>;
 
 /// ACT-053: whether the rail's dialog, context menu or delete confirmation
 /// is up (the board holds its shortcuts and menu commands meanwhile).
@@ -208,8 +211,8 @@ impl ActionRail {
     }
 
     /// `openTerminal`.
-    fn open_terminal(&mut self, session_id: String, cx: &mut Context<'_, Self>) {
-        self.state.update(cx, |s, cx| s.open_terminal(&session_id, cx));
+    fn open_terminal(&mut self, session_id: &str, cx: &mut Context<'_, Self>) {
+        self.state.update(cx, |s, cx| s.open_terminal(session_id, cx));
     }
 
     /// ACT-056: a run going opens it; otherwise a press starts one.
@@ -217,7 +220,7 @@ impl ActionRail {
         match logic::press(&self.cards(cx), action) {
             Press::ShowRun { session_id } => {
                 self.close(cx);
-                self.open_terminal(session_id, cx);
+                self.open_terminal(&session_id, cx);
             }
             Press::Run => self.run(action.clone(), cx),
         }
@@ -261,7 +264,7 @@ impl ActionRail {
                 state,
                 project,
                 action,
-                Rc::new(move |_, cx| rail.update(cx, |r, cx| r.close_dialog(cx))),
+                Rc::new(move |_, cx| rail.update(cx, ActionRail::close_dialog)),
                 window,
                 cx,
             )
@@ -857,7 +860,7 @@ impl ActionRail {
             self.fan_height.set(None);
         }
         let height = self.fan_height.get();
-        let anchor_top = self.buttons.borrow().get(&anchor_id).map(|b| b.top());
+        let anchor_top = self.buttons.borrow().get(&anchor_id).map(Bounds::top);
         let top = match (height, anchor_top) {
             (Some(h), Some(anchor)) => {
                 Some(px(
@@ -988,7 +991,7 @@ impl ActionRail {
                 let session = session.clone();
                 rail.update(cx, |r, cx| {
                     r.close(cx);
-                    r.open_terminal(session, cx);
+                    r.open_terminal(&session, cx);
                 });
             })
             .child(

@@ -609,6 +609,139 @@ impl IntoElement for StyledText {
     }
 }
 
+/// Nodus patch: CSS's ellipsis as Chromium places it, for
+/// `text-overflow: ellipsis` on one line (`clamp` none) and for
+/// `-webkit-line-clamp` (`clamp` is the number of lines and how they wrap).
+/// The text is laid out as usual; when it overflows (on one line) or runs
+/// past the last line shown, that line keeps what fits before the ellipsis.
+/// For a clamp, the line first loses the spaces at its end and the ellipsis
+/// follows its last word when there is room; otherwise characters go from
+/// its end, mid-word, until there is. Nothing else is trimmed (GPUI used to
+/// drop punctuation before the ellipsis). Returns the text to lay out
+/// instead, with its runs, or none when it fits.
+fn chromium_ellipsis(
+    text: &SharedString,
+    runs: &[TextRun],
+    font_size: Pixels,
+    width: Pixels,
+    clamp: Option<(usize, crate::WrapStyle)>,
+    affix: &SharedString,
+    window: &mut Window,
+) -> Option<(SharedString, Vec<TextRun>)> {
+    use unicode_segmentation::UnicodeSegmentation as _;
+
+    let text_system = window.text_system().clone();
+    let (wrap_width, wrap_style, max_lines) = match clamp {
+        Some((max_lines, wrap_style)) => (Some(width), wrap_style, max_lines.max(1)),
+        None => (None, crate::WrapStyle::default(), 1),
+    };
+    let lines = text_system
+        .shape_text_wrapped(text.clone(), font_size, runs, wrap_width, None, wrap_style)
+        .log_err()?;
+
+    // The last line shown, and whether anything is hidden after it.
+    let mut rows_before = 0;
+    let mut line_start = 0;
+    let mut found = None;
+    for (ix, line) in lines.iter().enumerate() {
+        let rows = line.wrap_boundaries().len() + 1;
+        if rows_before + rows >= max_lines {
+            let row = max_lines - rows_before - 1;
+            let hidden_after = rows_before + rows > max_lines || ix + 1 < lines.len();
+            found = Some((line, row, hidden_after));
+            break;
+        }
+        rows_before += rows;
+        line_start += line.len() + 1;
+    }
+    let (line, row, hidden_after) = found?;
+    let layout = &line.unwrapped_layout;
+    let glyph_at = |boundary: &crate::WrapBoundary| {
+        let glyph = &layout.runs[boundary.run_ix].glyphs[boundary.glyph_ix];
+        (glyph.index, glyph.position.x)
+    };
+    let (row_start, row_start_x) = if row == 0 {
+        (0, Pixels::ZERO)
+    } else {
+        glyph_at(&line.wrap_boundaries()[row - 1])
+    };
+    let (row_end, row_end_x) = line
+        .wrap_boundaries()
+        .get(row)
+        .map_or((line.len(), layout.width), glyph_at);
+    let overflows = row_end_x - row_start_x > width;
+    if !hidden_after && !overflows {
+        return None;
+    }
+
+    // Where each grapheme of the row starts.
+    let line_text = &line.text;
+    let x_of = |index: usize| {
+        layout
+            .runs
+            .iter()
+            .flat_map(|run| run.glyphs.iter())
+            .find(|glyph| glyph.index >= index)
+            .map_or(layout.width, |glyph| glyph.position.x)
+    };
+    let mut content_end = row_end;
+    if clamp.is_some() {
+        content_end = row_start + line_text[row_start..row_end].trim_end_matches(' ').len();
+    }
+
+    // The ellipsis in the style of the text it follows.
+    let style_at = |index: usize| {
+        let mut start = 0;
+        for run in runs {
+            if index < start + run.len {
+                return run.clone();
+            }
+            start += run.len;
+        }
+        runs.last().cloned().unwrap_or_else(|| window.text_style().to_run(0))
+    };
+    let mut affix_run = style_at((line_start + content_end).saturating_sub(1));
+    affix_run.len = affix.len();
+    let affix_width = text_system
+        .shape_line(affix.clone(), font_size, &[affix_run], None)
+        .width;
+
+    let cut = if clamp.is_some() && x_of(content_end) - row_start_x + affix_width <= width {
+        content_end
+    } else {
+        line_text[row_start..content_end]
+            .grapheme_indices(true)
+            .map(|(offset, _)| row_start + offset)
+            .chain([content_end])
+            .take_while(|&index| x_of(index) - row_start_x + affix_width <= width)
+            .last()
+            .unwrap_or(row_start)
+    };
+
+    let cut = line_start + cut;
+    let result = SharedString::from(format!("{}{affix}", &text[..cut]));
+    let mut kept: Vec<TextRun> = Vec::with_capacity(runs.len());
+    let mut start = 0;
+    for run in runs {
+        if start >= cut {
+            break;
+        }
+        let mut kept_run = run.clone();
+        kept_run.len = run.len.min(cut - start);
+        kept.push(kept_run);
+        start += run.len;
+    }
+    match kept.last_mut() {
+        Some(run) => run.len += affix.len(),
+        None => {
+            let mut run = style_at(0);
+            run.len = affix.len();
+            kept.push(run);
+        }
+    }
+    Some((result, kept))
+}
+
 /// The Layout for TextElement. This can be used to map indices to pixels and vice versa.
 #[derive(Default, Clone)]
 pub struct TextLayout(
@@ -711,9 +844,30 @@ impl TextLayout {
                     return size;
                 }
 
+                let wrap_style = text_style.wrap_style();
                 let mut line_wrapper = cx.text_system().line_wrapper(text_style.font(), font_size);
                 let (text, runs) = if let Some(truncate_width) = truncate_width {
-                    if let Some(max_lines) = text_style.line_clamp
+                    if truncate_from == TruncateFrom::End {
+                        // Nodus patch: CSS's ellipsis, as Chromium places it.
+                        let (width, clamp) = match (text_style.line_clamp, wrap_width) {
+                            (Some(max_lines), Some(wrap_width)) => {
+                                (wrap_width, Some((max_lines, wrap_style)))
+                            }
+                            _ => (truncate_width, None),
+                        };
+                        match chromium_ellipsis(
+                            &text,
+                            &runs,
+                            font_size,
+                            width,
+                            clamp,
+                            &truncation_affix,
+                            window,
+                        ) {
+                            Some((text, runs)) => (text, Cow::Owned(runs)),
+                            None => (text.clone(), Cow::Borrowed(&*runs)),
+                        }
+                    } else if let Some(max_lines) = text_style.line_clamp
                         && let Some(wrap_width) = wrap_width
                     {
                         line_wrapper.truncate_wrapped_line(
@@ -755,12 +909,13 @@ impl TextLayout {
 
                 let Some(lines) = window
                     .text_system()
-                    .shape_text(
+                    .shape_text_wrapped(
                         text,
                         font_size,
                         &runs,
                         wrap_width,            // Wrap if we know the width.
                         text_style.line_clamp, // Limit the number of lines if line_clamp is set.
+                        wrap_style,
                     )
                     .log_err()
                 else {

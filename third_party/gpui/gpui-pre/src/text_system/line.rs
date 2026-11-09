@@ -188,6 +188,7 @@ impl ShapedLine {
         paint_line(
             origin,
             &self.layout,
+            &self.text,
             line_height,
             align,
             align_width,
@@ -212,6 +213,7 @@ impl ShapedLine {
         paint_line_background(
             origin,
             &self.layout,
+            &self.text,
             line_height,
             align,
             align_width,
@@ -441,6 +443,7 @@ impl LineLayout {
         paint_line(
             origin,
             self,
+            "",
             line_height,
             align,
             align_width,
@@ -470,6 +473,7 @@ impl LineLayout {
         paint_line_background(
             origin,
             self,
+            "",
             line_height,
             align,
             align_width,
@@ -517,6 +521,7 @@ impl WrappedLine {
         paint_line(
             origin,
             &self.layout.unwrapped_layout,
+            &self.text,
             line_height,
             align,
             align_width,
@@ -548,6 +553,7 @@ impl WrappedLine {
         paint_line_background(
             origin,
             &self.layout.unwrapped_layout,
+            &self.text,
             line_height,
             align,
             align_width,
@@ -564,6 +570,7 @@ impl WrappedLine {
 fn paint_line(
     origin: Point<Pixels>,
     layout: &LineLayout,
+    text: &str,
     line_height: Pixels,
     align: TextAlign,
     align_width: Option<Pixels>,
@@ -582,6 +589,7 @@ fn paint_line(
     let line_bounds = line_paint_bounds(
         origin,
         layout,
+        text,
         line_height,
         align,
         align_width,
@@ -612,6 +620,7 @@ fn paint_line(
                 px(0.0),
                 &align,
                 layout,
+                text,
                 wraps.peek(),
             ),
             origin.y,
@@ -675,6 +684,7 @@ fn paint_line(
                         glyph.position.x,
                         &align,
                         layout,
+                        text,
                         wraps.peek(),
                     );
                     glyph_origin.y += line_height;
@@ -842,6 +852,7 @@ fn paint_line(
 fn paint_line_background(
     origin: Point<Pixels>,
     layout: &LineLayout,
+    text: &str,
     line_height: Pixels,
     align: TextAlign,
     align_width: Option<Pixels>,
@@ -853,6 +864,7 @@ fn paint_line_background(
     let line_bounds = line_paint_bounds(
         origin,
         layout,
+        text,
         line_height,
         align,
         align_width,
@@ -871,6 +883,7 @@ fn paint_line_background(
                 px(0.0),
                 &align,
                 layout,
+                text,
                 wraps.peek(),
             ),
             origin.y,
@@ -911,6 +924,7 @@ fn paint_line_background(
                         glyph.position.x,
                         &align,
                         layout,
+                        text,
                         wraps.peek(),
                     );
                     glyph_origin.y += line_height;
@@ -992,6 +1006,7 @@ fn paint_line_background(
 fn line_paint_bounds(
     origin: Point<Pixels>,
     layout: &LineLayout,
+    text: &str,
     line_height: Pixels,
     align: TextAlign,
     align_width: Option<Pixels>,
@@ -1010,16 +1025,9 @@ fn line_paint_bounds(
 
     let align_width = align_width.unwrap_or(layout.width);
     let mut row_start = Pixels::ZERO;
-    let row_ends = wrap_boundaries
-        .iter()
-        .map(|boundary| {
-            layout.runs[boundary.run_ix].glyphs[boundary.glyph_ix]
-                .position
-                .x
-        })
-        .chain([layout.width]);
-    for (row, row_end) in row_ends.enumerate() {
-        let width = row_end - row_start;
+    let row_ends = wrap_boundaries.iter().map(Some).chain([None]);
+    for (row, boundary) in row_ends.enumerate() {
+        let width = row_end_x(layout, text, boundary) - row_start;
         let offset = match align {
             TextAlign::Left => Pixels::ZERO,
             TextAlign::Center => (align_width - width) / 2.,
@@ -1029,9 +1037,50 @@ fn line_paint_bounds(
             point(origin.x + offset, origin.y + line_height * row as f32),
             size(width, line_height),
         ));
-        row_start = row_end;
+        row_start = boundary.map_or(layout.width, |boundary| {
+            layout.runs[boundary.run_ix].glyphs[boundary.glyph_ix]
+                .position
+                .x
+        });
     }
     bounds
+}
+
+/// Nodus patch: where a row's text ends for alignment: before the spaces at
+/// its end, which hang past the line (CSS `white-space: normal`) and don't
+/// count when it is centred or right-aligned. `boundary` is the glyph that
+/// starts the next row, or none for the last row; without the text (a bare
+/// layout) every glyph counts.
+fn row_end_x(layout: &LineLayout, text: &str, boundary: Option<&WrapBoundary>) -> Pixels {
+    let end = boundary.map_or(layout.width, |boundary| {
+        layout.runs[boundary.run_ix].glyphs[boundary.glyph_ix]
+            .position
+            .x
+    });
+    if text.is_empty() {
+        return end;
+    }
+    let before = boundary.map_or(usize::MAX, |boundary| {
+        layout.runs[..boundary.run_ix]
+            .iter()
+            .map(|run| run.glyphs.len())
+            .sum::<usize>()
+            + boundary.glyph_ix
+    });
+    let mut glyphs = layout
+        .runs
+        .iter()
+        .flat_map(|run| run.glyphs.iter())
+        .take(before)
+        .collect::<SmallVec<[_; 64]>>();
+    let mut end = end;
+    while let Some(glyph) = glyphs.pop() {
+        if text.as_bytes().get(glyph.index) != Some(&b' ') {
+            break;
+        }
+        end = glyph.position.x;
+    }
+    end
 }
 
 fn aligned_origin_x(
@@ -1040,13 +1089,10 @@ fn aligned_origin_x(
     last_glyph_x: Pixels,
     align: &TextAlign,
     layout: &LineLayout,
+    text: &str,
     wrap_boundary: Option<&&WrapBoundary>,
 ) -> Pixels {
-    let end_of_line = if let Some(WrapBoundary { run_ix, glyph_ix }) = wrap_boundary {
-        layout.runs[*run_ix].glyphs[*glyph_ix].position.x
-    } else {
-        layout.width
-    };
+    let end_of_line = row_end_x(layout, text, wrap_boundary.copied());
 
     let line_width = end_of_line - last_glyph_x;
 
@@ -1134,6 +1180,7 @@ mod tests {
                     line_paint_bounds(
                         origin,
                         &line.layout,
+                        "",
                         line_height,
                         align,
                         align_width.map(px),
@@ -1153,6 +1200,7 @@ mod tests {
                 line_paint_bounds(
                     origin,
                     &empty.layout,
+                    "",
                     line_height,
                     align,
                     Some(px(100.)),
@@ -1442,6 +1490,7 @@ mod tests {
                 paint_line(
                     origin,
                     &wrapped.unwrapped_layout,
+                    "",
                     line_height,
                     TextAlign::Left,
                     Some(px(16.)),

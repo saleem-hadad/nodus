@@ -11,7 +11,7 @@
 | --- | --- |
 | 1. sRGB-tagged layer inside GPUI (Metal; DirectX / wgpu checked) | ✅ PATCHES 6; nodus-ui's tagging removed |
 | 2. Widths at every size (the "tracking" gap) | ✅ PATCHES 7: the cause was weight 500 → Regular; tracking matches (CoreText's `trak` is what Chromium applies too) |
-| 3. Hanging trailing spaces; `overflow-wrap`, `word-break`, line clamp | ☐ |
+| 3. Hanging trailing spaces; `overflow-wrap`, `word-break`, line clamp | 🟡 WIP (committed): spaces hang, rows align without them, `OverflowWrap`/`WordBreak` text options, Chromium's ellipsis for `text-overflow` and `-webkit-line-clamp`. One-line ellipses and wrapped paragraphs now match Chromium's breaks; left: the clamp's centred last line sits ~2.4px left, min-content sizes, PATCHES entry |
 | 4. Chromium's baseline and glyph rounding | ✅ PATCHES 9: layout-unit line heights and widths, unrounded text origin, Blink's baseline, Skia's glyph rounding |
 | 5. Anti-aliasing and font smoothing | ✅ PATCHES 8: `-webkit-font-smoothing: antialiased` (no CoreGraphics thickening); grayscale AA as Chromium |
 | Scene diffs before / after | ☐ |

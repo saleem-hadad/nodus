@@ -29,14 +29,14 @@ y += 16.8 * 3 + 8
 add({ kind: 'wrap', x: 520, y, w: 160, size: 12, lh: 16.8, wordBreak: 'break-all', text: 'path ~/Code/a-very-long-repository-name-without-breaks/src end' })
 // 3. Line clamps with an ellipsis (folder names, 13px 500, centred, 2 lines; cards 4 lines).
 y = 10
-for (const [text, w] of [['quarterly-planning-and-roadmap-review-notes', 124], ['design system tokens and components library', 124], ['a b', 124], ['storefront checkout experiments archive 2026', 124]]) {
+for (const [text, w] of [['quarterly-planning-and-roadmap-review-notes', 124], ['design system tokens and components library', 124], ['a b', 124], ['storefront checkout experiments archive 2026', 124], ['averyveryverylongprojectnamewithoutanybreaks', 124], ['design system tokenizations compo', 124]]) {
   add({ kind: 'clamp', x: 860, y, w, size: 13, weight: 500, lh: 16.9, align: 'center', clamp: 2, overflowWrap: 'anywhere', text })
   y += 16.9 * 2 + 10
 }
 add({ kind: 'clamp', x: 860, y, w: 200, size: 12, lh: 16.8, clamp: 4, overflowWrap: 'anywhere', text: para + ' ' + para })
 y += 16.8 * 4 + 10
 // 4. One line with text-overflow: ellipsis.
-for (const w of [60, 75.5, 90, 120]) {
+for (const w of [60, 75.5, 78, 80, 90, 120]) {
   add({ kind: 'ellipsis', x: 860, y, w, size: 13, lh: 18.2, ellipsis: true, text: 'storefront, docs-site and mobile-app' })
   y += 22
 }

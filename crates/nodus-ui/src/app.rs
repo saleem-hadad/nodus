@@ -6,9 +6,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use gpui::App;
-use nodus_core::{Dialogs, Nodus, NodusConfig, PickFolder};
+use nodus_core::{Dialogs, Nodus, NodusConfig, Notifications, PickFolder};
 
 use crate::components::icon::Assets;
+use crate::shell::core_shell::{self, Flags, UiShell, WindowFlags};
 use crate::shell::{menus, window};
 use crate::theme;
 
@@ -43,8 +44,15 @@ pub fn run(user_data: PathBuf) -> anyhow::Result<()> {
         .thread_name("nodus-core")
         .build()?;
     let (requests, mut picks) = tokio::sync::mpsc::unbounded_channel();
+    // The window, quitting and the launch's question, as the core sees them;
+    // notifications and the Dock badge are the system's. Hosts start as this
+    // binary's `host` subcommand and updates come from GitHub (the defaults).
+    let flags = Arc::new(WindowFlags::default());
+    let (shell, shell_requests) = UiShell::new(Arc::clone(&flags));
     let nodus = Nodus::start(NodusConfig {
         dialogs: Some(Arc::new(WindowDialogs { requests })),
+        shell: Some(Arc::new(shell)),
+        notifications: Notifications::System,
         ..NodusConfig::new(user_data, runtime.handle().clone())
     })?;
 
@@ -68,6 +76,8 @@ pub fn run(user_data: PathBuf) -> anyhow::Result<()> {
         gpui::init(cx);
         theme::fonts::register(cx);
         cx.set_global(window::Core(nodus.clone()));
+        cx.set_global(Flags(flags));
+        core_shell::serve(shell_requests, cx);
         theme::apply_preference(settings.theme, cx);
         menus::install_menus(&settings, cx);
         menus::bind_shortcuts(cx);
@@ -103,14 +113,30 @@ pub fn run(user_data: PathBuf) -> anyhow::Result<()> {
         // PLAT-029, PLAT-031: closing the window keeps the app on a Mac;
         // elsewhere the last window closing quits.
         cx.on_window_closed(|cx, _| {
+            let open = window::main_window(cx).is_some();
+            cx.global::<Flags>().0.set_open(open);
             if cfg!(not(target_os = "macos")) && cx.windows().is_empty() {
                 cx.quit();
             }
         })
         .detach();
 
-        window::open_main_window(cx);
-        crate::automation::start(cx);
+        // PLAT-010 steps 8–11: the sessions a running host has are adopted
+        // and notifications armed before the window opens (PLAT-011). Quit
+        // in HOST-102's box has already left (HOST-103).
+        cx.spawn(async move |cx| {
+            if nodus.launch().await.is_err() {
+                return;
+            }
+            cx.update(|cx| {
+                // HOST-102's box off a Mac may have opened it already.
+                if window::main_window(cx).is_none() {
+                    window::open_main_window(cx);
+                }
+                crate::automation::start(cx);
+            });
+        })
+        .detach();
     });
     drop(runtime);
     Ok(())

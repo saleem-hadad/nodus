@@ -228,10 +228,8 @@ pub fn register_actions(nodus: &Nodus, cx: &mut App) {
     };
     let s = send(MenuCommand::Settings);
     cx.on_action(move |_: &OpenSettings, cx| s(cx));
-    let s = send(MenuCommand::Settings);
-    // Settings shows how the check goes; the user-asked check itself comes
-    // with nodus-updater (06).
-    cx.on_action(move |_: &CheckForUpdates, cx| s(cx));
+    let n = nodus.clone();
+    cx.on_action(move |_: &CheckForUpdates, cx| crate::shell::core_shell::check_for_updates(n.clone(), cx));
     let s = send(MenuCommand::NewSession);
     cx.on_action(move |_: &NewSession, cx| s(cx));
     let s = send(MenuCommand::NewTerminal);
@@ -253,8 +251,10 @@ pub fn register_actions(nodus: &Nodus, cx: &mut App) {
     cx.on_action(|_: &HideOthers, cx| cx.hide_other_apps());
     cx.on_action(|_: &ShowAll, cx| cx.unhide_other_apps());
     cx.on_action(|_: &Quit, cx| cx.quit());
-    // Stopping the host's sessions first comes with the host track (PLAT-034).
-    cx.on_action(|_: &QuitAndStopSessions, cx| cx.quit());
+    let n = nodus.clone();
+    cx.on_action(move |_: &QuitAndStopSessions, cx| {
+        crate::shell::core_shell::quit_and_stop_sessions(n.clone(), cx);
+    });
     // Opens the floating capture panel, once the capture track is in (07).
     cx.on_action(|_: &Capture, _| {});
     cx.on_action(|_: &StarOnGitHub, _| {

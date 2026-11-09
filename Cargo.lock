@@ -4217,6 +4217,7 @@ version = "0.9.4"
 dependencies = [
  "anyhow",
  "block2 0.6.2",
+ "dispatch2",
  "gpui-kit",
  "image",
  "indexmap",

@@ -13,7 +13,7 @@
 | 3 | README and how-it-works for the Rust app | ✅ |
 | 4 | Electron sources and toolchain removed | ✅ |
 | 5 | Workspace version 1.0.0 (the user's pick, 2026-11-10) | ✅ |
-| 6 | Final check: fmt, clippy, tests, prepush, arm64 bundle + smoke | ☐ |
+| 6 | Final check: fmt, clippy, tests, prepush, arm64 bundle + smoke | ✅ |
 
 ## 1. Protocol (U1)
 
@@ -55,3 +55,19 @@ The user approved the cutover and picked 1.0.0 for the first Rust release (2026-
 - The workflows: `package.yml`'s gates and `release.yml`'s version check (it must equal the `version` input, be `X.Y.Z`, newer than 0.9.4 and the latest release, and not released yet).
 
 Left at 0.9.4 on purpose: everything naming the Electron release being replaced (the handoff gates' downloads and checks, the updater's tests of an installed 0.9.4, `PROTOCOL_0_9_4`, the parity scenes' Settings rows, which match 0.9.4's goldens). No test pinned the app's own version.
+
+## 6. Final check
+
+On this Mac (arm64), with the Electron files gone:
+
+- `cargo fmt --all --check`: clean. `cargo clippy --workspace --all-targets -- -D warnings`: clean.
+- `cargo test --workspace`: 1,284 passed, 0 failed, 3 ignored.
+- `sh migration/prepush.sh main..HEAD`: clean (gitleaks: no leaks; no personal paths or old name in added lines).
+- `packaging/macos/bundle.sh arm64`: `dist/mac-arm64/Nodus.app`, version 1.0.0, ad-hoc signed. `python3 packaging/smoke.py` on it passed: window 1280×803 @2x, project added, terminal card live, the host's welcome saying protocol 2 with the session, the shell answered, light and dark screenshots, quit with 0. The bundle was unregistered from LaunchServices and `dist/`/`target/` removed afterwards.
+
+## For the orchestrator and the user
+
+- `migration/plan.md` (not edited here): ground rule 4 still says "same `PROTOCOL` number"; U1 is now done as default (a); D7's `pnpm typecheck/test/build` merge gate no longer exists; the integration debt "repeat the 0.9.4 `pty.ts` → Rust host check before cutover" is moot under U1 (a 0.9.4 app now stops a Rust host's sessions; `host_038_039_…` covers that direction).
+- Release trigger: still by hand (`release.yml`'s comment shows the switch to `v*` tags). The user's call.
+- Tracks still running (gpui-polish, views-polish) don't touch anything removed here; they merge on top without conflicts unless they edit `Cargo.toml`'s version line or the workflows.
+- Still only provable in CI or with the certificate, as before: Windows packaging and smoke, the DirectX shaders, signing/notarizing and the TeamIdentifier match.

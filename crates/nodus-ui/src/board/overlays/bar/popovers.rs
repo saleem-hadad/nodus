@@ -131,6 +131,7 @@ impl BoardCanvas {
                         .w(px(52.))
                         .font_family(fonts::MONO)
                         .text_size(TEXT_SM)
+                        .line_height(px(16.8))
                         .font_weight(gpui::FontWeight::MEDIUM)
                         .child(c.command),
                 )
@@ -142,6 +143,7 @@ impl BoardCanvas {
                         .text_ellipsis()
                         .whitespace_nowrap()
                         .text_size(TEXT_SM)
+                        .line_height(px(16.8))
                         .text_color(t.text_secondary)
                         .child(c.description),
                 )

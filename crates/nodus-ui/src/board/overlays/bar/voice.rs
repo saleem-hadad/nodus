@@ -189,11 +189,7 @@ impl BoardCanvas {
             DUR_FAST,
             motion::ease,
         );
-        let label = match phase {
-            Phase::Recording => "Stop and review (V)",
-            Phase::Transcribing => "Transcribing…",
-            _ => "Speak a prompt (V)",
-        };
+        let label = super::text::orb_label(phase);
         let glyph: AnyElement = match phase {
             // A filled `Square` 16: its 18-unit rect, radius 2.
             Phase::Recording => div().size(px(12.)).rounded(px(1.33)).bg(fg).into_any_element(),

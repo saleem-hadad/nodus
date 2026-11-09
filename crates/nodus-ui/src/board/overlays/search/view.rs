@@ -135,6 +135,7 @@ impl BoardCanvas {
                     .pb(px(4.))
                     .px(px(10.))
                     .text_size(TEXT_XS)
+                    .line_height(px(15.4))
                     .font_weight(FontWeight::SEMIBOLD)
                     .text_color(t.text_tertiary)
                     .child("Latest sessions")
@@ -158,21 +159,20 @@ impl BoardCanvas {
             children.push(
                 empty_box()
                     .text_color(t.text_secondary)
+                    // `.search-empty` is a flex column, so in 0.9.4 the words,
+                    // the query and the full stop each sit on a line of their own.
+                    .child("No session on this board mentions")
                     .child(
                         div()
-                            .flex()
-                            .child("No session on this board mentions ")
-                            .child(
-                                div()
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(t.text_primary)
-                                    .child(trimmed.clone()),
-                            )
-                            .child("."),
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(t.text_primary)
+                            .child(trimmed.clone()),
                     )
+                    .child(".")
                     .child(
                         div()
                             .text_size(TEXT_XS)
+                            .line_height(px(15.4))
                             .text_color(t.text_tertiary)
                             .child("Prompts, replies, file paths, commands and edits are searched; tool output isn’t."),
                     )
@@ -381,6 +381,7 @@ impl BoardCanvas {
             .when(ready, |d| d.hover(|s| s.bg(t.accent_hover)))
             .when(disabled, |d| d.opacity(0.4))
             .text_size(TEXT_XS)
+            .line_height(px(15.4))
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(fg)
             .when(!disabled, |d| {
@@ -405,6 +406,7 @@ impl BoardCanvas {
             .border_t(px(1.))
             .border_color(t.separator)
             .text_size(TEXT_XS)
+            .line_height(px(15.4))
             .text_color(t.text_tertiary)
             .child(hint(vec![cap("↑".into()), cap("↓".into())], "move"))
             .child(hint(
@@ -422,6 +424,7 @@ fn meta_text(t: &Tokens, text: String) -> AnyElement {
     div()
         .flex_none()
         .text_size(TEXT_XS)
+        .line_height(px(15.4))
         .text_color(t.text_tertiary)
         .font_features(fonts::tabular())
         .child(text)

@@ -68,7 +68,7 @@ impl BoardCanvas {
         }
         let placeholder = self.bar_placeholder();
         if self.overlays.bar.placeholder != placeholder {
-            self.overlays.bar.placeholder = placeholder;
+            self.overlays.bar.placeholder = placeholder.clone();
             field.update(cx, |s, cx| s.set_placeholder(placeholder, window, cx));
         }
         let (w, _) = self.canvas_size();
@@ -96,17 +96,12 @@ impl BoardCanvas {
     }
 
     /// BAR-006.
-    fn bar_placeholder(&self) -> &'static str {
-        match self.overlays.bar.target {
-            Some(Target::View) => "Describe the view, e.g. failing tests by file",
-            Some(Target::Note) => "Write a note…",
-            None if self.bar_sends_into().is_some() => "Reply to this session…",
-            None => match self.bar_context_count() {
-                0 => "Ask Claude to build, fix or explain…",
-                1 => "Ask Claude about this…",
-                n => Box::leak(format!("Ask Claude about these {n}…").into_boxed_str()),
-            },
-        }
+    fn bar_placeholder(&self) -> String {
+        super::text::placeholder(
+            self.overlays.bar.target,
+            self.bar_sends_into().is_some(),
+            self.bar_context_count(),
+        )
     }
 
     /// BAR-003: the pill and the mic, bottom-aligned.
@@ -171,12 +166,7 @@ impl BoardCanvas {
         let token = self.render_token(&t, window, cx);
         let popover = self.render_bar_popover(&t, window, cx);
         let me = cx.entity().downgrade();
-        let label = match (target, &into) {
-            (Some(Target::View), _) => "Create view".to_owned(),
-            (Some(Target::Note), _) => "Add note".to_owned(),
-            (None, Some(i)) => format!("Send to “{}”", i.title),
-            (None, None) => "Start session".to_owned(),
-        };
+        let label = super::text::send_label(target, into.as_ref().map(|i| i.title.as_str()));
         let send = self.render_send(&t, can_send, label, window, cx);
         div()
             .id("bar-pill")
@@ -215,11 +205,13 @@ impl BoardCanvas {
             .child(
                 // Hidden while listening, keeping its value (BAR-037).
                 // XSmall's editor insets are 4px across and none down: taken
-                // back, so the text sits where 0.9.4's textarea puts it.
+                // back, so the text sits where 0.9.4's textarea puts it; and
+                // the 10px it keeps clear on the right, so it wraps there too.
                 div()
                     .flex_1()
                     .min_w_0()
-                    .mx(px(-4.))
+                    .ml(px(-4.))
+                    .mr(px(-14.))
                     .when(listening, |d| d.hidden())
                     .child(
                         Textarea::new(&field)
@@ -240,6 +232,7 @@ impl BoardCanvas {
                         .items_center()
                         .gap(px(4.))
                         .text_size(TEXT_SM)
+                        .line_height(px(16.8))
                         .text_color(t.text_tertiary)
                         .whitespace_nowrap()
                         .child(kbd(&t, "/"))
@@ -400,6 +393,7 @@ impl BoardCanvas {
                 .bg(bg)
                 .text_color(fg)
                 .text_size(TEXT_SM)
+                .line_height(px(16.8))
                 .font_weight(gpui::FontWeight::MEDIUM)
                 .whitespace_nowrap()
                 .cursor(CursorStyle::Arrow)

@@ -140,11 +140,18 @@ impl BoardCanvas {
                 div()
                     .flex()
                     .flex_col()
-                    .child(div().text_size(TEXT_LG).font_weight(FontWeight::SEMIBOLD).child(title))
+                    .child(
+                        div()
+                            .text_size(TEXT_LG)
+                            .line_height(px(21.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(title),
+                    )
                     .child(
                         div()
                             .mt(px(2.))
                             .text_size(TEXT_SM)
+                            .line_height(px(16.8))
                             .text_color(t.text_secondary)
                             .child(subtitle),
                     ),
@@ -185,6 +192,7 @@ impl BoardCanvas {
                 .child(
                     div()
                         .text_size(TEXT_SM)
+                        .line_height(px(16.8))
                         .text_color(if it.phase == SummarizePhase::Error {
                             t.status_waiting
                         } else {
@@ -213,6 +221,7 @@ impl BoardCanvas {
             .child(
                 div()
                     .text_size(TEXT_SM)
+                    .line_height(px(16.8))
                     .text_color(t.text_tertiary)
                     .child(format!("{elapsed}Usually 10–30 seconds per session")),
             )
@@ -242,6 +251,7 @@ impl BoardCanvas {
                 .items_center()
                 .gap(px(10.))
                 .text_size(TEXT_SM)
+                .line_height(px(16.8))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(t.text_secondary)
                 .child(text)
@@ -251,6 +261,7 @@ impl BoardCanvas {
             div()
                 .id("merge-reset")
                 .text_size(TEXT_SM)
+                .line_height(px(16.8))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(t.accent)
                 .on_mouse_down(gpui::MouseButton::Left, |_, window, cx| {
@@ -284,7 +295,7 @@ impl BoardCanvas {
                     .gap(px(6.))
                     .child(label("Context").children(reset))
                     .child(
-                        frame(t, cf).flex_1().min_h_0().py(px(12.)).px(px(10.)).child(
+                        frame(t, cf).flex_1().min_h_0().py(px(12.)).pl(px(10.)).child(
                             Textarea::new(&context)
                                 .appearance(false)
                                 .xsmall()
@@ -302,7 +313,7 @@ impl BoardCanvas {
                     .gap(px(6.))
                     .child(label("What should the new session do?"))
                     .child(
-                        frame(t, inf).py(px(10.)).px(px(8.)).child(
+                        frame(t, inf).py(px(10.)).pl(px(8.)).child(
                             Textarea::new(&instruction)
                                 .appearance(false)
                                 .xsmall()
@@ -386,6 +397,7 @@ impl BoardCanvas {
                     .items_center()
                     .gap(px(7.))
                     .text_size(TEXT_SM)
+                    .line_height(px(16.8))
                     .child(phase_icon(t, icon_phase, SPIN[i % SPIN.len()], cx))
                     .child(
                         div()
@@ -397,7 +409,13 @@ impl BoardCanvas {
                     )
                     .children(actions)
                     .when(it.skipped, |d| {
-                        d.child(div().text_size(TEXT_XS).text_color(t.text_tertiary).child("Skipped"))
+                        d.child(
+                            div()
+                                .text_size(TEXT_XS)
+                                .line_height(px(15.4))
+                                .text_color(t.text_tertiary)
+                                .child("Skipped"),
+                        )
                     }),
             )
             .when_some(it.error.clone().filter(|_| blocking), |d, error| {
@@ -407,6 +425,7 @@ impl BoardCanvas {
                         .mt(px(4.))
                         .ml(px(22.))
                         .text_size(TEXT_XS)
+                        .line_height(px(15.4))
                         .text_color(t.status_waiting)
                         .child(error),
                 )
@@ -468,6 +487,7 @@ impl BoardCanvas {
                     .flex_1()
                     .min_w_0()
                     .text_size(TEXT_SM)
+                    .line_height(px(16.8))
                     .text_color(t.text_tertiary)
                     .child(note),
             )
@@ -501,6 +521,7 @@ fn mini(
         .px(px(7.))
         .rounded(px(6.))
         .text_size(TEXT_XS)
+        .line_height(px(15.4))
         .font_weight(FontWeight::MEDIUM)
         .whitespace_nowrap()
         .hover(move |s| s.bg(hover))

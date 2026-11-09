@@ -52,6 +52,7 @@ impl BoardCanvas {
                 .map(|d| frosted(d, rgba_mix(t.bg_elevated, 0.92), 20., 1.0))
                 .shadow(t.lg())
                 .text_size(TEXT_SM)
+                .line_height(px(16.8))
                 .text_color(t.text_primary)
                 .group_opacity(rise)
                 .translate(px(0.), px(6. * (1. - rise)))

@@ -8,6 +8,7 @@
 
 mod keys;
 mod popovers;
+mod text;
 mod view;
 mod voice;
 
@@ -51,7 +52,7 @@ pub(crate) struct Bar {
     pub clear_pending: bool,
     /// The field's value is being set by the bar, not typed.
     setting: bool,
-    pub placeholder: &'static str,
+    pub placeholder: String,
     /// The mic's phase isn't idle (BAR-004), as of this frame.
     pub voice_busy: bool,
     _subscriptions: Vec<Subscription>,
@@ -77,7 +78,7 @@ impl Default for Bar {
             heard: Vec::new(),
             clear_pending: false,
             setting: false,
-            placeholder: "",
+            placeholder: String::new(),
             voice_busy: false,
             _subscriptions: Vec::new(),
         }

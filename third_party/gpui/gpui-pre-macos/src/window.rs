@@ -2147,6 +2147,14 @@ impl PlatformWindow for MacWindow {
         this.renderer.draw(scene);
     }
 
+    // Nodus patch: one frame in step with native views (`Window::present_with_native_views`).
+    fn set_presents_with_transaction(&self, presents_with_transaction: bool) {
+        self.0
+            .lock()
+            .renderer
+            .set_presents_with_transaction(presents_with_transaction);
+    }
+
     // GPUI calls this without waking the frame waker when a window only needs
     // a present, so a paused Metal link must resume here too.
     fn schedule_frame(&self) {

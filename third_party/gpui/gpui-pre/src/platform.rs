@@ -1326,6 +1326,9 @@ pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     fn on_appearance_changed(&self, callback: Box<dyn FnMut()>);
     fn on_button_layout_changed(&self, _callback: Box<dyn FnMut()>) {}
     fn draw(&self, scene: &Scene);
+    /// Nodus patch: whether `draw` presents in the main thread's Core Animation transaction
+    /// (`Window::present_with_native_views`). Only Metal does; elsewhere it does nothing.
+    fn set_presents_with_transaction(&self, _presents_with_transaction: bool) {}
     fn schedule_frame(&self) {}
     fn sprite_atlas(&self) -> Arc<dyn PlatformAtlas>;
     fn is_subpixel_rendering_supported(&self) -> bool;

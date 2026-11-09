@@ -8,7 +8,7 @@ Stock GPUI can't blur what is behind an element, can't rotate or scale an elemen
 | --- | --- | --- | --- |
 | `gpui-pre/` | `gpui-pre 0.3.11` | `crates/gpui` | scene, style, window, hit testing, the API |
 | `gpui-pre-apple/` | `gpui-pre-apple 0.3.11` | `crates/gpui_apple` | Metal renderer and shaders |
-| `gpui-pre-macos/` | `gpui-pre-macos 0.3.11` | `crates/gpui_macos` | `render_to_image` in every build |
+| `gpui-pre-macos/` | `gpui-pre-macos 0.3.11` | `crates/gpui_macos` | `render_to_image` in every build, a frame presented with native views |
 | `gpui-pre-windows/` | `gpui-pre-windows 0.3.11` | `crates/gpui_windows` | DirectX 11 renderer and HLSL |
 | `gpui-pre-wgpu/` | `gpui-pre-wgpu 0.3.11` | `crates/gpui_wgpu` | wgpu renderer and WGSL (Linux, web) |
 
@@ -94,6 +94,8 @@ Fix: our port doesn't take #63793, so the fills the effect shaders call are this
 
 `Window::render_to_image` and the `PlatformWindow::render_to_image` it calls existed upstream behind `test-support`; the patch removes the gates in gpui-pre, gpui-pre-apple, gpui-pre-macos and gpui-pre-windows and documents the method. The renderer's offscreen path goes through the same effect layers.
 
+A capture that came back with a view's page blank (a menu over it, or the large window's panel) was not the capture's doing (track views-polish): in every such shot WebKit hadn't delivered a single snapshot of the board's pages yet (a busy machine starting its processes), so GPUI had nothing to draw there; images inside effect layers capture as they draw, over 50 runs. The test driver now waits for pages' pictures before a shot (`views::swap::pictures_ready`), and a snapshot WebKit fails to take is tried again.
+
 ### 6. sRGB colour space (Nodus, track gpui-text)
 
 GPUI's colours are sRGB values, but upstream left the window's `CAMetalLayer` untagged unless a window asks for Display P3, so on a wide-gamut display the window server showed them unconverted and every saturated colour came out more vivid than the same CSS colour in Chromium (`#007aff` reached a P3 screen as `#007aff` instead of Chromium's `#3579fa`). `MetalRenderer::configure_layer` now tags the layer `kCGColorSpaceSRGB` (still Display P3 when `use_display_p3` is set), so macOS converts for the display as it does for a browser. DirectX: a flip-model `B8G8R8A8_UNORM` swap chain is already sRGB (`DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709`); `tag_swap_chain_srgb` sets it explicitly through `IDXGISwapChain3::SetColorSpace1` so Windows' colour management treats it as a browser's. wgpu has no colour-space API: it picks a non-sRGB surface format, so the values reach the compositor as sRGB, which is what Linux compositors and a web canvas assume.
@@ -169,6 +171,14 @@ Checked against the goldens: `board-archive-open` (0.41% / 0.40% of the frame; t
 - **Timing.** `App::set_tooltip_timing(Some(TooltipTiming))` sets when tooltips without a delay of their own show (an element's `tooltip_show_delay` still wins; `None` keeps upstream's 500 ms). `TooltipTiming::APPKIT` is what 0.9.4's `title` tooltips used on a Mac, since Chromium shows them through AppKit: read from this macOS's `NSToolTipManager` (`_toolTipDelay` is 1.5 s, and `_getDisplayDelay:inQuickMode:forView:` answers 0.5 s while the window's last tooltip left the screen under 0.5 s before, 1.5 s otherwise). The window notes when a tooltip stops being drawn (`tooltip_on_screen`, `tooltip_left_screen`), and `default_tooltip_show_delay` picks the delay when a hover starts.
 
 nodus-ui sets the AppKit timing on macOS (`components::tooltip::init`); off a Mac it keeps 500 ms. The pad's tooltip ("Drag a note onto the board, or click for one beside the pad") now runs on one 320px line and wraps only its last word.
+
+### 16. Native views in step with a frame (Nodus, track views-polish)
+
+Views' pages are native webviews above GPUI's layer (decision D3): when GPUI must draw over one, the page goes transparent and GPUI draws its snapshot instead. Upstream GPUI only answers hit tests for the last frame presented, gives no way to tell a tooltip is up (it inserts no hitbox), and presents frames on its own clock, so the page stepped aside a frame or two after the menu that covered it appeared, and another element's tooltip stayed under a live page. Three small additions:
+
+- `Hitbox::is_hovered_at_in_frame(position, window)`: `is_hovered_at` against the frame being drawn while it draws. Every hitbox of a frame (deferred draws' and the tooltip's included) is inserted in prepaint, so in paint an element knows what will be drawn over it in that same frame.
+- `Window::tooltip_bounds()`: where the tooltip shown in the frame being drawn is, once tooltips are prepainted (else the last frame's).
+- `Window::present_with_native_views()`: the frame being drawn presents in the main thread's Core Animation transaction (`PlatformWindow::set_presents_with_transaction`, the Metal renderer's `presentsWithTransaction` path GPUI already uses while a window resizes), so changes made to native views while drawing it appear in the same frame instead of one ahead of it. Only frames that change native views ask for it; it costs a wait until the GPU has scheduled the frame. Other platforms present as usual.
 
 ## Verification
 

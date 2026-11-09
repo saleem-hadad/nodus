@@ -887,6 +887,25 @@ impl Hitbox {
             .any(|id| self.id == *id)
     }
 
+    /// Nodus patch: as [`Hitbox::is_hovered_at`], but in the frame being drawn while it draws.
+    /// Every hitbox of a frame (deferred draws' and the tooltip's included) is inserted in
+    /// prepaint, so in paint this answers for the whole frame, before it is presented: an
+    /// element can tell what will be drawn over it in the same frame. Outside a draw it is
+    /// `is_hovered_at`.
+    pub fn is_hovered_at_in_frame(&self, position: Point<Pixels>, window: &Window) -> bool {
+        let frame = if window.invalidator.not_drawing() {
+            &window.rendered_frame
+        } else {
+            &window.next_frame
+        };
+        let hit_test = frame.hit_test(position);
+        hit_test
+            .ids
+            .iter()
+            .take(hit_test.hover_hitbox_count)
+            .any(|id| self.id == *id)
+    }
+
     /// Checks if the hitbox contains the mouse and should handle scroll events. Typically this
     /// should only be used when handling `ScrollEvent`, and otherwise `is_hovered` should be
     /// used. See the documentation of `Hitbox::is_hovered` for details about this distinction.
@@ -1280,6 +1299,9 @@ pub struct Window {
     next_hitbox_id: HitboxId,
     pub(crate) next_tooltip_id: TooltipId,
     pub(crate) tooltip_bounds: Option<TooltipBounds>,
+    /// Nodus patch: the frame being drawn presents in the main thread's Core Animation
+    /// transaction (`Window::present_with_native_views`).
+    present_with_native_views: bool,
     pub(crate) next_frame_callbacks: Rc<RefCell<Vec<FrameCallback>>>,
     pub(crate) dirty_views: FxHashSet<EntityId>,
     focus_listeners: SingleSubscriberSet<AnyWindowFocusListener>,
@@ -2413,6 +2435,7 @@ impl Window {
             next_hitbox_id: HitboxId(0),
             next_tooltip_id: TooltipId::default(),
             tooltip_bounds: None,
+            present_with_native_views: false,
             dirty_views: FxHashSet::default(),
             focus_listeners: SingleSubscriberSet::new(),
             focus_lost_listeners: SingleSubscriberSet::new(),
@@ -3136,6 +3159,22 @@ impl Window {
     pub fn render_to_image(&self) -> anyhow::Result<image::RgbaImage> {
         self.platform_window
             .render_to_image(&self.rendered_frame.scene)
+    }
+
+    /// Nodus patch: where the tooltip shown in the frame being drawn is (in paint, once
+    /// tooltips are prepainted), else in the last frame drawn; None when there's none. A
+    /// tooltip inserts no hitbox, so this is how an element tells one is drawn over it.
+    pub fn tooltip_bounds(&self) -> Option<Bounds<Pixels>> {
+        self.tooltip_bounds.as_ref().map(|tooltip| tooltip.bounds)
+    }
+
+    /// Nodus patch: presents the frame being drawn in the main thread's Core Animation
+    /// transaction, so the changes made to native views while drawing it (a child view
+    /// hidden or shown, moved, or given new contents) appear in the same frame as it, not a
+    /// frame before. It costs a wait until the GPU has scheduled the frame, so only frames
+    /// that change native views ask for it. Metal only; elsewhere frames present as usual.
+    pub fn present_with_native_views(&mut self) {
+        self.present_with_native_views = true;
     }
 
     /// Returns the quads in the most recently rendered frame's scene, so tests can assert on
@@ -3904,7 +3943,15 @@ impl Window {
         let _foreground_turn = profiler::journal::foreground_turn();
         #[cfg(feature = "profiler")]
         let present_start = Instant::now();
+        // Nodus patch: a frame that changed native views shows with them.
+        let with_native_views = mem::take(&mut self.present_with_native_views);
+        if with_native_views {
+            self.platform_window.set_presents_with_transaction(true);
+        }
         self.platform_window.draw(&self.rendered_frame.scene);
+        if with_native_views {
+            self.platform_window.set_presents_with_transaction(false);
+        }
         #[cfg(feature = "profiler")]
         self.window_profiler.record_present(
             present_start,

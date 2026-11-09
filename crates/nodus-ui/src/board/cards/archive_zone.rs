@@ -13,6 +13,7 @@ use gpui::{
     KeyDownEvent, MouseButton, ParentElement, StatefulInteractiveElement, Styled, Subscription, Window, div, px,
 };
 
+use super::border::Stroke;
 use super::icons::{CardIcon, card_icon};
 use super::note_pad::{label_row, label_text};
 use super::para::para;
@@ -151,13 +152,13 @@ pub fn archive(
         .w(z.px(w))
         .h(z.px(h))
         .rounded(z.px(24.))
+        // The border is drawn by `border::border` (exact width and dashes);
+        // this one only insets the contents as CSS's does.
         .border(z.px(1.5))
-        .border_color(border)
+        .border_color(gpui::transparent_black())
         .bg(bg)
-        .shadow(shadow.gpui(z))
         .font_family(fonts::UI)
         .cursor(CursorStyle::Arrow)
-        .when(dashed, Styled::border_dashed)
         .when(open, |d| d.backdrop_blur(z.px(30.)).backdrop_saturate(1.8))
         // ARCH-011: a click on the folded frame opens the panel.
         .when(!open, |d| d.on_click(move |_, _, cx| env_click.actions.open_stack(cx)))
@@ -247,7 +248,24 @@ pub fn archive(
                 ),
         );
     }
-    frame.into_any_element()
+    // ARCH-004: the open panel's shadow, outside it only (it's see-through).
+    div()
+        .relative()
+        .w(z.px(w))
+        .h(z.px(h))
+        .children(super::outer_shadow(&shadow, w, h, 24.0, z))
+        .child(frame)
+        .child(super::border::border(
+            (w, h),
+            24.0,
+            Stroke {
+                width: 1.5,
+                color: border,
+                dashed,
+            },
+            z,
+        ))
+        .into_any_element()
 }
 
 /// The dashed outline at the stack's spot: empty (ARCH-010), or with every
@@ -266,9 +284,16 @@ fn placeholder(env: &Rc<BoardEnv>, dealt: Option<usize>, window: &mut Window, cx
         .items_center()
         .justify_center()
         .rounded(z.px(14.))
-        .border(z.px(1.5))
-        .border_dashed()
-        .border_color(t.archive_border)
+        .child(super::border::border(
+            (CARD_W, CARD_H),
+            14.0,
+            Stroke {
+                width: 1.5,
+                color: t.archive_border,
+                dashed: true,
+            },
+            z,
+        ))
         .text_color(t.archive_label)
         .text_size(z.px(12.))
         .line_height(z.px(16.8));

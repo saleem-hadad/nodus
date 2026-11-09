@@ -97,14 +97,15 @@ pub fn pad(env: &Rc<BoardEnv>, size: (f32, f32), _window: &mut Window, cx: &mut 
             s
         }
     };
-    div()
+    let frame = div()
         .relative()
         .w(z.px(w))
         .h(z.px(h))
         .rounded(z.px(24.))
+        // The dashed border is drawn by `border::border`; this one only
+        // insets the contents as CSS's does.
         .border(z.px(1.5))
-        .border_dashed()
-        .border_color(t.archive_border)
+        .border_color(gpui::transparent_black())
         .bg(t.archive_bg)
         .font_family(fonts::UI)
         .child(header)
@@ -118,6 +119,22 @@ pub fn pad(env: &Rc<BoardEnv>, size: (f32, f32), _window: &mut Window, cx: &mut 
                 .child(sheet(8.0, 0.97, 0.88))
                 .child(sheet(4.0, 0.985, 0.94))
                 .child(sheet(0.0, 1.0, 1.0)),
-        )
+        );
+    // NOTEUI-040: the frame's dashed border, drawn over the box.
+    div()
+        .relative()
+        .w(z.px(w))
+        .h(z.px(h))
+        .child(frame)
+        .child(super::border::border(
+            (w, h),
+            24.0,
+            super::border::Stroke {
+                width: 1.5,
+                color: t.archive_border,
+                dashed: true,
+            },
+            z,
+        ))
         .into_any_element()
 }

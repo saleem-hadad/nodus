@@ -314,7 +314,10 @@ fn dealt<E: Styled + IntoElement + ParentElement>(el: E, z: Z, dx: f32, p: Optio
     let Some(p) = p else {
         return el.group_opacity(0.0);
     };
-    if p >= 1.0 {
+    // Done is exactly 1; on the way the spring overshoots past 1 and back.
+    #[allow(clippy::float_cmp, reason = "anim::enter gives exactly 1 once done")]
+    let done = p == 1.0;
+    if done {
         return el;
     }
     let k = 1.0 - p;

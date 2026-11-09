@@ -98,7 +98,10 @@ pub fn sticker(
     let p = land.unwrap_or(0.0);
     let k = 1.0 - p;
     let (land_ty, land_rot, land_scale) = (-14.0 * k, -6.0 * k + rot * p, 1.35 * k + p);
-    let (final_rot, final_ty, scale) = if p < 1.0 {
+    // The spring overshoots past 1 on the way; exactly 1 is done.
+    #[allow(clippy::float_cmp, reason = "anim::enter gives exactly 1 once done")]
+    let landed = p == 1.0;
+    let (final_rot, final_ty, scale) = if !landed {
         (land_rot, land_ty + ty * p, land_scale)
     } else {
         (rot, ty, 1.0)

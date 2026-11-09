@@ -784,21 +784,26 @@ fn main() {
                     });
                     cx.background_executor().timer(Duration::from_millis(900)).await;
                     if let Some((x, y)) = s.pointer() {
-                        let position = point(px(vx + x * zoom), px(52. + vy + y * zoom));
-                        let _ = in_window(cx, handle, |window, cx| {
-                            window.refresh();
-                            window.draw(cx).clear(cx);
-                            window.dispatch_event(
-                                PlatformInput::MouseMove(MouseMoveEvent {
-                                    position,
-                                    pressed_button: None,
-                                    modifiers: Modifiers::default(),
-                                }),
-                                cx,
-                            );
-                            window.refresh();
-                            window.draw(cx).clear(cx);
-                        });
+                        // Two moves a beat apart, as a hand makes them: the second
+                        // is hit-tested against a frame that knows the first.
+                        for nudge in [1.0, 0.0] {
+                            let position = point(px(vx + x * zoom + nudge), px(52. + vy + y * zoom));
+                            let _ = in_window(cx, handle, |window, cx| {
+                                window.refresh();
+                                window.draw(cx).clear(cx);
+                                window.dispatch_event(
+                                    PlatformInput::MouseMove(MouseMoveEvent {
+                                        position,
+                                        pressed_button: None,
+                                        modifiers: Modifiers::default(),
+                                    }),
+                                    cx,
+                                );
+                                window.refresh();
+                                window.draw(cx).clear(cx);
+                            });
+                            cx.background_executor().timer(Duration::from_millis(100)).await;
+                        }
                     }
                     cx.background_executor().timer(Duration::from_millis(1400)).await;
                     // A frame drawn now, even while the window is covered (macOS

@@ -630,9 +630,13 @@ impl Element for Para {
             } else {
                 (layout.widest() * z).min(width).ceil()
             };
+            // GPUI rounds a measured size up to whole device pixels, where
+            // Chromium keeps fractions; rounding to the nearest one here
+            // keeps a column of lines (a fan row, a card) from drifting down.
+            let scale = window.scale_factor();
             Size {
                 width: px(w),
-                height: cfg.line_height * lines,
+                height: px((f32::from(cfg.line_height) * lines * scale).round() / scale),
             }
         });
         let _ = cx;

@@ -38,6 +38,11 @@ pub struct Shell {
 }
 
 impl Shell {
+    /// The board the main area shows, if any (for the test driver).
+    pub fn board(&self) -> Option<&Entity<BoardCanvas>> {
+        self.board.as_ref()
+    }
+
     pub fn new(nodus: Nodus, window: &mut Window, cx: &mut Context<'_, Self>) -> Self {
         let state = cx.new(|cx| AppState::new(nodus, cx));
         let menus = cx.new(|_| MenuLayer::default());

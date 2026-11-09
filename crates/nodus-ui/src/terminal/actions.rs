@@ -41,14 +41,10 @@ pub fn close_terminal(state: &Entity<AppState>, cx: &mut App) {
     });
 }
 
-/// `openPreview` (TRANS-002): records the search, closes the session window.
+/// `openPreview` (TRANS-002): records the search, closes the session window
+/// (the board's store does it).
 pub fn open_preview(state: &Entity<AppState>, session_id: &str, find: Option<PreviewFind>, cx: &mut App) {
-    cx.set_global(PreviewFindState(find));
-    state.update(cx, |s, cx| {
-        s.preview_session_id = Some(session_id.to_owned());
-        s.terminal_session_id = None;
-        cx.notify();
-    });
+    state.update(cx, |s, cx| s.open_preview_at(session_id, find, cx));
 }
 
 pub fn close_preview(state: &Entity<AppState>, cx: &mut App) {

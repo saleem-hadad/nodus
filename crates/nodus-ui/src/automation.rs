@@ -8,6 +8,7 @@
 //! {"cmd":"core","method":"settings.update","args":[{"theme":"dark"}]}
 //! {"cmd":"menu","command":"settings"}               a menu command, as the menu sends it
 //! {"cmd":"key","keystroke":"cmd-o"}                 a keystroke through GPUI
+//! {"cmd":"type","text":"Hello"}                    text typed into what has the keyboard
 //! {"cmd":"modifiers","meta":true}                   modifiers held (⌘ for the rail's numbers)
 //! {"cmd":"mouse","kind":"click","x":100,"y":200}    move | down | up | click | double | right
 //! {"cmd":"scroll","x":720,"y":400,"dy":-600}       a wheel scroll at a point
@@ -18,7 +19,11 @@
 //! {"cmd":"idle"}                                    until the window stops drawing
 //! {"cmd":"screenshot","path":"/…/scene.light.rust.png"}
 //! {"cmd":"window"}                                  the window's number and size
+//! {"cmd":"stub","name":"summarize","phases":["done",null],"results":[{…}]}   what summarize answers (spec 11)
 //! {"cmd":"terminal","action":"open",…}                the terminal's windows (terminal::driver)
+//! {"cmd":"views"}                                   views' frames: live or snapshot, and why
+//! {"cmd":"native-click","x":500,"y":300}            a click AppKit routes (into a page, or GPUI)
+//! {"cmd":"hit","x":500,"y":300}                     the native view a click there reaches
 //! {"cmd":"quit"}
 //! ```
 //!
@@ -162,6 +167,27 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
             with_window(cx, |window, _| window.refresh())?;
             Ok(Value::Null)
         }
+        // As 0.9.4's scenes replaced an IPC handler: what the merge dialog's
+        // summarize answers (each source's phase; results, or none: pending).
+        "stub" => {
+            let phases = command
+                .get("phases")
+                .and_then(Value::as_array)
+                .map(|a| {
+                    a.iter()
+                        .map(|p| p.as_str().and_then(nodus_domain::SummarizePhase::parse))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let results = command
+                .get("results")
+                .map(|r| serde_json::from_value(r.clone()).map_err(|e| e.to_string()))
+                .transpose()?;
+            cx.update(|cx| {
+                cx.set_global(crate::board::overlays::merge::SummarizeStub { phases, results });
+            });
+            Ok(Value::Null)
+        }
         "core" => core(&nodus, command).await,
         "menu" => {
             let command = command.get("command").and_then(Value::as_str).unwrap_or_default();
@@ -175,6 +201,36 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
             let keystroke = Keystroke::parse(spec).map_err(|e| e.to_string())?;
             with_window(cx, move |window, cx| {
                 window.dispatch_keystroke(keystroke, cx);
+            })?;
+            Ok(Value::Null)
+        }
+        "type" => {
+            // Text typed into whatever has the keyboard, a character at a time.
+            let text = command
+                .get("text")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            with_window(cx, move |window, cx| {
+                for ch in text.chars() {
+                    let s = ch.to_string();
+                    let key = if ch == ' ' {
+                        "space".to_owned()
+                    } else {
+                        s.to_lowercase()
+                    };
+                    window.dispatch_keystroke(
+                        Keystroke {
+                            modifiers: Modifiers {
+                                shift: ch.is_uppercase(),
+                                ..Modifiers::default()
+                            },
+                            key,
+                            key_char: Some(s),
+                        },
+                        cx,
+                    );
+                }
             })?;
             Ok(Value::Null)
         }
@@ -313,6 +369,11 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
                     status: serde_json::from_value(payload["status"].clone()).map_err(|e| e.to_string())?,
                     live: payload["live"].as_bool().unwrap_or(true),
                 },
+                // A session's status line, as Claude reports it (board-expanded).
+                "usage" => Event::Usage {
+                    session_id: payload["sessionId"].as_str().unwrap_or_default().to_owned(),
+                    usage: serde_json::from_value(payload["usage"].clone()).map_err(|e| e.to_string())?,
+                },
                 "captureContext" => Event::CaptureContext(crate::capture::automation::context_patch(&payload)?),
                 other => return Err(format!("unknown event {other}")),
             };
@@ -374,6 +435,24 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
             #[cfg(not(target_os = "macos"))]
             let menus = Value::Null;
             Ok(menus)
+        }
+        // Views' frames: live or behind a snapshot, and why (spec 04).
+        "views" => Ok(cx.update(|cx| crate::views::frames::describe(cx))),
+        // A click AppKit routes itself (into a page's webview, or GPUI), and
+        // which view a click at a point would reach.
+        #[cfg(target_os = "macos")]
+        "native-click" => {
+            let (x, y) = (f64::from(num(command, "x")), f64::from(num(command, "y")));
+            let number = with_window(cx, |window, _| crate::mac::window_number(window))?.ok_or("no window")?;
+            crate::views::native_click(number, x, y);
+            Ok(Value::Null)
+        }
+        #[cfg(target_os = "macos")]
+        "hit" => {
+            let (x, y) = (f64::from(num(command, "x")), f64::from(num(command, "y")));
+            Ok(Value::String(with_window(cx, move |window, _| {
+                crate::views::hit_class(window, x, y)
+            })?))
         }
         "quit" => {
             cx.update(|cx| cx.quit());

@@ -283,37 +283,6 @@ impl BoardCanvas {
             .into_any_element()
     }
 
-    /// The toast (BOARD-139), in the prompt bar's `above` slot.
-    pub(crate) fn render_toast(&self, window: &mut Window, cx: &mut Context<'_, Self>) -> Option<AnyElement> {
-        let (message, seq) = self.toast.clone()?;
-        let t = theme::tokens(cx);
-        let rise = enter(window, cx, ("board-toast", seq as usize), DUR_MED, motion::ease_out);
-        Some(
-            div()
-                .absolute()
-                .left_0()
-                .right_0()
-                .bottom(px(84. - 6. * (1. - rise)))
-                .flex()
-                .justify_center()
-                .child(
-                    div()
-                        .id("board-toast")
-                        .max_w(px(560.))
-                        .py(px(9.))
-                        .px(px(14.))
-                        .rounded(RADIUS_MD)
-                        .map(|d| frosted(d, rgba_mix(t.bg_elevated, 0.92), 20., 1.0))
-                        .shadow(t.lg())
-                        .text_size(TEXT_SM)
-                        .text_color(t.text_primary)
-                        .opacity(rise)
-                        .child(message),
-                )
-                .into_any_element(),
-        )
-    }
-
     /// The confirm dialog (BOARD-140, BOARD-141).
     pub(crate) fn render_confirm(&self, window: &mut Window, cx: &mut Context<'_, Self>) -> Option<AnyElement> {
         let confirm = self.confirm.as_ref()?;

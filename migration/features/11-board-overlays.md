@@ -624,114 +624,114 @@ Risks:
 
 ## Parity checklist
 
-- [ ] BAR-001 Column placement, width formula, z-order, pass-through
-- [ ] BAR-002 Stack order (toast, selection bar, voice notice, row) and rise-in
-- [ ] BAR-003 Row: pill + mic, widths 520/600, shrink, transitions
-- [ ] BAR-004 Open-state conditions
+- [x] BAR-001 Column placement, width formula, z-order, pass-through
+- [x] BAR-002 Stack order (toast, selection bar, voice notice, row) and rise-in
+- [x] BAR-003 Row: pill + mic, widths 520/600, shrink, transitions
+- [x] BAR-004 Open-state conditions
 - [ ] BAR-005 Field auto-grow 1–5 lines, then scroll; spellcheck on
-- [ ] BAR-006 Placeholder table
-- [ ] BAR-007 `/ view or note` hint conditions
-- [ ] BAR-008 Pill background mouse-down focuses field
-- [ ] BAR-009 Return submits, ⇧Return newline, IME ignored
-- [ ] BAR-010 Submit guards
-- [ ] BAR-011 Submission priority, trimmed text
-- [ ] BAR-012 In-flight spinner; false keeps, true clears target/text and dismisses notice
-- [ ] BAR-013 Send label/tooltip table and disabled conditions
-- [ ] BAR-014 Slash menu open conditions and filtering
-- [ ] BAR-015 Menu keys (wrap), Return/Tab pick, hover/click
-- [ ] BAR-016 Esc dismisses menu; edit reopens; blur resets
-- [ ] BAR-017 Picking clears typed text
-- [ ] BAR-018 Typed/pasted `/view ` `/note ` become tokens with rest
-- [ ] BAR-019 Token visuals, × behaviours, enter animation
-- [ ] BAR-020 Session token show/drop rules; dropped id reset on into change
-- [ ] BAR-021 Backspace on empty removes target, then session token
-- [ ] BAR-022 Note colour default yellow, picker, outside-press close
-- [ ] BAR-023 Esc in field: picker, else blur
-- [ ] BAR-024 `into` and `contextCount` computation
-- [ ] BAR-025 Context items and order; withContext prompt
-- [ ] BAR-026 New card placement (expanded size, below sources or viewport centre, free spot, section)
-- [ ] BAR-027 Create options; sticker note; selection cleared only with context; pan; no window
-- [ ] BAR-028 Failure → free note + toast; bar clears
-- [ ] BAR-029 Into: missing/archived, waiting (opens card), send error, success
-- [ ] BAR-030 /view creation and error toast
-- [ ] BAR-031 /note creation with colour
-- [ ] BAR-032 Toast one at a time, 4200ms
-- [ ] BAR-033 Board `/` key
-- [ ] BAR-034 Board `V` key
-- [ ] BAR-035 Mic button states, labels, icons, disabled
-- [ ] BAR-036 Recording halo and pill ring
-- [ ] BAR-037 Status line (dot, clock, meter / Transcribing…, cancel)
-- [ ] BAR-038 Esc cancels voice first
-- [ ] BAR-039 Transcript appended with a space, caret to end
-- [ ] BAR-040 Voice notice above the row
-- [ ] BAR-041 Bar state per board mount
-- [ ] SRCH-001 ⌘K open guards; closes preview first
-- [ ] SRCH-002 Menu `Search Sessions…` closes terminal/preview
-- [ ] SRCH-003 Close on Esc, ⌘K, backdrop, open, start
-- [ ] SRCH-004 Query kept per board; selected on open
-- [ ] SRCH-005 Latest sessions list (30, live first, updated desc, last prompt); empty board message
-- [ ] SRCH-006 120ms debounce, trimmed query, stale answers dropped
-- [ ] SRCH-007 Spinner; stale rows kept; hits mapped to cards
-- [ ] SRCH-008 No-match message
-- [ ] SRCH-009 Error display and persistence
-- [ ] SRCH-010 Row header: dot/archive icon, title, matches, time
-- [ ] SRCH-011 Snippet line: label column, highlights, mono tool text, 2-line clamp
-- [ ] SRCH-012 ↑/↓ clamped, reset on new answer, scroll nearest, hover
-- [ ] SRCH-013 Return/click open; `read it` / `go to card`
-- [ ] SRCH-014 Live card: select only it, centre at ≥0.8 over 320ms, flash ×2
-- [ ] SRCH-015 Archived: transcript preview at the match
-- [ ] SRCH-016 Tab/⇧Tab/⌘-click/check marking; marks persist
-- [ ] SRCH-017 Start button labels, disabled, ⌘Return, ids rule, focus = query
-- [ ] SRCH-018 Searchable set excludes terminals, runs, view brains
-- [ ] SRCH-019 Highlight runs from UTF-16 ranges; mark background
-- [ ] SRCH-020 Title highlights from answered query terms; underline style
-- [ ] SRCH-021 fuzzyMatch exact; archive stack ranking and 50% floor
-- [ ] MERGE-001 Entry points and source filtering, focus
-- [ ] MERGE-002 Modal: no backdrop close; Esc/Cancel close; results dropped
-- [ ] MERGE-003 Focus normalization
-- [ ] MERGE-004 One summarize request on open; progress for own request ids; done is final
-- [ ] MERGE-005 Gathering UI, subtitles, states, elapsed counter
-- [ ] MERGE-006 Result mapping: error/empty → error; done → summary + title
-- [ ] MERGE-007 One-way move to review
-- [ ] MERGE-008 Review chips, failed/skipped visuals
-- [ ] MERGE-009 Retry one source
-- [ ] MERGE-010 Skip
-- [ ] MERGE-011 Context follows generated until edited; Reset to generated
-- [ ] MERGE-012 Edited context + retry → appended numbered sections
-- [ ] MERGE-013 Instruction autofocus/placeholder/resizable; Name default
-- [ ] MERGE-014 Start enabled rule
-- [ ] MERGE-015 Start: spinner, name fallback, initial prompt, parents
-- [ ] MERGE-016 Start error stays; success placement, close, clear selection, open terminal
-- [ ] MERGE-017 Footer hint priority
-- [ ] INKUI-001 Dock placement, order, tooltips, names, no focus steal
-- [ ] INKUI-002 Tool keys P/A/X; starts at Pointer
-- [ ] INKUI-003 Tool change finishes label; deselects off Pointer
-- [ ] INKUI-004 Colours, palette, persistence (default red), recolour selected
-- [ ] INKUI-005 Clear all: disabled, undoable, toast
-- [ ] INKUI-006 Press gating (primary, no Space, board surface only)
-- [ ] INKUI-007 Taking a press: stop, finish label, blur, hold pointer, swallow click
-- [ ] INKUI-008 Pen: 1.5px step, coalesced samples, simplify 0.5/zoom, dot
-- [ ] INKUI-009 Arrow: dot before move, < 8px discarded
-- [ ] INKUI-010 size = round2(clamp(1/zoom, 0.5, 4)) and derived sizes
-- [ ] INKUI-011 Eraser: 6px path sampling, 25% preview, one change
-- [ ] INKUI-012 Pointer cancel discards
-- [ ] INKUI-013 Text labels: place, Return/blur commit, Esc discard, empty dropped
-- [ ] INKUI-014 Double-click label edits; change/delete/no-op
-- [ ] INKUI-015 Pointer tool select/move (3px), clears card selection, pass-through
+- [x] BAR-006 Placeholder table
+- [x] BAR-007 `/ view or note` hint conditions
+- [x] BAR-008 Pill background mouse-down focuses field
+- [x] BAR-009 Return submits, ⇧Return newline, IME ignored
+- [x] BAR-010 Submit guards
+- [x] BAR-011 Submission priority, trimmed text
+- [x] BAR-012 In-flight spinner; false keeps, true clears target/text and dismisses notice
+- [x] BAR-013 Send label/tooltip table and disabled conditions
+- [x] BAR-014 Slash menu open conditions and filtering
+- [x] BAR-015 Menu keys (wrap), Return/Tab pick, hover/click
+- [x] BAR-016 Esc dismisses menu; edit reopens; blur resets
+- [x] BAR-017 Picking clears typed text
+- [x] BAR-018 Typed/pasted `/view ` `/note ` become tokens with rest
+- [x] BAR-019 Token visuals, × behaviours, enter animation
+- [x] BAR-020 Session token show/drop rules; dropped id reset on into change
+- [x] BAR-021 Backspace on empty removes target, then session token
+- [x] BAR-022 Note colour default yellow, picker, outside-press close
+- [x] BAR-023 Esc in field: picker, else blur
+- [x] BAR-024 `into` and `contextCount` computation
+- [x] BAR-025 Context items and order; withContext prompt
+- [x] BAR-026 New card placement (expanded size, below sources or viewport centre, free spot, section)
+- [x] BAR-027 Create options; sticker note; selection cleared only with context; pan; no window
+- [x] BAR-028 Failure → free note + toast; bar clears
+- [x] BAR-029 Into: missing/archived, waiting (opens card), send error, success
+- [x] BAR-030 /view creation and error toast
+- [x] BAR-031 /note creation with colour
+- [x] BAR-032 Toast one at a time, 4200ms
+- [x] BAR-033 Board `/` key
+- [x] BAR-034 Board `V` key
+- [x] BAR-035 Mic button states, labels, icons, disabled
+- [x] BAR-036 Recording halo and pill ring
+- [x] BAR-037 Status line (dot, clock, meter / Transcribing…, cancel)
+- [x] BAR-038 Esc cancels voice first
+- [x] BAR-039 Transcript appended with a space, caret to end
+- [x] BAR-040 Voice notice above the row
+- [x] BAR-041 Bar state per board mount
+- [x] SRCH-001 ⌘K open guards; closes preview first
+- [x] SRCH-002 Menu `Search Sessions…` closes terminal/preview
+- [x] SRCH-003 Close on Esc, ⌘K, backdrop, open, start
+- [x] SRCH-004 Query kept per board; selected on open
+- [x] SRCH-005 Latest sessions list (30, live first, updated desc, last prompt); empty board message
+- [x] SRCH-006 120ms debounce, trimmed query, stale answers dropped
+- [x] SRCH-007 Spinner; stale rows kept; hits mapped to cards
+- [x] SRCH-008 No-match message
+- [x] SRCH-009 Error display and persistence
+- [x] SRCH-010 Row header: dot/archive icon, title, matches, time
+- [x] SRCH-011 Snippet line: label column, highlights, mono tool text, 2-line clamp
+- [x] SRCH-012 ↑/↓ clamped, reset on new answer, scroll nearest, hover
+- [x] SRCH-013 Return/click open; `read it` / `go to card`
+- [x] SRCH-014 Live card: select only it, centre at ≥0.8 over 320ms, flash ×2
+- [x] SRCH-015 Archived: transcript preview at the match
+- [x] SRCH-016 Tab/⇧Tab/⌘-click/check marking; marks persist
+- [x] SRCH-017 Start button labels, disabled, ⌘Return, ids rule, focus = query
+- [x] SRCH-018 Searchable set excludes terminals, runs, view brains
+- [x] SRCH-019 Highlight runs from UTF-16 ranges; mark background
+- [x] SRCH-020 Title highlights from answered query terms; underline style
+- [x] SRCH-021 fuzzyMatch exact; archive stack ranking and 50% floor
+- [x] MERGE-001 Entry points and source filtering, focus
+- [x] MERGE-002 Modal: no backdrop close; Esc/Cancel close; results dropped
+- [x] MERGE-003 Focus normalization
+- [x] MERGE-004 One summarize request on open; progress for own request ids; done is final
+- [x] MERGE-005 Gathering UI, subtitles, states, elapsed counter
+- [x] MERGE-006 Result mapping: error/empty → error; done → summary + title
+- [x] MERGE-007 One-way move to review
+- [x] MERGE-008 Review chips, failed/skipped visuals
+- [x] MERGE-009 Retry one source
+- [x] MERGE-010 Skip
+- [x] MERGE-011 Context follows generated until edited; Reset to generated
+- [x] MERGE-012 Edited context + retry → appended numbered sections
+- [x] MERGE-013 Instruction autofocus/placeholder/resizable; Name default
+- [x] MERGE-014 Start enabled rule
+- [x] MERGE-015 Start: spinner, name fallback, initial prompt, parents
+- [x] MERGE-016 Start error stays; success placement, close, clear selection, open terminal
+- [x] MERGE-017 Footer hint priority
+- [x] INKUI-001 Dock placement, order, tooltips, names, no focus steal
+- [x] INKUI-002 Tool keys P/A/X; starts at Pointer
+- [x] INKUI-003 Tool change finishes label; deselects off Pointer
+- [x] INKUI-004 Colours, palette, persistence (default red), recolour selected
+- [x] INKUI-005 Clear all: disabled, undoable, toast
+- [x] INKUI-006 Press gating (primary, no Space, board surface only)
+- [x] INKUI-007 Taking a press: stop, finish label, blur, hold pointer, swallow click
+- [x] INKUI-008 Pen: 1.5px step, coalesced samples, simplify 0.5/zoom, dot
+- [x] INKUI-009 Arrow: dot before move, < 8px discarded
+- [x] INKUI-010 size = round2(clamp(1/zoom, 0.5, 4)) and derived sizes
+- [x] INKUI-011 Eraser: 6px path sampling, 25% preview, one change
+- [x] INKUI-012 Pointer cancel discards
+- [x] INKUI-013 Text labels: place, Return/blur commit, Esc discard, empty dropped
+- [x] INKUI-014 Double-click label edits; change/delete/no-op
+- [x] INKUI-015 Pointer tool select/move (3px), clears card selection, pass-through
 - [ ] INKUI-016 Move cursor on hover over ink
 - [ ] INKUI-017 Tool cursors incl. eraser circle
-- [ ] INKUI-018 Views ignore pointer while a tool is out
-- [ ] INKUI-019 No new session on double-click while drawing / on a line
-- [ ] INKUI-020 Space held → ink ignores presses
-- [ ] INKUI-021 Undo/redo, 100 entries, per board, guards
-- [ ] INKUI-022 ⌫/Delete deletes selected stroke first
-- [ ] INKUI-023 Esc precedence
-- [ ] INKUI-024 Every change saved immediately
-- [ ] INKUI-025 Z-order (above cards, below open archive panel) and paint order
-- [ ] INKUI-026 Selection outline (dashed, non-scaling, padded)
-- [ ] SEL-001 Visibility (session-type selection, no merge dialog), position
-- [ ] SEL-002 `N selected` count
-- [ ] SEL-003 New session from context (disabled for terminals only)
-- [ ] SEL-004 Group (disabled when all archived), tooltip
-- [ ] SEL-005 Archive (disabled with no live Claude session), tooltip
-- [ ] SEL-006 Clear selection
+- [x] INKUI-018 Views ignore pointer while a tool is out
+- [x] INKUI-019 No new session on double-click while drawing / on a line
+- [x] INKUI-020 Space held → ink ignores presses
+- [x] INKUI-021 Undo/redo, 100 entries, per board, guards
+- [x] INKUI-022 ⌫/Delete deletes selected stroke first
+- [x] INKUI-023 Esc precedence
+- [x] INKUI-024 Every change saved immediately
+- [x] INKUI-025 Z-order (above cards, below open archive panel) and paint order
+- [x] INKUI-026 Selection outline (dashed, non-scaling, padded)
+- [x] SEL-001 Visibility (session-type selection, no merge dialog), position
+- [x] SEL-002 `N selected` count
+- [x] SEL-003 New session from context (disabled for terminals only)
+- [x] SEL-004 Group (disabled when all archived), tooltip
+- [x] SEL-005 Archive (disabled with no live Claude session), tooltip
+- [x] SEL-006 Clear selection

@@ -11,6 +11,7 @@
 
 pub mod bar;
 pub mod canvas;
+pub mod cards;
 mod commands;
 pub mod edges;
 pub mod fuzzy;
@@ -20,6 +21,7 @@ pub mod layout;
 mod menus;
 mod naming;
 pub mod nodes;
+pub mod overlays;
 mod render;
 pub mod scene;
 mod section;
@@ -72,6 +74,9 @@ pub(crate) async fn on_core<T: Send + 'static>(
 /// Sets the board up once at start-up: installs the node renderers.
 pub fn init(cx: &mut App) {
     // board/cards/ installs its renderers here: `cards::install(cx)`.
+    cards::install(cx);
+    // Views draw their own nodes, whichever renderers are installed (spec 04).
+    crate::views::install(cx);
     if cx.try_global::<nodes::Renderers>().is_none() {
         nodes::install(nodes::Placeholders, cx);
     }

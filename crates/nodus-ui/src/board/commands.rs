@@ -19,6 +19,7 @@ use super::layout::{
     find_spot_beside, is_expanded, is_terminal, layout_group, new_section_corner, note_obstacles, pad_sheet_spot,
     section_at, section_views, spot_for_new_session, spot_in_section, spot_right_of_archive, stack_top, view_obstacles,
 };
+use crate::terminal::actions::PreviewFind;
 
 /// A view can start a session at most this often.
 const VIEW_START_GAP_MS: f64 = 3000.0;
@@ -1221,13 +1222,14 @@ impl BoardCanvas {
         }
     }
 
-    /// BOARD-106.
+    /// BOARD-106. MODAL-029: the run's terminal is disposed, and its window
+    /// closes if it shows the run.
     pub fn run_finished(&mut self, run: &ActionRunResult, cx: &mut Context<'_, Self>) {
         if run.project_id != self.project_id {
             return;
         }
-        // The terminal registry disposes the run's terminal (spec 12).
         let id = run.session_id.clone();
+        crate::terminal::store::dispose(&id, cx);
         self.state.update(cx, |s, cx| {
             if s.terminal_session_id.as_deref() == Some(id.as_str()) {
                 s.terminal_session_id = None;
@@ -1271,17 +1273,18 @@ impl BoardCanvas {
         }
     }
 
-    /// BOARD-036: a search result for an active card.
-    pub fn jump_to_card(&mut self, session_id: &str, cx: &mut Context<'_, Self>) {
+    /// `jumpToCard`: takes a search result to its session. BOARD-036: an
+    /// active card is centred, selected and flashed. BOARD-037: an archived
+    /// one's transcript opens at the match (`find`), the viewport untouched.
+    /// An unknown id does nothing, and search stays open.
+    pub fn jump_to_card(&mut self, session_id: &str, find: Option<PreviewFind>, cx: &mut Context<'_, Self>) {
         let Some(card) = self.card(session_id).cloned() else {
             return;
         };
         self.search_open = false;
-        // BOARD-037: the transcript opens; at the match once the preview (12)
-        // takes a find.
         if card.node.archived {
             let id = session_id.to_owned();
-            self.state.update(cx, |s, cx| s.open_preview(&id, cx));
+            self.state.update(cx, |s, cx| s.open_preview_at(&id, find, cx));
             return;
         }
         self.select_cards(&[session_id.to_owned()], cx);

@@ -9,6 +9,7 @@ use gpui::{Context, Task};
 use nodus_domain::{BoardNote, BoardSection, NodePatch, Rect, SessionCard, SessionStatus, SessionUsage, ViewPatch};
 
 use crate::state::AppState;
+use crate::terminal::actions::{PreviewFind, PreviewFindState};
 
 /// `unstickNotes`: stickers on cards leaving the board fall off, onto the
 /// board where an active card was, or back where they were from an archived one.
@@ -29,10 +30,16 @@ fn unstick_notes(notes: &mut [BoardNote], leaving: &[SessionCard]) {
     }
 }
 
+/// MODAL-028: the session window's card came back archived in a reload
+/// (archived from outside the window, e.g. `archive_self`).
+pub(crate) fn came_back_archived(open: Option<&str>, cards: &[SessionCard]) -> bool {
+    open.is_some_and(|open| cards.iter().any(|c| c.node.session_id == open && c.node.archived))
+}
+
 impl AppState {
     /// `loadBoard` (UI-050, UI-051, BOARD-006): shows the spinner only when
     /// another project's board is up, ignores a stale answer, and closes the
-    /// terminal modal when its session came back archived.
+    /// terminal modal when its session came back archived (MODAL-028).
     pub fn fetch_board(&mut self, project_id: &str, cx: &mut Context<'_, Self>) {
         self.board_loading = self.board.as_ref().is_none_or(|b| b.project.id != project_id);
         cx.notify();
@@ -49,13 +56,7 @@ impl AppState {
                 if let Ok(board) = loaded
                     && state.route.project_id() == Some(project_id.as_str())
                 {
-                    let archived = state.terminal_session_id.as_ref().is_some_and(|open| {
-                        board
-                            .cards
-                            .iter()
-                            .any(|c| &c.node.session_id == open && c.node.archived)
-                    });
-                    if archived {
+                    if came_back_archived(state.terminal_session_id.as_deref(), &board.cards) {
                         state.terminal_session_id = None;
                     }
                     state.board = Some(board);
@@ -348,7 +349,8 @@ impl AppState {
         .detach();
     }
 
-    /// `removeView`: the view, and its brain's card, go at once.
+    /// `removeView`: the view, and its brain's card, go at once; the brain's
+    /// terminal is disposed and its window closes if open (MODAL-030).
     pub fn remove_view(&mut self, view_id: &str, cx: &mut Context<'_, Self>) -> Task<()> {
         let Some(board) = self.board.as_mut() else {
             return Task::ready(());
@@ -444,11 +446,17 @@ impl AppState {
         cx.notify();
     }
 
-    /// `openPreview` with no search (UI-076): the transcript preview,
-    /// closing the terminal modal. A search's preview opens through
-    /// `terminal::actions::open_preview`, which records it.
+    /// `openPreview(sessionId)`: the transcript preview, closing the terminal
+    /// modal, opened from no search (TRANS-002).
     pub fn open_preview(&mut self, session_id: &str, cx: &mut Context<'_, Self>) {
-        cx.set_global(crate::terminal::actions::PreviewFindState(None));
+        self.open_preview_at(session_id, None, cx);
+    }
+
+    /// `openPreview(sessionId, find)` (TRANS-002, BOARD-037): records the
+    /// search it was opened from (none clears the last one), so the preview
+    /// opens at the match.
+    pub fn open_preview_at(&mut self, session_id: &str, find: Option<PreviewFind>, cx: &mut Context<'_, Self>) {
+        cx.set_global(PreviewFindState(find));
         self.preview_session_id = Some(session_id.to_owned());
         self.terminal_session_id = None;
         cx.notify();
@@ -460,11 +468,75 @@ impl AppState {
         cx.notify();
     }
 
+    /// `saveInk` (INKUI-024): the board's ink at once, then saved (spec 11).
+    pub fn save_ink(&mut self, strokes: Vec<nodus_domain::InkStroke>, cx: &mut Context<'_, Self>) {
+        let Some(board) = self.board.as_mut() else { return };
+        board.ink = strokes.clone();
+        let project_id = board.project.id.clone();
+        cx.notify();
+        let nodus = self.nodus.clone();
+        let rt = crate::board::core_rt(cx);
+        cx.spawn(async move |_, _| {
+            crate::board::on_core(&rt, async move { nodus.board().save_ink(&project_id, &strokes).await }).await;
+        })
+        .detach();
+    }
+
     /// `setSelection`: the selected session cards (BOARD-…, store sync).
     pub fn set_selection(&mut self, ids: Vec<String>, cx: &mut Context<'_, Self>) {
         if self.selection != ids {
             self.selection = ids;
             cx.notify();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nodus_domain::BoardNode;
+    use serde_json::Map;
+
+    fn card(id: &str, archived: bool) -> SessionCard {
+        SessionCard {
+            node: BoardNode {
+                session_id: id.into(),
+                kind: None,
+                x: 0.0,
+                y: 0.0,
+                archived,
+                title: None,
+                parents: None,
+                created_by_app: None,
+                run_of: None,
+                expanded: None,
+                view_of: None,
+                auto_mode: None,
+                from_view: None,
+                created_at: 0.0,
+                w: None,
+                h: None,
+                archived_at: None,
+                section_id: None,
+                extra: Map::new(),
+            },
+            meta: None,
+            status: SessionStatus::Done,
+            live: false,
+            agents: None,
+            agent_count: None,
+            usage: None,
+        }
+    }
+
+    #[test]
+    fn a_reload_closes_the_window_whose_card_came_back_archived() {
+        // MODAL-028: archived from outside (archive_self) while its window is open.
+        let cards = [card("live", false), card("gone", true)];
+        assert!(came_back_archived(Some("gone"), &cards));
+        assert!(!came_back_archived(Some("live"), &cards));
+        // A card no longer on the board, or no window, leaves things be.
+        assert!(!came_back_archived(Some("elsewhere"), &cards));
+        assert!(!came_back_archived(None, &cards));
     }
 }

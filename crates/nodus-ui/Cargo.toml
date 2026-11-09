@@ -26,15 +26,20 @@ nodus-voice.workspace = true
 resvg.workspace = true
 # Local time, as `Intl.DateTimeFormat` shows it (localtime_r / localtime_s).
 libc.workspace = true
+lyon.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+unicode-linebreak.workspace = true
+unicode-segmentation.workspace = true
 # Spec 05's UI: the rail's and dialog's logic, the git labels and diff parser
 # (the mics' controller is nodus-voice, above).
 nodus-actions.workspace = true
 nodus-git.workspace = true
 uuid.workspace = true
+# Views' pages (spec 04): a child webview per frame.
+wry.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2.workspace = true
@@ -42,6 +47,9 @@ dispatch2.workspace = true
 objc2.workspace = true
 objc2-app-kit = { workspace = true, features = ["NSAlert", "NSAppearance", "NSApplication", "NSButton", "NSControl", "NSColor", "NSGraphics", "NSMenu", "NSOpenPanel", "NSPanel", "NSResponder", "NSSavePanel", "NSView", "NSWindow", "NSWorkspace", "objc2-core-foundation"] }
 objc2-foundation = { workspace = true, features = ["NSArray", "NSGeometry", "NSProcessInfo", "NSString", "NSURL"] }
+# Views' page snapshots, redrawn in sRGB (spec 04).
+objc2-core-foundation = { workspace = true, features = ["CFCGTypes", "CFString"] }
+objc2-core-graphics = { workspace = true, features = ["CGBitmapContext", "CGColorSpace", "CGContext", "CGImage"] }
 raw-window-handle.workspace = true
 
 [dev-dependencies]

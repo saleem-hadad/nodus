@@ -677,206 +677,206 @@ Cross-domain dependencies: 09 (node z-order incl. select elevation +1000, drag/d
 
 ## Parity checklist
 
-- [ ] CARD-001 compact size 288×216, padding 14/16/11, column gap 8
-- [ ] CARD-002 surface bg-elevated, radius 14, shadow-sm
-- [ ] CARD-003 hover shadow-md
-- [ ] CARD-004 waiting 1px ring 45% + shadow-md
-- [ ] CARD-005 selected 2px accent ring + shadow-md, beats waiting
-- [ ] CARD-006 dragging ring + shadow-lg + scale 1.015
-- [ ] CARD-007 card transitions 220ms
-- [ ] CARD-008 archived opacity rule + stack override
-- [ ] CARD-009 cursor default / grabbing
-- [ ] CARD-010 header flex-start gap 9 min-h 20
-- [ ] CARD-011 status dot 10px, top 5px, tooltip labels
-- [ ] CARD-012 working dot + breathe
-- [ ] CARD-013 done dot
-- [ ] CARD-014 waiting dot + pulse
-- [ ] CARD-015 small dot variants
-- [ ] CARD-016 terminal glyph instead of dot, live colour, tooltip
-- [ ] CARD-017 title precedence, typography, 2-line clamp, tooltip
-- [ ] CARD-018 search match runs in accent
-- [ ] CARD-019 live glyph + tooltip
-- [ ] CARD-020 corner group on hover (Archive + Expand)
-- [ ] CARD-021 corner button styling + hover mix colours
-- [ ] CARD-022 corner Archive (tooltip per platform, confirm)
-- [ ] CARD-023 corner Expand (tooltip, wake)
-- [ ] CARD-024 corner clicks don't reach card / no drag
-- [ ] CARD-025 merged chip
-- [ ] CARD-026 preview kind precedence
-- [ ] CARD-027 stripMarkdown rules
-- [ ] CARD-028 preview typography, collapse, clamp 4
-- [ ] CARD-029 clamp 3 after chip
-- [ ] CARD-030 prompt italic
-- [ ] CARD-031 empty tertiary `No messages yet`
-- [ ] CARD-032 path mono 11px clamp 2
-- [ ] CARD-033 footer layout + separator
-- [ ] CARD-034 branch item max 130 + tooltip
-- [ ] CARD-035 message count item
-- [ ] CARD-036 agents footer button with running badge
-- [ ] CARD-037 footer agents point/click/tooltip/aria-expanded
-- [ ] CARD-038 no-deck agents button opens viewer
-- [ ] CARD-039 footer agents button styling
-- [ ] CARD-040 terminal footer Running/Exited
-- [ ] CARD-041 timeAgo formats
-- [ ] CARD-042 timestamp source, no ticking
-- [ ] CARD-043 accessible label
-- [ ] CARD-044 rename field prefill + select all
-- [ ] CARD-045 rename field styling
-- [ ] CARD-046 rename commit rules
-- [ ] CARD-047 rename Escape cancels
-- [ ] CARD-048 rename swallows keys/pointer
-- [ ] CARD-049 rename triggers (09) + 240ms title click
-- [ ] CARD-050 no visible handles; facing-side edges
-- [ ] CARD-051 lineage edge stroke + working animation
-- [ ] CARD-052 view edge dashed marching
-- [ ] CARD-053 card node glide 420ms
-- [ ] XCARD-001 expanded condition + default 720×480
-- [ ] XCARD-002 expanded surface, clip, no drag scale
-- [ ] XCARD-003 title bar 40px layout
-- [ ] XCARD-004 title single line 13px, centred glyphs
-- [ ] XCARD-005 usage stats content
-- [ ] XCARD-006 usage hides at ≤560 / ≤440
-- [ ] XCARD-007 tool order
-- [ ] XCARD-008 tool button styling/states
-- [ ] XCARD-009 Agents tool + badge
-- [ ] XCARD-010 Mic types in + wakes
-- [ ] XCARD-011 Resume / Restart
-- [ ] XCARD-012 Stop + confirm
-- [ ] XCARD-013 Archive tool
-- [ ] XCARD-014 Open in a window
-- [ ] XCARD-015 Collapse + tooltip variants
-- [ ] XCARD-016 tools swallow clicks / no drag
-- [ ] XCARD-017 title bar drag handle, click focuses, dblclick renames
-- [ ] XCARD-018 body padding, bg, cursor, focus on press
-- [ ] XCARD-019 initial started rule
-- [ ] XCARD-020 started when live later
-- [ ] XCARD-021 enabled rule; blank while in modal
-- [ ] XCARD-022 not-started overlay + button copy
-- [ ] XCARD-023 loading pill copy + fade
-- [ ] XCARD-024 error overlay + Try again
-- [ ] XCARD-025 wake semantics + pending wake
-- [ ] XCARD-026 focus within 1500ms of wake only
-- [ ] XCARD-027 wheel gesture arbitration (250ms)
-- [ ] XCARD-028 pinch/ctrl always to board
-- [ ] XCARD-029 resize zones + cursors
-- [ ] XCARD-030 min 360×240, save rounded
-- [ ] XCARD-031 grip on hover
-- [ ] XCARD-032 z above compact; deck & stickers on expanded
-- [ ] DECK-001 deck existence
-- [ ] DECK-002 3 layers by urgency, nearest = most urgent
-- [ ] DECK-003 layer surface + 3px status strip
-- [ ] DECK-004 rest offsets/scales/brightness
-- [ ] DECK-005 lifted offsets on hover/open + pointer cursor
-- [ ] DECK-006 layer transitions 420/220ms
-- [ ] DECK-007 waiting layer glow
-- [ ] DECK-008 point opens fan
-- [ ] DECK-009 click toggles pin
-- [ ] DECK-010 280ms close on leaving node
-- [ ] DECK-011 pinned closes on outside press / Escape
-- [ ] DECK-012 unpin leaves hover-open
-- [ ] DECK-013 drag / no agents closes
-- [ ] DECK-014 fan node z 1400
-- [ ] DECK-015 fan side decision once
-- [ ] DECK-016 fan geometry per side
-- [ ] DECK-017 fan header + inside pill
-- [ ] DECK-018 ≤6 all, else 5 most urgent in start order
-- [ ] DECK-019 fan row visuals + tooltip
-- [ ] DECK-020 fan row hover
-- [ ] DECK-021 fan row lines content/typography
-- [ ] DECK-022 agentStep texts
-- [ ] DECK-023 agentStatusLabel
-- [ ] DECK-024 elapsed + 1s tick
-- [ ] DECK-025 all-agents pill text + visuals
-- [ ] DECK-026 deal-in animation + stagger
-- [ ] DECK-027 row/pill open Agents viewer
-- [ ] DECK-028 fan swallows clicks/menu/wheel/drag
-- [ ] DECK-029 fan accessible name
-- [ ] ARCH-001 frame sizes folded/open
-- [ ] ARCH-002 folded frame visuals
-- [ ] ARCH-003 hot visuals + `Drop to archive`
-- [ ] ARCH-004 open panel visuals + blur
-- [ ] ARCH-005 frame transitions + 460ms size
-- [ ] ARCH-006 z −1 / raised 1500 + 700ms
-- [ ] ARCH-007 header drag handle, cursor, tooltip
-- [ ] ARCH-008 label, count pill, zoom scale
-- [ ] ARCH-009 hint text + visibility
-- [ ] ARCH-010 empty placeholder
-- [ ] ARCH-011 click opens panel
-- [ ] ARCH-012 stack order + spot + depth ≤3
-- [ ] ARCH-013 depth visuals + hidden contents
-- [ ] ARCH-014 stack opacity 1 (d3 0)
-- [ ] ARCH-015 stack transitions
-- [ ] ARCH-016 stack lift on hover/hot
-- [ ] ARCH-017 lift overrides top card drag visuals
-- [ ] ARCH-018 only top card + results take pointer
-- [ ] ARCH-019 search field visibility + geometry + animation
-- [ ] ARCH-020 search auto-focus rules
-- [ ] ARCH-021 placeholder + accessible name
-- [ ] ARCH-022 typing opens + resets scroll
-- [ ] ARCH-023 Escape closes + dismisses
-- [ ] ARCH-024 Enter preview first / open
-- [ ] ARCH-025 ArrowDown opens
-- [ ] ARCH-026 click field opens + focuses
-- [ ] ARCH-027 clear button
-- [ ] ARCH-028 focus ring
-- [ ] ARCH-029 result slots 2 columns
-- [ ] ARCH-030 band clipping + 24px bleed
-- [ ] ARCH-031 result glide + stagger, none while scrolling
-- [ ] ARCH-032 rise-from-stack animation
-- [ ] ARCH-033 dealt placeholder copy
-- [ ] ARCH-034 divider
-- [ ] ARCH-035 no-match message
-- [ ] ARCH-036 scrollbar geometry
-- [ ] ARCH-037 outside press closes panel
-- [ ] ARCH-038 archived cards + pad travel with archive
-- [ ] ARCH-039 drop to archive / terminal bounce
-- [ ] ARCH-040 count = archived cards
-- [ ] NOTEUI-001 note size default + min 120
-- [ ] NOTEUI-002 paper colours both themes
-- [ ] NOTEUI-003 top shading gradient 22px
-- [ ] NOTEUI-004 note box padding/radius/shadow/ink
-- [ ] NOTEUI-005 selected/editing ring
-- [ ] NOTEUI-006 dragging tilt + lifted shadow
-- [ ] NOTEUI-007 note transitions
-- [ ] NOTEUI-008 text typography + bottom fade
-- [ ] NOTEUI-009 empty placeholder text
-- [ ] NOTEUI-010 write triggers
-- [ ] NOTEUI-011 editor focus, caret end, styling, placeholder
-- [ ] NOTEUI-012 Enter newline; Escape / mod+Enter done
-- [ ] NOTEUI-013 click away done + save
-- [ ] NOTEUI-014 500ms autosave + flush on destroy
-- [ ] NOTEUI-015 save to note's project after board switch
-- [ ] NOTEUI-016 editor swallows keys/pointer/wheel
-- [ ] NOTEUI-017 empty notes kept
-- [ ] NOTEUI-018 signature (this board) + click
-- [ ] NOTEUI-019 signature (other project) + click
-- [ ] NOTEUI-020 signature styling + hover
-- [ ] NOTEUI-021 signed text height −22
-- [ ] NOTEUI-022 ▶ visibility rules
-- [ ] NOTEUI-023 ▶ styling/hover/press
-- [ ] NOTEUI-024 start session from note semantics + toast
-- [ ] NOTEUI-025 note resize handles when selected
-- [ ] NOTEUI-026 note resize saves rounded
-- [ ] NOTEUI-027 notes z 2
-- [ ] NOTEUI-028 note glide 420ms
-- [ ] NOTEUI-029 note bounces off archive/pad
-- [ ] NOTEUI-030 delete without confirm
-- [ ] NOTEUI-031 new notes yellow; 8 colours
-- [ ] NOTEUI-032 sticker vs free note rules
-- [ ] NOTEUI-033 sticker placement
-- [ ] NOTEUI-034 sticker visuals + 3° tilt
-- [ ] NOTEUI-035 sticker hover + tooltip
-- [ ] NOTEUI-036 sticker text clamp 3
-- [ ] NOTEUI-037 sticker × delete, no confirm
-- [ ] NOTEUI-038 sticker landing < 4000ms
-- [ ] NOTEUI-039 sticker press drags/opens card
-- [ ] NOTEUI-040 pad frame position + visuals
-- [ ] NOTEUI-041 pad header + hint + zoom scale
-- [ ] NOTEUI-042 pad sheets stack
-- [ ] NOTEUI-043 draft top sheet properties + tooltip
-- [ ] NOTEUI-044 draft peel hover / drag tilt
-- [ ] NOTEUI-045 drop draft off pad → new note
-- [ ] NOTEUI-046 drop draft back → returns
-- [ ] NOTEUI-047 click pad → note beside pad
-- [ ] NOTEUI-048 pad menu `New note`
-- [ ] NOTEUI-049 pad moves with archive
+- [x] CARD-001 compact size 288×216, padding 14/16/11, column gap 8
+- [x] CARD-002 surface bg-elevated, radius 14, shadow-sm
+- [x] CARD-003 hover shadow-md
+- [x] CARD-004 waiting 1px ring 45% + shadow-md
+- [x] CARD-005 selected 2px accent ring + shadow-md, beats waiting
+- [x] CARD-006 dragging ring + shadow-lg + scale 1.015
+- [x] CARD-007 card transitions 220ms
+- [x] CARD-008 archived opacity rule + stack override
+- [x] CARD-009 cursor default / grabbing
+- [x] CARD-010 header flex-start gap 9 min-h 20
+- [x] CARD-011 status dot 10px, top 5px, tooltip labels
+- [x] CARD-012 working dot + breathe
+- [x] CARD-013 done dot
+- [x] CARD-014 waiting dot + pulse
+- [x] CARD-015 small dot variants
+- [x] CARD-016 terminal glyph instead of dot, live colour, tooltip
+- [x] CARD-017 title precedence, typography, 2-line clamp, tooltip
+- [x] CARD-018 search match runs in accent
+- [x] CARD-019 live glyph + tooltip
+- [x] CARD-020 corner group on hover (Archive + Expand)
+- [x] CARD-021 corner button styling + hover mix colours
+- [x] CARD-022 corner Archive (tooltip per platform, confirm)
+- [x] CARD-023 corner Expand (tooltip, wake)
+- [x] CARD-024 corner clicks don't reach card / no drag
+- [x] CARD-025 merged chip
+- [x] CARD-026 preview kind precedence
+- [x] CARD-027 stripMarkdown rules
+- [x] CARD-028 preview typography, collapse, clamp 4
+- [x] CARD-029 clamp 3 after chip
+- [x] CARD-030 prompt italic
+- [x] CARD-031 empty tertiary `No messages yet`
+- [x] CARD-032 path mono 11px clamp 2
+- [x] CARD-033 footer layout + separator
+- [x] CARD-034 branch item max 130 + tooltip
+- [x] CARD-035 message count item
+- [x] CARD-036 agents footer button with running badge
+- [x] CARD-037 footer agents point/click/tooltip/aria-expanded
+- [x] CARD-038 no-deck agents button opens viewer
+- [x] CARD-039 footer agents button styling
+- [x] CARD-040 terminal footer Running/Exited
+- [x] CARD-041 timeAgo formats
+- [x] CARD-042 timestamp source, no ticking
+- [x] CARD-043 accessible label
+- [x] CARD-044 rename field prefill + select all
+- [x] CARD-045 rename field styling
+- [x] CARD-046 rename commit rules
+- [x] CARD-047 rename Escape cancels
+- [x] CARD-048 rename swallows keys/pointer
+- [x] CARD-049 rename triggers (09) + 240ms title click
+- [x] CARD-050 no visible handles; facing-side edges
+- [x] CARD-051 lineage edge stroke + working animation
+- [x] CARD-052 view edge dashed marching
+- [x] CARD-053 card node glide 420ms
+- [x] XCARD-001 expanded condition + default 720×480
+- [x] XCARD-002 expanded surface, clip, no drag scale
+- [x] XCARD-003 title bar 40px layout
+- [x] XCARD-004 title single line 13px, centred glyphs
+- [x] XCARD-005 usage stats content
+- [x] XCARD-006 usage hides at ≤560 / ≤440
+- [x] XCARD-007 tool order
+- [x] XCARD-008 tool button styling/states
+- [x] XCARD-009 Agents tool + badge
+- [x] XCARD-010 Mic types in + wakes
+- [x] XCARD-011 Resume / Restart
+- [x] XCARD-012 Stop + confirm
+- [x] XCARD-013 Archive tool
+- [x] XCARD-014 Open in a window
+- [x] XCARD-015 Collapse + tooltip variants
+- [x] XCARD-016 tools swallow clicks / no drag
+- [x] XCARD-017 title bar drag handle, click focuses, dblclick renames
+- [x] XCARD-018 body padding, bg, cursor, focus on press
+- [x] XCARD-019 initial started rule
+- [x] XCARD-020 started when live later
+- [x] XCARD-021 enabled rule; blank while in modal
+- [x] XCARD-022 not-started overlay + button copy
+- [x] XCARD-023 loading pill copy + fade
+- [x] XCARD-024 error overlay + Try again
+- [x] XCARD-025 wake semantics + pending wake
+- [x] XCARD-026 focus within 1500ms of wake only
+- [x] XCARD-027 wheel gesture arbitration (250ms)
+- [x] XCARD-028 pinch/ctrl always to board
+- [x] XCARD-029 resize zones + cursors
+- [x] XCARD-030 min 360×240, save rounded
+- [x] XCARD-031 grip on hover
+- [x] XCARD-032 z above compact; deck & stickers on expanded
+- [x] DECK-001 deck existence
+- [x] DECK-002 3 layers by urgency, nearest = most urgent
+- [x] DECK-003 layer surface + 3px status strip
+- [x] DECK-004 rest offsets/scales/brightness
+- [x] DECK-005 lifted offsets on hover/open + pointer cursor
+- [x] DECK-006 layer transitions 420/220ms
+- [x] DECK-007 waiting layer glow
+- [x] DECK-008 point opens fan
+- [x] DECK-009 click toggles pin
+- [x] DECK-010 280ms close on leaving node
+- [x] DECK-011 pinned closes on outside press / Escape
+- [x] DECK-012 unpin leaves hover-open
+- [x] DECK-013 drag / no agents closes
+- [x] DECK-014 fan node z 1400
+- [x] DECK-015 fan side decision once
+- [x] DECK-016 fan geometry per side
+- [x] DECK-017 fan header + inside pill
+- [x] DECK-018 ≤6 all, else 5 most urgent in start order
+- [x] DECK-019 fan row visuals + tooltip
+- [x] DECK-020 fan row hover
+- [x] DECK-021 fan row lines content/typography
+- [x] DECK-022 agentStep texts
+- [x] DECK-023 agentStatusLabel
+- [x] DECK-024 elapsed + 1s tick
+- [x] DECK-025 all-agents pill text + visuals
+- [x] DECK-026 deal-in animation + stagger
+- [x] DECK-027 row/pill open Agents viewer
+- [x] DECK-028 fan swallows clicks/menu/wheel/drag
+- [x] DECK-029 fan accessible name
+- [x] ARCH-001 frame sizes folded/open
+- [x] ARCH-002 folded frame visuals
+- [x] ARCH-003 hot visuals + `Drop to archive`
+- [x] ARCH-004 open panel visuals + blur
+- [x] ARCH-005 frame transitions + 460ms size
+- [x] ARCH-006 z −1 / raised 1500 + 700ms
+- [x] ARCH-007 header drag handle, cursor, tooltip
+- [x] ARCH-008 label, count pill, zoom scale
+- [x] ARCH-009 hint text + visibility
+- [x] ARCH-010 empty placeholder
+- [x] ARCH-011 click opens panel
+- [x] ARCH-012 stack order + spot + depth ≤3
+- [x] ARCH-013 depth visuals + hidden contents
+- [x] ARCH-014 stack opacity 1 (d3 0)
+- [x] ARCH-015 stack transitions
+- [x] ARCH-016 stack lift on hover/hot
+- [x] ARCH-017 lift overrides top card drag visuals
+- [x] ARCH-018 only top card + results take pointer
+- [x] ARCH-019 search field visibility + geometry + animation
+- [x] ARCH-020 search auto-focus rules
+- [x] ARCH-021 placeholder + accessible name
+- [x] ARCH-022 typing opens + resets scroll
+- [x] ARCH-023 Escape closes + dismisses
+- [x] ARCH-024 Enter preview first / open
+- [x] ARCH-025 ArrowDown opens
+- [x] ARCH-026 click field opens + focuses
+- [x] ARCH-027 clear button
+- [x] ARCH-028 focus ring
+- [x] ARCH-029 result slots 2 columns
+- [x] ARCH-030 band clipping + 24px bleed
+- [x] ARCH-031 result glide + stagger, none while scrolling
+- [x] ARCH-032 rise-from-stack animation
+- [x] ARCH-033 dealt placeholder copy
+- [x] ARCH-034 divider
+- [x] ARCH-035 no-match message
+- [x] ARCH-036 scrollbar geometry
+- [x] ARCH-037 outside press closes panel
+- [x] ARCH-038 archived cards + pad travel with archive
+- [x] ARCH-039 drop to archive / terminal bounce
+- [x] ARCH-040 count = archived cards
+- [x] NOTEUI-001 note size default + min 120
+- [x] NOTEUI-002 paper colours both themes
+- [x] NOTEUI-003 top shading gradient 22px
+- [x] NOTEUI-004 note box padding/radius/shadow/ink
+- [x] NOTEUI-005 selected/editing ring
+- [x] NOTEUI-006 dragging tilt + lifted shadow
+- [x] NOTEUI-007 note transitions
+- [x] NOTEUI-008 text typography + bottom fade
+- [x] NOTEUI-009 empty placeholder text
+- [x] NOTEUI-010 write triggers
+- [x] NOTEUI-011 editor focus, caret end, styling, placeholder
+- [x] NOTEUI-012 Enter newline; Escape / mod+Enter done
+- [x] NOTEUI-013 click away done + save
+- [x] NOTEUI-014 500ms autosave + flush on destroy
+- [x] NOTEUI-015 save to note's project after board switch
+- [x] NOTEUI-016 editor swallows keys/pointer/wheel
+- [x] NOTEUI-017 empty notes kept
+- [x] NOTEUI-018 signature (this board) + click
+- [x] NOTEUI-019 signature (other project) + click
+- [x] NOTEUI-020 signature styling + hover
+- [x] NOTEUI-021 signed text height −22
+- [x] NOTEUI-022 ▶ visibility rules
+- [x] NOTEUI-023 ▶ styling/hover/press
+- [x] NOTEUI-024 start session from note semantics + toast
+- [x] NOTEUI-025 note resize handles when selected
+- [x] NOTEUI-026 note resize saves rounded
+- [x] NOTEUI-027 notes z 2
+- [x] NOTEUI-028 note glide 420ms
+- [x] NOTEUI-029 note bounces off archive/pad
+- [x] NOTEUI-030 delete without confirm
+- [x] NOTEUI-031 new notes yellow; 8 colours
+- [x] NOTEUI-032 sticker vs free note rules
+- [x] NOTEUI-033 sticker placement
+- [x] NOTEUI-034 sticker visuals + 3° tilt
+- [x] NOTEUI-035 sticker hover + tooltip
+- [x] NOTEUI-036 sticker text clamp 3
+- [x] NOTEUI-037 sticker × delete, no confirm
+- [x] NOTEUI-038 sticker landing < 4000ms
+- [x] NOTEUI-039 sticker press drags/opens card
+- [x] NOTEUI-040 pad frame position + visuals
+- [x] NOTEUI-041 pad header + hint + zoom scale
+- [x] NOTEUI-042 pad sheets stack
+- [x] NOTEUI-043 draft top sheet properties + tooltip
+- [x] NOTEUI-044 draft peel hover / drag tilt
+- [x] NOTEUI-045 drop draft off pad → new note
+- [x] NOTEUI-046 drop draft back → returns
+- [x] NOTEUI-047 click pad → note beside pad
+- [x] NOTEUI-048 pad menu `New note`
+- [x] NOTEUI-049 pad moves with archive

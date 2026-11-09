@@ -270,11 +270,17 @@ pub struct Assets;
 
 impl AssetSource for Assets {
     fn load(&self, path: &str) -> gpui::Result<Option<Cow<'static, [u8]>>> {
+        if let Some(svg) = crate::views::icons::load(path) {
+            return Ok(Some(Cow::Owned(svg)));
+        }
         if let Some(rest) = path.strip_prefix("icons/nodus/")
             && let Some((name, stroke)) = rest.strip_suffix(".svg").and_then(|r| r.split_once('@'))
             && let (Some(icon), Ok(stroke)) = (Icon::from_name(name), stroke.parse::<f32>())
         {
             return Ok(Some(Cow::Owned(icon.svg_source(stroke).into_bytes())));
+        }
+        if let Some(rest) = path.strip_prefix("icons/cards/") {
+            return Ok(crate::board::cards::icons::load(rest));
         }
         if let Some(svg) = crate::terminal::icons::load(path) {
             return Ok(Some(Cow::Owned(svg)));
@@ -283,6 +289,9 @@ impl AssetSource for Assets {
             return Ok(Some(Cow::Owned(svg)));
         }
         if let Some(svg) = crate::actions::icons::load(path) {
+            return Ok(Some(Cow::Owned(svg)));
+        }
+        if let Some(svg) = crate::board::overlays::icons::load(path) {
             return Ok(Some(Cow::Owned(svg)));
         }
         gpui::assets::Assets.load(path)

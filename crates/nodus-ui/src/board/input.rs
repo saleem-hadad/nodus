@@ -38,6 +38,40 @@ fn distance(a: GPoint<Pixels>, b: GPoint<Pixels>) -> f32 {
     (dx * dx + dy * dy).sqrt()
 }
 
+/// What is over the board when a key or a menu command comes: the session
+/// window (`modal`), the transcript preview, the agents viewer, the diff, one
+/// of the board's overlays, or a field (a terminal too) with the keyboard.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct Cover {
+    pub modal: bool,
+    pub preview: bool,
+    pub agents: bool,
+    pub diff: bool,
+    pub overlay: bool,
+    pub typing: bool,
+}
+
+impl Cover {
+    /// BOARD-157, MODAL-031: ⌘K opens search, from the preview too (it
+    /// closes, TRANS-024), but not over the session window, the agents
+    /// viewer, the diff or an overlay, nor from a field.
+    pub(crate) fn search_key(self) -> bool {
+        !(self.typing || self.modal || self.agents || self.diff || self.overlay)
+    }
+
+    /// BOARD-158, MODAL-031: the board's other shortcuts, with nothing over it.
+    pub(crate) fn shortcuts(self) -> bool {
+        !(self.modal || self.preview || self.agents || self.diff || self.overlay || self.typing)
+    }
+
+    /// BOARD-171, MODAL-031: the menu's board commands, but not under an
+    /// overlay, the agents viewer or the diff; Search closes the session
+    /// window and the preview.
+    pub(crate) fn menu(self) -> bool {
+        !(self.overlay || self.agents || self.diff)
+    }
+}
+
 /// The DOM wheel delta (`deltaX`, `deltaY`, `deltaMode` 0) Chromium gave
 /// for a GPUI scroll.
 fn dom_delta(delta: ScrollDelta) -> (f64, f64) {
@@ -1140,15 +1174,6 @@ impl BoardCanvas {
             .map_or_else(|| key.clone(), str::to_lowercase);
         let modk = platform.mod_key(&m);
         let other = platform.other_mod_key(&m);
-        let (modal, preview, agents, diff) = {
-            let s = self.state.read(cx);
-            (
-                s.terminal_session_id.is_some(),
-                s.preview_session_id.is_some(),
-                s.agent_view.is_some(),
-                s.diff_open,
-            )
-        };
         // BOARD-141: the confirm's button has the keyboard: Enter or Space
         // confirms, Escape cancels.
         if self.confirm.is_some() {
@@ -1159,17 +1184,17 @@ impl BoardCanvas {
             }
             return true;
         }
-        let overlay = self.overlay_open(cx);
+        let cover = self.cover(typing, cx);
         // Space held alone pans (React Flow's panActivationKeyCode).
         if key == "space" && !typing && !m.modified() {
             self.space = true;
         }
         // BOARD-157: ⌘K opens search (spec 11).
         if key == "k" && modk && !m.shift && !m.alt && !other {
-            if typing || modal || agents || diff || overlay {
+            if !cover.search_key() {
                 return false;
             }
-            if preview {
+            if cover.preview {
                 self.state.update(cx, |s, cx| {
                     s.preview_session_id = None;
                     cx.notify();
@@ -1179,12 +1204,12 @@ impl BoardCanvas {
             return true;
         }
         // BOARD-158.
-        if modal || preview || agents || diff || overlay || typing {
+        if !cover.shortcuts() {
             return false;
         }
-        // BOARD-159: only ink has an undo (spec 11).
+        // BOARD-159: only ink has an undo (spec 11, INKUI-021).
         if key == "z" && modk && !m.alt && !other {
-            return false;
+            return if m.shift { self.ink_redo(cx) } else { self.ink_undo(cx) };
         }
         let sel = self.selected_cards();
         let note_sel = self.selected_notes();
@@ -1194,6 +1219,10 @@ impl BoardCanvas {
         match key.as_str() {
             // BOARD-160.
             "escape" => {
+                // INKUI-023: the ink puts its tool down or lets go of its stroke first.
+                if self.ink_escape(cx) {
+                    return false;
+                }
                 if self.stack_open() {
                     self.close_stack(cx);
                 }
@@ -1217,6 +1246,10 @@ impl BoardCanvas {
             }
             // BOARD-163.
             "backspace" | "delete" if !modk && !m.alt => {
+                // INKUI-022: the selected stroke goes first.
+                if self.ink_delete_selected(cx) {
+                    return true;
+                }
                 if !any {
                     return false;
                 }
@@ -1248,9 +1281,25 @@ impl BoardCanvas {
                     true
                 }
                 // BOARD-166, BOARD-167, BOARD-169: the prompt bar and ink (spec 11).
-                "v" => !e.is_held,
-                "/" => true,
-                "p" | "a" | "x" => true,
+                // BAR-034: record, or stop and transcribe.
+                "v" => {
+                    if e.is_held {
+                        return false;
+                    }
+                    self.bar_toggle_voice(cx);
+                    true
+                }
+                // BAR-033: the bar takes the keyboard, with `/` typed.
+                "/" => {
+                    self.bar_focus_from_board(Some("/".to_owned()), cx);
+                    true
+                }
+                "p" | "a" | "x" => {
+                    if let Some(tool) = super::overlays::ink::tool_for_key(&ch) {
+                        self.ink_set_tool(tool, None, cx);
+                    }
+                    true
+                }
                 // BOARD-168.
                 "e" => {
                     let active: Vec<bool> = self
@@ -1287,20 +1336,32 @@ impl BoardCanvas {
     /// Window blur and any context menu let go of held keys.
     pub fn release_keys(&mut self) {
         self.space = false;
+        // INKUI-012, INKUI-020: a gesture the window lost goes.
+        self.overlays.ink.drop_gesture();
+    }
+
+    /// What is over the board now (`typing`: a field has the keyboard).
+    pub(crate) fn cover(&self, typing: bool, cx: &gpui::App) -> Cover {
+        let s = self.state.read(cx);
+        Cover {
+            modal: s.terminal_session_id.is_some(),
+            preview: s.preview_session_id.is_some(),
+            agents: s.agent_view.is_some(),
+            diff: s.diff_open,
+            overlay: self.overlay_open(cx),
+            typing,
+        }
     }
 
     /// BOARD-171: the app menu's board commands.
     pub fn on_menu(&mut self, command: MenuCommand, cx: &mut Context<'_, Self>) {
-        let (agents, diff) = {
-            let s = self.state.read(cx);
-            (s.agent_view.is_some(), s.diff_open)
-        };
-        if self.overlay_open(cx) || agents || diff {
+        if !self.cover(false, cx).menu() {
             return;
         }
         match command {
             MenuCommand::NewSession => self.create_session(None, SessionKind::Claude, None, cx),
             MenuCommand::NewTerminal => self.create_session(None, SessionKind::Terminal, None, cx),
+            // MODAL-031: over the session window (and the preview), which close.
             MenuCommand::Search => {
                 self.state.update(cx, |s, cx| {
                     s.terminal_session_id = None;
@@ -1317,6 +1378,53 @@ impl BoardCanvas {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_session_window_keeps_the_boards_keys_but_not_the_menus_search() {
+        // MODAL-031: with the session window up, no shortcut and no ⌘K…
+        let modal = Cover {
+            modal: true,
+            ..Cover::default()
+        };
+        assert!(!modal.search_key());
+        assert!(!modal.shortcuts());
+        // …but the menu's Search Sessions… still comes (and closes it).
+        assert!(modal.menu());
+        // A bare board takes all three.
+        let bare = Cover::default();
+        assert!(bare.search_key() && bare.shortcuts() && bare.menu());
+        // TRANS-024: the preview gives way to ⌘K, not to the other shortcuts.
+        let preview = Cover {
+            preview: true,
+            ..Cover::default()
+        };
+        assert!(preview.search_key());
+        assert!(!preview.shortcuts());
+        assert!(preview.menu());
+        // An overlay, the agents viewer or the diff take the menu's too.
+        for cover in [
+            Cover {
+                overlay: true,
+                ..Cover::default()
+            },
+            Cover {
+                agents: true,
+                ..Cover::default()
+            },
+            Cover {
+                diff: true,
+                ..Cover::default()
+            },
+        ] {
+            assert!(!cover.search_key() && !cover.shortcuts() && !cover.menu());
+        }
+        // A field (or a focused terminal) keeps its keys; the menu still works.
+        let typing = Cover {
+            typing: true,
+            ..Cover::default()
+        };
+        assert!(!typing.search_key() && !typing.shortcuts() && typing.menu());
+    }
 
     #[test]
     fn multi_selects_with_shift_or_meta_alone() {

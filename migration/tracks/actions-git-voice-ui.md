@@ -14,7 +14,7 @@
 
 ✅ ready to merge. Done: GIT 27, ACT 43, VOICE 9, plus MODAL-019. Deferred: none of this track's; two spec-05 IDs
 still unticked belong to the core (ACT-016's and VOICE-019's env wait and project lookup, see below). Every scene is
-within 0.03–2.4 % of its golden in its own region (text rasterisation and metrics, gpui-text's), see the table.
+within 0.03–3.3 % of its golden in its own region (text rasterisation and metrics, gpui-text's), see the table.
 
 | Piece | State |
 | --- | --- |
@@ -46,18 +46,20 @@ miss the scripted pointer path in `actions-run`; run it again alone.
 
 ### Checked against the goldens (each scene's own region, CSS px)
 
+Light is measured on main with gpui-text's text fixes (after the rebase); dark before them.
+
 | Scene | Region | Light | Dark | What differs |
 | --- | --- | --- | --- | --- |
-| git-log | chip + popover (250, 0, 520, 330) | 3.95 % | 2.82 % | text rasterisation only |
-| git-diff | Changes window (130, 56, 1180, 790) | 1.03 % | 1.05 % | text rasterisation only |
+| git-log | chip + popover (250, 0, 520, 330) | 2.76 % | 2.82 % | text rasterisation only |
+| git-diff | Changes window (130, 56, 1180, 790) | 0.33 % | 1.05 % | text rasterisation only |
 | git-diff | title bar (0, 0, 1440, 52) | 0.24 % | 0.20 % | text |
 | actions-rail | rail (1376, 350, 64, 255) | 0.06 % | 0.03 % | — |
-| actions-rail | hint (1176, 404, 196, 38) | 4.0 % | 4.2 % | text rasterisation only |
-| actions-run | fan card (1112, 356, 256, 78) | 1.56 % | 1.38 % | the card sits 0.5 px lower; text |
+| actions-rail | hint (1176, 404, 196, 38) | 3.3 % | 4.2 % | text rasterisation only |
+| actions-run | fan card (1112, 356, 256, 78) | 1.16 % | 1.38 % | the card sits 0.5 px lower; text |
 | actions-run | rail with the running tile and dot (1376, 350, 64, 255) | 0.14 % | 0.12 % | — |
-| actions-new | dialog (410, 180, 620, 420) | 2.16 % | 1.60 % | chip labels ~0.2 px wider per glyph (text metrics) |
-| actions-drafting | dialog (410, 180, 620, 420) | 2.05 % | 1.51 % | same |
-| actions-review | dialog (410, 140, 620, 620) | 1.34 % | 2.31 % | line boxes rounded to device pixels (+0.5 px below the header); text |
+| actions-new | dialog (410, 180, 620, 420) | 1.94 % | 1.60 % | chip labels ~0.2 px wider per glyph (text metrics) |
+| actions-drafting | dialog (410, 180, 620, 420) | 1.76 % | 1.51 % | same |
+| actions-review | dialog (410, 140, 620, 620) | 0.26 % | 2.31 % | line boxes rounded to device pixels (+0.5 px below the header); text |
 | terminal-claude | the mic (1118, 62, 40, 32) | 2.11 % | 2.09 % | the header's actions sit 0.5 px right (terminal-ui's layout, Stop too) |
 
 Whole-shot numbers are higher because the board's cards and notes behind are still placeholders (board-cards).

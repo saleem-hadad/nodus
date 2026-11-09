@@ -26,7 +26,7 @@ use super::present::{
 use super::status_dot::status_dot;
 use super::sticker::sticker;
 use super::{BoardEnv, Shade, Shadow, Z, anim, brightness, expanded_card, fade, mix};
-use crate::components::text_field::{focus_all, input, new_input};
+use crate::components::text_field::{focus_all, new_input};
 use crate::components::tooltip::native_tooltip;
 use crate::components::tween::transition;
 use crate::theme::tokens::Tokens;
@@ -767,7 +767,7 @@ fn title_editor(env: &Rc<BoardEnv>, card: &SessionCard, window: &mut Window, cx:
         .on_key_down(|_, _, cx| cx.stop_propagation())
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .on_click(|_, _, cx| cx.stop_propagation())
-        .child(input(&field, z.px(24.), false))
+        .child(super::field_line(&field, z.px(24.), z.px(15.), fonts::DISPLAY, FontWeight::SEMIBOLD))
         .into_any_element()
 }
 

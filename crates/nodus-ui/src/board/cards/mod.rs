@@ -276,6 +276,27 @@ pub fn text_tab(z: Z, s: impl Into<gpui::SharedString>, size: f32, weight: gpui:
     para::label(s, font, size, size * 1.4, color, z.0)
 }
 
+/// A text field's line at the board's scale: gpui-component's editing
+/// engine, no chrome, `height` tall, its text `size` (both scaled).
+pub fn field_line(
+    state: &gpui::Entity<gpui::component::input::InputState>,
+    height: Pixels,
+    size: Pixels,
+    family: &'static str,
+    weight: gpui::FontWeight,
+) -> impl gpui::IntoElement {
+    use gpui::Styled as _;
+    let field = gpui::component::input::Input::new(state)
+        .appearance(false)
+        .px(px(0.))
+        .py(px(0.))
+        .line_height(height)
+        .text_size(size)
+        .font_family(family)
+        .font_weight(weight);
+    gpui::Styled::h(field, height)
+}
+
 /// A UI-font face at a weight.
 pub fn ui_font(weight: gpui::FontWeight) -> gpui::Font {
     para::font(crate::theme::fonts::UI, weight, false)

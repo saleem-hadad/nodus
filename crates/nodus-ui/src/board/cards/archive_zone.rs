@@ -22,7 +22,7 @@ use super::present::{
 };
 use super::{BoardEnv, Shade, Shadow, anim, ui_font};
 use crate::board::nodes::{ArchiveNode, BoardCx};
-use crate::components::text_field::{input, new_input};
+use crate::components::text_field::new_input;
 use crate::components::tooltip::native_tooltip;
 use crate::components::tween::transition;
 use crate::theme::{self, fonts, motion};
@@ -387,7 +387,13 @@ fn search(env: &Rc<BoardEnv>, count: usize, visible: bool, window: &mut Window, 
         .translate(px(0.), z.px(ty))
         .scale(scale)
         .child(card_icon(CardIcon::Search, z.f(13.), 2.2, t.text_tertiary))
-        .child(div().flex_1().min_w_0().child(input(&field, z.px(STACK_SEARCH_H), false)));
+        .child(div().flex_1().min_w_0().child(super::field_line(
+            &field,
+            z.px(STACK_SEARCH_H),
+            z.px(13.),
+            fonts::UI,
+            FontWeight::NORMAL,
+        )));
     if visible {
         el = el
             // ARCH-026: a click anywhere in the box opens the panel.

@@ -483,6 +483,16 @@ fn editor(env: &Rc<BoardEnv>, note: &BoardNote, window: &mut Window, cx: &mut Ap
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .on_click(|_, _, cx| cx.stop_propagation())
         .on_scroll(|_, _, cx| cx.stop_propagation())
-        .child(Textarea::new(&field))
+        .child(
+            Textarea::new(&field)
+                .appearance(false)
+                .bordered(false)
+                .h(gpui::relative(1.))
+                .p(px(0.))
+                .text_size(z.px(15.))
+                .line_height(z.px(21.))
+                .font_family(fonts::UI)
+                .text_color(t.note_ink),
+        )
         .into_any_element()
 }

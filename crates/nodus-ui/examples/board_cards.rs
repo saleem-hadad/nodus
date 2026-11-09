@@ -329,13 +329,19 @@ impl Render for Gallery {
         let e = env(zoom, stack, renaming, false);
         let lift = scene == Scene::ArchiveHover;
         let size = if open { present::archive_size(Some(16)) } else { present::archive_size(None) };
-        root = root.child(place(0., 0., archive_zone::archive(&e, 16, size, false, window, cx)));
+        let frame = place(0., 0., archive_zone::archive(&e, 16, size, false, window, cx));
+        let mut raised = Vec::new();
+        if open {
+            raised.push(frame);
+        } else {
+            root = root.child(frame);
+        }
         root = root.child(place(0., 386., note_pad::pad(&e, (344., 296.), window, cx)));
         // The stack: depths 2, 1, then the top card (results when open).
         if open {
             for (slot, c) in archive.iter().enumerate() {
                 let (x, y) = (356. + (slot % 2) as f32 * 320., 52. + (slot / 2) as f32 * 248.);
-                root = root.child(place(x, y, node(&e, c.clone(), false, Some(StackLook { depth: 0, result: true, lifted: false, rise: None }), (288., 216.))));
+                raised.push(place(x, y, node(&e, c.clone(), false, Some(StackLook { depth: 0, result: true, lifted: false, rise: None }), (288., 216.))));
             }
         } else {
             for depth in (0..3).rev() {
@@ -384,7 +390,7 @@ impl Render for Gallery {
             .child(place(1400., 40., note::note(&e, &yellow, false, false, false, (216., 216.), None, window, cx)))
             .child(place(1400., 300., note::note(&e, &blue, false, scene == Scene::NoteSelected, false, (240., 216.), signature, window, cx)))
             .child(place(64., 438., note::note(&e, &draft(), true, false, false, (216., 216.), None, window, cx)));
-        root
+        root.children(raised)
     }
 }
 
@@ -408,6 +414,12 @@ fn node(env: &Rc<BoardEnv>, card: SessionCard, selected: bool, stack: Option<Sta
         size,
     }
     .into_any_element()
+}
+
+/// The theme, with the text caret hidden as the parity shots have it.
+fn set_theme(preference: ThemePreference, cx: &mut App) {
+    theme::apply_preference(preference, cx);
+    component::theme::Theme::global_mut(cx).caret = transparent_black();
 }
 
 /// An sRGB colour in Display P3, as the goldens hold Chromium's output.
@@ -448,7 +460,7 @@ fn main() {
         init(cx);
         theme::fonts::register(cx);
         cx.set_global(Parity { frozen: true, now_ms: Some(NOW) });
-        theme::apply_preference(themes[0], cx);
+        set_theme(themes[0], cx);
         let scene = Rc::new(RefCell::new(scenes[0]));
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(Bounds::new(point(px(40.), px(40.)), size(px(W), px(H))))),
@@ -476,7 +488,7 @@ fn main() {
         cx.spawn(async move |cx| {
             for theme_pref in themes {
                 let name = if theme_pref == ThemePreference::Dark { "dark" } else { "light" };
-                let _ = cx.update(|cx| theme::apply_preference(theme_pref, cx));
+                let _ = cx.update(|cx| set_theme(theme_pref, cx));
                 for s in &scenes {
                     *scene.borrow_mut() = *s;
                     let (vx, vy, zoom) = s.viewport();

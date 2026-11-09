@@ -121,6 +121,29 @@ pub async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
             });
             Ok(Value::Null)
         }
+        // A frame drawn now, even while the window is covered (macOS stops
+        // asking for frames then), so a screenshot shows the current state.
+        "draw" => {
+            cx.update(|cx| {
+                if let Some(handle) = window::main_window(cx) {
+                    let _ = gpui::AppContext::update_window(cx, handle.into(), |_, window, cx| {
+                        window.refresh();
+                        window.draw(cx).clear(cx);
+                    });
+                }
+            });
+            Ok(Value::Null)
+        }
+        "route" => Ok(cx.update(|cx| {
+            let s = state.read(cx);
+            json!({
+                "route": s.route.project_id(),
+                "board": s.board.as_ref().map(|b| b.project.id.clone()),
+                "terminal": s.terminal_session_id,
+                "preview": s.preview_session_id,
+                "agents": s.agent_view.as_ref().map(|(id, _)| id.clone()),
+            })
+        })),
         other => Err(format!("unknown terminal action {other}")),
     }
 }

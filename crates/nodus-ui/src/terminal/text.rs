@@ -66,7 +66,7 @@ pub fn time_of(t: Local) -> String {
         12 => (12, "PM"),
         _ => (t.hour - 12, "PM"),
     };
-    format!("{h}:{:02}\u{202f}{suffix}", t.minute)
+    format!("{h}:{:02} {suffix}", t.minute)
 }
 
 /// `formatDay`: `Oct 18`, or `Oct 18, 2025` in another year.
@@ -286,17 +286,17 @@ mod tests {
     fn trans_019_trans_020_times_and_ranges() {
         let now = at(2026, 9, 20, 15, 0);
         let earlier = at(2026, 9, 18, 14, 58);
-        assert_eq!(format_time_at(at(2026, 9, 20, 14, 59), now), "2:59\u{202f}PM");
-        assert_eq!(format_time_at(at(2026, 9, 20, 0, 5), now), "12:05\u{202f}AM");
-        assert_eq!(format_time_at(earlier, now), "Oct 18, 2:58\u{202f}PM");
+        assert_eq!(format_time_at(at(2026, 9, 20, 14, 59), now), "2:59 PM");
+        assert_eq!(format_time_at(at(2026, 9, 20, 0, 5), now), "12:05 AM");
+        assert_eq!(format_time_at(earlier, now), "Oct 18, 2:58 PM");
         assert_eq!(
             format_range_at(earlier, at(2026, 9, 18, 15, 0), now),
-            "Oct 18, 2:58\u{202f}PM – 3:00\u{202f}PM"
+            "Oct 18, 2:58 PM – 3:00 PM"
         );
         assert_eq!(format_range_at(earlier, now, now), "Oct 18 – Oct 20");
         assert_eq!(
             format_time_at(at(2025, 8, 15, 15, 0), now),
-            "Sep 15, 2025, 3:00\u{202f}PM"
+            "Sep 15, 2025, 3:00 PM"
         );
         // The machine's zone turns an instant into one of these.
         let t = local(1_792_508_400_000.0);

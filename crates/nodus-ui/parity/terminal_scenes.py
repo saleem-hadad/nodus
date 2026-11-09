@@ -96,7 +96,8 @@ def stop_host(world):
             pass
 
 
-def run(scene, theme, opts):
+def run(scene, theme, opts, again=True):
+    ok = True
     steps = SCENES[scene]
     world = opts["world"]
     subprocess.run([NODE, os.path.join(HERE, "seed.mjs"), opts["harness"], world, theme], check=True, capture_output=True)
@@ -134,10 +135,18 @@ def run(scene, theme, opts):
                 drive(f, {"cmd": "mouse", "kind": "click", "x": 1194, "y": 77})
                 drive(f, AWAY)
                 continue
-            drive(f, resolve(step, ids))
+            answer = drive(f, resolve(step, ids))
+            if os.environ.get("TUI_TRACE"):
+                print("  ", step if isinstance(step, dict) and step.get("cmd") != "terminal" else step.get("action"), drive(f, T("route")).get("result"))
             drive(f, {"cmd": "wait", "ms": 120})
         drive(f, {"cmd": "idle"})
+        if not (drive(f, T("route")).get("result") or {}).get("route"):
+            print("  ! the board closed under the scene; again")
+            ok = False
+        drive(f, T("draw"))
+        drive(f, {"cmd": "idle"})
         out = os.path.join(opts["golden"], f"{scene}.{theme}.rust.png")
+        drive(f, T("draw"))
         drive(f, {"cmd": "screenshot", "path": out})
         print("shot", out)
         try:
@@ -151,6 +160,8 @@ def run(scene, theme, opts):
         except subprocess.TimeoutExpired:
             app.kill()
         stop_host(world)
+    if not ok and again:
+        run(scene, theme, opts, again=False)
 
 
 def main():

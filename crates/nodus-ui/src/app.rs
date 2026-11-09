@@ -86,6 +86,8 @@ pub fn run(user_data: PathBuf) -> anyhow::Result<()> {
         menus::install_menus(&settings, cx);
         menus::bind_shortcuts(cx);
         menus::register_actions(&nodus, cx);
+        // CAP-038: capture gets its panel window, screen, permissions and key hook.
+        crate::capture::register(&nodus, cx);
         cx.spawn(async move |cx| {
             while let Some(settings) = applied.recv().await {
                 cx.update(|cx| {

@@ -13,9 +13,9 @@ use gpui::{
 use nodus_domain::{MessageRole, SearchSnippet, ToolCall, TranscriptMessage};
 
 use super::text::{CALLS_SHOWN, earlier_calls_label, format_time, is_long};
+use crate::components::spaced_text;
 use crate::parity;
 use crate::theme::tokens::*;
-use crate::components::spaced_text;
 use crate::theme::{self, fonts};
 
 /// How a message is shown.
@@ -114,19 +114,23 @@ fn tool_calls(
     cx: &App,
 ) -> AnyElement {
     let t = theme::tokens(cx);
-    let hidden = if all { 0 } else { calls.len().saturating_sub(CALLS_SHOWN) };
+    let hidden = if all {
+        0
+    } else {
+        calls.len().saturating_sub(CALLS_SHOWN)
+    };
     div()
         .flex()
         .flex_col()
         .gap(px(3.))
         .mt(px(top))
         .when(hidden > 0, |d| {
-            d.child(
-                div()
-                    .flex()
-                    .mb(px(2.))
-                    .child(more((id.clone(), "earlier"), earlier_calls_label(hidden), on_all, cx)),
-            )
+            d.child(div().flex().mb(px(2.)).child(more(
+                (id.clone(), "earlier"),
+                earlier_calls_label(hidden),
+                on_all,
+                cx,
+            )))
         })
         .children(calls[hidden..].iter().map(|call| {
             div()
@@ -158,7 +162,10 @@ pub fn message(p: MessageProps<'_>, cx: &App) -> AnyElement {
     } else {
         nodus_transcripts::search::match_ranges(&text, p.highlight)
     };
-    let author = p.author.clone().unwrap_or_else(|| if user { "You".into() } else { "Claude".into() });
+    let author = p
+        .author
+        .clone()
+        .unwrap_or_else(|| if user { "You".into() } else { "Claude".into() });
     let author_color = if m.role == MessageRole::Assistant {
         t.status_working
     } else {
@@ -214,14 +221,25 @@ pub fn message(p: MessageProps<'_>, cx: &App) -> AnyElement {
             )
             .when(long, |d| {
                 let label = if p.expanded { "Show less" } else { "Show more" };
-                d.child(div().flex().mt(px(4.)).child(more((p.id.clone(), "more"), label.into(), p.on_toggle.clone(), cx)))
+                d.child(div().flex().mt(px(4.)).child(more(
+                    (p.id.clone(), "more"),
+                    label.into(),
+                    p.on_toggle.clone(),
+                    cx,
+                )))
             });
         body
     });
 
     // The message is block flow in 0.9.4, so a margin right under the meta
     // row collapses into its 5 px bottom margin: the larger of the two shows.
-    let after_meta = |margin: f32| if content.is_none() { (margin - 5.0).max(0.0) } else { margin };
+    let after_meta = |margin: f32| {
+        if content.is_none() {
+            (margin - 5.0).max(0.0)
+        } else {
+            margin
+        }
+    };
     let found_call = p.found_call.map(|s| {
         let tool = s.tool.clone().unwrap_or_default();
         let name = if s.agent == Some(true) {
@@ -238,11 +256,9 @@ pub fn message(p: MessageProps<'_>, cx: &App) -> AnyElement {
             .font_family(super::MONO)
             .text_size(TEXT_XS)
             .line_height(px(18.))
-            .child(
-                chip(name, cx).when_some(s.file.clone(), |d, file| {
-                    d.child(div().ml(px(6.)).text_color(t.text_tertiary).child(file))
-                }),
-            )
+            .child(chip(name, cx).when_some(s.file.clone(), |d, file| {
+                d.child(div().ml(px(6.)).text_color(t.text_tertiary).child(file))
+            }))
             .child(
                 div()
                     .min_w_0()
@@ -254,7 +270,14 @@ pub fn message(p: MessageProps<'_>, cx: &App) -> AnyElement {
 
     let tools_top = if found_call.is_some() { 6. } else { after_meta(6.) };
     let tools = match (&m.calls, &m.tools) {
-        (Some(calls), _) => Some(tool_calls(&p.id, calls, p.all_calls, p.on_all_calls.clone(), tools_top, cx)),
+        (Some(calls), _) => Some(tool_calls(
+            &p.id,
+            calls,
+            p.all_calls,
+            p.on_all_calls.clone(),
+            tools_top,
+            cx,
+        )),
         (None, Some(tools)) if !tools.is_empty() => Some(
             div()
                 .flex()

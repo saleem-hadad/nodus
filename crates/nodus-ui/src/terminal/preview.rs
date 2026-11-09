@@ -16,10 +16,10 @@ use nodus_domain::{NodePatch, TranscriptMessage};
 use super::actions::{self, PreviewFind, card};
 use super::messages::{MessageProps, empty_note, message, skeleton};
 use super::text::{format_range, found_index, messages_label};
+use crate::components::button;
 use crate::components::icon::Icon;
 use crate::components::modal::Modal;
 use crate::components::scroll::scroll_area;
-use crate::components::button;
 use crate::format::card_title;
 use crate::parity;
 use crate::state::AppState;
@@ -119,9 +119,13 @@ impl TranscriptPreview {
 
     /// TRANS-021: back on the board beside the archive, then opened.
     fn restore(&mut self, cx: &mut Context<'_, Self>) {
-        let Some((x, y)) = self.state.read(cx).board.as_ref().map(|b| {
-            super::text::free_slot_beside_archive(&b.archive, &b.cards, &self.session_id)
-        }) else {
+        let Some((x, y)) = self
+            .state
+            .read(cx)
+            .board
+            .as_ref()
+            .map(|b| super::text::free_slot_beside_archive(&b.archive, &b.cards, &self.session_id))
+        else {
             return;
         };
         actions::patch_cards(
@@ -207,7 +211,9 @@ impl TranscriptPreview {
                             .mt(px(3.))
                             .text_size(TEXT_SM)
                             .text_color(t.text_secondary)
-                            .when_some(meta.as_ref(), |d, m| d.child(format_range(m.created_at, m.updated_at, now)))
+                            .when_some(meta.as_ref(), |d, m| {
+                                d.child(format_range(m.created_at, m.updated_at, now))
+                            })
                             .when_some(count, |d, n| d.child(messages_label(n)))
                             .when_some(meta.as_ref().and_then(|m| m.git_branch.clone()), |d, branch| {
                                 d.child(
@@ -343,7 +349,11 @@ impl Render for TranscriptPreview {
             // TRANS-003: Escape closes it.
             .on_key_down(move |e: &KeyDownEvent, _, cx| {
                 let m = &e.keystroke.modifiers;
-                let command = if cfg!(target_os = "macos") { m.platform } else { m.control };
+                let command = if cfg!(target_os = "macos") {
+                    m.platform
+                } else {
+                    m.control
+                };
                 if e.keystroke.key == "escape" {
                     cx.stop_propagation();
                     actions::close_preview(&close, cx);

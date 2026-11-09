@@ -8,9 +8,9 @@ use std::time::Duration;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, Entity, FocusHandle, FontWeight, InteractiveElement, IntoElement, KeyDownEvent,
-    ParentElement, Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled, Subscription, Task, Window,
-    div, px, relative,
+    AnyElement, Context, Entity, FocusHandle, FontWeight, InteractiveElement, IntoElement, KeyDownEvent, ParentElement,
+    Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled, Subscription, Task, Window, div, px,
+    relative,
 };
 use nodus_domain::{AgentInfo, SessionStatus};
 
@@ -288,7 +288,11 @@ impl AgentViewer {
                                         .child(agent_status_label(a)),
                                 )
                                 .child(a.agent_type.clone())
-                                .child(format!("{} · {}", format_time(a.started_at, now), agent_elapsed(a, now)))
+                                .child(format!(
+                                    "{} · {}",
+                                    format_time(a.started_at, now),
+                                    agent_elapsed(a, now)
+                                ))
                                 .when(a.tool_count > 0, |d| {
                                     d.child(format!(
                                         "{} tool {}",
@@ -344,9 +348,13 @@ impl AgentViewer {
             .border_r(px(0.5))
             .border_color(t.separator)
             .bg(t.bg_sunken)
-            .when(self.agents.is_none() && self.list_error.is_none(), |d| d.child(note("Loading…".into())))
+            .when(self.agents.is_none() && self.list_error.is_none(), |d| {
+                d.child(note("Loading…".into()))
+            })
             .when_some(self.list_error.clone(), |d, e| d.child(note(e)))
-            .when(self.agents.as_ref().is_some_and(Vec::is_empty), |d| d.child(note("No agents yet.".into())))
+            .when(self.agents.as_ref().is_some_and(Vec::is_empty), |d| {
+                d.child(note("No agents yet.".into()))
+            })
             .children(nested.into_iter().map(|(agent, depth)| {
                 let current = selected.is_some_and(|s| s.agent_id == agent.agent_id);
                 let (state, session, id) = (self.state.clone(), self.session_id.clone(), agent.agent_id.clone());
@@ -365,10 +373,9 @@ impl AgentViewer {
                     .when(!current, |d| d.hover(|s| s.bg(t.bg_hover)))
                     // AGV-008: picks that agent.
                     .on_click(move |_, _, cx| actions::open_agents(&state, &session, Some(&id), cx))
-                    .child(div().mt(px(5.)).child(status_dot(
-                        SharedString::from(format!("av-dot-{}", agent.agent_id)),
-                        agent.status,
-                    ).small()))
+                    .child(div().mt(px(5.)).child(
+                        status_dot(SharedString::from(format!("av-dot-{}", agent.agent_id)), agent.status).small(),
+                    ))
                     .child(
                         div()
                             .flex()

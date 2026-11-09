@@ -14,8 +14,8 @@ use gpui::{
 use super::icons::{TermIcon, term_icon};
 use crate::components::{Handler, button};
 use crate::parity;
-use crate::theme::tokens::*;
 use crate::theme::motion;
+use crate::theme::tokens::*;
 
 /// `rgba(255, 255, 255, a)`.
 fn white(a: f32) -> gpui::Rgba {

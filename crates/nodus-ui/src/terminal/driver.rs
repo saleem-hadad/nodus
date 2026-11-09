@@ -213,7 +213,9 @@ pub async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
                 if ok {
                     return Ok(Value::Null);
                 }
-                cx.background_executor().timer(std::time::Duration::from_millis(100)).await;
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(100))
+                    .await;
             }
             Err(format!("{id} never became {want}"))
         }

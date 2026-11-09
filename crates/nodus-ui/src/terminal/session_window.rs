@@ -7,9 +7,9 @@ use std::time::Duration;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, AppContext as _, ClickEvent, Context, Entity, FocusHandle, FontWeight, InteractiveElement,
-    IntoElement, MouseButton, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Subscription,
-    Task, Window, div, px, relative,
+    AnyElement, AppContext as _, ClickEvent, Context, Entity, FocusHandle, FontWeight, InteractiveElement, IntoElement,
+    MouseButton, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Task, Window,
+    div, px, relative,
 };
 use nodus_core::StopConfirmation;
 use nodus_domain::{SessionCard, SessionKind, SessionStatus};
@@ -92,10 +92,7 @@ impl SessionWindow {
         cx: &mut Context<'_, Self>,
     ) -> Self {
         let card = card(state.read(cx), &session_id);
-        let kind = card
-            .as_ref()
-            .and_then(|c| c.node.kind)
-            .unwrap_or(SessionKind::Claude);
+        let kind = card.as_ref().and_then(|c| c.node.kind).unwrap_or(SessionKind::Claude);
         // MODAL-007: the window attaches the terminal with focus.
         let host = cx.new(|cx| {
             let mut host = TerminalHost::new(
@@ -327,8 +324,13 @@ impl SessionWindow {
                         .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.copy_id(cx)))
                         .map(|d| {
                             if copied {
-                                d.child(icon(Icon::Check, 11., 2., if id_hovered { t.text_secondary } else { t.text_tertiary }))
-                                    .child("Copied")
+                                d.child(icon(
+                                    Icon::Check,
+                                    11.,
+                                    2.,
+                                    if id_hovered { t.text_secondary } else { t.text_tertiary },
+                                ))
+                                .child("Copied")
                             } else {
                                 d.child(SharedString::from(self.session_id.chars().take(8).collect::<String>()))
                             }

@@ -178,7 +178,10 @@ mod tests {
         let mut bang = ks("!");
         bang.key_char = Some("!".into());
         let e = key_event(&bang, false, false);
-        assert_eq!((e.key.as_str(), e.code.as_str(), e.modifiers.shift), ("!", "Digit1", true));
+        assert_eq!(
+            (e.key.as_str(), e.code.as_str(), e.modifiers.shift),
+            ("!", "Digit1", true)
+        );
         let e = key_event(&ks("space"), false, true);
         assert_eq!((e.key.as_str(), e.repeat), (" ", true));
     }

@@ -121,7 +121,12 @@ pub fn metrics(window: &Window) -> TermMetrics {
     let advance = ts.advance(font_id, size, 'W').map_or(7.8, |s| f32::from(s.width));
     let ascent = f32::from(ts.ascent(font_id, size));
     let descent = f32::from(ts.descent(font_id, size)).abs();
-    let m = compute(f64::from(advance), f64::from(ascent), f64::from(descent), f64::from(dpr));
+    let m = compute(
+        f64::from(advance),
+        f64::from(ascent),
+        f64::from(descent),
+        f64::from(dpr),
+    );
     CACHE.with(|c| *c.borrow_mut() = Some(m));
     m
 }

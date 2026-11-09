@@ -11,10 +11,10 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use gpui::{
-    App, Bounds, ContentMask, DispatchPhase, Element, ElementId, ElementInputHandler, Entity, GlobalElementId,
-    Hitbox, HitboxBehavior, Hsla, InspectorElementId, IntoElement, LayoutId, MouseMoveEvent, MouseUpEvent,
-    PathBuilder, Pixels, Point, Rgba, Style, TextRun, Window, fill, point, px, relative, size, Corners,
-    ElementTransform, LayerEffects,
+    App, Bounds, ContentMask, Corners, DispatchPhase, Element, ElementId, ElementInputHandler, ElementTransform,
+    Entity, GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId, IntoElement, LayerEffects, LayoutId,
+    MouseMoveEvent, MouseUpEvent, PathBuilder, Pixels, Point, Rgba, Style, TextRun, Window, fill, point, px, relative,
+    size,
 };
 use nodus_terminal::palette::{self, Rgb};
 use nodus_terminal::{CursorKind, Snapshot, Underline};
@@ -241,9 +241,7 @@ impl Element for TerminalElement {
         });
 
         // TERM-075: the slider, while scrolling, hovered or dragged.
-        let (history, display_offset) = snapshot
-            .as_ref()
-            .map_or((0, 0), |s| (s.history_size, s.display_offset));
+        let (history, display_offset) = snapshot.as_ref().map_or((0, 0), |s| (s.history_size, s.display_offset));
         let scrollbar = self.host.update(cx, |host, _| {
             let track = Bounds::new(
                 point(bounds.right() - px(SCROLLBAR_W), bounds.origin.y),
@@ -264,7 +262,10 @@ impl Element for TerminalElement {
             let mut color = rgba(color);
             color.a *= opacity;
             Some((
-                Bounds::new(point(track.origin.x, track.origin.y + px(top)), size(track.size.width, px(h))),
+                Bounds::new(
+                    point(track.origin.x, track.origin.y + px(top)),
+                    size(track.size.width, px(h)),
+                ),
                 color,
             ))
         });
@@ -535,7 +536,10 @@ fn draw(p: &Prepaint, window: &mut Window, shift: Point<Pixels>) {
             let at = cell_origin(c.row, c.col);
             let color = rgb(c.color);
             let rect = |window: &mut Window, x: f32, y: f32, rw: f32, rh: f32| {
-                window.paint_quad(fill(Bounds::new(point(at.x + d(x), at.y + d(y)), size(d(rw), d(rh))), color));
+                window.paint_quad(fill(
+                    Bounds::new(point(at.x + d(x), at.y + d(y)), size(d(rw), d(rh))),
+                    color,
+                ));
             };
             if !c.focused {
                 rect(window, 0.0, 0.0, dpr, ch);
@@ -704,7 +708,9 @@ fn paint_underline(window: &mut Window, style: Underline, at: Point<Pixels>, wid
             }
             if let Ok(path) = builder.build() {
                 let clip = Bounds::new(at, size(d(width), d(m.device_cell_h())));
-                window.with_content_mask(Some(ContentMask { bounds: clip }), |window| window.paint_path(path, color));
+                window.with_content_mask(Some(ContentMask { bounds: clip }), |window| {
+                    window.paint_path(path, color)
+                });
             }
         }
     }

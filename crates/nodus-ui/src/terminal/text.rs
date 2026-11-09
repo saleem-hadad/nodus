@@ -56,7 +56,9 @@ pub fn local(ms: f64) -> Local {
     }
 }
 
-const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTHS: [&str; 12] = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
 
 /// `{ hour: 'numeric', minute: '2-digit' }` in en-US: `2:58 PM`.
 pub fn time_of(t: Local) -> String {
@@ -112,9 +114,7 @@ fn format_range_at(a: Local, b: Local, now: Local) -> String {
 /// first message that says the words.
 pub fn found_index(messages: &[TranscriptMessage], find: &PreviewFind, terms: &[String]) -> Option<usize> {
     if let Some(at) = find.snippet.as_ref().map(|s| s.timestamp).filter(|t| *t != 0.0) {
-        let turn = messages
-            .iter()
-            .rposition(|m| m.timestamp > 0.0 && m.timestamp <= at);
+        let turn = messages.iter().rposition(|m| m.timestamp > 0.0 && m.timestamp <= at);
         if turn.is_some() {
             return turn;
         }
@@ -189,12 +189,10 @@ pub fn default_agent(agents: &[AgentInfo]) -> Option<&AgentInfo> {
     let mut busy: Vec<&AgentInfo> = agents.iter().filter(|a| a.status != SessionStatus::Done).collect();
     busy.sort_by(|a, b| by_urgency(a, b));
     busy.first().copied().or_else(|| {
-        agents
-            .iter()
-            .fold(None, |best: Option<&AgentInfo>, a| match best {
-                Some(b) if a.started_at <= b.started_at => Some(b),
-                _ => Some(a),
-            })
+        agents.iter().fold(None, |best: Option<&AgentInfo>, a| match best {
+            Some(b) if a.started_at <= b.started_at => Some(b),
+            _ => Some(a),
+        })
     })
 }
 
@@ -294,10 +292,7 @@ mod tests {
             "Oct 18, 2:58 PM – 3:00 PM"
         );
         assert_eq!(format_range_at(earlier, now, now), "Oct 18 – Oct 20");
-        assert_eq!(
-            format_time_at(at(2025, 8, 15, 15, 0), now),
-            "Sep 15, 2025, 3:00 PM"
-        );
+        assert_eq!(format_time_at(at(2025, 8, 15, 15, 0), now), "Sep 15, 2025, 3:00 PM");
         // The machine's zone turns an instant into one of these.
         let t = local(1_792_508_400_000.0);
         assert!(t.year == 2026 && t.month == 9);
@@ -410,6 +405,9 @@ mod tests {
         let mut notice = task.clone();
         notice.notice = Some(true);
         assert_eq!(agent_author(&notice, 2, "Explore"), "Background task");
-        assert_eq!(agent_author(&msg(MessageRole::Assistant, "a", 0.0), 1, "Explore"), "Explore");
+        assert_eq!(
+            agent_author(&msg(MessageRole::Assistant, "a", 0.0), 1, "Explore"),
+            "Explore"
+        );
     }
 }

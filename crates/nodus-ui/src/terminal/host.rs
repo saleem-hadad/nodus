@@ -21,8 +21,9 @@ use gpui::{
 use nodus_domain::{Event, SessionKind};
 use nodus_terminal::host::{AttachPhase, Attempt, Phase, WheelGestures, WheelRoute};
 use nodus_terminal::links::{self, Link, LinkKind, LinkPoint};
-use nodus_terminal::pointer::{self, MouseAction, MouseButton as TermButton, MouseEvent, WheelDelta, WheelModifiers,
-    WheelOutcome};
+use nodus_terminal::pointer::{
+    self, MouseAction, MouseButton as TermButton, MouseEvent, WheelDelta, WheelModifiers, WheelOutcome,
+};
 use nodus_terminal::{BufferPoint, ContainerId, KeyAction, Registry, Snapshot};
 
 use super::element::TerminalElement;
@@ -624,7 +625,9 @@ impl TerminalHost {
 
     fn mouse_reporting(&self, shift: bool) -> bool {
         self.registry
-            .with_terminal(&self.session_id, |t| t.mouse_events_active() && !t.should_force_selection(shift))
+            .with_terminal(&self.session_id, |t| {
+                t.mouse_events_active() && !t.should_force_selection(shift)
+            })
             .unwrap_or(false)
     }
 
@@ -633,8 +636,7 @@ impl TerminalHost {
         let Some(g) = self.geometry else { return false };
         let (x, y) = g.local(p);
         let (w, h) = g.grid_size();
-        let (col, row, px_x, px_y) =
-            pointer::report_position(x, y, w, h, f64::from(g.cell_w), f64::from(g.cell_h));
+        let (col, row, px_x, px_y) = pointer::report_position(x, y, w, h, f64::from(g.cell_w), f64::from(g.cell_h));
         let event = MouseEvent {
             col,
             row,
@@ -646,7 +648,10 @@ impl TerminalHost {
             alt: m.alt,
             shift: m.shift,
         };
-        let report = self.registry.with_terminal(&self.session_id, |t| t.mouse_report(event)).flatten();
+        let report = self
+            .registry
+            .with_terminal(&self.session_id, |t| t.mouse_report(event))
+            .flatten();
         if let Some(report) = report {
             self.registry.input(&self.session_id, &report);
         }
@@ -696,7 +701,9 @@ impl TerminalHost {
 
     /// xterm's `SelectionService._handleMouseDown` (TERM-056).
     fn selection_down(&mut self, event: &MouseDownEvent, cx: &mut Context<'_, Self>) {
-        let Some(p) = self.buffer_point(event.position) else { return };
+        let Some(p) = self.buffer_point(event.position) else {
+            return;
+        };
         self.press = Some(Press {
             at: Instant::now(),
             alt: event.modifiers.alt,
@@ -735,10 +742,7 @@ impl TerminalHost {
                 });
             }
             _ => {
-                let has_selection = self
-                    .registry
-                    .with_terminal(&id, |t| t.has_selection())
-                    .unwrap_or(false);
+                let has_selection = self.registry.with_terminal(&id, |t| t.has_selection()).unwrap_or(false);
                 if event.modifiers.shift && has_selection {
                     self.registry.with_terminal(&id, |t| t.extend_selection(p));
                     let anchor = self
@@ -816,15 +820,7 @@ impl TerminalHost {
         let (x, y) = g.local(drag.last);
         let (_, height) = g.grid_size();
         let y = y.clamp(0.0, (height - 1.0).max(0.0));
-        let (col, row) = pointer::pointer_cell(
-            x,
-            y,
-            g.cols,
-            g.rows,
-            f64::from(g.cell_w),
-            f64::from(g.cell_h),
-            true,
-        );
+        let (col, row) = pointer::pointer_cell(x, y, g.cols, g.rows, f64::from(g.cell_w), f64::from(g.cell_h), true);
         let offset = self.display_offset();
         let to = BufferPoint::new(row as i32 - 1 - offset as i32, col - 1);
         let id = self.session_id.clone();
@@ -997,8 +993,7 @@ impl TerminalHost {
         };
         let (x, y) = g.local(event.position);
         let (w, h) = g.grid_size();
-        let (col, row, px_x, px_y) =
-            pointer::report_position(x, y, w, h, f64::from(g.cell_w), f64::from(g.cell_h));
+        let (col, row, px_x, px_y) = pointer::report_position(x, y, w, h, f64::from(g.cell_w), f64::from(g.cell_h));
         let outcome = self
             .registry
             .with_terminal(&self.session_id, |t| {
@@ -1095,12 +1090,10 @@ impl TerminalHost {
     /// The cursor cell's box in the window, for the IME's candidates (TERM-055).
     fn cursor_bounds(&self) -> Option<Bounds<Pixels>> {
         let g = self.geometry?;
-        let cursor = self
-            .registry
-            .with_terminal(&self.session_id, |t| {
-                let (line, col) = t.cursor_point();
-                (line + t.display_offset() as i32, col)
-            })?;
+        let cursor = self.registry.with_terminal(&self.session_id, |t| {
+            let (line, col) = t.cursor_point();
+            (line + t.display_offset() as i32, col)
+        })?;
         let origin = point(
             g.origin.x + px(cursor.1 as f32 * g.cell_w),
             g.origin.y + px(cursor.0.max(0) as f32 * g.cell_h),
@@ -1150,9 +1143,7 @@ impl EntityInputHandler for TerminalHost {
     }
 
     fn marked_text_range(&self, _window: &mut Window, _cx: &mut Context<'_, Self>) -> Option<Range<usize>> {
-        self.marked
-            .as_deref()
-            .map(|m| 0..nodus_domain::js::utf16_len(m))
+        self.marked.as_deref().map(|m| 0..nodus_domain::js::utf16_len(m))
     }
 
     fn unmark_text(&mut self, _window: &mut Window, cx: &mut Context<'_, Self>) {
@@ -1242,11 +1233,7 @@ impl Render for TerminalHost {
             }))
             // TERM-032: files dropped type their quoted paths; TERM-034: anything else is ignored.
             .on_drop(cx.listener(|this, paths: &ExternalPaths, window, cx| {
-                let paths: Vec<String> = paths
-                    .paths()
-                    .iter()
-                    .map(|p| p.to_string_lossy().into_owned())
-                    .collect();
+                let paths: Vec<String> = paths.paths().iter().map(|p| p.to_string_lossy().into_owned()).collect();
                 this.registry.drop_paths(&this.session_id, &paths);
                 window.focus(&this.focus, cx);
                 cx.notify();

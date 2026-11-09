@@ -272,8 +272,24 @@ fn box_drawing(c: char) -> Option<Vec<(u8, Instr)>> {
         '╻' => b(MIDDLE_TO_BOTTOM),
         '═' => d(|_, yp| format!("M0,{} L1,{} M0,{} L1,{}", 0.5 - yp, 0.5 - yp, 0.5 + yp, 0.5 + yp)),
         '║' => d(|xp, _| format!("M{},0 L{},1 M{},0 L{},1", 0.5 - xp, 0.5 - xp, 0.5 + xp, 0.5 + xp)),
-        '╒' => d(|_, yp| format!("M.5,1 L.5,{} L1,{} M.5,{} L1,{}", 0.5 - yp, 0.5 - yp, 0.5 + yp, 0.5 + yp)),
-        '╓' => d(|xp, _| format!("M{},1 L{},.5 L1,.5 M{},.5 L{},1", 0.5 - xp, 0.5 - xp, 0.5 + xp, 0.5 + xp)),
+        '╒' => d(|_, yp| {
+            format!(
+                "M.5,1 L.5,{} L1,{} M.5,{} L1,{}",
+                0.5 - yp,
+                0.5 - yp,
+                0.5 + yp,
+                0.5 + yp
+            )
+        }),
+        '╓' => d(|xp, _| {
+            format!(
+                "M{},1 L{},.5 L1,.5 M{},.5 L{},1",
+                0.5 - xp,
+                0.5 - xp,
+                0.5 + xp,
+                0.5 + xp
+            )
+        }),
         '╔' => d(|xp, yp| {
             format!(
                 "M1,{} L{},{} L{},1 M1,{} L{},{} L{},1",
@@ -287,8 +303,24 @@ fn box_drawing(c: char) -> Option<Vec<(u8, Instr)>> {
                 0.5 + xp
             )
         }),
-        '╕' => d(|_, yp| format!("M0,{} L.5,{} L.5,1 M0,{} L.5,{}", 0.5 - yp, 0.5 - yp, 0.5 + yp, 0.5 + yp)),
-        '╖' => d(|xp, _| format!("M{},1 L{},.5 L0,.5 M{},.5 L{},1", 0.5 + xp, 0.5 + xp, 0.5 - xp, 0.5 - xp)),
+        '╕' => d(|_, yp| {
+            format!(
+                "M0,{} L.5,{} L.5,1 M0,{} L.5,{}",
+                0.5 - yp,
+                0.5 - yp,
+                0.5 + yp,
+                0.5 + yp
+            )
+        }),
+        '╖' => d(|xp, _| {
+            format!(
+                "M{},1 L{},.5 L0,.5 M{},.5 L{},1",
+                0.5 + xp,
+                0.5 + xp,
+                0.5 - xp,
+                0.5 - xp
+            )
+        }),
         '╗' => d(|xp, yp| {
             format!(
                 "M0,{} L{},{} L{},1 M0,{} L{},{} L{},1",
@@ -302,8 +334,24 @@ fn box_drawing(c: char) -> Option<Vec<(u8, Instr)>> {
                 0.5 + xp
             )
         }),
-        '╘' => d(|_, yp| format!("M.5,0 L.5,{} L1,{} M.5,{} L1,{}", 0.5 + yp, 0.5 + yp, 0.5 - yp, 0.5 - yp)),
-        '╙' => d(|xp, _| format!("M1,.5 L{},.5 L{},0 M{},.5 L{},0", 0.5 - xp, 0.5 - xp, 0.5 + xp, 0.5 + xp)),
+        '╘' => d(|_, yp| {
+            format!(
+                "M.5,0 L.5,{} L1,{} M.5,{} L1,{}",
+                0.5 + yp,
+                0.5 + yp,
+                0.5 - yp,
+                0.5 - yp
+            )
+        }),
+        '╙' => d(|xp, _| {
+            format!(
+                "M1,.5 L{},.5 L{},0 M{},.5 L{},0",
+                0.5 - xp,
+                0.5 - xp,
+                0.5 + xp,
+                0.5 + xp
+            )
+        }),
         '╚' => d(|xp, yp| {
             format!(
                 "M1,{} L{},{} L{},0 M1,{} L{},{} L{},0",
@@ -317,8 +365,24 @@ fn box_drawing(c: char) -> Option<Vec<(u8, Instr)>> {
                 0.5 - xp
             )
         }),
-        '╛' => d(|_, yp| format!("M0,{} L.5,{} L.5,0 M0,{} L.5,{}", 0.5 + yp, 0.5 + yp, 0.5 - yp, 0.5 - yp)),
-        '╜' => d(|xp, _| format!("M0,.5 L{},.5 L{},0 M{},.5 L{},0", 0.5 + xp, 0.5 + xp, 0.5 - xp, 0.5 - xp)),
+        '╛' => d(|_, yp| {
+            format!(
+                "M0,{} L.5,{} L.5,0 M0,{} L.5,{}",
+                0.5 + yp,
+                0.5 + yp,
+                0.5 - yp,
+                0.5 - yp
+            )
+        }),
+        '╜' => d(|xp, _| {
+            format!(
+                "M0,.5 L{},.5 L{},0 M{},.5 L{},0",
+                0.5 + xp,
+                0.5 + xp,
+                0.5 - xp,
+                0.5 - xp
+            )
+        }),
         '╝' => d(|xp, yp| {
             format!(
                 "M0,{} L{},{} L{},0 M0,{} L{},{} L{},0",
@@ -599,7 +663,11 @@ fn parse(instructions: &str) -> Vec<(char, Vec<f32>)> {
         .filter_map(|ins| {
             let mut chars = ins.chars();
             let kind = chars.next()?;
-            let args: Vec<f32> = chars.as_str().split(',').map(|a| a.parse::<f32>().unwrap_or(0.0)).collect();
+            let args: Vec<f32> = chars
+                .as_str()
+                .split(',')
+                .map(|a| a.parse::<f32>().unwrap_or(0.0))
+                .collect();
             // xterm skips an instruction missing either of its first two numbers.
             (args.len() >= 2).then_some((kind, args))
         })
@@ -758,7 +826,12 @@ fn powerline(c: char) -> Option<Powerline> {
         '\u{E0B4}' => p("M0,0 L0,1 C0.552,1,1,0.776,1,.5 C1,0.224,0.552,0,0,0", false, 0.0, 1.0),
         '\u{E0B5}' => p("M.2,1 C.422,1,.8,.826,.78,.5 C.8,.174,0.422,0,.2,0", true, 0.0, 1.0),
         '\u{E0B6}' => p("M1,0 L1,1 C0.448,1,0,0.776,0,.5 C0,0.224,0.448,0,1,0", false, 1.0, 0.0),
-        '\u{E0B7}' => p("M.8,1 C0.578,1,0.2,.826,.22,.5 C0.2,0.174,0.578,0,0.8,0", true, 1.0, 0.0),
+        '\u{E0B7}' => p(
+            "M.8,1 C0.578,1,0.2,.826,.22,.5 C0.2,0.174,0.578,0,0.8,0",
+            true,
+            1.0,
+            0.0,
+        ),
         '\u{E0B8}' => p("M-.5,-.5 L1.5,1.5 L-.5,1.5", false, 0.0, 0.0),
         '\u{E0B9}' | '\u{E0BF}' => p("M-.5,-.5 L1.5,1.5", true, 1.0, 1.0),
         '\u{E0BA}' => p("M1.5,-.5 L-.5,1.5 L1.5,1.5", false, 0.0, 0.0),
@@ -810,10 +883,7 @@ mod tests {
     #[test]
     fn term_080_corners_are_mitred() {
         // ┌: from the bottom up to the middle, then right; both reach into the corner.
-        assert_eq!(
-            rects('┌'),
-            vec![(6.5, 17.5, 2.0, 18.5), (6.5, 17.5, 8.5, 2.0)]
-        );
+        assert_eq!(rects('┌'), vec![(6.5, 17.5, 2.0, 18.5), (6.5, 17.5, 8.5, 2.0)]);
     }
 
     #[test]
@@ -843,7 +913,7 @@ mod tests {
                 // Right padding of 2 × (13/12)/2 CSS px narrows the triangle.
                 assert_eq!(cmds[0], Cmd::Move(0.0, 0.0));
                 let Cmd::Line(x, y) = cmds[1] else { panic!() };
-                assert!((x - (15.0 - 2.0 * 13.0 / 12.0) ).abs() < 1e-4 && y == 18.0);
+                assert!((x - (15.0 - 2.0 * 13.0 / 12.0)).abs() < 1e-4 && y == 18.0);
             }
             other => panic!("{other:?}"),
         }

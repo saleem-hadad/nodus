@@ -1209,13 +1209,13 @@ Risks:
 - [ ] UI-099 Menu button off a Mac
 - [x] UI-100 Crumbs hug the menu button
 - [x] UI-101 Long names
-- [ ] UI-102 Hidden at zero
-- [ ] UI-103 What counts
-- [ ] UI-104 Label
-- [ ] UI-105 Breakdown on hover
-- [ ] UI-106 Shown when ready
-- [ ] UI-107 Update tooltip
-- [ ] UI-108 Update click
+- [x] UI-102 Hidden at zero
+- [x] UI-103 What counts
+- [x] UI-104 Label
+- [x] UI-105 Breakdown on hover
+- [x] UI-106 Shown when ready
+- [x] UI-107 Update tooltip
+- [x] UI-108 Update click
 - [x] UI-109 Nothing until reported
 - [x] UI-110 Model
 - [x] UI-111 Context meter
@@ -1246,19 +1246,19 @@ Risks:
 - [x] UI-136 Notify row
 - [x] UI-137 Dock badge row
 - [x] UI-138 Whole row toggles
-- [ ] UI-139 Key field loading
-- [ ] UI-140 Key placeholder
-- [ ] UI-141 Save enabled
-- [ ] UI-142 Save key
-- [ ] UI-143 Key hint by source
-- [ ] UI-144 Remove key
-- [ ] UI-145 Key error
-- [ ] UI-146 Key privacy hint
-- [ ] UI-147 Version row
-- [ ] UI-148 Update status text
-- [ ] UI-149 Update button in Settings
-- [ ] UI-150 Auto-update row
-- [ ] UI-151 Download link on error
+- [x] UI-139 Key field loading
+- [x] UI-140 Key placeholder
+- [x] UI-141 Save enabled
+- [x] UI-142 Save key
+- [x] UI-143 Key hint by source
+- [x] UI-144 Remove key
+- [x] UI-145 Key error
+- [x] UI-146 Key privacy hint
+- [x] UI-147 Version row
+- [x] UI-148 Update status text
+- [x] UI-149 Update button in Settings
+- [x] UI-150 Auto-update row
+- [x] UI-151 Download link on error
 - [x] UI-152 Links open in the browser
 - [x] UI-153 Modal frame
 - [x] UI-154 Modal enter
@@ -1341,7 +1341,7 @@ Risks:
 - [x] UI-231 Folder hover and press
 - [x] UI-232 Folder tooltip
 - [x] UI-233 Subtitle
-- [ ] UI-234 Live badges
+- [x] UI-234 Live badges
 - [x] UI-235 Label
 - [x] UI-236 Faded folders
 - [x] UI-237 Rename field opens
@@ -1365,7 +1365,7 @@ Risks:
 - [x] UI-255 Rail focus filter
 - [x] UI-256 Rail separators
 - [x] UI-257 Rail item states
-- [ ] UI-258 Rail status dot
+- [x] UI-258 Rail status dot
 - [x] UI-259 Rail unfocused fade
 - [x] UI-260 Rail click
 - [x] UI-261 Rail add

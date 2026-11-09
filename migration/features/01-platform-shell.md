@@ -921,8 +921,8 @@ Risks and unknowns:
 - [ ] PLAT-007 Windows lock; second launch exits 0
 - [ ] PLAT-008 Second launch shows the first's window when ready
 - [ ] PLAT-009 `nodus-view` registered standard+secure
-- [ ] PLAT-010 Startup order (13 steps)
-- [ ] PLAT-011 Window waits for host connect to settle
+- [x] PLAT-010 Startup order (13 steps)
+- [x] PLAT-011 Window waits for host connect to settle
 - [ ] PLAT-012 Env capture non-blocking; ⏳env commands wait
 - [ ] PLAT-013 All commands registered before the window
 - [x] PLAT-014 Window 1440×920, min 960×620, centered, title `Nodus`
@@ -943,9 +943,9 @@ Risks and unknowns:
 - [x] PLAT-029 macOS: closing window keeps app running
 - [x] PLAT-030 macOS activate recreates window only with zero windows (panel quirk)
 - [ ] PLAT-031 Windows quits on all windows closed (panel quirk)
-- [ ] PLAT-032 shutdown() order on before-quit
+- [x] PLAT-032 shutdown() order on before-quit
 - [ ] PLAT-033 Quitting leaves sessions running
-- [ ] PLAT-034 Quit and Stop Sessions: shutdown host, ≤5000 ms, then quit
+- [x] PLAT-034 Quit and Stop Sessions: shutdown host, ≤5000 ms, then quit
 - [ ] PLAT-035 Windows logoff skips shutdown()
 - [x] PLAT-036 Menu commands dropped with no window; others still work
 - [x] PLAT-037 Menu bar order / Windows popup
@@ -957,7 +957,7 @@ Risks and unknowns:
 - [x] PLAT-043 Window menu
 - [x] PLAT-044 Help menu
 - [ ] PLAT-045 AppKit-added menu items match 0.9.4
-- [ ] PLAT-046 Check for Updates… → settings + check(true)
+- [x] PLAT-046 Check for Updates… → settings + check(true)
 - [x] PLAT-047 Settings… → settings
 - [ ] PLAT-048 Capture… → openPanel
 - [x] PLAT-049 File/Edit commands → menu commands
@@ -1025,7 +1025,7 @@ Risks and unknowns:
 - [ ] PLAT-111 shellCommand args
 - [ ] PLAT-112 requireClaude messages
 - [ ] PLAT-113 gitBash lookup + memo
-- [ ] PLAT-114 app:info contract
+- [x] PLAT-114 app:info contract
 - [x] PLAT-115 voiceKey = base64 safeStorage blob
 - [x] PLAT-116 macOS v10 AES-128-CBC/PBKDF2 format
 - [x] PLAT-117 Keychain `Nodus Safe Storage` / `Nodus Key`
@@ -1039,7 +1039,7 @@ Risks and unknowns:
 - [x] PLAT-125 Fire-and-forget commands
 - [x] PLAT-126 pathForFile / dropped paths
 - [x] PLAT-127 Subscriptions + unsubscribe, multi-listener
-- [ ] PLAT-128 ⏳env commands wait; failure still resolves
+- [x] PLAT-128 ⏳env commands wait; failure still resolves
 - [ ] PLAT-129 Structured-clone argument semantics
 - [x] PLAT-130 isMac / platform value
 - [x] PLAT-131 modKey / otherModKey

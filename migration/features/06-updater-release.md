@@ -773,7 +773,7 @@ No macOS test exists in TypeScript. Recommended Rust additions, marked as such s
 - [x] UPD-077 `updates:check` runs `check(true)`, resolves after the lookup
 - [x] UPD-078 `updates:install` runs `restartToUpdate()`
 - [x] UPD-079 Menu `Check for Updates…` opens Settings then `check(true)`; Mac app menu after About, else File after Settings…
-- [ ] UPD-080 `useUpdateStatus` null until the first answer, then follows events
+- [x] UPD-080 `useUpdateStatus` null until the first answer, then follows events
 - [ ] UPD-081 Title-bar `Restart to Update` only in `ready`, with the platform tooltip
 - [ ] UPD-082 Settings `Updates`: `Nodus <current>` + state hint strings
 - [ ] UPD-083 Button: `Restart to Update` (ready), none (off), else `Check Now` disabled while null/checking/downloading

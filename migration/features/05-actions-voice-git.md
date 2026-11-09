@@ -754,7 +754,7 @@ Risks:
 - [ ] ACT-039 Finish notice
 - [x] ACT-040 Takeover detection
 - [x] ACT-041 Takeover quirks (keep)
-- [ ] ACT-042 Takeover hook
+- [x] ACT-042 Takeover hook
 - [x] ACT-043 claimRun
 - [x] ACT-044 Prompt into a run
 - [ ] ACT-045 Taken-over placement
@@ -797,7 +797,7 @@ Risks:
 - [ ] ACT-082 Rail independent of dialog
 - [x] ACT-083 IPC error text (keep)
 - [x] VOICE-001 Key source
-- [ ] VOICE-002 Env wait
+- [x] VOICE-002 Env wait
 - [x] VOICE-003 Save key
 - [x] VOICE-004 Key storage
 - [x] VOICE-005 Non-string argument
@@ -843,7 +843,7 @@ Risks:
 - [ ] VOICE-045 Session mic notice
 - [x] GIT-001 Runner argv
 - [x] GIT-002 Runner results
-- [ ] GIT-003 Env wait
+- [x] GIT-003 Env wait
 - [x] GIT-004 Status argv
 - [x] GIT-005 Not a repository
 - [x] GIT-006 Status headers

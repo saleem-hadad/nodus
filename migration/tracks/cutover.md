@@ -10,9 +10,9 @@
 | --- | --- | --- |
 | 1 | `PROTOCOL` → 2 (U1, default (a)) | ✅ |
 | 2 | CI and release workflows on cargo only | ✅ |
-| 3 | README and how-it-works for the Rust app | ☐ |
+| 3 | README and how-it-works for the Rust app | ✅ |
 | 4 | Electron sources and toolchain removed | ☐ |
-| 5 | Workspace version: where the release number goes | ☐ |
+| 5 | Workspace version 1.0.0 (the user's pick, 2026-11-10) | ☐ |
 | 6 | Final check: fmt, clippy, tests, prepush, arm64 bundle + smoke | ☐ |
 
 ## 1. Protocol (U1)
@@ -28,3 +28,8 @@
 - `package.yml` is `rust-package.yml` renamed (name `Packages`), paths filter kept: bundles, DMGs, installers, handoff gates and the native smoke test on both OSes.
 - `release.yml` is `release-rust.yml` renamed (name `Release`), replacing 0.9.4's tag-triggered Electron release. Still started by hand, with every gate (version checks, tests, signing and notarizing, the handoff gates, draft → digests checked → published). A one-line comment above the trigger shows how to switch to `v*` tags.
 - Actions stay pinned by the same SHAs.
+
+## 3. Docs
+
+- README: only "Build from source" changed (cargo run / test, the bundle and DMG scripts, the Windows installer script); same layout and voice.
+- `docs/how-it-works.md`: the diagram (nodus-ui ⇄ nodus-core ⇄ `Nodus host`), the host running as `Nodus host` (was "as plain Node"), the xAI key "never reaches the window" (was "the main process"), the key hook (event tap / low-level hooks, was uiohook-napi), and Project layout, Built with, Development, Releasing and Troubleshooting installs rewritten for the workspace. Every user-facing section is otherwise unchanged; `NODUS_USER_DATA` is still documented.

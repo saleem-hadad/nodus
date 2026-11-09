@@ -5,22 +5,22 @@ The details behind the [README](../README.md): what the app runs, where status c
 ```mermaid
 flowchart LR
   subgraph app["Nodus"]
-    ui["Renderer<br/>React Flow · xterm.js"]
-    main["Main process"]
+    ui["UI · nodus-ui<br/>GPUI · alacritty_terminal · wry"]
+    core["Core · nodus-core<br/>sessions, board, views, …"]
   end
-  subgraph host["Session host · outlives the app"]
-    ptys["node-pty"]
+  subgraph host["Session host · Nodus host · outlives the app"]
+    ptys["PTYs"]
     hooks["Hook server<br/>127.0.0.1 + token"]
   end
   cli["claude<br/>one process per active card"]
   jsonl[("~/.claude/projects/…/*.jsonl")]
 
-  ui <-->|IPC| main
-  main <-->|Unix socket| host
+  ui <-->|commands + events| core
+  core <-->|Unix socket| host
   ptys --> cli
   cli -->|hooks POST via curl| hooks
   cli -->|writes transcripts| jsonl
-  jsonl -->|parse + watch| main
+  jsonl -->|parse + watch| core
 ```
 
 ## Sessions
@@ -33,7 +33,7 @@ The app doesn't run sessions itself. A background process, the session host, own
 
 The title bar says how many Claude sessions Nodus is running, in every project. The count includes the ones not drawn on the board, views' brains and action runs, since each holds its own `claude` process and MCP servers. Point at it for how many run in each project. Terminal shells aren't counted. Sessions started in other terminals aren't the app's, so they never count.
 
-The host starts with the first session you open, and runs Nodus's own binary as plain Node, so it has no Dock icon. It also receives the sessions' hooks, and keeps them along with the keypresses that move status (Esc, Ctrl+C, Enter and number keys), so a relaunched app can work out each session's status. The host exits by itself once no sessions are left and the app isn't open. **Quit and Stop Sessions** (⌥⌘Q) stops every session along with the app.
+The host starts with the first session you open, and runs Nodus's own binary as `Nodus host`, with no window or Dock icon. It also receives the sessions' hooks, and keeps them along with the keypresses that move status (Esc, Ctrl+C, Enter and number keys), so a relaunched app can work out each session's status. The host exits by itself once no sessions are left and the app isn't open. **Quit and Stop Sessions** (⌥⌘Q) stops every session along with the app.
 
 A running session keeps its `claude` process and the MCP servers it started, so each one holds on to memory while it sits idle. To let one go without quitting, press **Stop** in its window or in its expanded card's title bar, or right-click it and choose **Stop session** (with several selected, **Stop 3 sessions**). The process ends and the card stays where it is. Opening it resumes the session. A session in the middle of a turn asks first, since stopping cuts that turn off.
 
@@ -115,7 +115,7 @@ The mic beside the bar records a prompt (so does **V**): it turns red and swells
 
 Each recording goes with up to 100 hint words, so code names come back spelled as in the repo: the project's name, its branch and the names of the files it has changed. If xAI can't transcribe a recording, it's kept, and **Retry** sends it again.
 
-The xAI API key comes from Settings or from `XAI_API_KEY` in your shell, and a saved one wins. Settings encrypts it with the macOS Keychain before it goes into `state.json`, and it never leaves the main process: the window only learns where the key comes from. With no key, the mic opens Settings. The first recording asks macOS for the microphone. If you turned it down, the notice links to Privacy & Security › Microphone.
+The xAI API key comes from Settings or from `XAI_API_KEY` in your shell, and a saved one wins. Settings encrypts it with the macOS Keychain before it goes into `state.json`, and it never reaches the window, which only learns where the key comes from. With no key, the mic opens Settings. The first recording asks macOS for the microphone. If you turned it down, the notice links to Privacy & Security › Microphone.
 
 Audio leaves your machine only when you stop a recording, and goes to xAI alone. It counts toward your xAI usage.
 
@@ -138,7 +138,7 @@ Screenshots and copied images are saved in `captures/` in the app's data folder,
 
 ↑ in an empty field brings back earlier captures. Esc or a click anywhere else puts the panel away, and what you typed is still there the next time.
 
-The double tap is heard through a global key hook ([uiohook-napi](https://github.com/SnosMe/uiohook-napi)). Only ⇧ pressed on its own counts: ⇧ held to type a capital or to click doesn't. On a Mac the hook needs Accessibility permission. **Allow…** in Settings asks for it and opens Privacy & Security › Accessibility. macOS keeps the permission with the signature of the copy of Nodus it was given to, so one given to another copy (a build of your own, say) shows as on there but doesn't count. **Allow…** clears that and macOS asks again. Until it's allowed, **File › Capture…** still opens the panel. On Windows it needs no permission. There, the screenshot is the whole screen the pointer is on, and the browser tab isn't read.
+The double tap is heard through a global key hook (an event tap on a Mac, low-level keyboard and mouse hooks on Windows). Only ⇧ pressed on its own counts: ⇧ held to type a capital or to click doesn't. On a Mac the hook needs Accessibility permission. **Allow…** in Settings asks for it and opens Privacy & Security › Accessibility. macOS keeps the permission with the signature of the copy of Nodus it was given to, so one given to another copy (a build of your own, say) shows as on there but doesn't count. **Allow…** clears that and macOS asks again. Until it's allowed, **File › Capture…** still opens the panel. On Windows it needs no permission. There, the screenshot is the whole screen the pointer is on, and the browser tab isn't read.
 
 ## Cards
 
@@ -263,77 +263,83 @@ In the terminal, Esc goes to Claude (it interrupts a turn), so it never closes t
 
 ## Project layout
 
+Nodus is one Cargo workspace. Each domain is a crate of its own with no UI in it, so the same core could run without a window; only `nodus-ui` and the `nodus` binary know about GPUI.
+
 ```
-src/
-  shared/       types.ts + api.ts: the typed IPC contract (window.api)
-                geometry.ts: board sizes and the free-spot search, which the main process uses to place notes and views
-  preload/      contextBridge implementation of the contract
-  main/         Electron main process
-    env.ts        login-shell environment and claude binary lookup
-    discovery.ts  parses transcripts into card metadata and watches for changes
-    agents.ts     subagent transcripts: what each agent is doing, and its status
-    board.ts      merges sessions on disk with the saved board; archive layout
-    pty.ts        the app's side of the session host: output buffers replayed into terminals, input, status replay
-    host.ts       the session host, a separate process: node-pty processes, the hook server and the board tools' endpoint
-    hostProtocol.ts  messages between the two over a Unix socket (a named pipe on Windows)
-    hooks.ts      the status machine, driven by hooks the session host passes on
-    summarize.ts  forked, non-persisted handoff summaries
-    actions.ts    the actions rail's buttons: drafting them with Claude, and each run's extra claude options
-    boardTools.ts the board tools' MCP server, answering what the session host relays: notes, views and projects for every session, and listing and archiving sessions for action runs
-    notes.ts      notes sessions write: where they go on the board, and how big they are
-    views.ts      views: their files, commands and schedules, their brains, and what their pages ask the board for
-    viewPage.ts   the page a view's frame loads: its content security policy, theme and window.nodus
-    voice.ts      speech to text for the mics through xAI, and the key it uses
-    capture.ts    floating capture: the panel's window, the double tap, and making what's captured on the board
-    captureGuess.ts  Claude's guess at what a capture is and where it goes
-    doubleTap.ts  hears ⇧ tapped twice from the key hook's events
-    screenContext.ts  what a capture brings from the screen: the app in front, its browser tab, a screenshot, the clipboard
-    updater.ts    updates the app from GitHub releases: download, checks, and the swap on quit
-    store.ts      state.json in the app's userData directory
-  renderer/src/
-    views/        ProjectsView (folders) and BoardView (canvas)
-    components/   title bar, folder icon, board cards, agent decks, sections, archive stack, notes and their pad, views and the relay to their frames, merge dialog, lineage edges, the prompt bar and its mic
-    terminal/     xterm.js registry, TerminalModal, TranscriptPreview, AgentViewer
-    capture/      the floating capture panel, the page its window shows (#capture)
+crates/
+  nodus/              the binary: the app, and the session host as `Nodus host <socket> <key>`
+  nodus-ui/           everything on screen, in GPUI: title bar, projects grid and rail, the board,
+                      cards, notes, overlays, terminals, views' webviews, the capture panel;
+                      the test driver (NODUS_AUTOMATION)
+  nodus-core/         composes the domains into one service: the commands the UI calls and the
+                      events it hears
+  nodus-domain/       the shared types, read and written as state.json has them
+  nodus-store/        the data folder (NODUS_USER_DATA), state.json, views/ and captures/
+  nodus-platform/     the OS: login-shell environment and claude lookup, processes, secrets,
+                      notifications, Dock badge, permissions
+  nodus-host-proto/   messages between the app and the session host over a Unix socket
+                      (a named pipe on Windows)
+  nodus-host/         the session host: the sessions' terminals, the hook server and the board
+                      tools' endpoint
+  nodus-sessions/     the app's side of the host: output buffers replayed into terminals, input,
+                      status replay; the status machine the hooks drive; agents and usage
+  nodus-transcripts/  parses transcripts into card metadata and watches for changes; ⌘K search,
+                      naming, handoff summaries
+  nodus-board/        merges sessions on disk with the saved board; archive, sections, geometry
+                      and the free-spot search, where notes go, ink
+  nodus-terminal/     the terminal model: alacritty_terminal's grid, xterm-compatible keys and
+                      replies, selection
+  nodus-views/        views: their files, commands and schedules, their brains, and the page their
+                      webview loads, with window.nodus
+  nodus-tools/        the board tools' MCP server: notes, views and projects for every session,
+                      listing and archiving sessions for action runs
+  nodus-actions/      the actions rail's buttons: drafting them with Claude, and each run's options
+  nodus-voice/        the mics: recording, and speech to text through xAI
+  nodus-capture/      floating capture: the double tap, the key hook, what comes from the screen,
+                      Claude's guess, and making what's captured on the board
+  nodus-git/          the branch chip and Changes window's git status, diff and log
+  nodus-updater/      updates from GitHub releases: download, checks, and the swap on quit
+third_party/gpui/     our patched copy of GPUI: backdrop blur, transforms, group opacity and text
+                      rendering (PATCHES.md says what and why)
+packaging/            the macOS bundle and DMGs, the Windows installer, the checks a release
+                      passes, and the smoke test
+build/                the app icons
+migration/            how Nodus moved from Electron (0.9.4) to Rust: specs, parity harness, notes
 ```
 
-Built with Electron, electron-vite, React, TypeScript, [React Flow](https://reactflow.dev), [xterm.js](https://xtermjs.org), [node-pty](https://github.com/microsoft/node-pty), [uiohook-napi](https://github.com/SnosMe/uiohook-napi) and zustand.
+Built with Rust, [GPUI](https://www.gpui.rs) and [gpui-component](https://github.com/longbridge/gpui-component), [alacritty_terminal](https://github.com/alacritty/alacritty), [wry](https://github.com/tauri-apps/wry) (views' pages in WKWebView or WebView2), [tokio](https://tokio.rs) and [hyper](https://hyper.rs).
 
 ## Development
 
-You need macOS or Windows, [Node.js](https://nodejs.org) 22+ and [pnpm](https://pnpm.io).
+You need macOS 13 or later, or Windows 10 or later, and [Rust](https://rustup.rs). rustup installs the version `rust-toolchain.toml` pins the first time you build. A Mac also needs Xcode's command line tools, and Windows needs Visual Studio's C++ build tools.
 
 ```sh
-pnpm install
-pnpm dev          # run with hot reload
-pnpm build        # production build into out/
-pnpm start        # run the production build
-pnpm typecheck    # type-check main, preload and renderer
-pnpm dist         # build the arm64 and x64 DMGs into dist/ (on Windows, the installers)
+cargo run -p nodus      # build and run the app
+cargo test --workspace  # every crate's tests
+cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --all
 ```
 
-`NODUS_USER_DATA=/some/dir pnpm dev` keeps app state separate from your real board, which is useful for testing. It gets its own session host too.
+`NODUS_USER_DATA=/some/dir cargo run -p nodus` keeps app state separate from your real board, which is useful for testing. It gets its own session host too.
 
-A running session host keeps the code it started with. After changing `host.ts`, use **Quit and Stop Sessions** so the next session starts a fresh host. Bump `PROTOCOL` in `hostProtocol.ts` whenever a message changes shape.
+A development build starts the session host from its own binary, `nodus host`, as a packaged one does. A running session host keeps the code it started with. After changing `nodus-host`, use **Quit and Stop Sessions** so the next session starts a fresh host. Bump `PROTOCOL` in `nodus-host-proto` whenever a message changes shape. A development build doesn't update itself, and a debug build (`cargo run` without `--release`) has **View › Reload** (⌘R).
 
-`pnpm dist` writes `dist/Nodus-arm64.dmg` and `dist/Nodus-x64.dmg`, with the unpacked apps in `dist/mac-arm64/` and `dist/mac/`. They're signed with the Developer ID certificate in your keychain, under the hardened runtime with the entitlements in `build/entitlements.mac.plist`. Local builds aren't notarized unless `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID` are set. The packaged app shares its board with `pnpm dev`, so don't run both at once.
+`packaging/macos/bundle.sh arm64` builds `dist/mac-arm64/Nodus.app` (`x64` for an Intel Mac, `dist/mac-x64/`), and `packaging/macos/dmg.sh arm64` puts it in `dist/Nodus-arm64.dmg`. With `NODUS_SIGN_IDENTITY` set to a certificate in your keychain the app is signed with it, under the hardened runtime with the entitlements in `packaging/macos/entitlements.plist`; otherwise it's signed ad hoc. It's notarized only when `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID` are set as well. The packaged app shares its board with `cargo run`, so don't run both at once.
 
-On Windows, `pnpm dist` writes the unsigned installers `dist/Nodus-Setup-x64.exe` and `dist/Nodus-Setup-arm64.exe`, with the unpacked x64 app in `dist/win-unpacked/`. A Mac can't build them, as electron-builder's NSIS doesn't run there. CI's Windows job installs the x64 one and runs `scripts/smoke.mjs` on it, which drives the app over the DevTools protocol and saves screenshots: `node scripts/smoke.mjs <Nodus.exe> <folder>`.
+On Windows, `packaging/windows/installer.sh x64` (or `arm64`), run in Git Bash, writes the unsigned installer `dist/Nodus-Setup-x64.exe`, with the app in `dist/win-x64-unpacked/`. It's made from electron-builder's NSIS templates, so it installs and updates exactly as the installers before it did. A Mac can't make it, but `installer.sh x64 --compile-only` checks that its scripts compile.
+
+`python3 packaging/smoke.py <the app's binary> <folder>` drives a built app through its test driver and saves screenshots: the window opens, a project is added, a terminal card's shell answers in the session host, light and dark, and the app quits cleanly. CI runs it on every package (`.github/workflows/package.yml`).
 
 ### Releasing
 
-Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds both DMGs, signs and notarizes them with the certificate and Apple ID in the repo's secrets, and attaches them to the GitHub release for that tag. A Windows job builds both installers alongside and attaches them too. The README's download links point at `releases/latest/download/`, so they pick up each new release.
+Releases are made by `.github/workflows/release.yml`, which you start by hand: set `version` in `[workspace.package]` of the root `Cargo.toml`, merge that to `main`, then **Actions › Release › Run workflow** with the same version. The workflow refuses a version that isn't the workspace's, isn't three plain numbers, isn't newer than the latest release, or is released already. It runs every test, builds both DMGs and signs and notarizes them with the certificate and Apple ID in the repo's secrets, builds both Windows installers, and puts each DMG through the checks 0.9.4's updater makes. On Windows it installs 0.9.4 and updates it to each new installer, as its updater would.
 
-```sh
-npm version 0.2.0       # bumps package.json, commits, tags v0.2.0
-git push --follow-tags
-```
-
-The workflow fails if the tag doesn't match the version in `package.json`.
+Without **publish** ticked it stops there, and the packages are the run's artifacts to try by hand. With it ticked, and only once every check has passed, it makes the release `v<version>` as a draft, uploads the four files, checks each one's digest and publishes it. The README's download links point at `releases/latest/download/`, so they pick up each new release.
 
 Installed copies update themselves from `releases/latest`. They look for `Nodus-arm64.dmg`, `Nodus-x64.dmg`, `Nodus-Setup-x64.exe` and `Nodus-Setup-arm64.exe` by name, so keep those names, and don't publish a release before its files are ready to go out.
 
 ### Troubleshooting installs
 
-- **Wrong Node version.** Node 20 breaks Electron's installer and makes pnpm skip Vite's native binding. If a build fails with "Cannot find native binding", switch to Node 22 and run `rm -rf node_modules && pnpm install`.
-- **`posix_spawnp failed`.** pnpm drops the execute bit on node-pty's `spawn-helper`. `scripts/postinstall.cjs` restores it, and also downloads Electron's binary, because pnpm 10 skips dependency build scripts. Run `pnpm install` again if either step was skipped.
+- **The first build takes a while.** It compiles GPUI and every other dependency from source, and `target/` grows to several GB. Later builds only rebuild what changed.
+- **`xcrun: error: invalid active developer path`.** The Xcode command line tools are missing: `xcode-select --install`.
+- **The DMG or installer step can't download its tools.** `dmg.sh` and `installer.sh` fetch electron-builder's dmgbuild, makensis and NSIS plugins once into `target/packaging` and check them against pinned SHA-256 digests. Offline, point `DMGBUILD`, `NSIS_DIR` and `NSIS_RESOURCES_DIR` at copies of your own.

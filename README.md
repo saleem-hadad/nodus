@@ -58,14 +58,13 @@ Everything stays on your machine. Nodus reads transcripts where Claude Code keep
 <details>
 <summary>Build from source</summary>
 
-You need macOS or Windows, Node.js 22+ and pnpm.
+You need macOS or Windows and [Rust](https://rustup.rs). Nodus is a native app, written in Rust.
 
 ```sh
-pnpm install
-pnpm dev          # run with hot reload
-pnpm typecheck
-pnpm test
-pnpm dist         # build the DMGs (or on Windows, the installers) into dist/
+cargo run -p nodus                    # build and run the app
+cargo test --workspace
+packaging/macos/bundle.sh arm64       # build the app into dist/
+packaging/macos/dmg.sh arm64          # and its DMG (on Windows: packaging/windows/installer.sh x64)
 ```
 
 More in [Development](docs/how-it-works.md#development).

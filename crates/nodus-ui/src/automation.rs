@@ -113,6 +113,12 @@ fn num(v: &Value, key: &str) -> f32 {
 async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
     let name = command.get("cmd").and_then(Value::as_str).unwrap_or_default();
     let nodus = cx.update(|cx| cx.global::<window::Core>().0.clone());
+    // `"window": "capture"` sends input to, and shoots, the capture panel.
+    let panel = command.get("window").and_then(Value::as_str) == Some("capture");
+    cx.update(|cx| cx.set_global(Target { panel }));
+    if let Some(answer) = crate::capture::automation::run(name, command, &nodus, cx).await {
+        return answer;
+    }
     match name {
         "resize" => {
             let (w, h) = (num(command, "width"), num(command, "height"));
@@ -282,6 +288,7 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
                     status: serde_json::from_value(payload["status"].clone()).map_err(|e| e.to_string())?,
                     live: payload["live"].as_bool().unwrap_or(true),
                 },
+                "captureContext" => Event::CaptureContext(crate::capture::automation::context_patch(&payload)?),
                 other => return Err(format!("unknown event {other}")),
             };
             nodus.emit(event);
@@ -342,8 +349,21 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
     }
 }
 
+/// Which window a command is for: the main one, or the capture panel.
+#[derive(Default)]
+struct Target {
+    panel: bool,
+}
+
+impl gpui::Global for Target {}
+
 fn with_window<R>(cx: &mut AsyncApp, f: impl FnOnce(&mut gpui::Window, &mut App) -> R) -> Result<R, String> {
     cx.update(|cx| {
+        if cx.try_global::<Target>().is_some_and(|t| t.panel) {
+            let handle = crate::capture::PanelSlot::live(cx).ok_or("no capture panel")?;
+            return gpui::AppContext::update_window(cx, handle.into(), |_, window, cx| f(window, cx))
+                .map_err(|e| e.to_string());
+        }
         let handle = window::main_window(cx).ok_or("no main window")?;
         // Through the window, not its root view: input dispatched here
         // reaches views that update the root themselves.

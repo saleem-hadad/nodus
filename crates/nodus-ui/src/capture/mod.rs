@@ -6,6 +6,7 @@
 //! ([`panel`], drawn by `render`, `menu` and `receipt`). The app hands the
 //! window to the core once, at startup, with [`register`].
 
+pub mod automation;
 pub mod bridge;
 pub mod icons;
 mod menu;

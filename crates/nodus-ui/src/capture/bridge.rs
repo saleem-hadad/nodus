@@ -262,7 +262,8 @@ impl PanelSlot {
         let Ok(handle) = cx.open_window(options, |window, cx| {
             let panel = cx.new(|cx| CapturePanel::new(nodus, window, cx));
             view = Some(panel.clone());
-            cx.new(|cx| gpui::base::Root::new(panel, window, cx))
+            // See-through: the root fills nothing behind the stage (CAP-002).
+            cx.new(|cx| gpui::Styled::bg(gpui::base::Root::new(panel, window, cx), gpui::transparent_black()))
         }) else {
             return;
         };

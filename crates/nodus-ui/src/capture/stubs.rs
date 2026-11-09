@@ -20,6 +20,9 @@ pub struct Stubs {
     pub submit: Option<CaptureReceipt>,
     /// The paths the file dialog "picks".
     pub pick_files: Option<Vec<String>>,
+    /// Sessions' statuses, by id, as the harness posts them to the session
+    /// host's hooks (`app.status()`), laid over the targets the panel reads.
+    pub statuses: Option<std::collections::HashMap<String, nodus_domain::SessionStatus>>,
 }
 
 impl Global for Stubs {}
@@ -40,9 +43,27 @@ impl Stubs {
             "clipboard" => self.clipboard = if clear { None } else { Some(parse(value)?) },
             "submit" => self.submit = if clear { None } else { Some(parse(value)?) },
             "pickFiles" => self.pick_files = if clear { None } else { Some(parse(value)?) },
+            "statuses" => self.statuses = if clear { None } else { Some(parse(value)?) },
             other => return Err(format!("no capture stub {other}")),
         }
         Ok(())
+    }
+}
+
+/// The statuses the driver set, laid over `targets`.
+pub fn overlay(
+    targets: &mut nodus_domain::CaptureTargets,
+    statuses: &std::collections::HashMap<String, nodus_domain::SessionStatus>,
+) {
+    for session in &mut targets.sessions {
+        if let Some(status) = statuses.get(&session.session_id) {
+            session.status = *status;
+        }
+    }
+    for recent in &mut targets.recents {
+        if let Some(status) = recent.session_id.as_ref().and_then(|id| statuses.get(id)) {
+            recent.status = Some(*status);
+        }
     }
 }
 

@@ -273,6 +273,9 @@ impl CapturePanel {
         self.error = None;
         self.shot_blocked = false;
         self.context = context;
+        // Capture placed the window just before telling the page, at the
+        // height it had: the page says again how tall it is.
+        self.sent_height.set(0.0);
         self.refresh(cx);
         self.focus_field_at_end(window, cx);
         let field = self.field.clone();
@@ -315,8 +318,12 @@ impl CapturePanel {
     /// Reads the targets again (CAP-149).
     pub(super) fn refresh(&mut self, cx: &mut Context<'_, Self>) {
         let nodus = self.nodus.clone();
+        let statuses = cx.try_global::<Stubs>().and_then(|s| s.statuses.clone());
         cx.spawn(async move |this, cx| {
-            let targets = nodus.capture().targets().await;
+            let mut targets = nodus.capture().targets().await;
+            if let Some(statuses) = &statuses {
+                super::stubs::overlay(&mut targets, statuses);
+            }
             let _ = this.update(cx, |p, cx| {
                 p.targets = Some(targets);
                 p.note_recents();

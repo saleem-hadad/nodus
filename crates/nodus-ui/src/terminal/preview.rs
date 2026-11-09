@@ -238,7 +238,7 @@ impl TranscriptPreview {
                             .primary()
                             .icon(Icon::ArchiveRestore, 14., 2.)
                             .label("Restore & Open")
-                            .on_click(move |_, _, cx| this.update(cx, |p, cx| p.restore(cx))),
+                            .on_click(move |_, _, cx| this.update(cx, Self::restore)),
                     )
                     .child(
                         button("tp-close")
@@ -264,7 +264,7 @@ impl TranscriptPreview {
                     Some(
                         button("tp-retry")
                             .label("Try again")
-                            .on_click(move |_, _, cx| retry.update(cx, |p, cx| p.fetch(cx)))
+                            .on_click(move |_, _, cx| retry.update(cx, Self::fetch))
                             .into_any_element(),
                     ),
                     cx,
@@ -287,7 +287,7 @@ impl TranscriptPreview {
                         let (toggle, all) = (this.clone(), this.clone());
                         let bounds = self.found_bounds.clone();
                         message(
-                            MessageProps {
+                            &MessageProps {
                                 id: ("tp-msg", i).into(),
                                 message: m,
                                 author: None,
@@ -332,7 +332,7 @@ impl Render for TranscriptPreview {
         let height = viewport.height * 0.8;
         if !self.scrolled && matches!(self.load, Load::Ready(_)) {
             let this = cx.entity();
-            window.on_next_frame(move |_, cx| this.update(cx, |p, cx| p.first_scroll(cx)));
+            window.on_next_frame(move |_, cx| this.update(cx, Self::first_scroll));
         }
         let header = self.header(cx);
         let body = self.body(window, cx);

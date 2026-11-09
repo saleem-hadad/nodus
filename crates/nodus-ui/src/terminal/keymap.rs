@@ -147,7 +147,7 @@ pub fn key_event(ks: &Keystroke, alt_graph: bool, repeat: bool) -> KeyEvent {
 mod tests {
     use super::*;
 
-    fn ks(spec: &str) -> Keystroke {
+    fn ks(spec: &'static str) -> Keystroke {
         Keystroke::parse(spec).unwrap()
     }
 

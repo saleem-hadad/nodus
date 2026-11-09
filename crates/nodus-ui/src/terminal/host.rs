@@ -516,7 +516,7 @@ impl TerminalHost {
             let _ = this.update(cx, |this, cx| {
                 this.hold_timer = None;
                 this.registry
-                    .with_terminal(&this.session_id, |t| t.end_synchronized_output());
+                    .with_terminal(&this.session_id, nodus_terminal::Terminal::end_synchronized_output);
                 cx.notify();
             });
         }));
@@ -761,7 +761,8 @@ impl TerminalHost {
                         last: event.position,
                     });
                 } else {
-                    self.registry.with_terminal(&id, |t| t.clear_selection());
+                    self.registry
+                        .with_terminal(&id, nodus_terminal::Terminal::clear_selection);
                     self.drag = Some(Drag {
                         anchor: p,
                         unit: DragUnit::Char,
@@ -960,7 +961,8 @@ impl TerminalHost {
             LinkKind::Osc8 => {
                 // TERM-068: xterm's confirm; 0.9.4's window then opened nothing.
                 let text = links::osc8_confirm_text(&link.text);
-                let _ = window.prompt(gpui::PromptLevel::Info, &text, None, &["OK", "Cancel"], cx);
+                // Whatever the answer, nothing opens.
+                drop(window.prompt(gpui::PromptLevel::Info, &text, None, &["OK", "Cancel"], cx));
             }
         }
     }
@@ -1231,7 +1233,8 @@ impl Render for TerminalHost {
                 }
             }))
             .on_action(cx.listener(|this, _: &gpui::component::input::SelectAll, _, cx| {
-                this.registry.with_terminal(&this.session_id, |t| t.select_all());
+                this.registry
+                    .with_terminal(&this.session_id, nodus_terminal::Terminal::select_all);
                 cx.notify();
             }))
             // TERM-032: files dropped type their quoted paths; TERM-034: anything else is ignored.

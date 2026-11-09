@@ -18,6 +18,11 @@ use crate::parity;
 use crate::theme::tokens::*;
 use crate::theme::{self, fonts};
 
+/// A click on one of a message's toggles.
+pub type Action = Rc<dyn Fn(&mut Window, &mut App)>;
+/// Told where the message lies.
+pub type OnBounds = Rc<dyn Fn(Bounds<Pixels>, &mut App)>;
+
 /// How a message is shown.
 pub struct MessageProps<'a> {
     pub id: ElementId,
@@ -34,10 +39,10 @@ pub struct MessageProps<'a> {
     pub expanded: bool,
     /// Every call shown.
     pub all_calls: bool,
-    pub on_toggle: Rc<dyn Fn(&mut Window, &mut App)>,
-    pub on_all_calls: Rc<dyn Fn(&mut Window, &mut App)>,
+    pub on_toggle: Action,
+    pub on_all_calls: Action,
     /// Told where the message lies, for scrolling it into view.
-    pub on_bounds: Option<Rc<dyn Fn(Bounds<Pixels>, &mut App)>>,
+    pub on_bounds: Option<OnBounds>,
 }
 
 /// UTF-16 ranges as byte ranges of `text`.
@@ -91,28 +96,21 @@ fn chip(label: String, cx: &App) -> gpui::Div {
 }
 
 /// A `.tp-more` text button.
-fn more(id: impl Into<ElementId>, label: String, on_click: Rc<dyn Fn(&mut Window, &mut App)>, cx: &App) -> AnyElement {
+fn more(id: impl Into<ElementId>, label: String, on_click: Action, cx: &App) -> AnyElement {
     let t = theme::tokens(cx);
     div()
         .id(id)
         .text_size(TEXT_SM)
         .font_weight(FontWeight::MEDIUM)
         .text_color(t.accent)
-        .hover(|s| s.underline())
+        .hover(Styled::underline)
         .on_click(move |_, window, cx| on_click(window, cx))
         .child(label)
         .into_any_element()
 }
 
 /// `ToolCalls` (TRANS-018): the last eight until the rest are asked for.
-fn tool_calls(
-    id: &ElementId,
-    calls: &[ToolCall],
-    all: bool,
-    on_all: Rc<dyn Fn(&mut Window, &mut App)>,
-    top: f32,
-    cx: &App,
-) -> AnyElement {
+fn tool_calls(id: &ElementId, calls: &[ToolCall], all: bool, on_all: Action, top: f32, cx: &App) -> AnyElement {
     let t = theme::tokens(cx);
     let hidden = if all {
         0
@@ -150,7 +148,7 @@ fn tool_calls(
 }
 
 /// `Message`.
-pub fn message(p: MessageProps<'_>, cx: &App) -> AnyElement {
+pub fn message(p: &MessageProps<'_>, cx: &App) -> AnyElement {
     let t = theme::tokens(cx);
     let m = p.message;
     let text = nodus_domain::js::trim(&m.text).to_owned();
@@ -196,7 +194,7 @@ pub fn message(p: MessageProps<'_>, cx: &App) -> AnyElement {
         .when(m.timestamp > 0.0, |d| d.child(format_time(m.timestamp, now)));
 
     let content = (!text.is_empty()).then(|| {
-        let body = div()
+        div()
             .text_size(if notice { TEXT_SM } else { TEXT_MD })
             .line_height(relative(1.55))
             .when(user && !notice, |d| {
@@ -227,8 +225,7 @@ pub fn message(p: MessageProps<'_>, cx: &App) -> AnyElement {
                     p.on_toggle.clone(),
                     cx,
                 )))
-            });
-        body
+            })
     });
 
     // The message is block flow in 0.9.4, so a margin right under the meta

@@ -312,7 +312,7 @@ mod tests {
         };
         assert_eq!(found_index(&messages, &find, &terms), Some(1));
         find.snippet = Some(SearchSnippet {
-            kind: SearchSnippetKind::Assistant,
+            kind: SearchSnippetKind::Reply,
             tool: None,
             file: None,
             agent: None,

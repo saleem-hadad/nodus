@@ -24,16 +24,16 @@ pub fn confirm_dialog(
     id: impl Into<ElementId>,
     request: &StopConfirmation,
     focus: &FocusHandle,
-    resolve: Resolve,
+    resolve: &Resolve,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
     let id: ElementId = id.into();
     let t = theme::tokens(cx);
-    let cancel = resolve.clone();
-    let confirm = resolve.clone();
-    let keys = resolve.clone();
-    let on_close = resolve.clone();
+    let cancel = Rc::clone(resolve);
+    let confirm = Rc::clone(resolve);
+    let keys = Rc::clone(resolve);
+    let on_close = Rc::clone(resolve);
     let body = div()
         .id((id.clone(), "body"))
         .track_focus(focus)

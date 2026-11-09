@@ -386,14 +386,14 @@ impl SessionWindow {
                             .tooltip("Start a new shell in the project folder")
                             .child(term_icon(TermIcon::RotateCcw, 13., 2., t.text_primary))
                             .child("Restart")
-                            .on_click(move |_, _, cx| resume.update(cx, |w, cx| w.resume(cx))),
+                            .on_click(move |_, _, cx| resume.update(cx, Self::resume)),
                     )
                 } else {
                     d.child(
                         button("term-resume")
                             .child(term_icon(TermIcon::Play, 13., 2., t.text_primary))
                             .child("Resume")
-                            .on_click(move |_, _, cx| resume.update(cx, |w, cx| w.resume(cx))),
+                            .on_click(move |_, _, cx| resume.update(cx, Self::resume)),
                     )
                 }
             })
@@ -415,7 +415,7 @@ impl SessionWindow {
                             .icon(Icon::Trash2, 13., 2.)
                             .label("Remove")
                             .tooltip("Stop the shell and remove this terminal from the board")
-                            .on_click(move |_, _, cx| remove.update(cx, |w, cx| w.remove(cx))),
+                            .on_click(move |_, _, cx| remove.update(cx, Self::remove)),
                     )
                 } else if view_of {
                     // A view's brain goes with its view, never to the archive.
@@ -427,7 +427,7 @@ impl SessionWindow {
                             .icon(Icon::Archive, 13., 2.)
                             .label("Archive")
                             .tooltip("Stop and move to the archive")
-                            .on_click(move |_, _, cx| archive.update(cx, |w, cx| w.archive(cx))),
+                            .on_click(move |_, _, cx| archive.update(cx, Self::archive)),
                     )
                 }
             })
@@ -500,7 +500,7 @@ impl SessionWindow {
                     "term-error",
                     title,
                     phase.error.as_deref(),
-                    std::rc::Rc::new(move |_, cx| this.update(cx, |w, cx| w.resume(cx))),
+                    std::rc::Rc::new(move |_, cx| this.update(cx, Self::resume)),
                 ))
             })
             .into_any_element()
@@ -530,11 +530,13 @@ impl Render for SessionWindow {
         let mut out = vec![modal.render(content, window, cx)];
         if let Some(ask) = self.confirm.clone() {
             let this = cx.entity();
+            let resolve: super::confirm::Resolve =
+                std::rc::Rc::new(move |ok, window, cx| this.update(cx, |w, cx| w.resolve_stop(ok, window, cx)));
             out.push(confirm_dialog(
                 "term-stop-confirm",
                 &ask,
                 &self.confirm_focus,
-                std::rc::Rc::new(move |ok, window, cx| this.update(cx, |w, cx| w.resolve_stop(ok, window, cx))),
+                &resolve,
                 window,
                 cx,
             ));

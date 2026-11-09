@@ -148,7 +148,7 @@ pub async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
             Ok(Value::Null)
         }
         "close" => {
-            cx.update(|cx| state.update(cx, |s, cx| s.close_top_layer(cx)));
+            cx.update(|cx| state.update(cx, crate::state::AppState::close_top_layer));
             Ok(Value::Null)
         }
         "screen" => {

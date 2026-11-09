@@ -144,7 +144,7 @@ impl AgentViewer {
                 self._poll = Some(cx.spawn(async move |this, cx| {
                     loop {
                         cx.background_executor().timer(Duration::from_millis(POLL_MS)).await;
-                        if this.update(cx, |this, cx| this.fetch_list(cx)).is_err() {
+                        if this.update(cx, Self::fetch_list).is_err() {
                             break;
                         }
                     }
@@ -446,7 +446,7 @@ impl AgentViewer {
                 .children(messages.iter().enumerate().map(|(i, m)| {
                     let (toggle, all) = (this.clone(), this.clone());
                     message(
-                        MessageProps {
+                        &MessageProps {
                             id: ("av-msg", i).into(),
                             message: m,
                             author: Some(agent_author(m, i, &agent.agent_type)),

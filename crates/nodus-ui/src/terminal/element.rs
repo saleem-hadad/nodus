@@ -709,7 +709,7 @@ fn paint_underline(window: &mut Window, style: Underline, at: Point<Pixels>, wid
             if let Ok(path) = builder.build() {
                 let clip = Bounds::new(at, size(d(width), d(m.device_cell_h())));
                 window.with_content_mask(Some(ContentMask { bounds: clip }), |window| {
-                    window.paint_path(path, color)
+                    window.paint_path(path, color);
                 });
             }
         }
@@ -735,7 +735,10 @@ mod tests {
         // Taller than the window at 1×: two tiles, each within it.
         let tiles = stage_tiles(size(px(1000.), px(1500.)), point(px(100.), px(60.)), viewport);
         assert_eq!(tiles.len(), 2);
-        assert_eq!(tiles[1].0, Bounds::new(point(px(0.), px(900.)), size(px(1000.), px(600.))));
+        assert_eq!(
+            tiles[1].0,
+            Bounds::new(point(px(0.), px(900.)), size(px(1000.), px(600.)))
+        );
         for (tile, stage) in tiles {
             assert!(stage.x + tile.size.width <= viewport.width && stage.y + tile.size.height <= viewport.height);
         }

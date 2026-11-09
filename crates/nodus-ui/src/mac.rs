@@ -226,3 +226,45 @@ pub fn order_front_without_focus(window: &Window) {
         w.orderFrontRegardless();
     }
 }
+
+/// The menu bar as AppKit shows it, items AppKit adds included (PLAT-045):
+/// each menu's title and its visible items' titles, `-` for a separator,
+/// and a submenu's items under its title. For the test driver's `menus`.
+pub fn menu_bar() -> serde_json::Value {
+    fn items(menu: *mut AnyObject) -> serde_json::Value {
+        // SAFETY: `menu` is a live NSMenu; its items are read, not changed,
+        // after `update` lets AppKit add its own.
+        unsafe {
+            let _: () = msg_send![menu, update];
+            let count: isize = msg_send![menu, numberOfItems];
+            let mut out = Vec::new();
+            for i in 0..count {
+                let item: *mut AnyObject = msg_send![menu, itemAtIndex: i];
+                let hidden: Bool = msg_send![item, isHidden];
+                if hidden.as_bool() {
+                    continue;
+                }
+                let separator: Bool = msg_send![item, isSeparatorItem];
+                if separator.as_bool() {
+                    out.push(serde_json::Value::from("-"));
+                    continue;
+                }
+                let title: *mut NSString = msg_send![item, title];
+                let title = title.as_ref().map(NSString::to_string).unwrap_or_default();
+                let submenu: *mut AnyObject = msg_send![item, submenu];
+                out.push(if submenu.is_null() {
+                    serde_json::Value::from(title)
+                } else {
+                    serde_json::json!({ title: items(submenu) })
+                });
+            }
+            serde_json::Value::Array(out)
+        }
+    }
+    // SAFETY: reads NSApp.mainMenu, which may be nil before menus are set.
+    let main: *mut AnyObject = unsafe { msg_send![app(), mainMenu] };
+    if main.is_null() {
+        return serde_json::Value::Null;
+    }
+    items(main)
+}

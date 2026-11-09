@@ -366,6 +366,15 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
             Ok(Value::Null)
         }
         "terminal" => crate::terminal::driver::run(command, cx).await,
+        // The menu bar as AppKit shows it, its own additions included.
+        "menus" => {
+            #[cfg(target_os = "macos")]
+            // Outside an update: AppKit asks the app to validate the items.
+            let menus = crate::mac::menu_bar();
+            #[cfg(not(target_os = "macos"))]
+            let menus = Value::Null;
+            Ok(menus)
+        }
         "quit" => {
             cx.update(|cx| cx.quit());
             Ok(Value::Null)

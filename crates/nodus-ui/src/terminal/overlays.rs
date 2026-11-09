@@ -107,7 +107,7 @@ pub fn error_overlay(id: impl Into<ElementId>, title: &str, detail: Option<&str>
                 .when_some(detail.filter(|d| !d.is_empty()), |d, detail| {
                     d.child(
                         div()
-                            .font_family(fonts::MONO)
+                            .font_family(super::MONO)
                             .text_size(TEXT_SM)
                             .text_color(white(0.55))
                             .cursor_text()

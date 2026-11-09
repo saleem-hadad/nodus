@@ -24,6 +24,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 NOW = 1792508400000  # 2026-10-20 15:00 UTC, the harness's frozen clock
 SOCK = "nodus-term-parity.sock"
+# The stand-ins are ES modules without .mjs: they need Node 22 or newer, which
+# the seed links into the world as <work>/bin/node.
+NODE = os.environ.get("PARITY_NODE") or next(
+    (p for p in ["/opt/homebrew/bin/node", "/usr/local/bin/node"] if os.path.exists(p)), "node"
+)
 AWAY = {"cmd": "mouse", "kind": "move", "x": 720, "y": 26}
 
 
@@ -94,8 +99,8 @@ def stop_host(world):
 def run(scene, theme, opts):
     steps = SCENES[scene]
     world = opts["world"]
-    subprocess.run(["node", os.path.join(HERE, "seed.mjs"), opts["harness"], world, theme], check=True, capture_output=True)
-    node = ["node", os.path.join(HERE, "terminal.mjs"), opts["harness"], world]
+    subprocess.run([NODE, os.path.join(HERE, "seed.mjs"), opts["harness"], world, theme], check=True, capture_output=True)
+    node = [NODE, os.path.join(HERE, "terminal.mjs"), opts["harness"], world]
     ids = json.loads(subprocess.run(node + ["ids"], check=True, capture_output=True, text=True).stdout)
     env = dict(os.environ, NODUS_USER_DATA=os.path.join(world, "userData"), NODUS_AUTOMATION=SOCK,
                HOME=os.path.join(world, "home"), PATH=os.path.join(world, "bin") + ":/usr/bin:/bin:/usr/sbin",
@@ -126,7 +131,7 @@ def run(scene, theme, opts):
                 continue
             if step == "click-stop":
                 # The Stop button: left of Archive in the header's actions.
-                drive(f, {"cmd": "mouse", "kind": "click", "x": 1152, "y": 75})
+                drive(f, {"cmd": "mouse", "kind": "click", "x": 1194, "y": 77})
                 drive(f, AWAY)
                 continue
             drive(f, resolve(step, ids))

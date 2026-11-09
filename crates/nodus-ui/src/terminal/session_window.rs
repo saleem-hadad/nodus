@@ -277,7 +277,7 @@ impl SessionWindow {
                         .items_center()
                         .gap(px(4.))
                         .min_w_0()
-                        .font_family(fonts::MONO)
+                        .font_family(super::MONO)
                         .cursor_text()
                         .tooltip(native_tooltip(path.clone().into()))
                         .child(term_icon(TermIcon::Folder, 12., 2., t.text_tertiary))
@@ -292,7 +292,7 @@ impl SessionWindow {
                         .gap(px(4.))
                         .max_w(px(280.))
                         .overflow_hidden()
-                        .font_family(fonts::MONO)
+                        .font_family(super::MONO)
                         .child(term_icon(TermIcon::GitBranch, 12., 2., t.text_tertiary))
                         .child(div().truncate().child(branch)),
                 )
@@ -309,7 +309,7 @@ impl SessionWindow {
                         .px(px(4.))
                         .mx(px(-4.))
                         .rounded(px(4.))
-                        .font_family(fonts::MONO)
+                        .font_family(super::MONO)
                         .text_size(TEXT_XS)
                         .when(id_hovered, |d| d.bg(t.bg_hover).text_color(t.text_secondary))
                         .on_hover(move |h, _, cx| {

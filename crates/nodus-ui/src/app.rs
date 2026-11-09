@@ -65,6 +65,8 @@ pub fn run(user_data: PathBuf) -> anyhow::Result<()> {
         let _ = applied_tx.send(settings.clone());
     }));
 
+    // The core's runtime, for UI code that starts core work needing one (terminals).
+    let core_runtime = runtime.handle().clone();
     let app = gpui::application().with_assets(Assets);
     // PLAT-030: a Dock click with no window opens one.
     app.on_reopen(|cx| {
@@ -78,6 +80,7 @@ pub fn run(user_data: PathBuf) -> anyhow::Result<()> {
         cx.set_global(window::Core(nodus.clone()));
         cx.set_global(Flags(flags));
         core_shell::serve(shell_requests, cx);
+        cx.set_global(crate::terminal::store::CoreRuntime(core_runtime.clone()));
         theme::apply_preference(settings.theme, cx);
         menus::install_menus(&settings, cx);
         menus::bind_shortcuts(cx);

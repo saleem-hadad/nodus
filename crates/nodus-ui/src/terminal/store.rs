@@ -56,9 +56,20 @@ struct TerminalsGlobal(Entity<Terminals>);
 
 impl Global for TerminalsGlobal {}
 
-/// The registry's timers (the 30 s limit for starting sessions) run here:
-/// the core's runtime isn't reachable from the UI.
-fn timer_runtime() -> tokio::runtime::Handle {
+/// The core's tokio runtime, set at start-up: opening a session starts
+/// work on it (the host connection, the spawn), and the registry's timers
+/// (the 30 s limit for starting sessions) run there.
+pub struct CoreRuntime(pub tokio::runtime::Handle);
+
+impl Global for CoreRuntime {}
+
+/// The core's runtime, or (in tests, with none set) one of our own.
+pub fn core_runtime(cx: &App) -> tokio::runtime::Handle {
+    cx.try_global::<CoreRuntime>()
+        .map_or_else(fallback_runtime, |r| r.0.clone())
+}
+
+fn fallback_runtime() -> tokio::runtime::Handle {
     static RUNTIME: OnceLock<tokio::runtime::Handle> = OnceLock::new();
     RUNTIME
         .get_or_init(|| {
@@ -113,7 +124,7 @@ impl Sessions for CoreSessions {
     }
 }
 
-type OpenResultFuture = Pin<Box<dyn Future<Output = Result<String, String>>>>;
+type OpenResultFuture = Pin<Box<dyn Future<Output = Result<String, String>> + Send>>;
 
 /// The core's `session:open`, as the message a rejected IPC call carried.
 fn core_open(nodus: Nodus, request: &OpenRequest) -> OpenResultFuture {
@@ -134,7 +145,7 @@ fn core_open(nodus: Nodus, request: &OpenRequest) -> OpenResultFuture {
 }
 
 /// Polls a future once, without waiting.
-fn poll_once<T>(future: &mut Pin<Box<dyn Future<Output = T>>>) -> Option<T> {
+fn poll_once<T>(future: &mut Pin<Box<dyn Future<Output = T> + Send>>) -> Option<T> {
     let mut cx = TaskContext::from_waker(Waker::noop());
     match future.as_mut().poll(&mut cx) {
         Poll::Ready(value) => Some(value),
@@ -162,16 +173,18 @@ impl Terminals {
     fn new(nodus: Nodus, cx: &mut Context<'_, Self>) -> Self {
         let (opens_tx, opens) = mpsc::unbounded_channel();
         let (releases_tx, releases) = mpsc::unbounded_channel();
+        let runtime = core_runtime(cx);
         let sessions = Arc::new(CoreSessions {
             nodus: nodus.clone(),
             opens: opens_tx,
         });
-        let registry = Registry::new(sessions, Platform::current(), timer_runtime());
+        let registry = Registry::new(sessions, Platform::current(), runtime.clone());
         let events = nodus.subscribe();
         let pump = Pump {
             registry: registry.clone(),
             nodus: nodus.clone(),
             held: HashMap::new(),
+            runtime,
         };
         let task = cx.spawn(async move |this, cx| pump.run(events, opens, releases, this, cx).await);
         Self {
@@ -216,6 +229,7 @@ struct Pump {
     nodus: Nodus,
     /// Sessions whose events wait for their open's reply to be applied.
     held: HashMap<String, Vec<Event>>,
+    runtime: tokio::runtime::Handle,
 }
 
 /// What finished while the pump waited.
@@ -263,8 +277,11 @@ impl Pump {
                 }
                 Wake::Open(request) => {
                     let mut open = core_open(self.nodus.clone(), &request);
+                    let entered = self.runtime.enter();
                     let session = request.session_id.clone();
-                    match poll_once(&mut open) {
+                    let polled = poll_once(&mut open);
+                    drop(entered);
+                    match polled {
                         Some(result) => {
                             // A live session: the replay covers what's queued.
                             for _ in 0..events.len() {
@@ -280,8 +297,11 @@ impl Pump {
                             self.held.entry(session).or_default();
                             let done = done_tx.clone();
                             let reply = request.reply;
+                            let running = self.runtime.spawn(open);
                             cx.spawn(async move |_| {
-                                let result = open.await;
+                                let result = running
+                                    .await
+                                    .unwrap_or_else(|_| Err("The session couldn't be opened".to_owned()));
                                 let _ = done.send((reply, result));
                             })
                             .detach();

@@ -1,6 +1,6 @@
 //! The terminal's font and cell size, as xterm.js 6's WebGL renderer
 //! measured them in 0.9.4 (`CharSizeService`, `WebglRenderer._updateDimensions`):
-//! 13 px SF Mono (Cascadia Mono, else Consolas, on Windows), the cell as wide
+//! 13 px Menlo on a Mac (Cascadia Mono, else Consolas, on Windows), the cell as wide
 //! as the `W` advance floored to device pixels and 1.2 × the character
 //! height, the glyphs sat on an ideographic baseline at the bottom of the
 //! character box, centred in the cell.
@@ -8,24 +8,34 @@
 //! Chromium measures the character height from the font's ascent and
 //! descent each rounded to whole CSS pixels, and places the ideographic
 //! baseline at the descent rounded at the device font size. At 2× that
-//! gives SF Mono a 15 × 36 device-pixel cell (7.5 × 18 px) with the
+//! gives Menlo a 15 × 36 device-pixel cell (7.5 × 18 px) with the
 //! alphabetic baseline 27 device pixels below the cell's top, as the goldens
 //! show.
+//!
+//! The font is Menlo, not SF Mono, on a Mac: the stack asks for `'SF Mono',
+//! ui-monospace, Menlo, …`, but Chromium can't find SF Mono by name (it's a
+//! hidden system font) and a canvas font string doesn't take `ui-monospace`,
+//! so the WebGL atlas and xterm's measurement both fell through to Menlo.
+//! The goldens show Menlo's glyphs (the curved `l`, real bold) and its metrics.
 
 use gpui::{Font, FontStyle, FontWeight, Pixels, Window, px};
 use nodus_terminal::fit::{self, CellMetrics, FONT_SIZE};
 
+#[cfg(not(target_os = "macos"))]
 use crate::theme::fonts;
 
 /// `fontFamily: 'SF Mono', ui-monospace, Menlo, Monaco, 'Cascadia Mono', Consolas, monospace`.
 pub fn term_font() -> Font {
-    #[allow(unused_mut)]
-    let mut font = gpui::font(fonts::MONO);
+    #[cfg(target_os = "macos")]
+    {
+        gpui::font("Menlo")
+    }
     #[cfg(not(target_os = "macos"))]
     {
+        let mut font = gpui::font(fonts::MONO);
         font.fallbacks = Some(gpui::FontFallbacks::from_fonts(vec!["Consolas".into()]));
+        font
     }
-    font
 }
 
 /// The font for a cell: weight 700 when bold (`fontWeightBold`), italic when asked.
@@ -121,14 +131,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn term_sf_mono_cell_matches_the_goldens() {
-        // SF Mono at 13 px: 'W' advances 7.8 px, ascent ≈ 12.4, descent ≈ 2.9.
-        let m = compute(7.8, 12.4, 2.9, 2.0);
+    fn term_menlo_cell_matches_the_goldens() {
+        // Menlo at 13 px: 1233, 1901 and 483 of 2048 units.
+        let (advance, ascent, descent) = (13.0 * 1233.0 / 2048.0, 13.0 * 1901.0 / 2048.0, 13.0 * 483.0 / 2048.0);
+        let m = compute(advance, ascent, descent, 2.0);
         assert_eq!((m.cell.device_cell_width, m.cell.device_cell_height), (15.0, 36.0));
         assert_eq!((m.cell_w(), m.cell_h()), (7.5, 18.0));
         assert_eq!(m.cell.device_char_top, 3.0);
         assert_eq!(m.baseline, 27.0);
-        let m = compute(7.8, 12.4, 2.9, 1.0);
+        let m = compute(advance, ascent, descent, 1.0);
         assert_eq!((m.cell_w(), m.cell_h()), (7.0, 18.0));
     }
 }

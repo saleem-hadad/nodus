@@ -63,11 +63,13 @@ pub async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
                 .and_then(Value::as_array)
                 .map(|a| a.iter().filter_map(Value::as_str).map(str::to_owned).collect())
                 .unwrap_or_default();
+            let runtime = cx.update(|cx| super::store::core_runtime(cx));
             for id in sessions {
-                nodus
-                    .sessions()
-                    .open(&project, &id, cols, rows)
+                let (nodus, project) = (nodus.clone(), project.clone());
+                runtime
+                    .spawn(async move { nodus.sessions().open(&project, &id, cols, rows).await.map(|_| ()) })
                     .await
+                    .map_err(|e| e.to_string())?
                     .map_err(|e| e.ipc_message())?;
             }
             Ok(Value::Null)

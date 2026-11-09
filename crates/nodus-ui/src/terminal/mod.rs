@@ -7,6 +7,15 @@
 //!
 //! Ports `src/renderer/src/terminal/`.
 
+/// `--font-mono` as 0.9.4 drew it in the page as well as in the terminal:
+/// Chromium resolved `'SF Mono', ui-monospace, Menlo, …` to Menlo on a Mac
+/// (the goldens' mono text has Menlo's 0.6 em advance and shapes), Cascadia
+/// Mono on Windows.
+#[cfg(target_os = "macos")]
+pub const MONO: &str = "Menlo";
+#[cfg(not(target_os = "macos"))]
+pub const MONO: &str = crate::theme::fonts::MONO;
+
 pub mod icons;
 pub mod element;
 pub mod glyphs;
@@ -20,3 +29,7 @@ pub mod layers;
 pub mod overlays;
 pub mod session_window;
 pub mod driver;
+pub mod agents;
+pub mod messages;
+pub mod preview;
+pub mod text;

@@ -205,9 +205,12 @@ commands=(
 # The script: electron-builder's header, then installer.nsi.
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
-sed -e "s|@TEMPLATES@|$(native "$here/nsis")|g" \
-  -e "s|@PLUGINS@|$(native "$resources/plugins")|g" \
-  -e "s|@GENERATED@|$(native "$here/nsis-header")|g" \
+# A Windows path as a sed replacement: its backslashes (`D:\a\nodus`, where
+# GNU sed reads `\a` and `\n` as escapes), `&` and the `|` delimiter quoted.
+sed_path() { native "$1" | sed -e 's/[\\&|]/\\&/g'; }
+sed -e "s|@TEMPLATES@|$(sed_path "$here/nsis")|g" \
+  -e "s|@PLUGINS@|$(sed_path "$resources/plugins")|g" \
+  -e "s|@GENERATED@|$(sed_path "$here/nsis-header")|g" \
   "$here/nsis-header/header.nsh" >"$work/script.nsi"
 cat "$here/nsis/installer.nsi" >>"$work/script.nsi"
 

@@ -6,6 +6,7 @@
 pub mod bar;
 pub mod icons;
 pub mod ink;
+pub mod merge;
 pub mod search;
 pub mod selection;
 
@@ -30,6 +31,26 @@ pub struct Overlays {
     pub(crate) ink: ink::Ink,
     pub(crate) bar: bar::Bar,
     pub(crate) search: search::Search,
+    pub(crate) merge: Option<merge::MergeDialog>,
+}
+
+/// An empty layer the size of its parent that records the parent's box
+/// in window coordinates each frame (for presses outside a popover).
+pub(crate) fn bounds_probe(
+    canvas: gpui::WeakEntity<crate::board::canvas::BoardCanvas>,
+    put: fn(&mut crate::board::canvas::BoardCanvas, gpui::Bounds<gpui::Pixels>),
+) -> AnyElement {
+    gpui::canvas(
+        |_, _, _| {},
+        move |bounds, _, _, cx| {
+            if let Some(c) = canvas.upgrade() {
+                c.update(cx, |c, _| put(c, bounds));
+            }
+        },
+    )
+    .absolute()
+    .size_full()
+    .into_any_element()
 }
 
 /// Whether the text is empty once trimmed as JavaScript trims.

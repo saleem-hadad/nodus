@@ -18,6 +18,10 @@ impl BoardCanvas {
         let k = &e.keystroke;
         let m = k.modifiers;
         let key = k.key.as_str();
+        // SRCH-001: ⌘K opens search from a text field too (not a terminal).
+        if key == "k" && (m.platform || m.control) {
+            return self.on_key_down(e, false, cx);
+        }
         let commands = self.bar_commands();
         let menu_open = !commands.is_empty();
         let highlighted = self.overlays.bar.active.min(commands.len().saturating_sub(1));

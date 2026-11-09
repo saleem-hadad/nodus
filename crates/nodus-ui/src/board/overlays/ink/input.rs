@@ -45,6 +45,7 @@ impl BoardCanvas {
     /// INKUI-006…INKUI-015, INKUI-019, INKUI-020: a press, seen before
     /// anything on the board.
     pub(crate) fn ink_mouse_down(&mut self, e: &MouseDownEvent, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.bar_outside_press(e.position, cx);
         // INKUI-004: the palette closes on a press anywhere else.
         if self.overlays.ink.palette && !self.overlays.ink.color_area.iter().any(|b| b.contains(&e.position)) {
             self.overlays.ink.palette = false;

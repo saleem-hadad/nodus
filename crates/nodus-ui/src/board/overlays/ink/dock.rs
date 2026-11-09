@@ -6,6 +6,9 @@ impl BoardCanvas {
     /// INKUI-001: the dock, 16px from the left, its bottom 58px up.
     pub(crate) fn render_ink_dock(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> AnyElement {
         let t = theme::tokens(cx);
+        if self.overlays.ink.color.is_none() {
+            self.overlays.ink.color = Some(stored_color(&self.state.read(cx).nodus));
+        }
         let tool = self.overlays.ink.tool;
         let color = self.overlays.ink.color(cx);
         let palette = self.overlays.ink.palette;

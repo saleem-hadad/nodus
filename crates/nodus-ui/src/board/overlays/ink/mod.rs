@@ -15,7 +15,7 @@ use gpui::Focusable as _;
 use gpui::component::input::{Input, InputEvent, InputState};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, AppContext as _, Bounds, Context, CursorStyle, DispatchPhase, Entity, FontWeight, Global, Hitbox,
+    AnyElement, App, AppContext as _, Bounds, Context, CursorStyle, DispatchPhase, Entity, FontWeight, Hitbox,
     HitboxBehavior, InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
     ParentElement, PathBuilder, PathStyle, Pixels, Point as GPoint, Rgba, SharedString, StatefulInteractiveElement,
     Styled, Subscription, TextRun, Window, WindowTextSystem, canvas, div, point, px,
@@ -90,14 +90,17 @@ pub fn ink_rgba(t: &Tokens, color: InkColor) -> Rgba {
     }
 }
 
-/// INKUI-004: the colour picked last, for every board while the app runs
-/// (`nodus.inkColor`); red until one is picked.
-struct InkColorMemory(InkColor);
+/// INKUI-004: where the colour picked last is kept, app-wide and across
+/// restarts (`localStorage`, brought over from 0.9.4's).
+pub const COLOR_KEY: &str = "nodus.inkColor";
 
-impl Global for InkColorMemory {}
-
-fn remembered_color(cx: &App) -> InkColor {
-    cx.try_global::<InkColorMemory>().map_or(InkColor::Red, |m| m.0)
+/// The colour picked last; red when none was, or what's stored isn't one.
+pub(crate) fn stored_color(nodus: &nodus_core::Nodus) -> InkColor {
+    nodus
+        .local_storage()
+        .get(COLOR_KEY)
+        .and_then(|c| InkColor::parse(&c))
+        .unwrap_or(InkColor::Red)
 }
 
 /// A label being typed: a new one, or one already on the board (`id`).
@@ -136,7 +139,7 @@ enum InkGesture {
 #[derive(Default)]
 pub(crate) struct Ink {
     pub tool: InkTool,
-    /// Picked on this board; the remembered colour until then.
+    /// The current colour, read from storage the first time the dock is drawn.
     color: Option<InkColor>,
     pub selected: Option<String>,
     gesture: Option<InkGesture>,
@@ -151,8 +154,8 @@ pub(crate) struct Ink {
 }
 
 impl Ink {
-    pub fn color(&self, cx: &App) -> InkColor {
-        self.color.unwrap_or_else(|| remembered_color(cx))
+    pub fn color(&self, _: &App) -> InkColor {
+        self.color.unwrap_or(InkColor::Red)
     }
 
     /// Lets go of a gesture under way (the window lost the pointer).

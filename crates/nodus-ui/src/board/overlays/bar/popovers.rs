@@ -59,7 +59,12 @@ impl BoardCanvas {
                             window.prevent_default();
                             cx.stop_propagation();
                         })
-                        .child(body),
+                        .child(body)
+                        .when(key == "bar-picker", |d| {
+                            d.child(crate::board::overlays::bounds_probe(cx.entity().downgrade(), |c, b| {
+                                c.overlays.bar.picker_area[0] = Some(b)
+                            }))
+                        }),
                 )
                 .into_any_element(),
         )

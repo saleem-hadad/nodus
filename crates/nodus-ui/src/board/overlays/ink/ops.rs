@@ -93,7 +93,11 @@ impl BoardCanvas {
     pub(crate) fn ink_pick_color(&mut self, color: InkColor, cx: &mut Context<'_, Self>) {
         self.overlays.ink.color = Some(color);
         self.overlays.ink.palette = false;
-        cx.set_global(InkColorMemory(color));
+        self.state
+            .read(cx)
+            .nodus
+            .local_storage()
+            .set(COLOR_KEY, Some(color.as_str()));
         let current = self.ink_strokes();
         if let Some(id) = self.overlays.ink.selected.clone()
             && current.iter().any(|s| s.id == id && s.color != color)

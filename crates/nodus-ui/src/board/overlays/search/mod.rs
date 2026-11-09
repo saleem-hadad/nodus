@@ -37,6 +37,8 @@ pub(crate) struct Search {
     /// The query the latest request is for (stale answers are dropped).
     pub asking: Option<String>,
     pending: Option<Task<()>>,
+    /// The results' scroll, so the highlighted row stays in view (SRCH-012).
+    pub scroll: gpui::ScrollHandle,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -230,11 +232,30 @@ impl BoardCanvas {
 
     /// SRCH-012, SRCH-013, SRCH-016, SRCH-017, SRCH-003: the dialog's keys.
     pub(crate) fn search_key_down(&mut self, e: &gpui::KeyDownEvent, cx: &mut Context<'_, Self>) -> bool {
-        let m = e.keystroke.modifiers;
-        let modk = crate::platform::Platform::CURRENT.mod_key(&m);
         let rows = self.search_rows();
         let last = rows.len().saturating_sub(1);
         let current = self.overlays.search.active.min(last);
+        let moved = matches!(e.keystroke.key.as_str(), "down" | "up" | "tab");
+        let handled = self.search_key(e, &rows, current, last, cx);
+        if handled && moved {
+            // The highlighted row scrolls into view, the least it can.
+            let header = usize::from(js::trim(&self.search_query).is_empty() && !rows.is_empty());
+            let row = self.overlays.search.active.min(last);
+            self.overlays.search.scroll.scroll_to_item(row + header);
+        }
+        handled
+    }
+
+    fn search_key(
+        &mut self,
+        e: &gpui::KeyDownEvent,
+        rows: &[Row],
+        current: usize,
+        last: usize,
+        cx: &mut Context<'_, Self>,
+    ) -> bool {
+        let m = e.keystroke.modifiers;
+        let modk = crate::platform::Platform::CURRENT.mod_key(&m);
         match e.keystroke.key.as_str() {
             "escape" => self.search_close(cx),
             "down" => self.overlays.search.active = (current + 1).min(last),

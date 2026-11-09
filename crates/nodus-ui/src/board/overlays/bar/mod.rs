@@ -38,6 +38,8 @@ pub(crate) struct Bar {
     /// The `into` session last seen, to forget `dropped` when it changes.
     pub last_into: Option<String>,
     pub picking: bool,
+    /// The colour picker's and the note swatch's boxes, as last drawn.
+    pub picker_area: [Option<gpui::Bounds<gpui::Pixels>>; 2],
     pub sending: bool,
     /// The board's `/` key asked for the keyboard, with `/` typed.
     pub focus_request: Option<Option<String>>,
@@ -68,6 +70,7 @@ impl Default for Bar {
             dropped: None,
             last_into: None,
             picking: false,
+            picker_area: [None, None],
             sending: false,
             focus_request: None,
             mic: None,
@@ -221,6 +224,16 @@ impl BoardCanvas {
     pub(crate) fn bar_drop_into(&mut self, cx: &mut Context<'_, Self>) {
         self.overlays.bar.dropped = self.bar_sends_into().map(|i| i.session_id);
         cx.notify();
+    }
+
+    /// BAR-022: a press anywhere but the picker and its swatch closes it
+    /// (seen before anything else handles it).
+    pub(crate) fn bar_outside_press(&mut self, at: gpui::Point<gpui::Pixels>, cx: &mut Context<'_, Self>) {
+        let bar = &mut self.overlays.bar;
+        if bar.picking && !bar.picker_area.iter().flatten().any(|b| b.contains(&at)) {
+            bar.picking = false;
+            cx.notify();
+        }
     }
 
     /// BAR-033: the board's `/`: the keyboard to the bar, with `/` typed

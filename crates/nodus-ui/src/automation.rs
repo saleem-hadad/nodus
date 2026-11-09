@@ -18,6 +18,7 @@
 //! {"cmd":"idle"}                                    until the window stops drawing
 //! {"cmd":"screenshot","path":"/…/scene.light.rust.png"}
 //! {"cmd":"window"}                                  the window's number and size
+//! {"cmd":"stub","name":"summarize","phases":["done",null],"results":[{…}]}   what summarize answers (spec 11)
 //! {"cmd":"terminal","action":"open",…}                the terminal's windows (terminal::driver)
 //! {"cmd":"quit"}
 //! ```
@@ -135,6 +136,27 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
             let now = command.get("now").and_then(Value::as_f64);
             cx.update(|cx| cx.set_global(Parity { frozen, now_ms: now }));
             with_window(cx, |window, _| window.refresh())?;
+            Ok(Value::Null)
+        }
+        // As 0.9.4's scenes replaced an IPC handler: what the merge dialog's
+        // summarize answers (each source's phase; results, or none: pending).
+        "stub" => {
+            let phases = command
+                .get("phases")
+                .and_then(Value::as_array)
+                .map(|a| {
+                    a.iter()
+                        .map(|p| p.as_str().and_then(nodus_domain::SummarizePhase::parse))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let results = command
+                .get("results")
+                .map(|r| serde_json::from_value(r.clone()).map_err(|e| e.to_string()))
+                .transpose()?;
+            cx.update(|cx| {
+                cx.set_global(crate::board::overlays::merge::SummarizeStub { phases, results });
+            });
             Ok(Value::Null)
         }
         "core" => core(&nodus, command).await,

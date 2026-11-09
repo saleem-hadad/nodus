@@ -192,6 +192,7 @@ impl BoardCanvas {
         }
         div()
             .id("search-results")
+            .track_scroll(&self.overlays.search.scroll)
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()

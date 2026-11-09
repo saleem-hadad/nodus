@@ -428,6 +428,10 @@ impl BoardCanvas {
             .rounded(px(5.))
             .bg(note_gradient(color))
             .shadow(vec![inset_shadow(0., 0., 0., 0.5, rgba(0, 0, 0, 0.2))])
+            .relative()
+            .child(crate::board::overlays::bounds_probe(cx.entity().downgrade(), |c, b| {
+                c.overlays.bar.picker_area[1] = Some(b)
+            }))
             .tooltip(native_tooltip("Note colour".into()))
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_click(move |_, _, cx| {

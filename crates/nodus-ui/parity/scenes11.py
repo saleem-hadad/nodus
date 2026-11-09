@@ -94,6 +94,18 @@ SF_COUPONS = (495, 560)
 SF_SEARCH_PLAN = (776, 560)
 ARROW_A = AT(1300, 700)
 
+def STUB(phases, results=None):
+    """What summarize answers in the scene (0.9.4's scenes replaced its IPC handler)."""
+    out = {"cmd": "stub", "name": "summarize", "phases": phases}
+    if results is not None:
+        out["results"] = [{"sessionId": "", "title": "", **r} for r in results]
+    return out
+
+
+# sf-cart, sf-coupons and sf-search-plan selected, then New session from context.
+MERGE = [AWAY, M("click", *SF_CART, shift=True), M("click", *SF_COUPONS, shift=True),
+         M("click", *SF_SEARCH_PLAN, shift=True), W(300), M("click", 663, 797), W(400), AWAY]
+
 SCENES = {
     "ink-pen": ([], STOREFRONT + [AWAY, M("click", DOCK_X, PEN), M("click", DOCK_X, COLOUR), W(200),
                                   M("click", *PURPLE)]
@@ -123,6 +135,17 @@ SCENES = {
     "search-empty": ([], STOREFRONT + [AWAY, W(300), K("cmd-k"), W(300)]),
     "search-results": ([], STOREFRONT + [AWAY, W(300), K("cmd-k"), W(300)] + typed("coupon") + [W(1500)]),
     "search-none": ([], STOREFRONT + [AWAY, W(300), K("cmd-k"), W(300)] + typed("zebra") + [W(1500)]),
+    "merge-progress": ([], [STUB(["done", "running", "queued"])] + STOREFRONT + MERGE),
+    "merge-failed": ([], [STUB(["done", "error", "done"], [
+        {"summary": "Moved the cart to a Zustand store; useCart and useCartCount read it with selectors."},
+        {"summary": "", "error": "claude exited with code 1"},
+        {"summary": "Planned the v2 search page: skeleton tiles, a filter sheet, and an empty state."}])]
+        + STOREFRONT + MERGE),
+    "merge-ready": ([], [STUB(["done", "done", "done"], [
+        {"summary": "Moved the cart to a Zustand store; useCart and useCartCount read it with selectors."},
+        {"summary": "Wrote Playwright tests for coupon codes; the sale-only case fails on purpose."},
+        {"summary": "Planned the v2 search page: skeleton tiles, a filter sheet, and an empty state."}])]
+        + STOREFRONT + MERGE),
     "board-selected": ([], STOREFRONT + [M("click", 1030, 300, shift=True), M("click", 495, 560, shift=True), AWAY]),
 }
 

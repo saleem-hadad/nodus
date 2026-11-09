@@ -142,9 +142,9 @@ One file per domain in `migration/features/`. Each lists every behavior with an 
 | 06-updater-release.md | updater, packaging, signing, CI, release, smoke test, 0.9.4 → Rust handoff | ✅ 132 | 99/132 |
 | 07-capture.md | floating capture: panel window, double tap, screen context, guess, submit | ✅ 177 | 176/177 |
 | 08-projects-shell-ui.md | App, title bar, settings, projects grid, project rail, tokens and global styles, menus, modals | ✅ 305 | 270/305 |
-| 09-board-canvas.md | BoardView: pan/zoom, selection, drag, shortcuts, context menus, sections, archive, layout, edges | ✅ 177 | 152/177 |
+| 09-board-canvas.md | BoardView: pan/zoom, selection, drag, shortcuts, context menus, sections, archive, layout, edges | ✅ 177 | 170/177 |
 | 10-board-cards-notes.md | session cards, expanded cards, agent deck, archive stack, notes and the pad | ✅ 203 | 203/203 |
-| 11-board-overlays.md | prompt bar (sidekick), ⌘K search, merge dialog, ink layer, selection bar | ✅ 111 | ☐ |
+| 11-board-overlays.md | prompt bar (sidekick), ⌘K search, merge dialog, ink layer, selection bar | ✅ 111 | 107/111 |
 | 12-terminal-ui.md | terminal registry, modal, transcript preview, agent viewer, xterm behavior | ✅ 185 | 181/185 |
 
 ## Phases
@@ -161,7 +161,7 @@ Tracks after P1 run in parallel where the dependency column allows.
 | P5 | UI foundation: app shell, theme tokens (light/dark), title bar, menus, settings, projects grid, project rail | P1, S1 | ✅ merged (ui-shell) |
 | P6 | Board canvas: pan/zoom/select/drag, cards, sections, archive, notes, edges, controls, context menus, shortcuts | P4, P5 | ✅ merged (canvas + cards) |
 | P7 | Terminal: element, modal, expanded cards, transcript preview, agent viewer | P2, P5 | ✅ merged; expanded cards plug in through `terminal::card::CardTerminals` |
-| P8 | Overlays: prompt bar, ⌘K search, merge dialog, ink, selection bar, agent deck | P6 | 🟡 overlays running (agent deck is board-cards') |
+| P8 | Overlays: prompt bar, ⌘K search, merge dialog, ink, selection bar, agent deck | P6 | ✅ merged |
 | P9 | Views (wry), board tools, actions, voice, git UI | P6 | ☐ |
 | P10 | Capture panel, notifications, Dock badge, updater | P6 | ✅ merged (notifications and the Dock badge need the packaged app to see) |
 | P11 | Packaging: .app and DMGs (same bundle id, Info.plist keys, entitlements, signing, notarizing), Windows NSIS (same flags), release workflow; 0.9.4 → Rust update test | P10 | 🟡 merged; waits on Windows CI, the real certificate, and the UI tracks |
@@ -186,7 +186,8 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | capture | `rust/capture` | nodus-capture backend: double tap, key hook, screen context, guess, submit | ✅ merged: 98 CAP; panel UI and page wiring to the capture-panel track |
 | core | `rust/core` | P4: wire every merged domain into nodus-core (sessions, board, views, updates, events, startup/quit), deferred core IDs, debts, headless end-to-end tests | ✅ merged (6243e7c): every domain composed; git/actions/voice wired; the windowed app launches, runs sessions through `Nodus host` and quits through the core |
 | audit-shell | `rust/audit-shell` | P12 slice: resolve every unticked ID in specs 01–03, 05–08 (tick with evidence, implement, or defer with a reason); selectable static text; action-name paste; test driver on Windows named pipes; Windows chrome (☰ menu, caption buttons, single instance) | 🟡 running |
-| overlays | `rust/overlays` | P8, spec 11: prompt bar, ⌘K search, merge dialog, ink layer, selection bar, on the board's `board/bar.rs` hooks | 🟡 running |
+| gpui-polish | `rust/gpui-polish` | GPUI/UI gaps: custom cursors (ink move, eraser circle), spellcheck underline + suggestions, rounded search highlights and underline offset, Chromium-style tooltips, shadows outside see-through boxes | 🟡 running |
+| overlays | `rust/overlays` | P8, spec 11: prompt bar, ⌘K search, merge dialog, ink layer, selection bar, on the board's `board/bar.rs` hooks | ✅ merged (f4467cd): 107 of 111 + 19 board hooks; BAR-005 (spellcheck underline), INKUI-016/017 (cursors) to gpui-polish, INKUI-018 to views-ui; overlay regions 0–1.6% off the goldens |
 | gpui-text | `rust/gpui-text` | patched GPUI text parity with Chromium: sRGB tagging, no SF Pro tracking, hanging trailing spaces, Chromium's rounding; Windows effects CI step | ✅ merged: PATCHES 6–10; 69/71 text cases pixel-identical to Electron 44.5.1; shell scenes now 0.04–0.8% off the goldens |
 | board-canvas | `rust/board-canvas` | P6, spec 09: the board route and canvas (pan/zoom/select/drag, sections, edges, menus, shortcuts), node plug-in interface | ✅ merged (f2f5747): 149 ticked; 13 deferred to cards/terminal/views/overlays and 13 board-side overlay hooks (`board/bar.rs`) tick when the overlays land |
 | board-cards | `rust/board-cards` | P6, spec 10: session cards, expanded card chrome, agent deck, archive stack, notes, pad (`nodus-ui/src/board/cards/`) | ✅ merged: all 203 (CARD 53, XCARD 32, DECK 29, ARCH 40, NOTEUI 49) + TERM-093…108 and BOARD-036/042/044; board scenes 0.35–1.1% off the goldens |
@@ -279,6 +280,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-10: overlays merged (f4467cd): prompt bar with the shared mic, ⌘K search, merge dialog, ink layer and dock, selection bar; the ink colour kept via the core's local-storage store; 1,252 tests. gpui-polish started.
 - 2026-11-10: board-cards merged: every card, expanded card, agent deck, archive and note behavior; real terminals and mics in expanded cards; one wheel arbiter; a crash fixed (nodes reading the canvas while it drew); 1,227+ tests.
 - 2026-11-10: actions-git-voice-ui merged (1e9d618): the actions rail and dialog, the branch chip and Changes window, the shared mic and recording look; 1,191+ tests.
 - 2026-11-10: capture-panel merged (bd3f414): the floating capture panel, Settings' capture rows, File › Capture…, the core's `capture.*`; 0.9.4's capture draft and history read from Chromium's Local Storage once; 1,191 tests. A test fixture had been dropped by the repo's `*.log` ignore; committed with an exception.

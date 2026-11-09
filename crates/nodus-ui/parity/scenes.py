@@ -41,7 +41,7 @@ def AT(x, y):
 
 
 def OPEN(name):
-    return [{"cmd": "open", "project": name}, {"cmd": "wait", "ms": 600}]
+    return [{"cmd": "open", "project": name}, {"cmd": "wait", "ms": 1000}]
 
 
 def sid(key):
@@ -80,6 +80,14 @@ SCENES = {
         M("click", 495, 560, shift=True), M("click", 776, 560, shift=True),
         {"cmd": "key", "keystroke": "cmd-g"}, {"cmd": "wait", "ms": 700}, AWAY]),
     "board-section-rename": ([], STOREFRONT_LIVE + [M("double", 700, 163), {"cmd": "wait", "ms": 300}, AWAY]),
+    # Not 0.9.4 goldens: interactions to look at.
+    "try-drag-out": ([], STOREFRONT_LIVE + [
+        M("down", 1030, 300), M("drag", 1031, 301), M("drag", 1080, 500), M("drag", 1130, 640),
+        M("up", 1130, 640), {"cmd": "wait", "ms": 600}, AWAY]),
+    "try-select-all": ([], STOREFRONT_LIVE + [{"cmd": "key", "keystroke": "cmd-a"}, AWAY]),
+    "try-wait": ([], OPEN("storefront") + [{"cmd": "wait", "ms": 4000}, AWAY]),
+    "try-pane-note": ([], STOREFRONT_LIVE + [M("right", *EMPTY), {"cmd": "wait", "ms": 200},
+        M("click", 1020, 761), {"cmd": "wait", "ms": 600}, AWAY]),
     "board-menu-section": ([], STOREFRONT_LIVE + [M("right", 700, 163)]),
     "projects-empty": (["empty"], []),
     "projects-grid": ([], []),
@@ -161,6 +169,9 @@ def run(scene, theme, opts):
             app.wait(timeout=5)
         except subprocess.TimeoutExpired:
             app.kill()
+        # A session host a scene started outlives the app, as it's meant to:
+        # stop it, so the next scene's world starts without one.
+        subprocess.run(["pkill", "-f", os.path.join(world, "userData", "host")], check=False)
 
 
 def main():

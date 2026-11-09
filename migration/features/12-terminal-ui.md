@@ -617,98 +617,98 @@ No Vitest exists for the registry, the modal, the preview or the viewer. New Rus
 
 ## Parity checklist
 
-- [ ] TERM-001 one terminal per session for the window's life, shared by window and card
-- [ ] TERM-002 shown in one place at a time
-- [ ] TERM-003 detach keeps screen/scrollback/modes/selection
-- [ ] TERM-004 detach with container only if still shown there
-- [ ] TERM-005 detach blurs
-- [ ] TERM-006 parked offscreen 1200×800, never refitted, keeps size
-- [ ] TERM-007 parked terminals keep parsing output
-- [ ] TERM-008 one subscription; output without a terminal ignored
-- [ ] TERM-009 output during opening dropped (replay covers it)
-- [ ] TERM-010 output in ready written; hasOutput; listeners notified
-- [ ] TERM-011 output in exited dropped
-- [ ] TERM-012 exit during opening remembered
-- [ ] TERM-013 exit in ready writes exit line, state exited
-- [ ] TERM-014 exit otherwise ignored
-- [ ] TERM-015 exit line strings per kind
-- [ ] TERM-016 new attach: create, fit, open with fitted size
-- [ ] TERM-017 disposed during open → nothing
-- [ ] TERM-018 replay, ready, resize, then exit line or queued words
-- [ ] TERM-019 open failure → exited, retry on next attach
-- [ ] TERM-020 attach during opening shares the open
-- [ ] TERM-021 attach of exited resets then reopens
-- [ ] TERM-022 attach of ready moves, fits, resizes
+- [x] TERM-001 one terminal per session for the window's life, shared by window and card
+- [x] TERM-002 shown in one place at a time
+- [x] TERM-003 detach keeps screen/scrollback/modes/selection
+- [x] TERM-004 detach with container only if still shown there
+- [x] TERM-005 detach blurs
+- [x] TERM-006 parked offscreen 1200×800, never refitted, keeps size
+- [x] TERM-007 parked terminals keep parsing output
+- [x] TERM-008 one subscription; output without a terminal ignored
+- [x] TERM-009 output during opening dropped (replay covers it)
+- [x] TERM-010 output in ready written; hasOutput; listeners notified
+- [x] TERM-011 output in exited dropped
+- [x] TERM-012 exit during opening remembered
+- [x] TERM-013 exit in ready writes exit line, state exited
+- [x] TERM-014 exit otherwise ignored
+- [x] TERM-015 exit line strings per kind
+- [x] TERM-016 new attach: create, fit, open with fitted size
+- [x] TERM-017 disposed during open → nothing
+- [x] TERM-018 replay, ready, resize, then exit line or queued words
+- [x] TERM-019 open failure → exited, retry on next attach
+- [x] TERM-020 attach during opening shares the open
+- [x] TERM-021 attach of exited resets then reopens
+- [x] TERM-022 attach of ready moves, fits, resizes
 - [ ] TERM-023 refit on container resize, once per frame
-- [ ] TERM-024 resize sent only in ready
-- [ ] TERM-025 input written unless exited (type-ahead during opening)
-- [ ] TERM-026 needsOpen / hasOutput semantics
-- [ ] TERM-027 dispose triggers and cleanup
-- [ ] TERM-028 typeIn immediate vs queued, trim + space, starting OR
-- [ ] TERM-029 queued words after replay (not starting)
-- [ ] TERM-030 starting: on bracketed paste or after 30 s
-- [ ] TERM-031 queued words only into the same ready terminal
-- [ ] TERM-032 file drop pastes quoted paths + space, focuses
-- [ ] TERM-033 shell quoting rule
+- [x] TERM-024 resize sent only in ready
+- [x] TERM-025 input written unless exited (type-ahead during opening)
+- [x] TERM-026 needsOpen / hasOutput semantics
+- [x] TERM-027 dispose triggers and cleanup
+- [x] TERM-028 typeIn immediate vs queued, trim + space, starting OR
+- [x] TERM-029 queued words after replay (not starting)
+- [x] TERM-030 starting: on bracketed paste or after 30 s
+- [x] TERM-031 queued words only into the same ready terminal
+- [x] TERM-032 file drop pastes quoted paths + space, focuses
+- [x] TERM-033 shell quoting rule
 - [ ] TERM-034 drops without files ignored, no navigation
-- [ ] TERM-035 paste newline conversion and bracketing (empty too)
-- [ ] TERM-036 ⇧Enter in Claude → ESC CR, swallowed, bypasses guards
-- [ ] TERM-037 ⇧Enter in shell → CR
-- [ ] TERM-038 Mac ⌘ keys never sent to the program
-- [ ] TERM-039 ⌘K local clear semantics
-- [ ] TERM-040 ⌘C copies selection, keeps it
-- [ ] TERM-041 ⌘A select all
-- [ ] TERM-042 other ⌘ keys go to the app; ⌘V pastes via menu
-- [ ] TERM-043 Windows Ctrl+C / Ctrl+Shift+C rules
-- [ ] TERM-044 Windows Ctrl+V / Ctrl+Shift+V paste
-- [ ] TERM-045 Windows Ctrl+Shift+A/W/T and other Ctrl+Shift letters
-- [ ] TERM-046 Ctrl shortcut letters by key code on non-Latin layouts
-- [ ] TERM-047 other Windows Ctrl keys and AltGr go to the program
-- [ ] TERM-048 Esc → `\x1b`, never closes, never reaches board
+- [x] TERM-035 paste newline conversion and bracketing (empty too)
+- [x] TERM-036 ⇧Enter in Claude → ESC CR, swallowed, bypasses guards
+- [x] TERM-037 ⇧Enter in shell → CR
+- [x] TERM-038 Mac ⌘ keys never sent to the program
+- [x] TERM-039 ⌘K local clear semantics
+- [x] TERM-040 ⌘C copies selection, keeps it
+- [x] TERM-041 ⌘A select all
+- [x] TERM-042 other ⌘ keys go to the app; ⌘V pastes via menu
+- [x] TERM-043 Windows Ctrl+C / Ctrl+Shift+C rules
+- [x] TERM-044 Windows Ctrl+V / Ctrl+Shift+V paste
+- [x] TERM-045 Windows Ctrl+Shift+A/W/T and other Ctrl+Shift letters
+- [x] TERM-046 Ctrl shortcut letters by key code on non-Latin layouts
+- [x] TERM-047 other Windows Ctrl keys and AltGr go to the program
+- [x] TERM-048 Esc → `\x1b`, never closes, never reaches board
 - [ ] TERM-049 consumed keys don't reach board/app shortcuts
-- [ ] TERM-050 key encoding table
-- [ ] TERM-051 Mac ⌥ composes; ⌥ with special keys uses modifiers
-- [ ] TERM-052 Windows Alt+printable → ESC prefix
-- [ ] TERM-053 ⇧PgUp/⇧PgDn scroll rows−1
-- [ ] TERM-054 input scrolls to bottom and clears selection
+- [x] TERM-050 key encoding table
+- [x] TERM-051 Mac ⌥ composes; ⌥ with special keys uses modifiers
+- [x] TERM-052 Windows Alt+printable → ESC prefix
+- [x] TERM-053 ⇧PgUp/⇧PgDn scroll rows−1
+- [x] TERM-054 input scrolls to bottom and clears selection
 - [ ] TERM-055 IME composition at cursor
 - [ ] TERM-056 selection gestures
-- [ ] TERM-057 selection cleared on input and row-count resize
-- [ ] TERM-058 selection colours focused/unfocused
-- [ ] TERM-059 copied text format per platform
-- [ ] TERM-060 no copy on select
-- [ ] TERM-061 right-click: Mac selects word, no menu
-- [ ] TERM-062 Alt/⌥-click moves cursor
-- [ ] TERM-063 mouse reporting and forced selection rules
+- [x] TERM-057 selection cleared on input and row-count resize
+- [x] TERM-058 selection colours focused/unfocused
+- [x] TERM-059 copied text format per platform
+- [x] TERM-060 no copy on select
+- [x] TERM-061 right-click: Mac selects word, no menu
+- [x] TERM-062 Alt/⌥-click moves cursor
+- [x] TERM-063 mouse reporting and forced selection rules
 - [ ] TERM-064 pointer shapes
-- [ ] TERM-065 URL detection incl. wrapped lines
+- [x] TERM-065 URL detection incl. wrapped lines
 - [ ] TERM-066 link hover underline + hand
 - [ ] TERM-067 link click opens http(s) in browser only
-- [ ] TERM-068 OSC 8 links and confirm text
-- [ ] TERM-069 wheel scroll math in normal buffer
-- [ ] TERM-070 wheel in alt buffer → one arrow per event
-- [ ] TERM-071 wheel reported with mouse reporting
-- [ ] TERM-072 prevented wheel ignored
-- [ ] TERM-073 follow output at bottom; stable when scrolled up
-- [ ] TERM-074 10 000 lines scrollback
+- [x] TERM-068 OSC 8 links and confirm text
+- [x] TERM-069 wheel scroll math in normal buffer
+- [x] TERM-070 wheel in alt buffer → one arrow per event
+- [x] TERM-071 wheel reported with mouse reporting
+- [x] TERM-072 prevented wheel ignored
+- [x] TERM-073 follow output at bottom; stable when scrolled up
+- [x] TERM-074 10 000 lines scrollback
 - [ ] TERM-075 scrollbar size, colours, fade
 - [ ] TERM-076 cursor shape, colours, blink, inactive outline, init
-- [ ] TERM-077 focus reporting
-- [ ] TERM-078 colour query and DA replies
-- [ ] TERM-079 text attributes
+- [x] TERM-077 focus reporting
+- [x] TERM-078 colour query and DA replies
+- [x] TERM-079 text attributes
 - [ ] TERM-080 custom box/block/powerline glyphs
-- [ ] TERM-081 Unicode 11 widths
-- [ ] TERM-082 synchronized output 2026
+- [x] TERM-081 Unicode 11 widths
+- [x] TERM-082 synchronized output 2026
 - [ ] TERM-083 pointer mapping at board zoom
-- [ ] TERM-084 terminal colours same in light and dark
-- [ ] TERM-085 focus(id) semantics
-- [ ] TERM-086 initial phase
-- [ ] TERM-087 phase loading on attach when needed
-- [ ] TERM-088 phase ready on output or resolved-with-output
-- [ ] TERM-089 phase error with message
+- [x] TERM-084 terminal colours same in light and dark
+- [x] TERM-085 focus(id) semantics
+- [x] TERM-086 initial phase
+- [x] TERM-087 phase loading on attach when needed
+- [x] TERM-088 phase ready on output or resolved-with-output
+- [x] TERM-089 phase error with message
 - [ ] TERM-090 window focuses on attach and on resolve
-- [ ] TERM-091 reattach resumes
-- [ ] TERM-092 detach only from own container
+- [x] TERM-091 reattach resumes
+- [x] TERM-092 detach only from own container
 - [ ] TERM-093 expanded card start rule
 - [ ] TERM-094 not-started overlay buttons
 - [ ] TERM-095 wake semantics and 1500 ms focus window
@@ -720,10 +720,10 @@ No Vitest exists for the registry, the modal, the preview or the viewer. New Rus
 - [ ] TERM-101 card loading/error overlays
 - [ ] TERM-102 card mic types in and wakes
 - [ ] TERM-103 card body clicks don't reach board, not a drag handle
-- [ ] TERM-104 wheel gesture starting on terminal scrolls it, board stays
-- [ ] TERM-105 gesture started elsewhere keeps panning board
-- [ ] TERM-106 Ctrl+wheel/pinch goes to board zoom
-- [ ] TERM-107 wheel over non-hosting card body pans board
+- [x] TERM-104 wheel gesture starting on terminal scrolls it, board stays
+- [x] TERM-105 gesture started elsewhere keeps panning board
+- [x] TERM-106 Ctrl+wheel/pinch goes to board zoom
+- [x] TERM-107 wheel over non-hosting card body pans board
 - [ ] TERM-108 closing the window leaves the card expanded with the terminal
 - [ ] TERM-109 board ⌘K yields to a focused terminal
 - [ ] MODAL-001 open condition, one session, rebuild on switch

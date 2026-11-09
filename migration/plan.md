@@ -145,7 +145,7 @@ One file per domain in `migration/features/`. Each lists every behavior with an 
 | 09-board-canvas.md | BoardView: pan/zoom, selection, drag, shortcuts, context menus, sections, archive, layout, edges | ✅ 177 | ☐ |
 | 10-board-cards-notes.md | session cards, expanded cards, agent deck, archive stack, notes and the pad | ✅ 203 | ☐ |
 | 11-board-overlays.md | prompt bar (sidekick), ⌘K search, merge dialog, ink layer, selection bar | ✅ 111 | ☐ |
-| 12-terminal-ui.md | terminal registry, modal, transcript preview, agent viewer, xterm behavior | ✅ 185 | ☐ |
+| 12-terminal-ui.md | terminal registry, modal, transcript preview, agent viewer, xterm behavior | ✅ 185 | 83/185 |
 
 ## Phases
 
@@ -188,7 +188,7 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | board-canvas | `rust/board-canvas` | P6, spec 09: the board route and canvas (pan/zoom/select/drag, sections, edges, menus, shortcuts), node plug-in interface | 🟡 running |
 | board-cards | `rust/board-cards` | P6, spec 10: session cards, expanded card chrome, agent deck, archive stack, notes, pad (`nodus-ui/src/board/cards/`) | 🟡 running |
 | capture-panel | `rust/capture-panel` | P10, spec 07 UI: the panel window and page, Settings' capture rows, File › Capture…, `nodus.capture()` | 🟡 running |
-| terminal | `rust/terminal` | nodus-terminal (GPUI-free): alacritty model, xterm key encoder, query answers, widths, registry | 🟡 running |
+| terminal | `rust/terminal` | nodus-terminal (GPUI-free): alacritty model, xterm key encoder, query answers, widths, registry | ✅ merged: 83 TERM; 26 drawing/focus/timing TERM + MODAL/TRANS/AGV to the terminal UI track |
 
 ### Integration debts
 
@@ -242,6 +242,8 @@ Places where the code and the docs disagree, or where matching 0.9.4 exactly mea
 | 09 | "New section here" beside a card puts the section about 9,920 units below the click. | Same, unless the user rules it a bug |
 | 09 | The zoom pill's fit button jumps instead of gliding; on Windows Ctrl-click doesn't add to the selection; single-letter shortcuts don't work on non-Latin layouts. | Same |
 | 06 | When a GitHub lookup times out mid-body the updater says "Couldn't reach GitHub…"; and a non-JSON answer shows serde's parse message where 0.9.4 shows V8's `JSON.parse` message. Both are rare error paths. | Differs; match V8's message if the user asks |
+| 12 | alacritty differs from xterm in three small ways: a resize that changes only the column count clears the selection (and reflow is alacritty's), there's no overline (SGR 53), and a selection inside a scroll region moves with it. | Differs; none seen in Claude Code's output |
+| 12 | Windows wheel speed in a terminal may be 0.5× where xterm uses 1.25×. | Check against 0.9.4 on Windows |
 | 01 PLAT-086/088 | The TS store drops unknown top-level and settings keys, and overwrites a `state.json` that parses but doesn't fit on the next save. | Deliberately safer, invisible to users: unknown keys are kept, and a misfit file is moved aside to `state.json.unreadable-<ms>` |
 | 01 | A login shell that hangs ignores the SIGTERM Node sends at the 10 s timeout, so 0.9.4 never stops it. | Killed at 10 s |
 | 01, 07 CAP-174/175 | The hidden capture panel stops the Dock from reopening a closed window on macOS, and keeps the app running after its window closes on Windows (the docs say closing the window quits). | Same, unless the user rules them bugs |
@@ -264,6 +266,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-09: terminal merged (75ea2b4): nodus-terminal checked against xterm.js 6's own code (3,083 key presses, 23 screens cell by cell, every code point's width, 18 registry scenarios); 1,070 tests. Every other running agent stopped at a usage limit again; resumed after the reset.
 - 2026-11-09: Windows CI ran the Rust tests for the first time: all passed except one quoting test whose expectation was wrong (fixed in cd25612). gpui-text, board-canvas, board-cards and capture-panel started.
 - 2026-11-09: ui-shell, capture and actions-voice-git merged (fac662d); 996 tests; 1,160 of 2,266 behaviors ticked. The golden PNGs had been swept into two plan commits by `git add migration`; untracked in 954e195 (synthetic content only; one file named this Mac's temp folder id).
 - 2026-11-09: ui-shell's core skeleton cherry-picked to main (a9d528f) so track core (P4) could start; 715 tests.

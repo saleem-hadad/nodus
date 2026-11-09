@@ -501,6 +501,7 @@ fn editor(env: &Rc<BoardEnv>, note: &BoardNote, window: &mut Window, cx: &mut Ap
     let platform = env.platform;
     div()
         .id(anim::key(&id, "note-field"))
+        .relative()
         .size_full()
         .font_family(fonts::UI)
         .text_size(z.px(15.))
@@ -524,28 +525,37 @@ fn editor(env: &Rc<BoardEnv>, note: &BoardNote, window: &mut Window, cx: &mut Ap
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .on_click(|_, _, cx| cx.stop_propagation())
         .on_scroll(|_, _, cx| cx.stop_propagation())
-        // The field's own 4px side padding (its smallest) sits outside the note's.
+        // The field's own 4px side padding (its smallest) sits outside the
+        // note's, and so do the 10px it keeps clear at the right of every
+        // line (gpui-component's `RIGHT_MARGIN`): it wraps where the note's
+        // text does (NOTEUI-011).
         .child(
-            div().size_full().mx(px(-4.)).child(WithCaret {
-                color: t.note_ink.into(),
-                child: Textarea::new(&field)
-                    .appearance(false)
-                    .bordered(false)
-                    .xsmall()
-                    .h(gpui::relative(1.))
-                    .text_size(z.px(15.))
-                    .line_height(z.px(21.))
-                    .font_family(fonts::UI)
-                    .text_color(t.note_ink)
-                    .into_any_element(),
-            }),
+            div()
+                .absolute()
+                .top_0()
+                .bottom_0()
+                .left(px(-4.))
+                .right(px(-14.))
+                .child(WithCaret {
+                    color: t.note_ink.into(),
+                    child: Textarea::new(&field)
+                        .appearance(false)
+                        .bordered(false)
+                        .xsmall()
+                        .h(gpui::relative(1.))
+                        .text_size(z.px(15.))
+                        .line_height(z.px(21.))
+                        .font_family(fonts::UI)
+                        .text_color(t.note_ink)
+                        .into_any_element(),
+                }),
         )
         .into_any_element()
 }
 
-/// Lays a field out with the text caret in `color` (NOTEUI-011: the
-/// note's ink): gpui-component takes the caret's colour from its theme as
-/// the field renders, so the theme's is swapped for that moment.
+/// Draws a field with the text caret in `color` (NOTEUI-011: the note's
+/// ink): gpui-component takes the caret's colour from its theme as the
+/// field lays out and paints, so the theme's is swapped for those moments.
 struct WithCaret {
     color: gpui::Hsla,
     child: AnyElement,
@@ -577,16 +587,8 @@ impl gpui::Element for WithCaret {
         window: &mut Window,
         cx: &mut App,
     ) -> (gpui::LayoutId, ()) {
-        use gpui::component::theme::Theme;
-        let saved = Theme::global(cx).caret;
-        // Parity shots hide the caret.
-        Theme::global_mut(cx).caret = if crate::parity::frozen(cx) {
-            gpui::transparent_black()
-        } else {
-            self.color
-        };
-        let id = self.child.request_layout(window, cx);
-        Theme::global_mut(cx).caret = saved;
+        let color = self.color;
+        let id = with_caret(color, cx, |cx| self.child.request_layout(window, cx));
         (id, ())
     }
 
@@ -599,7 +601,8 @@ impl gpui::Element for WithCaret {
         window: &mut Window,
         cx: &mut App,
     ) {
-        self.child.prepaint(window, cx);
+        let color = self.color;
+        with_caret(color, cx, |cx| self.child.prepaint(window, cx));
     }
 
     fn paint(
@@ -612,6 +615,22 @@ impl gpui::Element for WithCaret {
         window: &mut Window,
         cx: &mut App,
     ) {
-        self.child.paint(window, cx);
+        let color = self.color;
+        with_caret(color, cx, |cx| self.child.paint(window, cx));
     }
+}
+
+/// Runs `f` with the theme's caret in `color` (transparent in parity
+/// shots, which hide the caret), then puts the theme's back.
+fn with_caret<R>(color: gpui::Hsla, cx: &mut App, f: impl FnOnce(&mut App) -> R) -> R {
+    use gpui::component::theme::Theme;
+    let saved = Theme::global(cx).caret;
+    Theme::global_mut(cx).caret = if crate::parity::frozen(cx) {
+        gpui::transparent_black()
+    } else {
+        color
+    };
+    let out = f(cx);
+    Theme::global_mut(cx).caret = saved;
+    out
 }

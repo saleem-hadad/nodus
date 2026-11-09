@@ -4029,6 +4029,7 @@ dependencies = [
  "indexmap",
  "nodus-actions",
  "nodus-board",
+ "nodus-capture",
  "nodus-domain",
  "nodus-git",
  "nodus-host",

@@ -105,14 +105,21 @@ fn more(id: impl Into<ElementId>, label: String, on_click: Rc<dyn Fn(&mut Window
 }
 
 /// `ToolCalls` (TRANS-018): the last eight until the rest are asked for.
-fn tool_calls(id: &ElementId, calls: &[ToolCall], all: bool, on_all: Rc<dyn Fn(&mut Window, &mut App)>, cx: &App) -> AnyElement {
+fn tool_calls(
+    id: &ElementId,
+    calls: &[ToolCall],
+    all: bool,
+    on_all: Rc<dyn Fn(&mut Window, &mut App)>,
+    top: f32,
+    cx: &App,
+) -> AnyElement {
     let t = theme::tokens(cx);
     let hidden = if all { 0 } else { calls.len().saturating_sub(CALLS_SHOWN) };
     div()
         .flex()
         .flex_col()
         .gap(px(3.))
-        .mt(px(6.))
+        .mt(px(top))
         .when(hidden > 0, |d| {
             d.child(
                 div()
@@ -212,6 +219,9 @@ pub fn message(p: MessageProps<'_>, cx: &App) -> AnyElement {
         body
     });
 
+    // The message is block flow in 0.9.4, so a margin right under the meta
+    // row collapses into its 5 px bottom margin: the larger of the two shows.
+    let after_meta = |margin: f32| if content.is_none() { (margin - 5.0).max(0.0) } else { margin };
     let found_call = p.found_call.map(|s| {
         let tool = s.tool.clone().unwrap_or_default();
         let name = if s.agent == Some(true) {
@@ -224,7 +234,7 @@ pub fn message(p: MessageProps<'_>, cx: &App) -> AnyElement {
             .items_baseline()
             .gap(px(8.))
             .min_w_0()
-            .mt(px(8.))
+            .mt(px(after_meta(8.)))
             .font_family(super::MONO)
             .text_size(TEXT_XS)
             .line_height(px(18.))
@@ -242,14 +252,15 @@ pub fn message(p: MessageProps<'_>, cx: &App) -> AnyElement {
             )
     });
 
+    let tools_top = if found_call.is_some() { 6. } else { after_meta(6.) };
     let tools = match (&m.calls, &m.tools) {
-        (Some(calls), _) => Some(tool_calls(&p.id, calls, p.all_calls, p.on_all_calls.clone(), cx)),
+        (Some(calls), _) => Some(tool_calls(&p.id, calls, p.all_calls, p.on_all_calls.clone(), tools_top, cx)),
         (None, Some(tools)) if !tools.is_empty() => Some(
             div()
                 .flex()
                 .flex_wrap()
                 .gap(px(4.))
-                .mt(px(6.))
+                .mt(px(tools_top))
                 .children(tools.iter().map(|tool| chip(tool.clone(), cx).py(px(1.))))
                 .into_any_element(),
         ),

@@ -141,9 +141,16 @@ def run(scene, theme, opts, again=True):
                     print("  ! node", step, r.stderr.strip())
                 continue
             if step == "click-stop":
+                if os.environ.get("TUI_TRACE"):
+                    print("   before", drive(f, T("route")).get("result"))
                 # The Stop button: left of Archive in the header's actions.
+                # Hit testing uses the last frame drawn, and macOS may not
+                # have asked for one since the window opened: draw it first.
+                drive(f, T("draw"))
                 drive(f, {"cmd": "mouse", "kind": "click", "x": 1194, "y": 77})
                 drive(f, AWAY)
+                if os.environ.get("TUI_TRACE"):
+                    print("   after", drive(f, T("route")).get("result"))
                 continue
             answer = drive(f, resolve(step, ids))
             if os.environ.get("TUI_TRACE"):

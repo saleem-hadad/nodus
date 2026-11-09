@@ -60,10 +60,7 @@ pub fn test_cards(window: &mut gpui::Window, cx: &mut gpui::App) -> Vec<gpui::An
             let terminals = super::card::CardTerminals::new(c.project_id.clone(), z, cx);
             terminals.set_enabled(&c.session_id, c.shell, true, cx);
             let el = terminals.element(&c.session_id, window, cx);
-            div()
-                .absolute()
-                .left(px(c.vx + c.x * z))
-                .top(px(52.0 + c.vy + (c.y + 40.0) * z))
+            let body = div()
                 .w(px(c.w * z))
                 .h(px((c.h - 40.0) * z))
                 .pt(px(8.0 * z))
@@ -71,8 +68,15 @@ pub fn test_cards(window: &mut gpui::Window, cx: &mut gpui::App) -> Vec<gpui::An
                 .pb(px(8.0 * z))
                 .pl(px(12.0 * z))
                 .bg(super::element::rgb(super::element::TERM_BG))
-                .children(el.map(|el| div().relative().size_full().child(el)))
-                .into_any_element()
+                .children(el.map(|el| div().relative().size_full().child(el)));
+            // Placed in the window, under the windows over the board.
+            gpui::deferred(
+                gpui::anchored()
+                    .position(gpui::point(px(c.vx + c.x * z), px(52.0 + c.vy + (c.y + 40.0) * z)))
+                    .child(body),
+            )
+            .with_priority(1)
+            .into_any_element()
         })
         .collect()
 }
@@ -238,8 +242,12 @@ pub async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
             Ok(Value::Null)
         }
         "route" => Ok(cx.update(|cx| {
+            let confirm = window::main_shell(cx)
+                .and_then(|shell| shell.read(cx).terminal_layers.read(cx).session_window().cloned())
+                .is_some_and(|w| w.read(cx).asking());
             let s = state.read(cx);
             json!({
+                "confirm": confirm,
                 "route": s.route.project_id(),
                 "board": s.board.as_ref().map(|b| b.project.id.clone()),
                 "terminal": s.terminal_session_id,

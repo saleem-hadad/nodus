@@ -162,6 +162,7 @@ impl Terminals {
         let nodus = cx.global::<Core>().0.clone();
         let entity = cx.new(|cx| Terminals::new(nodus, cx));
         cx.set_global(TerminalsGlobal(entity.clone()));
+        bind_keys(cx);
         entity
     }
 
@@ -214,6 +215,24 @@ impl Terminals {
         self.registry.dispose(session_id);
         cx.emit(TerminalsEvent::Changed(SharedString::from(session_id.to_owned())));
     }
+}
+
+/// Keys the window's root binds that a focused terminal must get as keys
+/// (GPUI matches bindings before key listeners): Tab and ⇧Tab move focus
+/// elsewhere but are `\t` and `\x1b[Z` here (focus never leaves a terminal),
+/// and the root's Copy on ⌘C / Ctrl+C would take TERM-040's and TERM-043's
+/// copy-or-`\x03`. Bound to nothing in the terminal's context, they reach
+/// its key listener (TERM-049, TERM-050).
+pub fn terminal_key_bindings() -> Vec<gpui::KeyBinding> {
+    let copy = if cfg!(target_os = "macos") { "cmd-c" } else { "ctrl-c" };
+    ["tab", "shift-tab", copy]
+        .into_iter()
+        .map(|keys| gpui::KeyBinding::new(keys, gpui::NoAction, Some("Terminal")))
+        .collect()
+}
+
+fn bind_keys(cx: &mut App) {
+    cx.bind_keys(terminal_key_bindings());
 }
 
 /// `TERM-027` from anywhere: a card removed, a run finished, a view gone.

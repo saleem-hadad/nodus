@@ -131,6 +131,11 @@ impl SessionWindow {
         }
     }
 
+    /// Whether Stop's confirm is up (MODAL-022).
+    pub fn asking(&self) -> bool {
+        self.confirm.is_some()
+    }
+
     fn shell(&self) -> bool {
         self.kind == SessionKind::Terminal
     }

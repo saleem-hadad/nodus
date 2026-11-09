@@ -100,6 +100,10 @@ Whole-shot numbers are higher because the board's cards and notes behind are sti
   `Mic::set_own_field(Some(field_focus))` so Esc in the bar cancels, then `voice::voice_status(id, &mic, false, Z(1.),
   window, cx)` and `voice::voice_notice(id, &mic, NoticeAnchor::Bar, Z(1.), window, cx)`; `voice::spinner` is the
   `.spin` loader. All mics in a window share one listening slot (VOICE-025).
+- **The capture panel's mic (07, merged):** it holds its own `VoiceController` (its window's slot) and now draws its
+  recording look with `voice::voice_status_of(id, phase, elapsed, levels, …)`, the same status as the other mics
+  (its own copy lacked the clock's tabular figures and the bars' 70 ms easing). Its notice stays its own: 0.9.4
+  gives `.voice-notice` no pill there, unlike the session mic's and the bar's (`NoticeAnchor`).
 
 ## Known differences
 
@@ -121,3 +125,4 @@ Whole-shot numbers are higher because the board's cards and notes behind are sti
 - `shell/root.rs`: the rail mounted over the board area, with the canvas's `run_action`.
 - `board/canvas.rs`: `overlay_open()` also counts the rail's overlays (one line, as BOARD-142 asked).
 - `terminal/session_window.rs`: the mic placeholder is the session mic (MODAL-019).
+- `capture/render.rs`: `render_voice_status` draws the shared `voice::voice_status_of` (no golden shows a busy mic).

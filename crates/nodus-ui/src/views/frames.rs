@@ -298,6 +298,44 @@ pub fn sync_board(canvas: &mut BoardCanvas, window: &mut Window, cx: &mut Contex
     }
 }
 
+/// The frames as the test driver reports them: which views have a webview,
+/// whether each is live or behind its snapshot, and why.
+pub fn describe(cx: &App) -> serde_json::Value {
+    let Some(rc) = existing(cx) else {
+        return serde_json::Value::Array(Vec::new());
+    };
+    let f = rc.borrow();
+    serde_json::Value::Array(
+        f.frames
+            .iter()
+            .map(|fr| {
+                let g = fr.geometry;
+                serde_json::json!({
+                    "frame": fr.id,
+                    "view": fr.view_id,
+                    "slot": if fr.slot == Slot::Card { "card" } else { "large" },
+                    "version": fr.version,
+                    "live": fr.live,
+                    "snapshot": fr.snapshot.is_some(),
+                    "occluded": fr.occluded,
+                    "offscreen": fr.web.offscreen(),
+                    "drawn": fr.drawn,
+                    "hovered": fr.hovered,
+                    "forced": g.map(|g| g.forced),
+                    "passthrough": g.map(|g| g.passthrough),
+                    "zoom": g.map(|g| g.zoom),
+                    "document": g.map(|g| [
+                        f32::from(g.document.origin.x),
+                        f32::from(g.document.origin.y),
+                        f32::from(g.document.size.width),
+                        f32::from(g.document.size.height),
+                    ]),
+                })
+            })
+            .collect(),
+    )
+}
+
 /// The body's probe: an invisible box over a frame's body, last in its card,
 /// so whatever GPUI hit-tests above it covers the page. Painting it places
 /// the frame's webview there.

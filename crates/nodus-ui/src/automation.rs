@@ -20,6 +20,7 @@
 //! {"cmd":"screenshot","path":"/…/scene.light.rust.png"}
 //! {"cmd":"window"}                                  the window's number and size
 //! {"cmd":"terminal","action":"open",…}                the terminal's windows (terminal::driver)
+//! {"cmd":"views"}                                   views' frames: live or snapshot, and why
 //! {"cmd":"quit"}
 //! ```
 //!
@@ -365,6 +366,8 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
             Ok(Value::Null)
         }
         "terminal" => crate::terminal::driver::run(command, cx).await,
+        // Views' frames: live or behind a snapshot, and why (spec 04).
+        "views" => Ok(cx.update(|cx| crate::views::frames::describe(cx))),
         "quit" => {
             cx.update(|cx| cx.quit());
             Ok(Value::Null)

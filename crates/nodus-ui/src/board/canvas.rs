@@ -1130,6 +1130,29 @@ impl BoardCanvas {
         self.state.update(cx, |s, cx| s.patch_view(patch, cx));
     }
 
+    /// A click inside a node that its contents took (a view's tools and
+    /// buttons): React Flow's `handleNodeClick` still selected the node, or
+    /// with a multi-select key toggled it.
+    pub fn click_select(&mut self, id: &str, multi: bool, cx: &mut Context<'_, Self>) {
+        self.selection_rect = false;
+        let Some(selected) = self.node(id).filter(|n| n.selectable).map(|n| n.selected) else {
+            return;
+        };
+        if !selected {
+            for n in &mut self.nodes {
+                if n.id == id {
+                    n.selected = true;
+                } else if !multi {
+                    n.selected = false;
+                }
+            }
+        } else if multi && let Some(n) = self.node_mut(id) {
+            n.selected = false;
+        }
+        self.sync_selection(cx);
+        cx.notify();
+    }
+
     /// A node's live box while it's resized.
     pub fn hold_rect(&mut self, id: String, rect: Option<Rect>, cx: &mut Context<'_, Self>) {
         match rect {

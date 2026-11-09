@@ -6,7 +6,8 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Bounds, Context, ElementId, FocusHandle, FontWeight, InteractiveElement, IntoElement,
-    KeyDownEvent, MouseButton, ParentElement, Pixels, StatefulInteractiveElement, Styled, Window, div, img, px,
+    KeyDownEvent, MouseButton, ParentElement, Pixels, StatefulInteractiveElement, Styled, Window, anchored, deferred,
+    div, img, px,
 };
 
 use super::frames::{self, Geometry, Slot};
@@ -32,7 +33,15 @@ pub fn close(window: &mut Window, cx: &mut App) {
 }
 
 /// The large window, while a view is open large.
-pub fn render(canvas: &BoardCanvas, window: &mut Window, cx: &mut Context<'_, BoardCanvas>) -> Option<AnyElement> {
+pub fn render(canvas: &BoardCanvas, window: &mut Window, cx: &mut Context<'_, BoardCanvas>) -> Vec<AnyElement> {
+    render_parts(canvas, window, cx).unwrap_or_default()
+}
+
+fn render_parts(
+    canvas: &BoardCanvas,
+    window: &mut Window,
+    cx: &mut Context<'_, BoardCanvas>,
+) -> Option<Vec<AnyElement>> {
     let id = frames::existing(cx)?.borrow().large.clone()?;
     let view = canvas.board()?.views.iter().find(|v| v.id == id)?.clone();
     let t = theme::tokens(cx);
@@ -44,7 +53,7 @@ pub fn render(canvas: &BoardCanvas, window: &mut Window, cx: &mut Context<'_, Bo
     if !focused_once {
         focus.update(cx, |f, _| f.1 = true);
         let h = handle.clone();
-        window.on_next_frame(move |window, cx| window.focus(&h, cx));
+        super::inputs::focus_soon(h, window);
     }
     let shown = frames::shown(&id, Slot::Large, cx);
     let parity = crate::parity::frozen(cx);
@@ -101,7 +110,7 @@ pub fn render(canvas: &BoardCanvas, window: &mut Window, cx: &mut Context<'_, Bo
                         .text_ellipsis()
                         .font_family(fonts::DISPLAY)
                         .text_size(TEXT_LG)
-                        .line_height(px(19.5))
+                        .line_height(px(21.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(t.text_primary)
                         .child(view.title.clone()),
@@ -114,22 +123,34 @@ pub fn render(canvas: &BoardCanvas, window: &mut Window, cx: &mut Context<'_, Bo
                 .flex_1()
                 .min_h_0()
                 .bg(t.bg_elevated)
-                .when_some(shown.snapshot, |d, image| {
-                    d.child(
-                        img(image)
-                            .absolute()
-                            .top_0()
-                            .left_0()
-                            .size_full()
-                            .rounded_bl(RADIUS_XL)
-                            .rounded_br(RADIUS_XL),
-                    )
-                })
                 .when(view.version > 0, |d| {
                     d.child(frames::probe(id.clone(), Slot::Large, geometry))
                 }),
         );
-    Some(Modal::new(ElementId::Name("view-modal".into()), width, on_close).render(content, window, cx))
+    let mut out: Vec<AnyElement> =
+        vec![Modal::new(ElementId::Name("view-modal".into()), width, on_close).render(content, window, cx)];
+    // The snapshot goes over the panel rather than in it: the panel draws in
+    // an effect layer (its enter animation), which an image inside doesn't
+    // survive in the window's capture.
+    let document = frames::existing(cx)
+        .and_then(|f| f.borrow().get(&id, Slot::Large).and_then(|fr| fr.geometry))
+        .map(|g| g.document);
+    if let (Some(image), Some(document)) = (shown.snapshot, document) {
+        out.push(
+            deferred(
+                anchored().position(document.origin).child(
+                    img(image)
+                        .w(document.size.width)
+                        .h(document.size.height)
+                        .rounded_bl(RADIUS_XL)
+                        .rounded_br(RADIUS_XL),
+                ),
+            )
+            .with_priority(501)
+            .into_any_element(),
+        );
+    }
+    Some(out)
 }
 
 /// ✕ (`.card-tool` with `X` 15): `Close`.

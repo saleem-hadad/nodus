@@ -347,6 +347,14 @@ impl BoardActions {
         self.with(cx, move |c, cx| c.raise(id, raised, cx));
     }
 
+    /// A click on a control inside a node still selects the node, as React
+    /// Flow's click on the node's wrapper did (a view's tools, spec 04).
+    pub fn click_select(&self, id: &str, modifiers: &gpui::Modifiers, cx: &mut App) {
+        let id = id.to_owned();
+        let multi = (modifiers.shift ^ modifiers.platform) && !modifiers.control && !modifiers.alt;
+        self.with(cx, move |c, cx| c.click_select(&id, multi, cx));
+    }
+
     /// Shows the board's toast (BOARD-139).
     pub fn toast(&self, message: &str, cx: &mut App) {
         let message = message.to_owned();

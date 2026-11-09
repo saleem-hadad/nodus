@@ -83,7 +83,7 @@ pub fn render(canvas: &BoardCanvas, window: &mut Window, cx: &mut Context<'_, Bo
             });
             // autoFocus.
             let focus = field.read(cx).focus_handle(cx);
-            window.on_next_frame(move |window, cx| window.focus(&focus, cx));
+            super::inputs::focus_soon(focus, window);
             state.update(cx, |s, _| {
                 s.field = Some(field.clone());
                 s._sub = Some(sub);
@@ -140,7 +140,7 @@ pub fn render(canvas: &BoardCanvas, window: &mut Window, cx: &mut Context<'_, Bo
                     t.bg_elevated
                 })
                 .text_size(TEXT_SM)
-                .line_height(px(15.))
+                .line_height(px(16.8))
                 .text_color(if active { t.accent } else { t.text_primary })
                 .when(creating, |d| d.opacity(0.45))
                 .child(*label)
@@ -216,7 +216,7 @@ pub fn render(canvas: &BoardCanvas, window: &mut Window, cx: &mut Context<'_, Bo
                         .child(
                             div()
                                 .text_size(TEXT_LG)
-                                .line_height(px(19.5))
+                                .line_height(px(21.))
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(t.text_primary)
                                 .child("New view"),
@@ -225,7 +225,7 @@ pub fn render(canvas: &BoardCanvas, window: &mut Window, cx: &mut Context<'_, Bo
                             div()
                                 .mt(px(2.))
                                 .text_size(TEXT_SM)
-                                .line_height(px(15.))
+                                .line_height(px(16.8))
                                 .text_color(t.text_secondary)
                                 .child(
                                     "Say what it should show and where the data comes from. Claude builds it on the board and keeps it up to date.",
@@ -259,7 +259,14 @@ pub fn render(canvas: &BoardCanvas, window: &mut Window, cx: &mut Context<'_, Bo
                         .text_size(TEXT_MD)
                         .line_height(px(18.85))
                         .text_color(t.text_primary)
-                        .child(Textarea::new(&field).appearance(false).disabled(creating).h(px(18.85 * 5.))),
+                        .child(
+                            Textarea::new(&field)
+                                .appearance(false)
+                                .disabled(creating)
+                                .px(px(0.))
+                                .py(px(0.))
+                                .h(px(18.85 * 5.)),
+                        ),
                 )
                 .child(
                     div()
@@ -269,7 +276,7 @@ pub fn render(canvas: &BoardCanvas, window: &mut Window, cx: &mut Context<'_, Bo
                         .child(
                             div()
                                 .text_size(TEXT_SM)
-                                .line_height(px(15.))
+                                .line_height(px(16.8))
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(t.text_secondary)
                                 .child("Start from an example"),
@@ -296,7 +303,7 @@ pub fn render(canvas: &BoardCanvas, window: &mut Window, cx: &mut Context<'_, Bo
                     .rounded(px(8.))
                     .bg(fade(t.status_waiting, 0.10))
                     .text_size(TEXT_SM)
-                    .line_height(px(15.))
+                    .line_height(px(16.8))
                     .text_color(t.text_primary)
                     .child(error),
             )

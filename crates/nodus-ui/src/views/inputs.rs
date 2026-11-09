@@ -57,7 +57,7 @@ pub fn ask_bar(
             })];
             // Focused on open, without scrolling (VIEW-131).
             let focus = field.read(cx).focus_handle(cx);
-            window.on_next_frame(move |window, cx| window.focus(&focus, cx));
+            focus_soon(focus, window);
             ui.update(cx, |u, _| {
                 u.ask = Some(AskBar {
                     input: field.clone(),
@@ -125,6 +125,7 @@ pub fn ask_bar(
                 .child(input(&field, px(18.0 * z), false)),
         )
         .child(card_btn(
+            Some((board, &view.id)),
             format!("view-ask-send-{}", view.id),
             Btn::Primary,
             None,
@@ -186,6 +187,14 @@ fn send(ui: &Entity<CardUi>, project_id: &str, view_id: &str, cx: &mut App) {
             }
         },
     );
+}
+
+/// Focuses `handle` once a frame has drawn it: a handle no frame has drawn
+/// yet doesn't keep the focus (as `text_field::focus_all`).
+pub fn focus_soon(handle: gpui::FocusHandle, window: &mut Window) {
+    window.on_next_frame(move |window, _| {
+        window.on_next_frame(move |window, cx| window.focus(&handle, cx));
+    });
 }
 
 /// The rename field (`.view-title-input`): the title, focused and all

@@ -80,6 +80,8 @@ def drive(f, cmd):
     answer = json.loads(f.readline() or "{}")
     if not answer.get("ok"):
         print("  !", cmd, answer)
+    elif cmd.get("cmd") == "views":
+        print(json.dumps(answer.get("result"), indent=1))
     return answer
 
 
@@ -107,13 +109,21 @@ def run(scene, theme, opts):
                 time.sleep(0.05)
         f = s.makefile("rw")
         drive(f, {"cmd": "resize", "width": 1440, "height": 900})
-        drive(f, {"cmd": "parity", "frozen": True, "now": NOW})
+        if not os.environ.get("VIEWS_LIVE"):
+            drive(f, {"cmd": "parity", "frozen": True, "now": NOW})
         drive(f, AWAY)
         drive(f, {"cmd": "idle"})
         for step in steps:
             drive(f, step)
             drive(f, {"cmd": "wait", "ms": 120})
         drive(f, {"cmd": "idle"})
+        if os.environ.get("VIEWS_DEBUG"):
+            drive(f, {"cmd": "views"})
+        if os.environ.get("VIEWS_SCREENCAPTURE"):
+            # The window as the screen shows it, native webviews included.
+            number = drive(f, {"cmd": "window"}).get("result", {}).get("number")
+            subprocess.run(["screencapture", "-x", "-o", "-l", str(number),
+                            os.environ["VIEWS_SCREENCAPTURE"]], check=False)
         out = os.path.join(opts["golden"], f"{scene}.{theme}.rust.png")
         drive(f, {"cmd": "screenshot", "path": out})
         print("shot", out)

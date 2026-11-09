@@ -142,6 +142,7 @@ pub fn status_dot(
 /// (`aria-expanded`), `disabled` fades it to 40%. It doesn't start drags.
 #[allow(clippy::too_many_arguments)]
 fn card_tool(
+    board: &BoardCx,
     view_id: &str,
     name: &'static str,
     glyph: impl Fn(Rgba) -> AnyElement,
@@ -169,6 +170,7 @@ fn card_tool(
         t.text_secondary
     };
     let id = view_id.to_owned();
+    let actions = board.actions.clone();
     div()
         .id(ElementId::Name(key.into()))
         .relative()
@@ -207,7 +209,14 @@ fn card_tool(
                 down.update(cx, |p, _| p.press());
             })
             .active(|s| s.bg(t.bg_pressed))
-            .on_click(move |_, window, cx| on_click(bounds.get(), window, cx))
+            .on_click({
+                let select_id = id.clone();
+                move |e, window, cx| {
+                    // The click still selects the view (React Flow's node click).
+                    actions.click_select(&select_id, &e.modifiers(), cx);
+                    on_click(bounds.get(), window, cx);
+                }
+            })
             .tooltip(tip_over_page(&id, tip, press.clone()))
         })
         .when(disabled, |d| {
@@ -241,6 +250,7 @@ pub fn tools(
         let view_id = id.clone();
         let spin_key = format!("view-refresh-spin-{id}");
         out.push(card_tool(
+            board,
             &id,
             "refresh",
             move |c| {
@@ -261,6 +271,7 @@ pub fn tools(
     }
     let ask_ui = ui.clone();
     out.push(card_tool(
+        board,
         &id,
         "change",
         move |c| icon(Icon::PencilLine, 14.0 * z, 2.0, c).into_any_element(),
@@ -281,6 +292,7 @@ pub fn tools(
     ));
     let (actions, brain_id) = (board.actions.clone(), id.clone());
     out.push(card_tool(
+        board,
         &id,
         "session",
         move |c| icon(Icon::SquareTerminal, 14.0 * z, 2.0, c).into_any_element(),
@@ -293,6 +305,7 @@ pub fn tools(
     ));
     let large_id = id.clone();
     out.push(card_tool(
+        board,
         &id,
         "large",
         move |c| icon(Icon::Maximize2, 14.0 * z, 2.0, c).into_any_element(),
@@ -305,6 +318,7 @@ pub fn tools(
     ));
     let (actions, menu_id) = (board.actions.clone(), id.clone());
     out.push(card_tool(
+        board,
         &id,
         "more",
         move |c| more_icon(z, c).into_any_element(),
@@ -387,6 +401,7 @@ pub enum Btn {
 /// A card button (`nodrag`), `children` before `label`.
 #[allow(clippy::too_many_arguments)]
 pub fn card_btn(
+    select: Option<(&BoardCx, &str)>,
     key: String,
     kind: Btn,
     label: Option<&'static str>,
@@ -400,6 +415,7 @@ pub fn card_btn(
     let t = theme::tokens(cx);
     let hovered = window.use_keyed_state(ElementId::Name(format!("{key}-hover").into()), cx, |_, _| false);
     let hot = *hovered.read(cx) && !disabled;
+    let select = select.map(|(b, id)| (b.actions.clone(), id.to_owned()));
     let (rest, hover, border, text, shadow) = match kind {
         Btn::Default => (t.bg_elevated, t.bg_hover, t.border_strong, t.text_primary, true),
         Btn::Primary => (t.accent, t.accent_hover, fade(t.accent, 0.0), t.text_on_accent, true),
@@ -442,7 +458,12 @@ pub fn card_btn(
                 });
             })
             .when(kind != Btn::Primary, |d| d.active(move |s| s.bg(t.bg_pressed)))
-            .on_click(move |_, window, cx| on_click(window, cx))
+            .on_click(move |e, window, cx| {
+                if let Some((actions, id)) = &select {
+                    actions.click_select(id, &e.modifiers(), cx);
+                }
+                on_click(window, cx);
+            })
         })
         .children(lead)
         .children(label)
@@ -458,7 +479,7 @@ pub fn error_line(message: String, _z: f32, t: &Tokens) -> AnyElement {
         .border_t(fu(0.5))
         .border_color(t.separator)
         .text_size(fu(12.))
-        .line_height(fu(15.))
+        .line_height(fu(16.8))
         .text_color(t.status_waiting)
         .child(message)
         .into_any_element()
@@ -501,6 +522,7 @@ pub fn approvals(
                     c.name.clone(),
                 );
                 card_btn(
+                    Some((board, &view.id)),
                     format!("view-approve-{allow}-{i}-{}", view.id),
                     kind,
                     Some(label),
@@ -521,7 +543,7 @@ pub fn approvals(
                 .child(
                     div()
                         .text_size(fu(12.))
-                        .line_height(fu(15.))
+                        .line_height(fu(16.8))
                         .text_color(t.text_secondary)
                         .child(format!("This view wants to run{every}:"))
                         .child(
@@ -624,6 +646,7 @@ pub fn empty_state(
         ));
         children.push(title("Claude is building this view…").into_any_element());
         children.push(card_btn(
+            Some((board, &id)),
             format!("view-watch-{id}"),
             Btn::Ghost,
             Some("Watch it work"),
@@ -637,6 +660,7 @@ pub fn empty_state(
     } else if waiting {
         children.push(title("Claude needs you to carry on").into_any_element());
         children.push(card_btn(
+            Some((board, &id)),
             format!("view-open-{id}"),
             Btn::Default,
             Some("Open its session"),
@@ -651,6 +675,7 @@ pub fn empty_state(
         children.push(title("No page yet").into_any_element());
         let (ui, project, view_id) = (ui.clone(), board.project_id.to_string(), id.clone());
         children.push(card_btn(
+            Some((board, &id)),
             format!("view-build-{id}"),
             Btn::Default,
             Some("Build it"),

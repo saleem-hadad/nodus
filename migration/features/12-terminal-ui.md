@@ -744,7 +744,7 @@ No Vitest exists for the registry, the modal, the preview or the viewer. New Rus
 - [x] MODAL-016 branch
 - [x] MODAL-017 session id copy, Copied 1400 ms
 - [x] MODAL-018 usage stats
-- [ ] MODAL-019 mic types in, resumes, focuses
+- [x] MODAL-019 mic types in, resumes, focuses
 - [x] MODAL-020 Resume/Restart availability and action
 - [x] MODAL-021 Stop availability
 - [x] MODAL-022 Stop immediate vs confirmed

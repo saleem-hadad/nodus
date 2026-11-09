@@ -729,8 +729,8 @@ Risks:
 - [x] ACT-014 Save command
 - [x] ACT-015 Remove command
 - [ ] ACT-016 Draft command
-- [ ] ACT-017 Renderer list update
-- [ ] ACT-018 Global list loading
+- [x] ACT-017 Renderer list update
+- [x] ACT-018 Global list loading
 - [x] ACT-019 Empty description
 - [x] ACT-020 Claude required
 - [x] ACT-021 Draft argv
@@ -743,58 +743,58 @@ Risks:
 - [x] ACT-028 Run args
 - [x] ACT-029 Starting a run (main)
 - [x] ACT-030 Run node
-- [ ] ACT-031 Starting a run (renderer)
-- [ ] ACT-032 Runs are hidden from the board
+- [x] ACT-031 Starting a run (renderer)
+- [x] ACT-032 Runs are hidden from the board
 - [x] ACT-033 Run tools
 - [x] ACT-034 Finish trigger · status
 - [x] ACT-035 Finish trigger · board load
 - [x] ACT-036 finishRun guard
 - [x] ACT-037 finishRun effects, in order
 - [x] ACT-038 Run result fields
-- [ ] ACT-039 Finish notice
+- [x] ACT-039 Finish notice
 - [x] ACT-040 Takeover detection
 - [x] ACT-041 Takeover quirks (keep)
 - [x] ACT-042 Takeover hook
 - [x] ACT-043 claimRun
 - [x] ACT-044 Prompt into a run
-- [ ] ACT-045 Taken-over placement
-- [ ] ACT-046 Rail presence
-- [ ] ACT-047 Rail order
-- [ ] ACT-048 Run lookup
-- [ ] ACT-049 Reveal
-- [ ] ACT-050 Hide
-- [ ] ACT-051 Keep open
-- [ ] ACT-052 Shown state
-- [ ] ACT-053 Overlay flag
-- [ ] ACT-054 Hint
-- [ ] ACT-055 Hint text
-- [ ] ACT-056 Press
-- [ ] ACT-057 Running look
-- [ ] ACT-058 Global badge
-- [ ] ACT-059 Edge mark
-- [ ] ACT-060 Context menu
-- [ ] ACT-061 Edit / New
-- [ ] ACT-062 Delete
-- [ ] ACT-063 Run fan
-- [ ] ACT-064 Fan position
-- [ ] ACT-065 Fan card text
-- [ ] ACT-066 Fan card click
-- [ ] ACT-067 Dialog start
-- [ ] ACT-068 Dialog header
-- [ ] ACT-069 Describe step
-- [ ] ACT-070 Example chips
-- [ ] ACT-071 Scope switch
-- [ ] ACT-072 Draft
-- [ ] ACT-073 Stale drafts
-- [ ] ACT-074 Review step
-- [ ] ACT-075 Save
-- [ ] ACT-076 Footer · left
-- [ ] ACT-077 Footer · right
-- [ ] ACT-078 Dialog keys
-- [ ] ACT-079 Dialog close
-- [ ] ACT-080 Dialog error
-- [ ] ACT-081 Icon fallback
-- [ ] ACT-082 Rail independent of dialog
+- [x] ACT-045 Taken-over placement
+- [x] ACT-046 Rail presence
+- [x] ACT-047 Rail order
+- [x] ACT-048 Run lookup
+- [x] ACT-049 Reveal
+- [x] ACT-050 Hide
+- [x] ACT-051 Keep open
+- [x] ACT-052 Shown state
+- [x] ACT-053 Overlay flag
+- [x] ACT-054 Hint
+- [x] ACT-055 Hint text
+- [x] ACT-056 Press
+- [x] ACT-057 Running look
+- [x] ACT-058 Global badge
+- [x] ACT-059 Edge mark
+- [x] ACT-060 Context menu
+- [x] ACT-061 Edit / New
+- [x] ACT-062 Delete
+- [x] ACT-063 Run fan
+- [x] ACT-064 Fan position
+- [x] ACT-065 Fan card text
+- [x] ACT-066 Fan card click
+- [x] ACT-067 Dialog start
+- [x] ACT-068 Dialog header
+- [x] ACT-069 Describe step
+- [x] ACT-070 Example chips
+- [x] ACT-071 Scope switch
+- [x] ACT-072 Draft
+- [x] ACT-073 Stale drafts
+- [x] ACT-074 Review step
+- [x] ACT-075 Save
+- [x] ACT-076 Footer · left
+- [x] ACT-077 Footer · right
+- [x] ACT-078 Dialog keys
+- [x] ACT-079 Dialog close
+- [x] ACT-080 Dialog error
+- [x] ACT-081 Icon fallback
+- [x] ACT-082 Rail independent of dialog
 - [x] ACT-083 IPC error text (keep)
 - [x] VOICE-001 Key source
 - [x] VOICE-002 Env wait
@@ -828,19 +828,19 @@ Risks:
 - [x] VOICE-030 Cancel
 - [x] VOICE-031 Retry
 - [x] VOICE-032 Dismiss
-- [ ] VOICE-033 Esc
+- [x] VOICE-033 Esc
 - [x] VOICE-034 Notice timeout
 - [x] VOICE-035 Unmount
 - [x] VOICE-036 Clock
 - [x] VOICE-037 Unhandled IPC failure (keep)
-- [ ] VOICE-038 Status (recording)
-- [ ] VOICE-039 Status (transcribing)
-- [ ] VOICE-040 Notice
-- [ ] VOICE-041 Session mic placement
-- [ ] VOICE-042 Session mic layout
-- [ ] VOICE-043 Session mic button
-- [ ] VOICE-044 Session mic recording look
-- [ ] VOICE-045 Session mic notice
+- [x] VOICE-038 Status (recording)
+- [x] VOICE-039 Status (transcribing)
+- [x] VOICE-040 Notice
+- [x] VOICE-041 Session mic placement
+- [x] VOICE-042 Session mic layout
+- [x] VOICE-043 Session mic button
+- [x] VOICE-044 Session mic recording look
+- [x] VOICE-045 Session mic notice
 - [x] GIT-001 Runner argv
 - [x] GIT-002 Runner results
 - [x] GIT-003 Env wait
@@ -861,33 +861,33 @@ Risks:
 - [x] GIT-018 Too large
 - [x] GIT-019 Diff exit
 - [x] GIT-020 Binary
-- [ ] GIT-021 Shared read
-- [ ] GIT-022 Reset
-- [ ] GIT-023 Refresh triggers
-- [ ] GIT-024 Hidden
-- [ ] GIT-025 Changes button
-- [ ] GIT-026 Branch chip label
-- [ ] GIT-027 Log hover
-- [ ] GIT-028 Log fetch
-- [ ] GIT-029 Popover head
-- [ ] GIT-030 Popover commits
-- [ ] GIT-031 Relative time
-- [ ] GIT-032 Modal open
-- [ ] GIT-033 Fresh read
-- [ ] GIT-034 Modal header
-- [ ] GIT-035 Empty states
-- [ ] GIT-036 File list
-- [ ] GIT-037 Status icons
-- [ ] GIT-038 Selection
-- [ ] GIT-039 List input
-- [ ] GIT-040 Focus look
-- [ ] GIT-041 Diff loading
-- [ ] GIT-042 Uncached selection
-- [ ] GIT-043 Diff errors
-- [ ] GIT-044 Pane header
-- [ ] GIT-045 Pane body precedence
-- [ ] GIT-046 Scroll
-- [ ] GIT-047 Line rendering
+- [x] GIT-021 Shared read
+- [x] GIT-022 Reset
+- [x] GIT-023 Refresh triggers
+- [x] GIT-024 Hidden
+- [x] GIT-025 Changes button
+- [x] GIT-026 Branch chip label
+- [x] GIT-027 Log hover
+- [x] GIT-028 Log fetch
+- [x] GIT-029 Popover head
+- [x] GIT-030 Popover commits
+- [x] GIT-031 Relative time
+- [x] GIT-032 Modal open
+- [x] GIT-033 Fresh read
+- [x] GIT-034 Modal header
+- [x] GIT-035 Empty states
+- [x] GIT-036 File list
+- [x] GIT-037 Status icons
+- [x] GIT-038 Selection
+- [x] GIT-039 List input
+- [x] GIT-040 Focus look
+- [x] GIT-041 Diff loading
+- [x] GIT-042 Uncached selection
+- [x] GIT-043 Diff errors
+- [x] GIT-044 Pane header
+- [x] GIT-045 Pane body precedence
+- [x] GIT-046 Scroll
+- [x] GIT-047 Line rendering
 - [x] GIT-048 Lines
 - [x] GIT-049 Hunk header
 - [x] GIT-050 Header lines

@@ -243,8 +243,11 @@ pub fn title_bar(state: &Entity<AppState>, actions: Vec<AnyElement>, window: &mu
             .icon(Icon::RotateCw, 14., 2.2)
             .label("Restart to Update")
             .tooltip(tip)
-            // UI-108: the install itself comes with nodus-updater (06).
-            .on_click(move |_, _, cx| state.update(cx, |_, _| {}))
+            // UI-108
+            .on_click(move |_, _, cx| {
+                let nodus = state.read(cx).nodus.clone();
+                crate::shell::core_shell::install_update(nodus, cx);
+            })
     });
 
     let right = no_drag(

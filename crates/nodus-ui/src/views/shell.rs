@@ -114,6 +114,10 @@ window.ipc.postMessage(text);
 f.addEventListener('mouseenter',function(){window.ipc.postMessage('{"h":true}');});
 f.addEventListener('mouseleave',function(){window.ipc.postMessage('{"h":false}');});
 window.__nodusDeliver=function(m){if(f.contentWindow)f.contentWindow.postMessage(m,'*');};
+window.__nodusScale=function(z,w,h){
+f.style.width=w+'px';f.style.height=h+'px';f.style.transformOrigin='0 0';
+f.style.transform=z===1?'':'scale('+z+')';
+};
 window.__nodusFrame=function(src,title,bg){
 if(title!==null)f.title=title;
 if(bg!==null){document.documentElement.style.background=bg;document.body.style.background=bg;f.style.background=bg;}

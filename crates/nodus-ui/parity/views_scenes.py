@@ -129,7 +129,28 @@ def page_setup(html):
     return setup
 
 
-SETUP = {"try-relay": relay_setup, "try-wheel": page_setup(WHEEL_PAGE)}
+def zoom_setup(zoom, x, y):
+    """docs-site opens at another zoom."""
+    def setup(world):
+        path = os.path.join(world, "userData", "state.json")
+        state = json.load(open(path))
+        for board in state["boards"].values():
+            if any(v["title"] == "Docs build status" for v in board.get("views", {}).values()):
+                board["viewport"] = {"x": x, "y": y, "zoom": zoom}
+        json.dump(state, open(path, "w"))
+    return setup
+
+
+SETUP = {"try-relay": relay_setup, "try-wheel": page_setup(WHEEL_PAGE),
+         "try-zoom-in": zoom_setup(1.6, -1100, 40), "try-zoom-out": zoom_setup(0.35, 120, 160)}
+SIZE_PAGE = """<!doctype html><html><body style="margin:0;font:20px -apple-system"><div id="o"></div><script>
+function show(){document.getElementById('o').textContent=innerWidth+'x'+innerHeight+' dpr '+devicePixelRatio+' '+document.documentElement.clientWidth;}
+show();addEventListener('resize',show);
+</script></body></html>"""
+SETUP["try-size"] = page_setup(SIZE_PAGE)
+SCENES["try-size"] = DOCS() + [AWAY]
+SCENES["try-zoom-in"] = DOCS() + [AWAY]
+SCENES["try-zoom-out"] = DOCS() + [AWAY]
 # A scroll the page has no use for pans the board (VIEW-047): the board moves up 200px.
 SCENES["try-wheel"] = DOCS() + [{"cmd": "wait", "ms": 1500}, {"cmd": "views"}]
 # The page takes the keyboard on a click, and gives it back on a click on the board (VIEW-051).

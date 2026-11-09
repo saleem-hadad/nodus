@@ -126,16 +126,8 @@ impl Container {
 
     /// `visible` and `document` in GPUI window coordinates (logical px, from
     /// the top left). `radius` rounds the document's bottom corners where
-    /// they're on screen. `scale` is the view scale the webview draws at: its
-    /// frame is the document unscaled, from the same top left.
-    pub fn set_geometry(
-        &self,
-        child: &NSView,
-        visible: Bounds<Pixels>,
-        document: Bounds<Pixels>,
-        radius: f32,
-        scale: f64,
-    ) {
+    /// they're on screen.
+    pub fn set_geometry(&self, child: &NSView, visible: Bounds<Pixels>, document: Bounds<Pixels>, radius: f32) {
         // SAFETY: the container was added to GPUI's view and stays there.
         let Some(parent) = (unsafe { self.view.superview() }) else {
             return;
@@ -159,7 +151,7 @@ impl Container {
             f64::from(f32::from(document.size.height)),
         );
         self.view.ivars().page.set((dx, dy, dw, dh));
-        let (cw, ch) = (dw / scale, dh / scale);
+        let (cw, ch) = (dw, dh);
         let child_y = if self.view.isFlipped() { dy } else { vh - dy - ch };
         let child_frame = NSRect::new(NSPoint::new(dx, child_y), NSSize::new(cw, ch));
         if child.frame() != child_frame {
@@ -196,24 +188,6 @@ impl Drop for Container {
     }
 }
 
-/// Scales the page with the board: WebKit's view scale lays it out at the
-/// webview's frame and draws it scaled from the top left, as Chromium drew
-/// the 0.9.4 iframe under the board's CSS transform. Page zoom would lay it
-/// out too, but bumps zoomed text up to WebKit's 9px "smart minimum".
-/// False when this WebKit has no view scale.
-pub fn set_view_scale(webview: &NSView, scale: f64) -> bool {
-    let sel = objc2::sel!(_setViewScale:);
-    // SAFETY: respondsToSelector: on a live NSObject.
-    let has: bool = unsafe { msg_send![webview, respondsToSelector: sel] };
-    if has && scale.is_finite() && scale > 0.0 {
-        // SAFETY: WKWebView's `-_setViewScale:(CGFloat)`, checked above.
-        unsafe {
-            let _: () = msg_send![webview, _setViewScale: scale];
-        }
-    }
-    has
-}
-
 /// Keeps the page drawing while the window is covered: WebKit otherwise
 /// stops rendering an occluded window's pages, and a snapshot then comes
 /// back blank. Chromium kept 0.9.4's frames drawing, on screen or not.
@@ -232,29 +206,15 @@ pub fn ignore_window_occlusion(webview: &NSView) {
 /// `-[WKWebView takeSnapshotWithConfiguration:completionHandler:]`, as BGRA
 /// pixels in sRGB (premultiplied), for a GPUI image. `done` runs on the main
 /// thread, with None when there's no picture.
-/// `rect`: the part to take, from the top left (the scaled page), else all.
-pub fn snapshot(webview: &NSView, rect: Option<(f64, f64)>, done: impl FnOnce(Option<(u32, u32, Vec<u8>)>) + 'static) {
+pub fn snapshot(webview: &NSView, done: impl FnOnce(Option<(u32, u32, Vec<u8>)>) + 'static) {
     let done = std::cell::RefCell::new(Some(done));
     let block = block2::RcBlock::new(move |image: *mut AnyObject, _error: *mut AnyObject| {
         let Some(done) = done.borrow_mut().take() else { return };
         done(if image.is_null() { None } else { pixels(image) });
     });
-    // SAFETY: a WKWebView; a nil configuration snapshots its whole bounds,
-    // else WKSnapshotConfiguration's `rect` is in the view's coordinates.
+    // SAFETY: a WKWebView; a nil configuration snapshots its whole bounds.
     unsafe {
-        let config: *mut AnyObject = match rect {
-            Some((w, h)) => {
-                let config: *mut AnyObject = msg_send![objc2::class!(WKSnapshotConfiguration), new];
-                let r = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(w, h));
-                let _: () = msg_send![config, setRect: r];
-                config
-            }
-            None => std::ptr::null_mut(),
-        };
-        let _: () = msg_send![webview, takeSnapshotWithConfiguration: config, completionHandler: &*block];
-        if !config.is_null() {
-            let _: () = msg_send![config, release];
-        }
+        let _: () = msg_send![webview, takeSnapshotWithConfiguration: std::ptr::null_mut::<AnyObject>(), completionHandler: &*block];
     }
 }
 
@@ -316,6 +276,45 @@ pub fn has_keyboard(webview: &NSView) -> bool {
         }
     }
     false
+}
+
+/// No WebKit context menu in pages: Electron showed none in a view's frame.
+/// WebKit builds its menu, then asks the view `willOpenMenu:withEvent:`;
+/// emptied there, nothing opens. Done once for wry's webview class.
+pub fn no_context_menu(webview: &NSView) {
+    static DONE: std::sync::Once = std::sync::Once::new();
+    unsafe extern "C-unwind" fn will_open_menu(
+        _this: *mut AnyObject,
+        _cmd: objc2::runtime::Sel,
+        menu: *mut AnyObject,
+        _event: *mut AnyObject,
+    ) {
+        if !menu.is_null() {
+            // SAFETY: the NSMenu AppKit is about to show.
+            unsafe {
+                let _: () = msg_send![menu, removeAllItems];
+            }
+        }
+    }
+    let mut class = webview.class();
+    // Key-value observing swaps in a subclass; the method goes on wry's own.
+    if class.name().to_bytes().starts_with(b"NSKVONotifying_")
+        && let Some(sup) = class.superclass()
+    {
+        class = sup;
+    }
+    let class = std::ptr::from_ref(class).cast_mut();
+    DONE.call_once(|| {
+        // SAFETY: an IMP with the selector's signature (void, id, SEL, id,
+        // id), on a class the runtime owns; "v@:@@" says so.
+        unsafe {
+            let imp: objc2::runtime::Imp = std::mem::transmute(
+                will_open_menu
+                    as unsafe extern "C-unwind" fn(*mut AnyObject, objc2::runtime::Sel, *mut AnyObject, *mut AnyObject),
+            );
+            objc2::ffi::class_replaceMethod(class, objc2::sel!(willOpenMenu:withEvent:), imp, c"v@:@@".as_ptr());
+        }
+    });
 }
 
 /// Gives the keyboard back to GPUI's view after a press on the board: AppKit

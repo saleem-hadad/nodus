@@ -47,15 +47,10 @@ pub struct PageWebview {
     #[cfg(target_os = "macos")]
     container: super::mac::Container,
     shell: Arc<Mutex<ShellState>>,
-    zoom: Cell<f64>,
+    /// The zoom and the page's size in CSS px the shell last scaled it to.
+    scale: Cell<(f64, f64, f64)>,
     offscreen: Cell<bool>,
     live: Cell<bool>,
-    /// WebKit scales the page by view scale (macOS); else by page zoom.
-    #[cfg(target_os = "macos")]
-    view_scale: bool,
-    /// The page's size on screen, for its snapshot.
-    #[cfg(target_os = "macos")]
-    page: Cell<(Pixels, Pixels)>,
 }
 
 impl PageWebview {
@@ -126,36 +121,37 @@ impl PageWebview {
             container
         };
         #[cfg(target_os = "macos")]
-        let view_scale = {
+        {
             use wry::WebViewExtMacOS as _;
             super::mac::ignore_window_occlusion(&webview.webview());
-            super::mac::set_view_scale(&webview.webview(), 1.0)
-        };
+            super::mac::no_context_menu(&webview.webview());
+        }
         Ok(Self {
             frame,
             webview,
             #[cfg(target_os = "macos")]
             container,
             shell: shell_state,
-            zoom: Cell::new(1.0),
+            scale: Cell::new((1.0, 0.0, 0.0)),
             offscreen: Cell::new(true),
             live: Cell::new(true),
-            #[cfg(target_os = "macos")]
-            view_scale,
-            #[cfg(target_os = "macos")]
-            page: Cell::new((Pixels::ZERO, Pixels::ZERO)),
         })
     }
 
     /// Follows the card: `document` is the body on screen, `clip` what of it
-    /// may show (the board's edges), `zoom` the board's zoom, which is the
-    /// page's zoom too, so its CSS viewport stays the body's size in flow
-    /// units. `radius` rounds the bottom corners.
+    /// may show (the board's edges), `zoom` the board's zoom: the shell lays
+    /// the page out at the body's size in flow units and scales it with a
+    /// CSS transform, as 0.9.4's board scaled its iframe. `radius` rounds the
+    /// bottom corners.
     pub fn place(&self, document: Bounds<Pixels>, clip: Bounds<Pixels>, zoom: f32, radius: f32) {
         let mut visible = document.intersect(&clip);
         let offscreen = visible.size.width < gpui::px(1.) || visible.size.height < gpui::px(1.);
         self.offscreen.set(offscreen);
-        self.set_zoom(f64::from(zoom));
+        self.set_scale(
+            f64::from(zoom),
+            f64::from(f32::from(document.size.width)),
+            f64::from(f32::from(document.size.height)),
+        );
         #[cfg(target_os = "macos")]
         {
             use wry::WebViewExtMacOS as _;
@@ -165,10 +161,8 @@ impl PageWebview {
             if offscreen {
                 visible = Bounds::new(document.origin, gpui::size(Pixels::ZERO, Pixels::ZERO));
             }
-            let scale = if self.view_scale { f64::from(zoom) } else { 1.0 };
-            self.page.set((document.size.width, document.size.height));
             self.container
-                .set_geometry(&self.webview.webview(), visible, document, radius, scale);
+                .set_geometry(&self.webview.webview(), visible, document, radius);
         }
         #[cfg(not(target_os = "macos"))]
         {
@@ -189,19 +183,25 @@ impl PageWebview {
         }
     }
 
-    /// The page's scale: WKWebView's view scale (page zoom where WebKit has
-    /// none), WebView2's `ZoomFactor`.
-    pub fn set_zoom(&self, zoom: f64) {
-        if (zoom - self.zoom.get()).abs() > 1e-4 {
-            self.zoom.set(zoom);
-            #[cfg(target_os = "macos")]
-            if self.view_scale {
-                use wry::WebViewExtMacOS as _;
-                super::mac::set_view_scale(&self.webview.webview(), zoom);
-                return;
-            }
-            let _ = self.webview.zoom(zoom);
+    /// Scales the page in the shell: laid out at the body's size in flow
+    /// units (`w`×`h` screen px over the zoom), drawn at the zoom. A CSS
+    /// transform keeps WebKit's minimum font size out of it, as it stayed out
+    /// of 0.9.4's (page zoom bumped zoomed-out text up to 9px).
+    fn set_scale(&self, zoom: f64, w: f64, h: f64) {
+        let z = if zoom.is_finite() && zoom > 0.0 { zoom } else { 1.0 };
+        let (cw, ch) = (w / z, h / z);
+        let (oz, ow, oh) = self.scale.get();
+        if (oz - z).abs() < 1e-4 && (ow - cw).abs() < 0.01 && (oh - ch).abs() < 0.01 {
+            return;
         }
+        self.scale.set((z, cw, ch));
+        let n = |v: f64| nodus_domain::json::number_to_string((v * 1000.0).round() / 1000.0);
+        let _ = self.webview.evaluate_script(&format!(
+            "window.__nodusScale&&window.__nodusScale({},{},{})",
+            n(z),
+            n(cw),
+            n(ch)
+        ));
     }
 
     /// Off screen: the visible part of the body is empty.
@@ -283,17 +283,12 @@ impl PageWebview {
         #[cfg(target_os = "macos")]
         {
             use wry::WebViewExtMacOS as _;
-            // With a view scale the page fills the webview's top left, at
-            // the zoom's share of its size.
-            let share = if self.view_scale { self.zoom.get().min(1.0) } else { 1.0 };
-            super::mac::snapshot(&self.webview.webview(), None, move |pixels| {
+            super::mac::snapshot(&self.webview.webview(), move |pixels| {
                 done(pixels.and_then(|(w, h, bgra)| {
-                    let (cw, ch) = crop_size(w, h, share);
-                    let bgra = crop_top_left(&bgra, w, cw, ch);
                     if let Some(dir) = std::env::var_os("NODUS_VIEWS_SNAPSHOT_DIR") {
-                        dump(&dir, cw, ch, &bgra);
+                        dump(&dir, w, h, &bgra);
                     }
-                    let buf = image::RgbaImage::from_raw(cw, ch, bgra)?;
+                    let buf = image::RgbaImage::from_raw(w, h, bgra)?;
                     Some(Arc::new(RenderImage::new(vec![image::Frame::new(buf)])))
                 }));
             });
@@ -321,25 +316,6 @@ impl PageWebview {
     }
 }
 
-/// The top-left `share` of a w×h picture, in whole pixels.
-fn crop_size(w: u32, h: u32, share: f64) -> (u32, u32) {
-    let cut = |v: u32| ((f64::from(v) * share).round() as u32).clamp(1, v.max(1));
-    (cut(w), cut(h))
-}
-
-/// The top-left cw×ch of a BGRA picture `w` wide.
-fn crop_top_left(bgra: &[u8], w: u32, cw: u32, ch: u32) -> Vec<u8> {
-    if cw == w {
-        return bgra[..(cw * ch * 4) as usize].to_vec();
-    }
-    let mut out = Vec::with_capacity((cw * ch * 4) as usize);
-    for row in 0..ch as usize {
-        let start = row * w as usize * 4;
-        out.extend_from_slice(&bgra[start..start + cw as usize * 4]);
-    }
-    out
-}
-
 /// Debugging: writes a snapshot as a PNG into `dir`.
 #[cfg(target_os = "macos")]
 fn dump(dir: &std::ffi::OsStr, w: u32, h: u32, bgra: &[u8]) {
@@ -348,7 +324,7 @@ fn dump(dir: &std::ffi::OsStr, w: u32, h: u32, bgra: &[u8]) {
         let n = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| d.as_millis());
-        let _ = img.save(std::path::Path::new(dir).join(format!("snap-{n}.png")));
+        let _ = img.save(std::path::Path::new(dir).join(format!("snap-{n}-{w}x{h}.png")));
     }
 }
 

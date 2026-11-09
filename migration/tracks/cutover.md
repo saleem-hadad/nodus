@@ -12,7 +12,7 @@
 | 2 | CI and release workflows on cargo only | ✅ |
 | 3 | README and how-it-works for the Rust app | ✅ |
 | 4 | Electron sources and toolchain removed | ✅ |
-| 5 | Workspace version 1.0.0 (the user's pick, 2026-11-10) | ☐ |
+| 5 | Workspace version 1.0.0 (the user's pick, 2026-11-10) | ✅ |
 | 6 | Final check: fmt, clippy, tests, prepush, arm64 bundle + smoke | ☐ |
 
 ## 1. Protocol (U1)
@@ -44,3 +44,14 @@
   - The Node-host tests (`nodus-host/tests/wire.rs`, `nodus-sessions/tests/client.rs`) document building `host.js` from the tag.
 - `packaging/` never read `node_modules` at build time: dmgbuild, makensis and the NSIS plugins are electron-builder-binaries' pinned archives, downloaded and checked by SHA-256, and the NSIS templates are vendored.
 - **What still names Electron, on purpose:** code and docs about 0.9.4 itself, which every install upgrades from: reading its safeStorage ciphertext and Chromium Local Storage, its updater's checks (handoff gates), its installer's registry id and NSIS templates (electron-builder's, MIT), its parity goldens, and doc comments saying which `src/…` file a module ports. `migration/` is kept as the record.
+
+## 5. Version 1.0.0
+
+The user approved the cutover and picked 1.0.0 for the first Rust release (2026-11-10). `[workspace.package] version` is `1.0.0`, and `Cargo.lock`'s 19 workspace crates with it (nothing else moved, so `--locked` builds pass). Where it flows, with nothing else to edit:
+
+- `env!("CARGO_PKG_VERSION")` → `nodus_core::VERSION`: the updater's `current` (Settings, the "is it newer" check against `releases/latest`), the board tools' MCP `serverInfo.version`, Help › Report a Bug's body.
+- `packaging/macos/bundle.sh` (`cargo pkgid -p nodus`): `CFBundleShortVersionString` and `CFBundleVersion` in Info.plist, which 0.9.4's updater compares with the release tag; `dmg.sh`: the volume name `Nodus 1.0.0-<arch>`.
+- `packaging/windows/installer.sh`: the NSIS `VERSION` define (`VIProductVersion`, `BrandingText`, `DisplayVersion`, `DisplayName`) and the `nodus-1.0.0-<arch>.nsis.7z` package; `crates/nodus/build.rs`: `Nodus.exe`'s FileVersion `1.0.0` and ProductVersion `1.0.0.0`.
+- The workflows: `package.yml`'s gates and `release.yml`'s version check (it must equal the `version` input, be `X.Y.Z`, newer than 0.9.4 and the latest release, and not released yet).
+
+Left at 0.9.4 on purpose: everything naming the Electron release being replaced (the handoff gates' downloads and checks, the updater's tests of an installed 0.9.4, `PROTOCOL_0_9_4`, the parity scenes' Settings rows, which match 0.9.4's goldens). No test pinned the app's own version.

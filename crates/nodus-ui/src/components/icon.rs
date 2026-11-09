@@ -170,6 +170,9 @@ impl AssetSource for Assets {
         {
             return Ok(Some(Cow::Owned(icon.svg_source(stroke).into_bytes())));
         }
+        if let Some(svg) = crate::terminal::icons::load(path) {
+            return Ok(Some(Cow::Owned(svg)));
+        }
         gpui::assets::Assets.load(path)
     }
 

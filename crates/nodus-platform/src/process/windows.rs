@@ -18,6 +18,37 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const DETACHED_PROCESS: u32 = 0x0000_0008;
 const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
 
+/// The program libuv's `search_path` would start for `program`: a bare name
+/// is looked for in the child's working folder, then in each folder of the
+/// child's PATH (`path`), as given or, without an extension, with `.com` and
+/// then `.exe`. Std's own search falls back to the app's folder, the system
+/// folders and the app's PATH, so a program the child's PATH lacks would
+/// still start; Node fails with ENOENT there. None when nothing matches.
+pub(super) fn search_path(
+    program: &std::path::Path,
+    cwd: &std::path::Path,
+    path: Option<&std::ffi::OsStr>,
+) -> Option<std::path::PathBuf> {
+    let candidates = |dir: &std::path::Path| -> Vec<std::path::PathBuf> {
+        let base = dir.join(program);
+        if program.extension().is_some() {
+            vec![base]
+        } else {
+            ["com", "exe"].iter().map(|ext| base.with_extension(ext)).collect()
+        }
+    };
+    let dirs = std::iter::once(cwd.to_path_buf()).chain(
+        path.map(|p| {
+            std::env::split_paths(p)
+                .filter(|d| !d.as_os_str().is_empty())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default(),
+    );
+    dirs.flat_map(|dir| candidates(&dir))
+        .find(|candidate| candidate.is_file())
+}
+
 /// No console window: `windowsHide`.
 pub(super) fn prepare_tree(command: &mut std::process::Command, _new_session: bool) {
     command.creation_flags(CREATE_NO_WINDOW);

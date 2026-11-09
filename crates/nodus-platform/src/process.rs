@@ -335,7 +335,7 @@ impl Command {
     }
 
     fn std_command(&self) -> std::process::Command {
-        let mut command = std::process::Command::new(&self.program);
+        let mut command = std::process::Command::new(self.program_to_start());
         for arg in &self.args {
             match arg {
                 Arg::Plain(arg) => {
@@ -356,6 +356,45 @@ impl Command {
         }
         command.envs(self.extra_env.iter().map(|(name, value)| (name, value)));
         command
+    }
+
+    /// The program as the OS is asked to start it. On Windows, a bare name
+    /// started with an environment of its own is looked for on that
+    /// environment's PATH as libuv does (`windows::search_path`), so one
+    /// it lacks fails with ENOENT as in Node; std would fall back to the
+    /// app's own PATH. Elsewhere, and otherwise, as given.
+    fn program_to_start(&self) -> PathBuf {
+        #[cfg(windows)]
+        {
+            let bare = std::path::Path::new(&self.program).components().count() == 1
+                && !self.program.to_string_lossy().contains(['/', '\\', ':']);
+            let path = self
+                .extra_env
+                .iter()
+                .rev()
+                .find(|(name, _)| name.eq_ignore_ascii_case("PATH"))
+                .map(|(_, value)| OsString::from(value))
+                .or_else(|| {
+                    self.env.as_ref().map(|env| {
+                        env.iter()
+                            .find(|(name, _)| name.eq_ignore_ascii_case("PATH"))
+                            .map(|(_, value)| OsString::from(value))
+                            .unwrap_or_default()
+                    })
+                });
+            if bare && let Some(path) = path {
+                let cwd = self
+                    .cwd
+                    .clone()
+                    .or_else(|| std::env::current_dir().ok())
+                    .unwrap_or_default();
+                let program = std::path::Path::new(&self.program);
+                // Nothing found: a path that isn't there, so the start fails
+                // with ENOENT under the name it was given.
+                return imp::search_path(program, &cwd, Some(&path)).unwrap_or_else(|| cwd.join(program));
+            }
+        }
+        PathBuf::from(&self.program)
     }
 
     fn spawn_error(&self, source: io::Error) -> SpawnError {

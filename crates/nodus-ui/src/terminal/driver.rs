@@ -11,6 +11,10 @@
 //! {"cmd":"terminal","action":"close"}                              ⌘W's layer
 //! {"cmd":"terminal","action":"screen","session":"<id>"}            the terminal's visible text
 //! {"cmd":"terminal","action":"type","session":"<id>","text":"…"}   typed into the terminal
+//! {"cmd":"terminal","action":"route"}                              what's open (windows, search, find, cards, views)
+//! {"cmd":"terminal","action":"save-nodes","project":"<id>","patches":[…]}   changed from outside, then board-changed
+//! {"cmd":"terminal","action":"run-finished","run":{"projectId":…,"sessionId":…,"actionName":…}}
+//! {"cmd":"terminal","action":"remove-view","view":"<id>"}          the store's removeView
 //! ```
 //!
 //! Until the board's own track loads boards, `board` puts the core's
@@ -247,6 +251,12 @@ pub async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
             let confirm = window::main_shell(cx)
                 .and_then(|shell| shell.read(cx).terminal_layers.read(cx).session_window().cloned())
                 .is_some_and(|w| w.read(cx).asking());
+            let search = window::main_shell(cx)
+                .and_then(|shell| shell.read(cx).board().cloned())
+                .is_some_and(|b| b.read(cx).search_open);
+            let find = actions::preview_find(cx).map(|f| {
+                json!({ "query": f.query, "snippet": f.snippet.map(|s| json!({ "text": s.text, "timestamp": s.timestamp })) })
+            });
             let s = state.read(cx);
             json!({
                 "confirm": confirm,
@@ -255,8 +265,67 @@ pub async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
                 "terminal": s.terminal_session_id,
                 "preview": s.preview_session_id,
                 "agents": s.agent_view.as_ref().map(|(id, _)| id.clone()),
+                "search": search,
+                "find": find,
+                "cards": s.board.as_ref().map(|b| b.cards.iter().map(|c| json!({ "id": c.node.session_id, "archived": c.node.archived })).collect::<Vec<_>>()),
+                "views": s.board.as_ref().map(|b| b.views.iter().map(|v| json!({ "id": v.id, "title": v.title, "brain": v.session_id })).collect::<Vec<_>>()),
             })
         })),
+        // The board as another process changes it (an MCP tool's
+        // `archive_self`): saved through the core, then `board-changed`.
+        "save-nodes" => {
+            let project = text(command, "project");
+            let patches: Vec<nodus_domain::NodePatch> =
+                serde_json::from_value(command.get("patches").cloned().unwrap_or_default()).map_err(|e| e.to_string())?;
+            let runtime = cx.update(|cx| super::store::core_runtime(cx));
+            let (core, id) = (nodus.clone(), project.clone());
+            runtime
+                .spawn(async move { core.board().save_nodes(&id, &patches).await })
+                .await
+                .map_err(|e| e.to_string())?
+                .map_err(|e| e.ipc_message())?;
+            nodus.emit(nodus_domain::Event::BoardChanged { project_id: project });
+            Ok(Value::Null)
+        }
+        // An action run finished, as the core reports it (MODAL-029). Says
+        // whether the run's terminal was disposed: the registry's change for
+        // it with no terminal left, seen before a frame could attach it again
+        // (closing the window expands a card still on the board, BOARD-103).
+        "run-finished" => {
+            let run: nodus_domain::ActionRunResult =
+                serde_json::from_value(command.get("run").cloned().unwrap_or_default()).map_err(|e| e.to_string())?;
+            let disposed = std::rc::Rc::new(std::cell::Cell::new(false));
+            let watch = cx.update(|cx| {
+                let terminals = Terminals::try_global(cx)?;
+                let (flag, id) = (disposed.clone(), run.session_id.clone());
+                Some(cx.subscribe(&terminals, move |t, event, cx| {
+                    if let super::store::TerminalsEvent::Changed(changed) = event
+                        && changed.as_ref() == id
+                        && !t.read(cx).registry.contains(&id)
+                    {
+                        flag.set(true);
+                    }
+                }))
+            });
+            nodus.emit(nodus_domain::Event::RunFinished(run));
+            for _ in 0..40 {
+                if disposed.get() {
+                    break;
+                }
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(50))
+                    .await;
+            }
+            drop(watch);
+            Ok(json!({ "disposed": disposed.get() }))
+        }
+        // The board's `removeView`, as Delete does once confirmed (MODAL-030).
+        "remove-view" => {
+            let id = text(command, "view");
+            let removed = cx.update(|cx| state.update(cx, |s, cx| s.remove_view(&id, cx)));
+            removed.await;
+            Ok(Value::Null)
+        }
         other => Err(format!("unknown terminal action {other}")),
     }
 }

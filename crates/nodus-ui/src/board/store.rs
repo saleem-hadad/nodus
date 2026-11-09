@@ -344,7 +344,8 @@ impl AppState {
         .detach();
     }
 
-    /// `removeView`: the view, and its brain's card, go at once.
+    /// `removeView`: the view, and its brain's card, go at once; the brain's
+    /// terminal is disposed and its window closes if open (MODAL-030).
     pub fn remove_view(&mut self, view_id: &str, cx: &mut Context<'_, Self>) -> Task<()> {
         let Some(board) = self.board.as_mut() else {
             return Task::ready(());
@@ -363,6 +364,9 @@ impl AppState {
         }
         let project_id = board.project.id.clone();
         cx.notify();
+        if let Some(brain) = &brain {
+            crate::terminal::store::dispose(brain, cx);
+        }
         let nodus = self.nodus.clone();
         let rt = crate::board::core_rt(cx);
         let view_id = view_id.to_owned();

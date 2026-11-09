@@ -153,7 +153,7 @@ impl BoardCanvas {
                         .tooltip("Clear selection (Esc)")
                         .on_click(move |_, _, cx| {
                             if let Some(c) = clear.upgrade() {
-                                c.update(cx, |c, cx| c.clear_selection(cx));
+                                c.update(cx, BoardCanvas::clear_selection);
                             }
                         }),
                 )

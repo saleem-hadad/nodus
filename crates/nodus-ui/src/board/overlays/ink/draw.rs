@@ -50,7 +50,7 @@ impl BoardCanvas {
             move |_, hitbox, window, cx| {
                 match tool {
                     InkTool::Pen | InkTool::Arrow | InkTool::Eraser => {
-                        window.set_cursor_style(CursorStyle::Crosshair, &hitbox)
+                        window.set_cursor_style(CursorStyle::Crosshair, &hitbox);
                     }
                     InkTool::Text => window.set_cursor_style(CursorStyle::IBeam, &hitbox),
                     InkTool::Select => {}

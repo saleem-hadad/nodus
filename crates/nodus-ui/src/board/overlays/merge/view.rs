@@ -272,7 +272,7 @@ impl BoardCanvas {
                 })
                 .on_click(move |_, _, cx| {
                     if let Some(c) = me.upgrade() {
-                        c.update(cx, |c, cx| c.merge_reset_context(cx));
+                        c.update(cx, BoardCanvas::merge_reset_context);
                     }
                 })
                 .child("Reset to generated")
@@ -475,7 +475,7 @@ impl BoardCanvas {
             .disabled(!can_start)
             .on_click(move |_, _, cx| {
                 if let Some(c) = start.upgrade() {
-                    c.update(cx, |c, cx| c.merge_begin(cx));
+                    c.update(cx, BoardCanvas::merge_begin);
                 }
             });
         let start_button = if starting {
@@ -502,7 +502,7 @@ impl BoardCanvas {
             )
             .child(button("merge-cancel").label("Cancel").on_click(move |_, _, cx| {
                 if let Some(c) = cancel.upgrade() {
-                    c.update(cx, |c, cx| c.merge_cancel(cx));
+                    c.update(cx, BoardCanvas::merge_cancel);
                 }
             }))
             .child(start_button)

@@ -167,7 +167,7 @@ impl BoardCanvas {
         let popover = self.render_bar_popover(&t, window, cx);
         let me = cx.entity().downgrade();
         let label = super::text::send_label(target, into.as_ref().map(|i| i.title.as_str()));
-        let send = self.render_send(&t, can_send, label, window, cx);
+        let send = self.render_send(&t, can_send, &label, window, cx);
         div()
             .id("bar-pill")
             .relative()
@@ -212,7 +212,7 @@ impl BoardCanvas {
                     .min_w_0()
                     .ml(px(-4.))
                     .mr(px(-14.))
-                    .when(listening, |d| d.hidden())
+                    .when(listening, Styled::hidden)
                     .child(
                         Textarea::new(&field)
                             .appearance(false)
@@ -248,7 +248,7 @@ impl BoardCanvas {
         &mut self,
         t: &Tokens,
         enabled: bool,
-        label: String,
+        label: &str,
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
@@ -282,7 +282,7 @@ impl BoardCanvas {
                 hovered.update(cx, |s, cx| {
                     *s = *h;
                     cx.notify();
-                })
+                });
             })
             .on_mouse_down(MouseButton::Left, |_, window, cx| {
                 cx.stop_propagation();
@@ -291,7 +291,7 @@ impl BoardCanvas {
             .when(enabled, |d| {
                 d.on_click(move |_, _, cx| {
                     if let Some(c) = me.upgrade() {
-                        c.update(cx, |c, cx| c.bar_submit(cx));
+                        c.update(cx, BoardCanvas::bar_submit);
                     }
                 })
             })
@@ -362,16 +362,16 @@ impl BoardCanvas {
                 clear_hover.update(cx, |s, cx| {
                     *s = *h;
                     cx.notify();
-                })
+                });
             })
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_click(move |_, _, cx| {
                 if let Some(c) = me.upgrade() {
                     c.update(cx, |c, cx| {
                         if is_into {
-                            c.bar_drop_into(cx)
+                            c.bar_drop_into(cx);
                         } else {
-                            c.bar_clear_target(cx)
+                            c.bar_clear_target(cx);
                         }
                     });
                 }
@@ -424,7 +424,7 @@ impl BoardCanvas {
             .shadow(vec![inset_shadow(0., 0., 0., 0.5, rgba(0, 0, 0, 0.2))])
             .relative()
             .child(crate::board::overlays::bounds_probe(cx.entity().downgrade(), |c, b| {
-                c.overlays.bar.picker_area[1] = Some(b)
+                c.overlays.bar.picker_area[1] = Some(b);
             }))
             .tooltip(native_tooltip("Note colour".into()))
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())

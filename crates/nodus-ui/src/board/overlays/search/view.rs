@@ -99,7 +99,7 @@ impl BoardCanvas {
             .group_opacity(progress)
             .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                 if let Some(c) = me.upgrade() {
-                    c.update(cx, |c, cx| c.search_close(cx));
+                    c.update(cx, BoardCanvas::search_close);
                 }
             })
             .child(panel);
@@ -387,7 +387,7 @@ impl BoardCanvas {
             .when(!disabled, |d| {
                 d.on_click(move |_, _, cx| {
                     if let Some(c) = me.upgrade() {
-                        c.update(cx, |c, cx| c.search_start_merge(cx));
+                        c.update(cx, BoardCanvas::search_start_merge);
                     }
                 })
             })

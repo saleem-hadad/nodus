@@ -209,6 +209,7 @@ impl BoardCanvas {
             .is_some()
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn ink_open_label(
         &mut self,
         id: Option<String>,

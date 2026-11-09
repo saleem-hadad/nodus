@@ -172,7 +172,7 @@ impl BoardCanvas {
         let focus = d.m.focus.clone();
         cx.notify();
         if let Some(stub) = cx.try_global::<SummarizeStub>().cloned() {
-            self.merge_run_stubbed(ids, request_id, stub, cx);
+            self.merge_run_stubbed(&ids, &request_id, stub, cx);
             return;
         }
         let nodus = self.state.read(cx).nodus.clone();
@@ -202,18 +202,12 @@ impl BoardCanvas {
     }
 
     /// A parity scene's summarize: its phases as progress, then its results.
-    fn merge_run_stubbed(
-        &mut self,
-        ids: Vec<String>,
-        request_id: String,
-        stub: SummarizeStub,
-        cx: &mut Context<'_, Self>,
-    ) {
+    fn merge_run_stubbed(&mut self, ids: &[String], request_id: &str, stub: SummarizeStub, cx: &mut Context<'_, Self>) {
         let Some(d) = self.overlays.merge.as_mut() else { return };
         for (i, id) in ids.iter().enumerate() {
             if let Some(Some(phase)) = stub.phases.get(i) {
                 d.m.progress(&nodus_domain::SummarizeProgress {
-                    request_id: request_id.clone(),
+                    request_id: request_id.to_owned(),
                     session_id: id.clone(),
                     phase: *phase,
                     error: (*phase == SummarizePhase::Error).then(|| "claude exited with code 1".to_owned()),
@@ -229,7 +223,7 @@ impl BoardCanvas {
                     ..r
                 })
                 .collect();
-            d.m.results(&ids, Ok(results));
+            d.m.results(ids, Ok(results));
         } else {
             d.m.settle();
         }

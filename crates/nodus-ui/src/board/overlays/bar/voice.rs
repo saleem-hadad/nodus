@@ -136,7 +136,7 @@ impl BoardCanvas {
                         hover.update(cx, |s, cx| {
                             *s = *h;
                             cx.notify();
-                        })
+                        });
                     })
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .on_click(move |_, _, cx| cancel_mic.read(cx).cancel())
@@ -223,7 +223,7 @@ impl BoardCanvas {
                 hovered.update(cx, |s, cx| {
                     *s = *h;
                     cx.notify();
-                })
+                });
             })
             .on_mouse_down(MouseButton::Left, |_, window, cx| {
                 cx.stop_propagation();
@@ -233,9 +233,9 @@ impl BoardCanvas {
                 d.active(|s| s.opacity(1.)).on_click(move |_, _, cx| {
                     let m = press.read(cx);
                     if m.phase() == Phase::Recording {
-                        m.stop()
+                        m.stop();
                     } else {
-                        m.record()
+                        m.record();
                     }
                 })
             })

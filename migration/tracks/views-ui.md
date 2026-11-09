@@ -22,6 +22,7 @@
 | `views/relay.rs` | page messages → report/call/board, replies, `ev:view` to frames, `board`/`git` broadcasts |
 | `views/large.rs`, `views/dialog.rs` | the large window (VIEW-147) and the New view dialog (VIEW-151…154) |
 | `views/mac.rs` | the clip container (rounded, pass-through, resize-edge pass-through), occlusion, no context menu, sRGB snapshots, first responder, driver clicks |
+| `views/ink.rs`, `views/mac_ink.rs` | the board's ink over live pages, in a native overlay above each page (track views-polish) |
 | `views/icons.rs` | `ellipsis`, `wand-sparkles` |
 | `parity/views_scenes.py` | the six golden scenes, plus `try-*` interaction scenes (relay page, rename, refresh, resize, drag, create, wheel, keyboard) |
 
@@ -43,10 +44,11 @@ Shared files touched (additive): `board/nodes.rs` (`ViewRenderer` global used by
   units and scales it by the board's zoom with a CSS transform (`__nodusScale`), as 0.9.4's board scaled its iframe.
   WebKit's page zoom laid out the same but bumped zoomed-out text to its 9px "smart minimum" (rows 12% taller), and its
   private view scale lost a pixel to rounding and left a white sliver.
-- **Swap (D3).** After each frame the body's probe hitbox is hit-tested over the page's visible rect: anything drawn
-  later that blocks the pointer (notes, menus, the minimap, dialogs) covers it. Covered, dragged, resized, zooming, an
-  ink tool out, the marquee over it, one of the card's own tooltips up, or parity mode → the page goes transparent and
-  takes no pointer, and GPUI draws a WebKit snapshot (sRGB, 2–16 ms) in its place. Pages keep drawing while the window
+- **Swap (D3).** As each frame paints, the body's probe hitbox is hit-tested over the page's visible rect in that
+  frame (views-polish): anything drawn later that blocks the pointer (notes, menus, the minimap, dialogs), or a
+  tooltip, covers it. Covered, dragged, resized, zooming, an ink tool out, the marquee over it, or parity mode → the
+  page goes transparent and takes no pointer, and GPUI draws a WebKit snapshot (sRGB, 2–16 ms) in its place, in that
+  same frame when one is ready. The board's ink draws over a live page in a native overlay. Pages keep drawing while the window
   is covered (`_setWindowOcclusionDetectionEnabled:NO`) and off screen (the container shrinks rather than hides), so
   snapshots are never blank and pages load for page checks (R13).
 - **Pointer.** While nodes are dragged, a marquee or selection rectangle is up, the viewport moves, or this view is
@@ -93,17 +95,17 @@ VIEW-056/057 (the start rules), 058/059 (placement, edge), 101 (placement), 122/
   written: a covered page steps aside and the body shows its background instead), **no rounded clipping or clip to the
   board** (needs `webview2-com` composition or a window region), **no pointer pass-through** (no `hitTest` there),
   and the activation check is the shell's alone (the page's scale is the shell's CSS transform, as on macOS).
-- Ink strokes over a live page draw under it while no tool is out (with a tool out the page is a snapshot).
-- Only the card's own tooltips swap the page out; another element's GPUI tooltip over a live page is hidden under it.
-- The New view textarea's placeholder doesn't wrap, and it has no resize grip.
+- ~~Ink strokes over a live page draw under it while no tool is out~~ (views-polish: a native overlay above the page).
+- ~~Only the card's own tooltips swap the page out~~ (views-polish: any tooltip over the page covers it).
+- ~~The New view textarea's placeholder doesn't wrap, and it has no resize grip~~ (views-polish).
 - A right-click in a page empties WebKit's context menu (`willOpenMenu:withEvent:`), so none opens, as in 0.9.4; the driver doesn't exercise it.
-- An overlay appearing over a live page shows a frame or two later than the overlay, while the snapshot is taken.
+- ~~An overlay appearing over a live page shows a frame or two later than the overlay~~ (views-polish: decided in the
+  frame's paint, presented with the webview change; only a page never pictured yet is still late).
 
 ## Notes for the orchestrator
 
-- `Window::render_to_image` sometimes drops a group-opacity layer's contents (a menu's rows, a modal's panel) when the
-  frame also holds images (views' snapshots); rerunning the shot gives the right picture. A gpui-fork issue; the large
-  window draws its snapshot above its panel to stay out of the panel's layer.
+- ~~`Window::render_to_image` sometimes drops a group-opacity layer's contents~~ (views-polish: WebKit hadn't
+  delivered the snapshots yet; failed snapshots are retried and the driver waits for pages' pictures; the large
+  window's snapshot is in its panel again).
 - `Views::serve_page` runs on the main thread from WebKit's scheme handler (it's synchronous and cheap).
-- The git broadcast reads `git status` itself (on mount, status events, every 4 s while focused) while a view has a
-  page; when the git UI's model lands it can call `relay` with its status instead of a second read.
+- ~~The git broadcast reads `git status` itself~~ (views-polish: the relay follows the git UI's model).

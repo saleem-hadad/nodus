@@ -350,6 +350,7 @@ impl CapturePanel {
                 .update(cx, |s, cx| s.set_placeholder(placeholder, window, cx));
         }
         div()
+            .relative()
             .pt(px(14.))
             .pb(px(10.))
             .px(px(12.))
@@ -363,12 +364,10 @@ impl CapturePanel {
             )
             // PLAT-137: the capture box asks for spellcheck explicitly.
             .child(crate::components::spellcheck::underlines(
-                "cap-field-spelling".into(),
+                &self.spell,
                 &self.field,
                 px(15.),
-                px(22.),
-                window,
-                cx,
+                1.,
             ))
             .into_any_element()
     }

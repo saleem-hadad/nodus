@@ -237,6 +237,7 @@ impl BoardCanvas {
                 .map(|(i, (id, it))| self.merge_chip(t, i, id, it, cx))
                 .collect();
         let (context, instruction, name) = (d.context.clone(), d.instruction.clone(), d.name.clone());
+        let instruction_spell = d.instruction_spell.clone();
         let dirty = d.m.dirty;
         let instruction_h = d.instruction_h;
         let grip = self.render_instruction_grip(t, cx);
@@ -328,6 +329,12 @@ impl BoardCanvas {
                                     .text_size(TEXT_MD)
                                     .line_height(px(18.85)),
                             )
+                            .child(crate::components::spellcheck::underlines(
+                                &instruction_spell,
+                                &instruction,
+                                TEXT_MD,
+                                1.,
+                            ))
                             .child(grip),
                     ),
             )

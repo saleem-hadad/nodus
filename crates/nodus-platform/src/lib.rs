@@ -11,6 +11,7 @@
 //! - [`shell`]: links to the browser, files to Finder or Explorer.
 //! - [`permissions`]: the microphone, Accessibility and Screen Recording.
 //! - [`app`]: the app's id, packaged or not, the machine, the bundle.
+//! - [`spell`]: the system spell checker, for text fields' underlines.
 
 pub mod app;
 pub mod env;

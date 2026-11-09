@@ -119,14 +119,7 @@ impl ActionDialogView {
         let field = field_frame(t, focused, drafting)
             .child(textarea)
             // PLAT-137: Chromium's spellcheck underlines.
-            .child(spellcheck::underlines(
-                "act-description-spelling".into(),
-                &self.description,
-                TEXT_MD,
-                px(DESCRIPTION_LH),
-                window,
-                cx,
-            ))
+            .child(spellcheck::underlines(&self.spell[0], &self.description, TEXT_MD, 1.))
             // `resize: vertical`: Chromium's grip in the corner.
             .child(div().absolute().right(px(0.5)).bottom(px(0.5)).child(glyph(
                 Glyph::ResizeGrip,
@@ -263,14 +256,7 @@ impl ActionDialogView {
                         .line_height(px(31.))
                         .h(px(31.)),
                 )
-                .child(spellcheck::underlines(
-                    "act-name-spelling".into(),
-                    &self.name,
-                    TEXT_MD,
-                    px(31.),
-                    window,
-                    cx,
-                )),
+                .child(spellcheck::underlines(&self.spell[1], &self.name, TEXT_MD, 1.)),
         );
         let selected = self.model.selected_icon();
         let icons: Vec<AnyElement> = ActionIcon::ALL
@@ -309,14 +295,7 @@ impl ActionDialogView {
                             .h(px(160. - 1. - 4.))
                             .mr(px(-WRAP_MARGIN)),
                     )
-                    .child(spellcheck::underlines(
-                        "act-prompt-spelling".into(),
-                        &self.prompt,
-                        TEXT_SM,
-                        px(PROMPT_LH),
-                        window,
-                        cx,
-                    )),
+                    .child(spellcheck::underlines(&self.spell[2], &self.prompt, TEXT_SM, 1.)),
             );
         vec![
             name.into_any_element(),

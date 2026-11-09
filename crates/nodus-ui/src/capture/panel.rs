@@ -48,6 +48,8 @@ pub struct CapturePanel {
     pub(super) targets: Option<CaptureTargets>,
     pub(super) context: CaptureContext,
     pub(super) field: Entity<TextareaState>,
+    /// The field's spelling (`.cap-field`'s `spellCheck`, PLAT-137).
+    pub(super) spell: Entity<crate::components::spellcheck::Spellcheck>,
     /// The field's text, as typed (untrimmed).
     pub(super) text: String,
     pub(super) attachments: Vec<CaptureAttachment>,
@@ -120,6 +122,7 @@ impl CapturePanel {
             let value = text.clone();
             field.update(cx, |s, cx| s.set_value(value, window, cx));
         }
+        let spell = crate::components::spellcheck::spellcheck(&field, false, window, cx);
         let (voice, voice_project, voice_task, said_task) = mic(&nodus, window, cx);
         let mut rx = nodus.subscribe();
         let events = cx.spawn_in(window, async move |this, cx| {
@@ -199,6 +202,7 @@ impl CapturePanel {
                 shortcut: CaptureShortcut::Ready,
             },
             field,
+            spell,
             text,
             attachments,
             guess: GuessState::default(),

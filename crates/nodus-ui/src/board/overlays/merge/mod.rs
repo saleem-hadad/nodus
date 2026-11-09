@@ -33,6 +33,9 @@ pub(crate) struct MergeDialog {
     pub m: Merge,
     pub context: Entity<TextareaState>,
     pub instruction: Entity<TextareaState>,
+    /// The instruction's spelling (the textarea's default `spellcheck`;
+    /// the context and the name opt out).
+    pub instruction_spell: Entity<crate::components::spellcheck::Spellcheck>,
     pub name: Entity<InputState>,
     pub starting: bool,
     pub start_error: Option<String>,
@@ -88,6 +91,7 @@ impl BoardCanvas {
                 .placeholder("e.g. Combine both approaches and implement …")
                 .context_menu(false)
         });
+        let instruction_spell = crate::components::spellcheck::spellcheck(&instruction, false, window, cx);
         let default_name = m.default_name();
         let name = cx.new(|cx| {
             let mut s = InputState::new(window, cx).context_menu(false);
@@ -151,6 +155,7 @@ impl BoardCanvas {
             m,
             context,
             instruction,
+            instruction_spell,
             name,
             starting: false,
             start_error: None,

@@ -208,6 +208,7 @@ impl BoardCanvas {
                 // back, so the text sits where 0.9.4's textarea puts it; and
                 // the 10px it keeps clear on the right, so it wraps there too.
                 div()
+                    .relative()
                     .flex_1()
                     .min_w_0()
                     .ml(px(-4.))
@@ -221,6 +222,14 @@ impl BoardCanvas {
                             .line_height(px(20.))
                             .py(px(7.))
                             .px(px(0.)),
+                    )
+                    // BAR-005: misspelt words dotted, as Chromium's spellcheck.
+                    .children(
+                        self.overlays
+                            .bar
+                            .spell
+                            .as_ref()
+                            .map(|spell| crate::components::spellcheck::underlines(spell, &field, px(14.), 1.)),
                     ),
             )
             .when(hint, |d| {

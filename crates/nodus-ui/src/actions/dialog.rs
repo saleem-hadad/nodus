@@ -29,6 +29,9 @@ pub struct ActionDialogView {
     pub(super) description: Entity<TextareaState>,
     pub(super) name: Entity<InputState>,
     pub(super) prompt: Entity<TextareaState>,
+    /// Spelling in the description, the name and the prompt (Chromium's
+    /// default `spellcheck`; the name is a single-line field).
+    pub(super) spell: [Entity<crate::components::spellcheck::Spellcheck>; 3],
     /// The dialog's own focus, for its keys when no field has them.
     pub(super) focus: FocusHandle,
     /// The step whose field was last given the keyboard (`autoFocus`).
@@ -104,6 +107,14 @@ impl ActionDialogView {
         });
         let mut subscriptions = subscriptions;
         subscriptions.push(keys);
+        let spell = {
+            use crate::components::spellcheck::spellcheck;
+            [
+                spellcheck(&description, false, window, cx),
+                spellcheck(&name, true, window, cx),
+                spellcheck(&prompt, false, window, cx),
+            ]
+        };
         Self {
             state,
             project_id,
@@ -112,6 +123,7 @@ impl ActionDialogView {
             description,
             name,
             prompt,
+            spell,
             focus: cx.focus_handle(),
             focused_step: None,
             _subscriptions: subscriptions,

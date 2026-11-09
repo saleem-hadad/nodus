@@ -24,6 +24,8 @@ use crate::board::layout::card_title;
 /// The bar's state, per board mount (BAR-041).
 pub(crate) struct Bar {
     pub field: Option<Entity<TextareaState>>,
+    /// BAR-005: spelling (the textarea's `spellCheck`).
+    pub spell: Option<Entity<crate::components::spellcheck::Spellcheck>>,
     /// The field's text, as last seen.
     pub text: String,
     pub target: Option<Target>,
@@ -62,6 +64,7 @@ impl Default for Bar {
     fn default() -> Self {
         Self {
             field: None,
+            spell: None,
             text: String::new(),
             target: None,
             color: FolderColor::Yellow,
@@ -118,6 +121,7 @@ impl BoardCanvas {
             _ => {}
         });
         self.overlays.bar.field = Some(field.clone());
+        self.overlays.bar.spell = Some(crate::components::spellcheck::spellcheck(&field, false, window, cx));
         self.overlays.bar._subscriptions.push(sub);
         field
     }

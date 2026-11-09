@@ -398,6 +398,8 @@ fn play(
 /// Writing in a note (NOTEUI-011…NOTEUI-017).
 pub struct NoteEditor {
     field: Entity<TextareaState>,
+    /// The note's spelling (`.note-input` is a textarea, spellchecked).
+    spell: Entity<crate::components::spellcheck::Spellcheck>,
     saver: Rc<Saver>,
     _subscriptions: Vec<Subscription>,
 }
@@ -488,16 +490,18 @@ fn editor(env: &Rc<BoardEnv>, note: &BoardNote, window: &mut Window, cx: &mut Ap
             let release = cx.on_release(move |_, cx| releasing.flush(cx));
             let focus = field.clone();
             window.defer(cx, move |window, cx| focus.update(cx, |f, cx| f.focus(window, cx)));
+            let spell = crate::components::spellcheck::spellcheck(&field, false, window, cx);
             NoteEditor {
                 field,
+                spell,
                 saver,
                 _subscriptions: vec![sub, release],
             }
         }
     });
-    let (field, saver) = {
+    let (field, saver, spell) = {
         let e = editor.read(cx);
-        (e.field.clone(), e.saver.clone())
+        (e.field.clone(), e.saver.clone(), e.spell.clone())
     };
     // The note changes under the editor (a move, a recolour): save onto it.
     *saver.note.borrow_mut() = note.clone();
@@ -551,7 +555,13 @@ fn editor(env: &Rc<BoardEnv>, note: &BoardNote, window: &mut Window, cx: &mut Ap
                         .font_family(fonts::UI)
                         .text_color(t.note_ink)
                         .into_any_element(),
-                }),
+                })
+                .child(crate::components::spellcheck::underlines(
+                    &spell,
+                    &field,
+                    z.px(15.),
+                    z.f(1.),
+                )),
         )
         .into_any_element()
 }

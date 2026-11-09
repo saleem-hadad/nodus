@@ -4,8 +4,11 @@ use gpui::{
     App, AppContext as _, Bounds, Global, TitlebarOptions, WindowBackgroundAppearance, WindowBounds, WindowHandle,
     WindowOptions, point, px, size,
 };
+use std::sync::Arc;
+
 use nodus_core::Nodus;
 
+use crate::shell::core_shell::Flags;
 use crate::shell::root::Shell;
 
 /// The core, for whoever opens a window.
@@ -69,14 +72,40 @@ pub fn open_main_window(cx: &mut App) -> Option<WindowHandle<gpui::base::Root>> 
         app_id: Some("dev.saleem.nodus".into()),
         ..WindowOptions::default()
     };
+    let flags = cx.try_global::<Flags>().map(|f| Arc::clone(&f.0));
     let mut shell = None;
     let handle = cx
         .open_window(options, |window, cx| {
             let view = cx.new(|cx| Shell::new(nodus.clone(), window, cx));
             shell = Some(view.clone());
-            cx.new(|cx| gpui::base::Root::new(view, window, cx))
+            cx.new(|cx| {
+                // Notifications only show while the app is in the background (HOST-205).
+                if let Some(flags) = flags.clone() {
+                    flags.set_focused(window.is_window_active());
+                    cx.observe_window_activation(window, move |_, window, _| {
+                        flags.set_focused(window.is_window_active());
+                    })
+                    .detach();
+                }
+                gpui::base::Root::new(view, window, cx)
+            })
         })
         .ok()?;
+    if let Some(flags) = cx.try_global::<Flags>() {
+        flags.0.set_open(true);
+    }
+    // UPD-080: the update status as it is now; changes arrive as events.
+    if let Some(view) = &shell {
+        let state = view.read(cx).state.clone();
+        cx.spawn(async move |cx| {
+            let status = nodus.updates().status().await;
+            state.update(cx, |s, cx| {
+                s.update_status = Some(status);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
     let _ = handle.update(cx, |_, window, cx| {
         #[cfg(target_os = "macos")]
         crate::mac::tag_layer_srgb(window);

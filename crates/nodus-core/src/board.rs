@@ -21,7 +21,9 @@ impl BoardApi<'_> {
     /// Capture is told the board opened first (SESS-071 step 1) once the
     /// capture track is wired.
     pub async fn load(&self, project_id: &str) -> CommandResult<BoardSnapshot> {
-        self.nodus.inner.board.load(project_id).on("board:load")
+        self.nodus
+            .on_core(async { self.nodus.inner.board.load(project_id).on("board:load") })
+            .await
     }
 
     /// `board:save-nodes` (SESS-090…099): moves, renames, archives (stopping
@@ -29,67 +31,107 @@ impl BoardApi<'_> {
     /// is removed rather than archived.
     pub async fn save_nodes(&self, project_id: &str, patches: &[NodePatch]) -> CommandResult<()> {
         self.nodus
-            .inner
-            .board
-            .save_nodes(project_id, patches)
-            .on("board:save-nodes")
+            .on_core(async {
+                self.nodus
+                    .inner
+                    .board
+                    .save_nodes(project_id, patches)
+                    .on("board:save-nodes")
+            })
+            .await
     }
 
     /// `board:save-archive` (SESS-106).
     pub async fn save_archive(&self, project_id: &str, rect: Rect) {
-        self.nodus.inner.board.save_archive(project_id, rect);
+        self.nodus
+            .on_core(async {
+                self.nodus.inner.board.save_archive(project_id, rect);
+            })
+            .await;
     }
 
     /// `board:save-viewport` (SESS-106).
     pub async fn save_viewport(&self, project_id: &str, viewport: Viewport) {
-        self.nodus.inner.board.save_viewport(project_id, viewport);
+        self.nodus
+            .on_core(async {
+                self.nodus.inner.board.save_viewport(project_id, viewport);
+            })
+            .await;
     }
 
     /// `board:remove-node` (SESS-107, SESS-108): the card goes, its session
     /// is hidden for good unless it's a terminal, and this waits for its
     /// process to stop. The transcript stays.
     pub async fn remove_node(&self, project_id: &str, session_id: &str) {
-        self.nodus.inner.board.remove_node(project_id, session_id).await;
+        self.nodus
+            .on_core(async {
+                self.nodus.inner.board.remove_node(project_id, session_id).await;
+            })
+            .await;
     }
 
     /// `board:save-section` (SESS-100): creates or updates a section.
     pub async fn save_section(&self, project_id: &str, section: &BoardSection) {
-        self.nodus.inner.board.save_section(project_id, &to_json(section));
+        self.nodus
+            .on_core(async {
+                self.nodus.inner.board.save_section(project_id, &to_json(section));
+            })
+            .await;
     }
 
     /// `board:remove-section` (SESS-101): its cards stay where they are.
     pub async fn remove_section(&self, project_id: &str, section_id: &str) {
-        self.nodus.inner.board.remove_section(project_id, section_id);
+        self.nodus
+            .on_core(async {
+                self.nodus.inner.board.remove_section(project_id, section_id);
+            })
+            .await;
     }
 
     /// `board:name-section` (SESS-102): a short name from Claude for a
     /// section holding these sessions, once the login shell's environment is
     /// in. `These sessions have nothing to name the section after yet`.
     pub async fn name_section(&self, project_id: &str, session_ids: &[String]) -> CommandResult<String> {
-        let env = self.nodus.env().await;
         self.nodus
-            .inner
-            .board
-            .name_section(project_id, session_ids, &env)
+            .on_core(async {
+                let env = self.nodus.env().await;
+                self.nodus
+                    .inner
+                    .board
+                    .name_section(project_id, session_ids, &env)
+                    .await
+                    .on("board:name-section")
+            })
             .await
-            .on("board:name-section")
     }
 
     /// `board:save-note` (SESS-103): creates or updates a sticky note.
     pub async fn save_note(&self, project_id: &str, note: &BoardNote) {
-        self.nodus.inner.board.save_note(project_id, &to_json(note));
+        self.nodus
+            .on_core(async {
+                self.nodus.inner.board.save_note(project_id, &to_json(note));
+            })
+            .await;
     }
 
     /// `board:remove-notes` (SESS-104).
     pub async fn remove_notes(&self, project_id: &str, note_ids: &[String]) {
-        self.nodus.inner.board.remove_notes(project_id, note_ids);
+        self.nodus
+            .on_core(async {
+                self.nodus.inner.board.remove_notes(project_id, note_ids);
+            })
+            .await;
     }
 
     /// `board:save-ink` (SESS-105, INK-012): replaces the board's ink with
     /// these strokes, cleaned as views-tools' `cleanInk` does.
     pub async fn save_ink(&self, project_id: &str, strokes: &[InkStroke]) {
-        let strokes = nodus_board::ink::clean_ink(&to_json(&strokes));
-        self.nodus.inner.board.save_ink(project_id, strokes);
+        self.nodus
+            .on_core(async {
+                let strokes = nodus_board::ink::clean_ink(&to_json(&strokes));
+                self.nodus.inner.board.save_ink(project_id, strokes);
+            })
+            .await;
     }
 }
 

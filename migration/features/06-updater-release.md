@@ -706,8 +706,8 @@ No macOS test exists in TypeScript. Recommended Rust additions, marked as such s
 - [x] UPD-010 Clean-up starts at start-up; every check awaits it
 - [x] UPD-011 macOS registers the swap on will-quit; Windows registers nothing
 - [x] UPD-012 Auto check at 30 000 ms, then every 14 400 000 ms from start, only while `autoUpdate` is on at that tick
-- [ ] UPD-013 `settings:update` with truthy `autoUpdate` runs a non-asked check
-- [ ] UPD-014 `autoUpdate` defaults to true (`!== false`)
+- [x] UPD-013 `settings:update` with truthy `autoUpdate` runs a non-asked check
+- [x] UPD-014 `autoUpdate` defaults to true (`!== false`)
 - [x] UPD-015 `check()` is a no-op while busy, staged or off
 - [x] UPD-016 Lookup: `checking`, GET LATEST_URL with Accept + `Nodus/<v>` UA, 20 s timeout, no token
 - [x] UPD-017 Lookup throws/times out → `Couldn’t reach GitHub to check for updates.`
@@ -769,31 +769,31 @@ No macOS test exists in TypeScript. Recommended Rust additions, marked as such s
 - [x] UPD-073 macOS force-detaches leftover `mount-*` before deleting
 - [x] UPD-074 Everything else deleted (rm -rf / fs.rm); errors logged `[updater] cleanup failed`
 - [x] UPD-075 Missing `updates/` is fine
-- [ ] UPD-076 `updates:status` returns the status
-- [ ] UPD-077 `updates:check` runs `check(true)`, resolves after the lookup
-- [ ] UPD-078 `updates:install` runs `restartToUpdate()`
-- [ ] UPD-079 Menu `Check for Updates…` opens Settings then `check(true)`; Mac app menu after About, else File after Settings…
-- [ ] UPD-080 `useUpdateStatus` null until the first answer, then follows events
+- [x] UPD-076 `updates:status` returns the status
+- [x] UPD-077 `updates:check` runs `check(true)`, resolves after the lookup
+- [x] UPD-078 `updates:install` runs `restartToUpdate()`
+- [x] UPD-079 Menu `Check for Updates…` opens Settings then `check(true)`; Mac app menu after About, else File after Settings…
+- [x] UPD-080 `useUpdateStatus` null until the first answer, then follows events
 - [ ] UPD-081 Title-bar `Restart to Update` only in `ready`, with the platform tooltip
 - [ ] UPD-082 Settings `Updates`: `Nodus <current>` + state hint strings
 - [ ] UPD-083 Button: `Restart to Update` (ready), none (off), else `Check Now` disabled while null/checking/downloading
 - [ ] UPD-084 Switch `Download updates automatically` hidden when off, platform hint, disabled until settings load
 - [ ] UPD-085 Error state shows `You can also download the latest version yourself.` linking to releases/latest
-- [ ] REL-001 One version source feeds status, UA, plist versions, DMG name, exe/NSIS version fields
+- [x] REL-001 One version source feeds status, UA, plist versions, DMG name, exe/NSIS version fields
 - [ ] REL-002 Release workflow on `v*` tags, `contents: write`
-- [ ] REL-003 Tag/version mismatch fails with the `::error::Tag …` message
-- [ ] REL-004 macOS release job on macos-latest runs the type check and tests first
-- [ ] REL-005 Certificate from `CSC_LINK`/`CSC_KEY_PASSWORD` into a throwaway keychain (script verbatim)
-- [ ] REL-006 Only the packaging step sees `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`
-- [ ] REL-007 `Nodus-arm64.dmg` and `Nodus-x64.dmg`, thin per arch, minimum macOS 13.0
+- [x] REL-003 Tag/version mismatch fails with the `::error::Tag …` message
+- [x] REL-004 macOS release job on macos-latest runs the type check and tests first
+- [x] REL-005 Certificate from `CSC_LINK`/`CSC_KEY_PASSWORD` into a throwaway keychain (script verbatim)
+- [x] REL-006 Only the packaging step sees `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`
+- [x] REL-007 `Nodus-arm64.dmg` and `Nodus-x64.dmg`, thin per arch, minimum macOS 13.0
 - [ ] REL-008 Developer ID signature, hardened runtime, entitlements on all code, timestamp
 - [ ] REL-009 App notarized and stapled; DMG unsigned and unstapled
-- [ ] REL-010 DMG UDZO zlib level 9, HFS+, volume `Nodus <v>-<arch>`, no SLA, unencrypted
-- [ ] REL-011 DMG contents and Finder layout (540×380 window at 400,530; icons 80/12; app 130,220; Applications 410,220)
-- [ ] REL-012 Windows release job on windows-latest builds both installers, no tests
+- [x] REL-010 DMG UDZO zlib level 9, HFS+, volume `Nodus <v>-<arch>`, no SLA, unencrypted
+- [x] REL-011 DMG contents and Finder layout (540×380 window at 400,530; icons 80/12; app 130,220; Applications 410,220)
+- [x] REL-012 Windows release job on windows-latest builds both installers, no tests
 - [ ] REL-013 Race-tolerant `gh release view || create || view`, upload `--clobber`, generated notes
 - [ ] REL-014 Release published immediately (not draft/prerelease)
-- [ ] REL-015 No blockmaps or latest*.yml
+- [x] REL-015 No blockmaps or latest*.yml
 - [ ] REL-016 NSIS one-click per-user into `%LOCALAPPDATA%\Programs\nodus` (or registry InstallLocation, or `/D=`)
 - [ ] REL-017 Installer flags `/S`, `--updated`, `--force-run`, `--keep-shortcuts`, `--no-desktop-shortcut`, `--delete-app-data`, `--allusers`, `--currentuser`
 - [ ] REL-018 Single-instance mutex `99c2a492-c8ad-53bf-923b-1df868e91b51`
@@ -805,24 +805,24 @@ No macOS test exists in TypeScript. Recommended Rust additions, marked as such s
 - [ ] REL-024 `--force-run` launches via the Start menu shortcut with `--updated`
 - [ ] REL-025 Installer copies itself to `%LOCALAPPDATA%\nodus-updater\installer.exe`
 - [ ] REL-026 Uninstall keeps `%APPDATA%\Nodus` unless `--delete-app-data`
-- [ ] REL-027 Installer and exe unsigned (SmartScreen: More info › Run anyway)
+- [x] REL-027 Installer and exe unsigned (SmartScreen: More info › Run anyway)
 - [ ] REL-028 `Nodus.exe` icon (index 0) and version strings
-- [ ] REL-029 CI triggers, `contents: read`, concurrency `ci-${{ github.ref }}` cancel-in-progress
-- [ ] REL-030 CI macOS job: install, typecheck, test, build
-- [ ] REL-031 CI Windows job: subset tests, x64 installer, silent `/S` install, smoke, `windows` artifact
+- [x] REL-029 CI triggers, `contents: read`, concurrency `ci-${{ github.ref }}` cancel-in-progress
+- [x] REL-030 CI macOS job: install, typecheck, test, build
+- [x] REL-031 CI Windows job: subset tests, x64 installer, silent `/S` install, smoke, `windows` artifact
 - [ ] REL-032 Smoke: isolated userData, projects/board/terminal `nodus-42`, light and dark screenshots
-- [ ] REL-033 Smoke: host welcome lists the terminal; Windows key matches `host.key`
+- [x] REL-033 Smoke: host welcome lists the terminal; Windows key matches `host.key`
 - [ ] REL-034 Smoke (Windows): Ctrl+W board/terminal and Ctrl+Shift+W behaviors
-- [ ] REL-035 Smoke cleanup: host shutdown, kill app, copy `host.log`, exit code
-- [ ] REL-036 Actions pinned by SHA, `persist-credentials: false`
+- [x] REL-035 Smoke cleanup: host shutdown, kill app, copy `host.log`, exit code
+- [x] REL-036 Actions pinned by SHA, `persist-credentials: false`
 - [ ] REL-037 `postinstall.cjs` is Electron-only and is removed at cutover
 - [ ] REL-038 README/site links `releases/latest/download/<asset>` keep working
 - [ ] REL-039 First Rust release > 0.9.4, tag `vX.Y.Z` with no suffix
 - [ ] REL-040 Contract holds for every Mac 0.6.0–0.9.4 and Windows 0.9.0–0.9.4 updater
 - [ ] REL-041 Rust .app passes deep-strict verify, id, version and same TeamIdentifier
-- [ ] REL-042 Rust app starts via `open -n` and honors `open --env NODUS_USER_DATA`
+- [x] REL-042 Rust app starts via `open -n` and honors `open --env NODUS_USER_DATA`
 - [ ] REL-043 Rust first launch cleans up the 0.9.4 `updates/` leftovers
 - [ ] REL-044 Rust installer run as `--updated /S --force-run` replaces the Electron install in place and starts the app
-- [ ] REL-045 Rust app ignores the `--updated` argument
+- [x] REL-045 Rust app ignores the `--updated` argument
 - [ ] REL-046 Same designated requirement as 0.9.4 (TCC grants and Keychain item survive)
 - [ ] REL-047 Rust releases keep the same contract; the Rust updater implements UPD-001…UPD-085

@@ -449,6 +449,18 @@ async fn core(nodus: &nodus_core::Nodus, command: &Value) -> Result<Value, Strin
             nodus.app().menu_command(&text(0)).await;
             Ok(Value::Null)
         }
+        "projects.stats" => serde_json::to_value(nodus.projects().stats().await).map_err(|e| e.to_string()),
+        "sessions.create" => {
+            let opts: nodus_domain::CreateSessionOptions = serde_json::from_value(arg(1)).map_err(|e| e.to_string())?;
+            serde_json::to_value(nodus.sessions().create(&text(0), &opts).await.map_err(err)?)
+                .map_err(|e| e.to_string())
+        }
+        "sessions.kill" => {
+            nodus.sessions().kill(&text(0)).await;
+            Ok(Value::Null)
+        }
+        "updates.status" => serde_json::to_value(nodus.updates().status().await).map_err(|e| e.to_string()),
+        "voice.keySource" => serde_json::to_value(nodus.voice().key_source().await).map_err(|e| e.to_string()),
         other => Err(format!("unknown core method {other}")),
     }
 }

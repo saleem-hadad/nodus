@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Hardened-runtime entitlements for Nodus.app (the app and the session host,
+     which is the same binary run as `Nodus host`). The prompt bar's mic needs
+     audio-input, and floating capture needs Apple Events to read the browser
+     tab in front; without them the hardened runtime blocks both.
+     build/entitlements.mac.plist also allowed JIT and unsigned executable
+     memory, which only V8 needed: views' pages run in WKWebView's own
+     WebContent process, which carries WebKit's entitlements, not the app's.
+     Library validation stays on, as it was. -->
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.device.audio-input</key>
+  <true/>
+  <key>com.apple.security.automation.apple-events</key>
+  <true/>
+</dict>
+</plist>

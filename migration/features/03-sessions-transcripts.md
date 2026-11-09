@@ -901,15 +901,15 @@ Cross-domain dependencies: 01 (store `getBoard`/`getProject`/`save`, env `spawnE
 - [x] SESS-127 Terminal shell
 - [x] SESS-128 Process placement
 - [x] SESS-129 Initial status
-- [ ] SESS-130 One process per session
-- [ ] SESS-131 Host first
+- [x] SESS-130 One process per session
+- [x] SESS-131 Host first
 - [x] SESS-132 Action run args
 - [x] SESS-133 Brain args
-- [ ] SESS-134 Brain launches
-- [ ] SESS-135 Open a live session
+- [x] SESS-134 Brain launches
+- [x] SESS-135 Open a live session
 - [x] SESS-136 Open a stopped session
 - [x] SESS-137 Reopened runs
-- [ ] SESS-138 Write
+- [x] SESS-138 Write
 - [x] SESS-139 Takeover test
 - [x] SESS-140 Claiming a run
 - [x] SESS-141 Blank prompt
@@ -917,14 +917,14 @@ Cross-domain dependencies: 01 (store `getBoard`/`getProject`/`save`, env `spawnE
 - [x] SESS-143 Waiting sessions
 - [x] SESS-144 Live send
 - [x] SESS-145 Resume to send
-- [ ] SESS-146 Shared with capture
-- [ ] SESS-147 Resize
-- [ ] SESS-148 Kill
+- [x] SESS-146 Shared with capture
+- [x] SESS-147 Resize
+- [x] SESS-148 Kill
 - [x] SESS-149 Stoppable
 - [x] SESS-150 Stop without asking
 - [x] SESS-151 Stop confirmation title
 - [x] SESS-152 Stop confirmation message
-- [ ] SESS-153 Stop waits
+- [x] SESS-153 Stop waits
 - [x] SESS-154 On done
 - [x] SESS-155 Finishing a run
 - [x] SESS-156 Stale runs
@@ -935,7 +935,7 @@ Cross-domain dependencies: 01 (store `getBoard`/`getProject`/`save`, env `spawnE
 - [x] SESS-161 Has transcript
 - [x] SESS-162 Session transcript
 - [x] SESS-163 Agent transcript
-- [ ] SESS-164 Agents list
+- [x] SESS-164 Agents list
 - [x] SESS-165 No conversation
 - [x] SESS-166 Summary titles
 - [x] SESS-167 Focus
@@ -974,6 +974,6 @@ Cross-domain dependencies: 01 (store `getBoard`/`getProject`/`save`, env `spawnE
 - [x] SESS-200 Intersects
 - [x] SESS-201 Free spot
 - [x] SESS-202 Spot beside
-- [ ] SESS-203 Events without a window
+- [x] SESS-203 Events without a window
 - [x] SESS-204 Unknown project ids
 - [x] SESS-205 Known limitations kept

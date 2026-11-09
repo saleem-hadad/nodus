@@ -15,13 +15,17 @@ pub struct UpdatesApi<'a> {
 impl UpdatesApi<'_> {
     /// `updates:status` (UPD-076).
     pub async fn status(&self) -> UpdateStatus {
-        self.nodus.inner.updater.status()
+        self.nodus.on_core(async { self.nodus.inner.updater.status() }).await
     }
 
     /// `updates:check` (UPD-077): looks for a newer version now, as the user
     /// asked, and starts downloading it; done once the lookup is.
     pub async fn check(&self) {
-        self.nodus.inner.updater.check(true).await;
+        self.nodus
+            .on_core(async {
+                self.nodus.inner.updater.check(true).await;
+            })
+            .await;
     }
 
     /// `updates:install` (UPD-078): quits into the downloaded version. On
@@ -29,12 +33,16 @@ impl UpdatesApi<'_> {
     /// instead: the window shows that question (`Stop and Update`, `Not
     /// Now`) and answers with [`UpdatesApi::answer_stop_sessions`].
     pub async fn install(&self) -> RestartOutcome {
-        self.nodus.inner.updater.restart_to_update().await
+        self.nodus
+            .on_core(async { self.nodus.inner.updater.restart_to_update().await })
+            .await
     }
 
     /// The answer to [`RestartOutcome::Ask`]: `Stop and Update` (true) or
     /// `Not Now` (false, and closing the question).
     pub async fn answer_stop_sessions(&self, stop: bool) -> RestartOutcome {
-        self.nodus.inner.updater.answer_stop_sessions(stop).await
+        self.nodus
+            .on_core(async { self.nodus.inner.updater.answer_stop_sessions(stop).await })
+            .await
     }
 }

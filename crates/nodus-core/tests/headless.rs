@@ -748,6 +748,15 @@ async fn a_view_starts_its_brain_and_a_relaunch_adopts_the_host() {
             payload: json!({ "tab": 2 }),
         }
     );
+    // VIEW-066: the project folder's git status, as the window reads it.
+    let git = nodus
+        .views()
+        .call(&project.id, &view.id, "git", &Value::Null)
+        .await
+        .unwrap();
+    if repo.join(".git").exists() {
+        assert!(git["files"].is_array(), "{git}");
+    }
     let err = nodus
         .views()
         .call(&project.id, "missing", "sessions", &Value::Null)

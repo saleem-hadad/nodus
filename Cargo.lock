@@ -3954,6 +3954,7 @@ dependencies = [
 name = "nodus"
 version = "0.9.4"
 dependencies = [
+ "embed-resource",
  "nodus-domain",
  "nodus-host",
  "nodus-host-proto",
@@ -4026,8 +4027,10 @@ name = "nodus-core"
 version = "0.9.4"
 dependencies = [
  "indexmap",
+ "nodus-actions",
  "nodus-board",
  "nodus-domain",
+ "nodus-git",
  "nodus-host",
  "nodus-host-proto",
  "nodus-platform",
@@ -4037,6 +4040,7 @@ dependencies = [
  "nodus-transcripts",
  "nodus-updater",
  "nodus-views",
+ "nodus-voice",
  "serde",
  "serde_json",
  "tempfile",
@@ -4214,6 +4218,7 @@ version = "0.9.4"
 dependencies = [
  "anyhow",
  "block2 0.6.2",
+ "dispatch2",
  "gpui-kit",
  "image",
  "indexmap",

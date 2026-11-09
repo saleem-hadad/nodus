@@ -15,15 +15,23 @@ impl MenuApi<'_> {
     /// the check goes (the `settings` menu command), and a check the user
     /// asked for starts. Done once the lookup is.
     pub async fn check_for_updates(&self) {
-        self.nodus.emit(Event::Menu(MenuCommand::Settings));
-        self.nodus.inner.updater.check(true).await;
+        self.nodus
+            .on_core(async {
+                self.nodus.emit(Event::Menu(MenuCommand::Settings));
+                self.nodus.inner.updater.check(true).await;
+            })
+            .await;
     }
 
     /// `Quit and Stop Sessions` (PLAT-034, HOST-112, HOST-225): stops every
     /// session and the session host, waiting until the host has gone or 5 s
     /// have passed, then quits through the shell, even if stopping failed.
     pub async fn quit_and_stop_sessions(&self) {
-        self.nodus.inner.host.stop_all().await;
-        self.nodus.inner.shell.quit();
+        self.nodus
+            .on_core(async {
+                self.nodus.inner.host.stop_all().await;
+                self.nodus.inner.shell.quit();
+            })
+            .await;
     }
 }

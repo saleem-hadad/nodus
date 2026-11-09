@@ -2,9 +2,9 @@
 //! UI-116…UI-152): Appearance, Focus, Floating capture, Notifications, Voice
 //! prompts and Updates.
 //!
-//! The capture shortcut state (07), the voice key (05) and the update
-//! status (06) come from their tracks' core APIs; until those land their
-//! rows render as 0.9.4 renders them before the answer arrives.
+//! The voice key (05) and the update status (06) come from the core; the
+//! capture shortcut state (07) comes with the capture panel track, and until
+//! then its rows render as 0.9.4 renders them before the answer arrives.
 
 pub mod preview;
 
@@ -89,12 +89,30 @@ impl SettingsDialog {
         // UI-119: focus moves into the dialog, onto the panel itself.
         window.focus(&panel, cx);
         let key_field = new_input("", "xAI API key", true, window, cx);
-        cx.subscribe_in(&key_field, window, |this, field, e: &InputEvent, _, cx| {
+        cx.subscribe_in(&key_field, window, |this, field, e: &InputEvent, window, cx| {
             if let InputEvent::PressEnter { .. } = e {
                 let value = field.read(cx).value().to_string();
-                this.save_key(&value, cx);
+                this.save_key(&value, window, cx);
             }
             cx.notify();
+        })
+        .detach();
+        let nodus = state.read(cx).nodus.clone();
+        // UI-139: the key field waits for where the key comes from.
+        let voice = nodus.clone();
+        cx.spawn_in(window, async move |this, cx| {
+            let source = voice.voice().key_source().await;
+            let _ = this.update_in(cx, |this, window, cx| this.set_source(source, window, cx));
+        })
+        .detach();
+        // UPD-080: the update status as it is now; changes arrive as events.
+        let status_state = state.clone();
+        cx.spawn(async move |_, cx| {
+            let status = nodus.updates().status().await;
+            status_state.update(cx, |s, cx| {
+                s.update_status = Some(status);
+                cx.notify();
+            });
         })
         .detach();
         let stops = Stops {
@@ -124,14 +142,60 @@ impl SettingsDialog {
         }
     }
 
-    /// UI-142: saves a non-blank key. The voice key API comes with the voice
-    /// track (05); until then nothing is saved.
-    fn save_key(&mut self, value: &str, cx: &mut Context<'_, Self>) {
+    /// UI-139, UI-140: where the key comes from, and the field's placeholder for it.
+    fn set_source(&mut self, source: Option<VoiceKeySource>, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.key_source = Some(source);
+        let placeholder = if source == Some(VoiceKeySource::Settings) {
+            "Replace the saved xAI API key"
+        } else {
+            "xAI API key"
+        };
+        self.key_field
+            .update(cx, |field, cx| field.set_placeholder(placeholder, window, cx));
+        cx.notify();
+    }
+
+    /// UI-142, UI-145: saves a non-blank key (the core trims it), then shows
+    /// where the key comes from and empties the field, focus staying in it; a
+    /// failure shows its message until the next try.
+    fn save_key(&mut self, value: &str, window: &mut Window, cx: &mut Context<'_, Self>) {
         if value.trim().is_empty() {
             return;
         }
         self.key_error = None;
         cx.notify();
+        let nodus = self.state.read(cx).nodus.clone();
+        let key = value.to_owned();
+        cx.spawn_in(window, async move |this, cx| {
+            let saved = nodus.voice().set_key(Some(&key)).await;
+            let _ = this.update_in(cx, |this, window, cx| match saved {
+                Ok(source) => {
+                    this.set_source(source, window, cx);
+                    this.key_field.update(cx, |field, cx| field.set_value("", window, cx));
+                }
+                Err(err) => {
+                    this.key_error = Some(err.message);
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// UI-144: forgets the saved key; the shell's takes over, if there is one.
+    fn remove_key(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let nodus = self.state.read(cx).nodus.clone();
+        cx.spawn_in(window, async move |this, cx| {
+            let removed = nodus.voice().set_key(None).await;
+            let _ = this.update_in(cx, |this, window, cx| match removed {
+                Ok(source) => this.set_source(source, window, cx),
+                Err(err) => {
+                    this.key_error = Some(err.message);
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
     }
 
     fn close(&mut self, cx: &mut Context<'_, Self>) {
@@ -223,9 +287,9 @@ impl Render for SettingsDialog {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let t = theme::tokens(cx);
         let platform = Platform::CURRENT;
-        let (settings, update_status) = {
+        let (settings, update_status, nodus) = {
             let s = self.state.read(cx);
-            (s.settings.clone(), s.update_status.clone())
+            (s.settings.clone(), s.update_status.clone(), s.nodus.clone())
         };
         let loaded = settings.is_some();
         let key_value = self.key_field.read(cx).value().to_string();
@@ -575,10 +639,11 @@ impl Render for SettingsDialog {
                     .label("Save")
                     .disabled(key_blank)
                     .focus(&self.stops.save)
-                    .on_click(move |_, _, cx| {
-                        save_view.update(cx, |d, cx| d.save_key(&save_value, cx));
+                    .on_click(move |_, window, cx| {
+                        save_view.update(cx, |d, cx| d.save_key(&save_value, window, cx));
                     }),
             );
+        let remove_view = cx.entity();
         let key_hint: AnyElement = match source {
             Some(Some(VoiceKeySource::Settings)) => div()
                 .flex()
@@ -588,7 +653,9 @@ impl Render for SettingsDialog {
                 } else {
                     "Saved encrypted for your Windows account.\u{a0}"
                 })
-                .child(link("key-remove", "Remove", None, t))
+                .child(action_link("key-remove", "Remove", t, move |window, cx| {
+                    remove_view.update(cx, |d, cx| d.remove_key(window, cx));
+                }))
                 .into_any_element(),
             Some(Some(VoiceKeySource::Env)) => div()
                 .child("Using XAI_API_KEY from your shell. A key saved here takes its place.")
@@ -638,6 +705,10 @@ impl Render for SettingsDialog {
                     .primary()
                     .label("Restart to Update")
                     .focus(&self.stops.check)
+                    .on_click({
+                        let nodus = nodus.clone();
+                        move |_, _, cx| crate::shell::core_shell::install_update(nodus.clone(), cx)
+                    })
                     .into_any_element(),
             ),
             Some(UpdateState::Off { .. }) => None,
@@ -646,6 +717,13 @@ impl Render for SettingsDialog {
                     .label("Check Now")
                     .disabled(update_status.is_none() || busy)
                     .focus(&self.stops.check)
+                    .on_click({
+                        let nodus = nodus.clone();
+                        move |_, _, cx| {
+                            let nodus = nodus.clone();
+                            cx.spawn(async move |_| nodus.updates().check().await).detach();
+                        }
+                    })
                     .into_any_element(),
             ),
         };
@@ -815,6 +893,23 @@ fn link(id: &'static str, text: &'static str, url: Option<&'static str>, t: Toke
                 nodus_platform::shell::open_external(url);
             })
         })
+        .child(text)
+        .into_any_element()
+}
+
+/// A link that does something in the app rather than open a page.
+fn action_link(
+    id: &'static str,
+    text: &'static str,
+    t: Tokens,
+    on_click: impl Fn(&mut Window, &mut App) + 'static,
+) -> AnyElement {
+    div()
+        .id(id)
+        .text_color(t.accent)
+        .cursor(CursorStyle::Arrow)
+        .hover(Styled::underline)
+        .on_click(move |_, window, cx| on_click(window, cx))
         .child(text)
         .into_any_element()
 }

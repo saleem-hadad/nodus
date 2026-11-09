@@ -1,0 +1,127 @@
+# Packages the native app on every pull request and push to main that touches
+# it, unsigned, and checks the packages as a release would (packaging/,
+# migration/tracks/packaging.md): macOS bundles and DMGs for arm64 and x64,
+# replayed through 0.9.4's updater checks and driven through the test driver;
+# Windows installers for x64 and arm64, installed fresh, uninstalled, and
+# taken over from a real 0.9.4 install the way its updater does it.
+name: Rust packages
+
+on:
+  pull_request:
+    paths:
+      - 'crates/**'
+      - 'third_party/**'
+      - 'packaging/**'
+      - 'build/icon*'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - '.github/workflows/rust-package.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'crates/**'
+      - 'third_party/**'
+      - 'packaging/**'
+      - 'build/icon*'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - '.github/workflows/rust-package.yml'
+
+permissions:
+  contents: read
+
+# A newer push to the same branch makes an older run moot.
+concurrency:
+  group: rust-package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      # The toolchain rust-toolchain.toml pins, and Intel as well as Apple silicon.
+      - run: rustup toolchain install && rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      - name: Bundle and DMG (arm64, ad-hoc signed)
+        run: packaging/macos/bundle.sh arm64 && packaging/macos/dmg.sh arm64
+      - name: Bundle and DMG (x64, ad-hoc signed)
+        run: packaging/macos/bundle.sh x64 && packaging/macos/dmg.sh x64
+
+      # What 0.9.4's updater checks, but the team: these aren't signed with the
+      # Developer ID, which only the release workflow has.
+      - name: Handoff gate
+        run: |
+          version=$(cargo pkgid -p nodus | sed 's/.*[#@]//')
+          GATE_COPY_TO="$RUNNER_TEMP/swapped" packaging/macos/handoff-gate.sh dist/Nodus-arm64.dmg arm64 "$version"
+          packaging/macos/handoff-gate.sh dist/Nodus-x64.dmg x64 "$version"
+
+      # The copy 0.9.4 would swap in, run directly, then reopened through
+      # LaunchServices as the swap script reopens it.
+      - name: Smoke test
+        run: |
+          python3 packaging/smoke.py "$RUNNER_TEMP/swapped/Nodus.app/Contents/MacOS/Nodus" smoke/exec
+          python3 packaging/smoke.py --open "$RUNNER_TEMP/swapped/Nodus.app/Contents/MacOS/Nodus" smoke/open
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: mac
+          path: |
+            smoke
+            dist/*.dmg
+          if-no-files-found: ignore
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - run: rustup toolchain install && rustup target add x86_64-pc-windows-msvc aarch64-pc-windows-msvc
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      - name: Installers (x64, arm64)
+        run: packaging/windows/installer.sh x64 && packaging/windows/installer.sh arm64
+
+      - name: Version
+        id: version
+        run: echo "version=$(cargo pkgid -p nodus | sed 's/.*[#@]//')" >> "$GITHUB_OUTPUT"
+
+      # A fresh install and its uninstall, as a user who downloads it.
+      - name: Install and uninstall
+        shell: pwsh
+        run: packaging/windows/install-check.ps1 -Installer dist/Nodus-Setup-x64.exe -Version '${{ steps.version.outputs.version }}'
+
+      # A real 0.9.4 install, updated to this build the way its updater does it.
+      - name: Handoff gate
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.9.4 --repo saleem-hadad/nodus --pattern Nodus-Setup-x64.exe --dir "$env:RUNNER_TEMP\old"
+          packaging/windows/handoff-gate.ps1 -Old "$env:RUNNER_TEMP\old\Nodus-Setup-x64.exe" -New dist/Nodus-Setup-x64.exe -Version '${{ steps.version.outputs.version }}'
+
+      - name: Smoke test
+        run: python packaging/smoke.py "$LOCALAPPDATA/Programs/nodus/Nodus.exe" smoke
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: windows
+          path: |
+            smoke
+            dist/Nodus-Setup-*.exe
+          if-no-files-found: ignore

@@ -125,6 +125,7 @@ fn world() -> World {
         shell: Some(Arc::clone(&shell) as _),
         notifications: Notifications::Custom(Arc::clone(&shown) as _),
         updates: Some(Arc::new(LatestIsThis)),
+        secrets: Some(Arc::new(crate::SafeStorage::with_mac_password(b"synthetic"))),
         ..NodusConfig::new(dir.path().join("userData"), tokio::runtime::Handle::current())
     })
     .unwrap();
@@ -415,4 +416,140 @@ async fn host_212_213_a_card_to_open_waits_for_a_window_that_was_closed() {
     assert_eq!(world.nodus.app().take_open_request().await, Some(request));
     assert_eq!(world.nodus.app().take_open_request().await, None);
     assert!(events.try_recv().is_err());
+}
+
+/// Polls a future to its end on this thread, outside any tokio runtime, as
+/// GPUI's executor polls the window's commands.
+fn block_on<F: Future>(future: F) -> F::Output {
+    struct Unpark(std::thread::Thread);
+    impl std::task::Wake for Unpark {
+        fn wake(self: Arc<Self>) {
+            self.0.unpark();
+        }
+    }
+    let waker = std::task::Waker::from(Arc::new(Unpark(std::thread::current())));
+    let mut cx = std::task::Context::from_waker(&waker);
+    let mut future = std::pin::pin!(future);
+    loop {
+        if let std::task::Poll::Ready(output) = future.as_mut().poll(&mut cx) {
+            return output;
+        }
+        std::thread::park_timeout(Duration::from_millis(50));
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn commands_can_be_awaited_from_another_executor() {
+    let world = world();
+    let nodus = world.nodus.clone();
+    // A plain thread, with no tokio runtime of its own: the updater's lookup
+    // (timers, HTTP), a kill's 4 s wait and Quit and Stop Sessions still run.
+    let states = std::thread::spawn(move || {
+        assert!(tokio::runtime::Handle::try_current().is_err());
+        block_on(nodus.updates().check());
+        block_on(nodus.sessions().kill("not-live"));
+        block_on(nodus.sessions().stop(&["a".into(), "b".into()]));
+        block_on(nodus.menu().quit_and_stop_sessions());
+        block_on(nodus.updates().status()).state
+    })
+    .join()
+    .unwrap();
+    assert_eq!(states, UpdateState::Latest);
+    assert_eq!(world.shell.quits.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn act_001_015_actions_are_saved_moved_and_removed() {
+    let world = world();
+    let project = project(&world).await;
+    let actions = world.nodus.actions();
+    assert!(actions.global().await.is_empty());
+    let err = actions.save(&project.id, &json!({ "name": "Ship" })).await.unwrap_err();
+    assert_eq!(
+        err.ipc_message(),
+        "Error invoking remote method 'actions:save': Error: An action needs a prompt"
+    );
+    let lists = actions
+        .save(
+            &project.id,
+            &json!({ "id": "a1", "name": " Ship ", "prompt": "Deploy it", "icon": "rocket" }),
+        )
+        .await
+        .unwrap();
+    let own = lists.project.actions.clone().unwrap();
+    assert_eq!((own[0].id.as_str(), own[0].name.as_str()), ("a1", "Ship"));
+    assert!(lists.global.is_empty());
+    // Made global, it moves out of the project's list.
+    let lists = actions
+        .save(
+            &project.id,
+            &json!({ "id": "a1", "name": "Ship", "prompt": "Deploy it", "global": true }),
+        )
+        .await
+        .unwrap();
+    assert_eq!(lists.project.actions, None);
+    assert_eq!(actions.global().await.len(), 1);
+    let lists = actions.remove(&project.id, "a1").await.unwrap();
+    assert!(lists.global.is_empty());
+    let err = actions.remove("nope", "a1").await.unwrap_err();
+    assert_eq!(err.message, "Unknown project nope");
+    // ACT-016: the project is checked before anything is drafted.
+    let err = actions.draft("nope", "deploy", false).await.unwrap_err();
+    assert_eq!(
+        (err.channel, err.message.as_str()),
+        ("actions:draft", "Unknown project nope")
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn voice_001_008_the_key_is_sealed_and_never_given_out() {
+    let world = world();
+    let voice = world.nodus.voice();
+    let from_shell = std::env::var("XAI_API_KEY")
+        .ok()
+        .filter(|k| !k.trim().is_empty())
+        .map(|_| nodus_domain::VoiceKeySource::Env);
+    assert_eq!(voice.key_source().await, from_shell);
+    assert_eq!(
+        voice.set_key(Some("  xai-synthetic  ")).await.unwrap(),
+        Some(nodus_domain::VoiceKeySource::Settings)
+    );
+    let sealed = world.nodus.inner.store.read(|state| state.voice_key.clone()).unwrap();
+    assert!(!sealed.contains("xai-synthetic"));
+    assert_eq!(voice.key_source().await, Some(nodus_domain::VoiceKeySource::Settings));
+    assert_eq!(voice.set_key(None).await.unwrap(), from_shell);
+    assert!(world.nodus.inner.store.read(|state| state.voice_key.is_none()));
+    // VOICE-002: the project is checked before anything is sent.
+    let err = voice.transcribe("nope", vec![1, 2, 3], "audio/webm").await.unwrap_err();
+    assert_eq!(
+        err.ipc_message(),
+        "Error invoking remote method 'voice:transcribe': Error: Unknown project nope"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn git_003_git_reads_the_project_folder_once_the_env_is_in() {
+    let world = world();
+    let project = project(&world).await;
+    let git = world.nodus.git();
+    // Not a repository yet.
+    assert_eq!(git.status(&project.id).await.unwrap(), None);
+    assert!(git.log(&project.id, Some(5.0)).await.unwrap().is_empty());
+    let made = std::process::Command::new("git")
+        .args(["init", "-q", "-b", "trunk"])
+        .current_dir(&project.repo_path)
+        .status();
+    if made.is_ok_and(|s| s.success()) {
+        std::fs::write(Path::new(&project.repo_path).join("a.txt"), "a\n").unwrap();
+        let status = git.status(&project.id).await.unwrap().unwrap();
+        assert_eq!(status.branch.as_deref(), Some("trunk"));
+        assert_eq!(status.files.len(), 1);
+        let diff = git.diff(&project.id, &status.files[0]).await.unwrap();
+        assert!(diff.patch.contains("+a"), "{}", diff.patch);
+    }
+    let err = git.status("nope").await.unwrap_err();
+    assert_eq!(
+        err.ipc_message(),
+        "Error invoking remote method 'git:status': Error: Unknown project nope"
+    );
 }

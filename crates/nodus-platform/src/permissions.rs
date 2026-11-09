@@ -96,15 +96,19 @@ pub async fn ask_for_microphone() -> bool {
             return false;
         };
         let (tx, rx) = tokio::sync::oneshot::channel();
-        let tx = Mutex::new(Some(tx));
-        let handler = RcBlock::new(move |granted: Bool| {
-            if let Some(tx) = tx.lock().ok().and_then(|mut tx| tx.take()) {
-                let _ = tx.send(granted.as_bool());
-            }
-        });
-        // SAFETY: the handler is copied by AVFoundation and called once, on
-        // a queue of its own; it only sends on a channel.
-        unsafe { AVCaptureDevice::requestAccessForMediaType_completionHandler(audio, &handler) };
+        // The block is let go of before the wait, so the future can move
+        // between threads.
+        {
+            let tx = Mutex::new(Some(tx));
+            let handler = RcBlock::new(move |granted: Bool| {
+                if let Some(tx) = tx.lock().ok().and_then(|mut tx| tx.take()) {
+                    let _ = tx.send(granted.as_bool());
+                }
+            });
+            // SAFETY: the handler is copied by AVFoundation and called once,
+            // on a queue of its own; it only sends on a channel.
+            unsafe { AVCaptureDevice::requestAccessForMediaType_completionHandler(audio, &handler) };
+        }
         rx.await.unwrap_or(false)
     }
     #[cfg(not(target_os = "macos"))]

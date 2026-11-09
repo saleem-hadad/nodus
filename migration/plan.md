@@ -177,7 +177,7 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | status | `rust/status` | nodus-sessions hooks, agents, usage, notify, running | ✅ merged: HOST-132…219 (88), 0 deferred |
 | transcripts-board | `rust/transcripts-board` | nodus-transcripts, nodus-board, nodus-sessions::launch | ✅ merged: 194/205 SESS; 11 deferred to core (130, 131, 134, 135, 138, 146–148, 153, 164, 203) |
 | platform-updater | `rust/platform-updater` | nodus-platform process, secrets, notify, permissions; nodus-updater | ✅ merged: UPD 73, PLAT 11, VOICE 2 (+ OS side of HOST-208…211/215, CAP-032/040/041/055/059); UPD-013/014/076…085 to core/UI |
-| parity-harness | `rust/parity-harness` | golden screenshots of 0.9.4 (`migration/parity/`) | 🟡 running |
+| parity-harness | `rust/parity-harness` | golden screenshots of 0.9.4 (`migration/parity/`) | ✅ merged: harness, seed and scene list; ~98 scenes × 2 themes captured locally (gitignored) |
 | gpui-fork | `rust/gpui-fork` | `third_party/gpui/`: backdrop blur, transforms, group opacity, frame capture (D13) | ✅ merged: Metal + wgpu verified at 60 fps; DirectX 11 HLSL unverified (CI step `continue-on-error` until green) |
 | ui-shell | `rust/ui-shell` | nodus-core skeleton (P4a); nodus-ui theme, controls, title bar, menus, settings, projects grid, rail (P5); test driver (D11) | ✅ merged: UI 243, PLAT 64; shell scenes within 0.03–0.3% of the goldens; board route, live counts and Settings rows on other APIs deferred |
 | views-tools | `rust/views-tools` | nodus-views, nodus-tools, nodus-board notes and ink | ✅ merged: NOTE 16, INK 12, TOOL 40 (004…013/015 by host), VIEW 100; 54 VIEW UI-only to the UI tracks |
@@ -266,6 +266,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-09: parity-harness merged: `node migration/parity/capture-electron.mjs` regenerates the goldens from 0.9.4 with synthetic seeded data (see migration/parity/README.md). capture-panel restarted fresh after stalling with nothing committed.
 - 2026-11-09: terminal merged (75ea2b4): nodus-terminal checked against xterm.js 6's own code (3,083 key presses, 23 screens cell by cell, every code point's width, 18 registry scenarios); 1,070 tests. Every other running agent stopped at a usage limit again; resumed after the reset.
 - 2026-11-09: Windows CI ran the Rust tests for the first time: all passed except one quoting test whose expectation was wrong (fixed in cd25612). gpui-text, board-canvas, board-cards and capture-panel started.
 - 2026-11-09: ui-shell, capture and actions-voice-git merged (fac662d); 996 tests; 1,160 of 2,266 behaviors ticked. The golden PNGs had been swept into two plan commits by `git add migration`; untracked in 954e195 (synthetic content only; one file named this Mac's temp folder id).

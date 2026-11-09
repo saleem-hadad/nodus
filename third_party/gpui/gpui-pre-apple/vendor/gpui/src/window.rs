@@ -5223,17 +5223,20 @@ impl Window {
         let scale_factor = self.scale_factor();
         let glyph_origin = origin.scale(scale_factor);
 
+        // Nodus patch: Skia's rounding, which Chromium draws text with: to the
+        // nearest subpixel position, halves up (`SkGlyphPositionRoundingSpec`),
+        // where GPUI rounded halves toward zero.
         let quantized_origin = Point::new(
-            round_half_toward_zero(glyph_origin.x.0 * SUBPIXEL_VARIANTS_X as f32)
+            (glyph_origin.x.0 * SUBPIXEL_VARIANTS_X as f32 + 0.5).floor()
                 / SUBPIXEL_VARIANTS_X as f32,
-            round_half_toward_zero(glyph_origin.y.0 * SUBPIXEL_VARIANTS_Y as f32)
+            (glyph_origin.y.0 * SUBPIXEL_VARIANTS_Y as f32 + 0.5).floor()
                 / SUBPIXEL_VARIANTS_Y as f32,
         );
         let subpixel_variant = Point::new(
-            (quantized_origin.x.fract() * SUBPIXEL_VARIANTS_X as f32) as u8,
-            (quantized_origin.y.fract() * SUBPIXEL_VARIANTS_Y as f32) as u8,
+            ((quantized_origin.x - quantized_origin.x.floor()) * SUBPIXEL_VARIANTS_X as f32) as u8,
+            ((quantized_origin.y - quantized_origin.y.floor()) * SUBPIXEL_VARIANTS_Y as f32) as u8,
         );
-        let integer_origin = quantized_origin.map(|c| ScaledPixels(c.trunc()));
+        let integer_origin = quantized_origin.map(|c| ScaledPixels(c.floor()));
         let subpixel_rendering = self.should_use_subpixel_rendering(font_id, font_size);
         // Nodus patch: `-webkit-font-smoothing: antialiased` draws without
         // the platform's stroke thickening.
@@ -5644,6 +5647,37 @@ impl Window {
             .as_mut()
             .unwrap()
             .request_measured_layout(style, rem_size, scale_factor, measure)
+    }
+
+    /// Nodus patch: like [`Self::request_measured_layout`], but the measured
+    /// size is used as it is, not rounded up to device pixels, as Chromium
+    /// keeps a text's box in its layout units.
+    pub(crate) fn request_measured_layout_unsnapped<F>(&mut self, style: Style, measure: F) -> LayoutId
+    where
+        F: Fn(Size<Option<Pixels>>, Size<AvailableSpace>, &mut Window, &mut App) -> Size<Pixels>
+            + 'static,
+    {
+        self.invalidator.debug_assert_prepaint();
+
+        let rem_size = self.rem_size();
+        let scale_factor = self.scale_factor();
+        self.layout_engine
+            .as_mut()
+            .unwrap()
+            .request_measured_layout_with(style, rem_size, scale_factor, false, measure)
+    }
+
+    /// Nodus patch: where a laid-out node's border box starts before it is
+    /// rounded to device pixels, as Chromium paints text from (its layout
+    /// units), with the same element offset as [`Self::layout_bounds`].
+    pub(crate) fn unrounded_layout_origin(&mut self, layout_id: LayoutId) -> Point<Pixels> {
+        let bounds = self.layout_bounds(layout_id);
+        let scale_factor = self.scale_factor();
+        let Some(origin) = self.layout_engine.as_ref().unwrap().unrounded_origin(layout_id) else {
+            return bounds.origin;
+        };
+        point(px(origin.x / scale_factor), px(origin.y / scale_factor))
+            + self.pixel_snap_point(self.element_offset())
     }
 
     /// Compute the layout for the given id within the given available space.

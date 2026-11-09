@@ -7,6 +7,49 @@ use derive_more::{Deref, DerefMut};
 use smallvec::SmallVec;
 use std::{ops::Range, sync::Arc};
 
+/// Nodus patch: Chromium's layout unit, 1/64 of a device pixel.
+const LAYOUT_UNITS_PER_DEVICE_PIXEL: f32 = 64.;
+
+/// Nodus patch: `value` in Chromium's layout units at `scale_factor`,
+/// rounded down (`LayoutUnit::FromFloatFloor`), as Chromium keeps a line
+/// height.
+pub fn layout_unit_floor(value: Pixels, scale_factor: f32) -> Pixels {
+    let units = scale_factor * LAYOUT_UNITS_PER_DEVICE_PIXEL;
+    px((value.0 * units).floor() / units)
+}
+
+/// Nodus patch: `value` in Chromium's layout units at `scale_factor`,
+/// rounded up (`LayoutUnit::FromFloatCeil`), as Chromium keeps a text's
+/// width.
+pub fn layout_unit_ceil(value: Pixels, scale_factor: f32) -> Pixels {
+    let units = scale_factor * LAYOUT_UNITS_PER_DEVICE_PIXEL;
+    px((value.0 * units).ceil() / units)
+}
+
+/// Nodus patch: where Chromium puts the baseline of a line box that starts at
+/// `top`, as an offset from `top` that lands on a device pixel. Blink works in
+/// device pixels: the font's ascent and descent rounded to whole pixels, the
+/// half-leading above the text floored (`CalculateLeadingSpace`), and Skia
+/// rounds the baseline to a pixel when it draws. Checked against Electron
+/// 44.5.1 for the system font at 10.5–26px, eight line heights and four
+/// sub-pixel tops (320 of 320 the same).
+pub fn chromium_baseline_offset(
+    top: Pixels,
+    line_height: Pixels,
+    ascent: Pixels,
+    descent: Pixels,
+    scale_factor: f32,
+) -> Pixels {
+    let round = |v: f32| (v + 0.5).floor();
+    let ascent = round(ascent.0 * scale_factor);
+    let descent = round(descent.0 * scale_factor);
+    let line_height = layout_unit_floor(line_height, scale_factor).0 * scale_factor;
+    let top_device = layout_unit_floor(top, scale_factor).0 * scale_factor;
+    let leading = ((line_height - (ascent + descent)) / 2.).floor();
+    let baseline = round(top_device + leading + ascent);
+    px(baseline / scale_factor) - top
+}
+
 /// Pre-computed glyph data for efficient painting without per-glyph cache lookups.
 ///
 /// This is produced by `ShapedLine::compute_glyph_raster_data` during prepaint
@@ -547,6 +590,13 @@ fn paint_line(
     window.paint_layer(line_bounds, |window| {
         let padding_top = (line_height - layout.ascent - layout.descent) / 2.;
         let baseline_offset = point(px(0.), padding_top + layout.ascent);
+        // Nodus patch: glyphs sit on Chromium's baseline, worked out for each
+        // row since the rows' tops can fall between device pixels.
+        let scale_factor = window.scale_factor();
+        let row_baseline = |top: Pixels| {
+            chromium_baseline_offset(top, line_height, layout.ascent, layout.descent, scale_factor)
+        };
+        let mut glyph_baseline = row_baseline(origin.y);
         let underline_y_offset = underline_y_offset(line_height, layout.ascent, layout.descent);
         let mut decoration_runs = decoration_runs.iter();
         let mut wraps = wrap_boundaries.iter().peekable();
@@ -628,6 +678,7 @@ fn paint_line(
                         wraps.peek(),
                     );
                     glyph_origin.y += line_height;
+                    glyph_baseline = row_baseline(glyph_origin.y);
                 }
                 prev_glyph_position = glyph.position;
 
@@ -730,17 +781,17 @@ fn paint_line(
 
                 let content_mask = window.content_mask();
                 if max_glyph_bounds.intersects(&content_mask.bounds) {
-                    let vertical_offset = point(px(0.0), glyph.position.y);
+                    let vertical_offset = point(px(0.0), glyph_baseline + glyph.position.y);
                     if glyph.is_emoji {
                         window.paint_emoji(
-                            glyph_origin + baseline_offset + vertical_offset,
+                            glyph_origin + vertical_offset,
                             run.font_id,
                             glyph.id,
                             layout.font_size,
                         )?;
                     } else {
                         window.paint_glyph(
-                            glyph_origin + baseline_offset + vertical_offset,
+                            glyph_origin + vertical_offset,
                             run.font_id,
                             glyph.id,
                             layout.font_size,

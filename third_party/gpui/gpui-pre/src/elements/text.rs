@@ -281,10 +281,10 @@ impl Element for &'static str {
         _inspector_id: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         text_layout: &mut Self::RequestLayoutState,
-        _window: &mut Window,
+        window: &mut Window,
         _cx: &mut App,
     ) {
-        text_layout.prepaint(bounds, self)
+        text_layout.prepaint(bounds, self, window)
     }
 
     fn paint(
@@ -355,10 +355,10 @@ impl Element for SharedString {
         _inspector_id: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         text_layout: &mut Self::RequestLayoutState,
-        _window: &mut Window,
+        window: &mut Window,
         _cx: &mut App,
     ) {
-        text_layout.prepaint(bounds, self.as_ref())
+        text_layout.prepaint(bounds, self.as_ref(), window)
     }
 
     fn paint(
@@ -581,10 +581,10 @@ impl Element for StyledText {
         _inspector_id: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
-        _window: &mut Window,
+        window: &mut Window,
         _cx: &mut App,
     ) {
-        self.layout.prepaint(bounds, &self.text)
+        self.layout.prepaint(bounds, &self.text, window)
     }
 
     fn paint(
@@ -611,7 +611,11 @@ impl IntoElement for StyledText {
 
 /// The Layout for TextElement. This can be used to map indices to pixels and vice versa.
 #[derive(Default, Clone)]
-pub struct TextLayout(Rc<RefCell<Option<TextLayoutInner>>>);
+pub struct TextLayout(
+    Rc<RefCell<Option<TextLayoutInner>>>,
+    // Nodus patch: the text's layout node, to paint from its unrounded origin.
+    Rc<Cell<Option<LayoutId>>>,
+);
 
 #[derive(Clone, Copy)]
 enum TextPaintPass {
@@ -628,6 +632,9 @@ struct TextLayoutInner {
     truncate_width: Option<Pixels>,
     size: Option<Size<Pixels>>,
     bounds: Option<Bounds<Pixels>>,
+    /// Nodus patch: where the lines start: the box's origin before the
+    /// layout rounds it to device pixels, as Chromium paints text from.
+    origin: Option<Point<Pixels>>,
 }
 
 impl TextLayout {
@@ -640,10 +647,14 @@ impl TextLayout {
     ) -> LayoutId {
         let text_style = window.text_style();
         let font_size = text_style.font_size.to_pixels(window.rem_size());
-        let line_height = window.pixel_snap(
+        // Nodus patch: Chromium keeps a line box's height in its layout units
+        // (1/64 of a device pixel), not rounded to a device pixel, so lines of
+        // 18.2px stack 18.2px apart; the baseline is what lands on a pixel.
+        let line_height = crate::layout_unit_floor(
             text_style
                 .line_height
                 .to_pixels(font_size.into(), window.rem_size()),
+            window.scale_factor(),
         );
 
         let runs = if let Some(runs) = runs {
@@ -651,7 +662,7 @@ impl TextLayout {
         } else {
             vec![text_style.to_run(text.len())]
         };
-        window.request_measured_layout(Default::default(), {
+        let layout_id = window.request_measured_layout_unsnapped(Default::default(), {
             let element_state = self.clone();
 
             move |known_dimensions, available_space, window, cx| {
@@ -761,6 +772,7 @@ impl TextLayout {
                         truncate_width,
                         size: Some(Size::default()),
                         bounds: None,
+                        origin: None,
                     });
                     return Size::default();
                 };
@@ -769,7 +781,12 @@ impl TextLayout {
                 for line in &lines {
                     let line_size = line.size(line_height);
                     size.height += line_size.height;
-                    size.width = size.width.max(line_size.width).ceil();
+                    // Nodus patch: Chromium rounds a text's width up to its
+                    // layout units, not to a whole pixel.
+                    size.width = crate::layout_unit_ceil(
+                        size.width.max(line_size.width),
+                        window.scale_factor(),
+                    );
                 }
 
                 element_state.0.borrow_mut().replace(TextLayoutInner {
@@ -780,20 +797,25 @@ impl TextLayout {
                     truncate_width,
                     size: Some(size),
                     bounds: None,
+                    origin: None,
                 });
 
                 size
             }
-        })
+        });
+        self.1.set(Some(layout_id));
+        layout_id
     }
 
-    fn prepaint(&self, bounds: Bounds<Pixels>, text: &str) {
+    fn prepaint(&self, bounds: Bounds<Pixels>, text: &str, window: &mut Window) {
+        let origin = self.1.get().map(|id| window.unrounded_layout_origin(id));
         let mut element_state = self.0.borrow_mut();
         let element_state = element_state
             .as_mut()
             .with_context(|| format!("measurement has not been performed on {text}"))
             .unwrap();
         element_state.bounds = Some(bounds);
+        element_state.origin = origin;
     }
 
     fn paint(&self, text: &str, window: &mut Window, cx: &mut App) {
@@ -829,7 +851,7 @@ impl TextLayout {
             .context("prepaint has not been performed")?;
 
         let line_height = element_state.line_height;
-        let mut line_origin = bounds.origin;
+        let mut line_origin = element_state.origin.unwrap_or(bounds.origin);
         let text_style = window.text_style();
         for line in &element_state.lines {
             if matches!(pass, TextPaintPass::All | TextPaintPass::Background) {
@@ -874,7 +896,7 @@ impl TextLayout {
         }
 
         let line_height = element_state.line_height;
-        let mut line_origin = bounds.origin;
+        let mut line_origin = element_state.origin.unwrap_or(bounds.origin);
         let mut line_start_ix = 0;
         for line in &element_state.lines {
             let line_bottom = line_origin.y + line.size(line_height).height;
@@ -904,7 +926,7 @@ impl TextLayout {
             .expect("prepaint has not been performed");
         let line_height = element_state.line_height;
 
-        let mut line_origin = bounds.origin;
+        let mut line_origin = element_state.origin.unwrap_or(bounds.origin);
         let mut line_start_ix = 0;
 
         for line in &element_state.lines {

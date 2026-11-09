@@ -27,6 +27,9 @@ type NodeMeasureFn = StackSafe<Box<MeasureFn>>;
 
 struct NodeContext {
     measure: NodeMeasureFn,
+    /// Nodus patch: whether the measured size is rounded up to device
+    /// pixels. Text isn't: Chromium keeps a text's box in layout units.
+    snap: bool,
 }
 pub struct TaffyLayoutEngine {
     taffy: TaffyTree<NodeContext>,
@@ -95,15 +98,40 @@ impl TaffyLayoutEngine {
         ) -> Size<Pixels>
         + 'static,
     ) -> LayoutId {
+        self.request_measured_layout_with(style, rem_size, scale_factor, true, measure)
+    }
+
+    /// Nodus patch: a measured leaf whose size is used as measured, not
+    /// rounded up to device pixels (text, as Chromium lays it out).
+    pub(crate) fn request_measured_layout_with(
+        &mut self,
+        style: Style,
+        rem_size: Pixels,
+        scale_factor: f32,
+        snap: bool,
+        measure: impl FnMut(
+            Size<Option<Pixels>>,
+            Size<AvailableSpace>,
+            &mut Window,
+            &mut App,
+        ) -> Size<Pixels>
+        + 'static,
+    ) -> LayoutId {
         let taffy_style = style.to_taffy(rem_size, scale_factor);
         let measure = Box::new(measure) as Box<MeasureFn>;
         #[cfg(feature = "stacker")]
         let measure = StackSafe::new(measure);
 
         self.taffy
-            .new_leaf_with_context(taffy_style, NodeContext { measure })
+            .new_leaf_with_context(taffy_style, NodeContext { measure, snap })
             .expect(EXPECT_MESSAGE)
             .into()
+    }
+
+    /// Nodus patch: the node's border-box origin before rounding, in device
+    /// pixels, once its bounds have been asked for.
+    pub(crate) fn unrounded_origin(&self, id: LayoutId) -> Option<Point<f32>> {
+        self.absolute_outer_origins.get(&id).copied()
     }
 
     /// Treats any `auto` dimension of the given node's style as filling `size`.
@@ -270,7 +298,14 @@ impl TaffyLayoutEngine {
                                 window,
                                 cx,
                             );
-                            snap_measured_size_to_device_pixels(measured_size, scale_factor).into()
+                            if node_context.snap {
+                                snap_measured_size_to_device_pixels(measured_size, scale_factor)
+                                    .into()
+                            } else {
+                                measured_size
+                                    .map(|d| d.0.max(0.0) * scale_factor)
+                                    .into()
+                            }
                         },
                     )
                 },

@@ -187,9 +187,9 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | gpui-text | `rust/gpui-text` | patched GPUI text parity with Chromium: sRGB tagging, no SF Pro tracking, hanging trailing spaces, Chromium's rounding; Windows effects CI step | 🟡 running |
 | board-canvas | `rust/board-canvas` | P6, spec 09: the board route and canvas (pan/zoom/select/drag, sections, edges, menus, shortcuts), node plug-in interface | 🟡 running |
 | board-cards | `rust/board-cards` | P6, spec 10: session cards, expanded card chrome, agent deck, archive stack, notes, pad (`nodus-ui/src/board/cards/`) | 🟡 running |
-| capture-panel | `rust/capture-panel` | P10, spec 07 UI: the panel window and page, Settings' capture rows, File › Capture…, `nodus.capture()` | 🟡 running (restarted fresh) |
+| capture-panel | `rust/capture-panel` | P10, spec 07 UI: the panel window and page, Settings' capture rows, File › Capture…, `nodus.capture()` | ⏸ paused at adc385b (6 commits; resume when a slot frees) |
 | packaging | `rust/packaging` | P11: macOS bundle + DMGs, Windows NSIS (electron-builder templates), signing/notarizing, CI packaging + native smoke test, `release-rust.yml` with D12 handoff gates; publishes nothing | 🟡 running |
-| actions-git-voice-ui | `rust/actions-git-voice-ui` | P9, spec 05 UI: actions rail and dialog, branch chip + commits popover + diff modal, session mic and recording look | 🟡 running |
+| actions-git-voice-ui | `rust/actions-git-voice-ui` | P9, spec 05 UI: actions rail and dialog, branch chip + commits popover + diff modal, session mic and recording look | ⏸ paused (3 commits; resume when a slot frees) |
 | terminal-ui | `rust/terminal-ui` | P7, spec 12 UI: the GPUI terminal element, session window, transcript preview, agents viewer | 🟡 running |
 | terminal | `rust/terminal` | nodus-terminal (GPUI-free): alacritty model, xterm key encoder, query answers, widths, registry | ✅ merged: 83 TERM; 26 drawing/focus/timing TERM + MODAL/TRANS/AGV to the terminal UI track |
 
@@ -269,6 +269,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-09: Agents kept dying to the 10-minute no-progress watchdog: with seven tracks building GPUI at once, one `cargo` call ran past it. Now at most five tracks run, each with `CARGO_BUILD_JOBS=4` and long builds in the background; board-cards, terminal-ui, board-canvas and gpui-text restarted as fresh agents from their branches (work committed), capture-panel and actions-git-voice-ui paused. A WIP sweep briefly committed a stale worktree's snapshot onto rust/capture-panel; reset locally, never pushed. The old worktree `.claude/worktrees/agent-abd95dd991086fde4` is stale: don't commit there.
 - 2026-11-09: All seven UI/packaging tracks stopped at a session limit with work committed (2–7 commits each); resumed after the reset. Disk at ~28 GB free with seven builds.
 - 2026-11-09: core phase 2 merged (6243e7c): git/actions/voice in the core; every core command runs on the core's tokio runtime whatever awaits it; the GUI opens after `launch()`, starts hosts through `Nodus host`, has live counts, Settings' voice and update rows, Quit and Stop Sessions; 1,092 tests.
 - 2026-11-09: core's first part merged (3cd11cf): the whole app runs headless in tests with a stand-in claude and the real Rust host; integration debts resolved; 1,088 tests. Weekly usage limit hit on one account; resumed on another.

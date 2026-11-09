@@ -177,7 +177,8 @@ async function main() {
           : `${c.diffPixels} px differ, within ${JSON.stringify(c.box)}`
       console.log(`${path.basename(r.file).padEnd(46)} ${verdict}`)
     }
-    console.log(differ ? `\n${differ} shot(s) differ.` : '\nEvery shot matches.')
+    console.log(differ ? `\n${differ} shot(s) differ; this run's shots are in ${dir}.` : '\nEvery shot matches.')
+    if (!differ && results.every((r) => r.file)) fs.rmSync(dir, { recursive: true, force: true })
   } else {
     // Shots taken before and not retaken keep their entries.
     const file = path.join(dir, 'report.json')

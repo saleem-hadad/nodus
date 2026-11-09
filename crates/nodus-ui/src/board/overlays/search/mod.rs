@@ -15,7 +15,7 @@ use nodus_domain::{SessionCard, SessionSearchHit, js};
 
 use crate::board::canvas::BoardCanvas;
 use crate::board::layout::is_terminal;
-use crate::terminal::actions::{PreviewFind, open_preview};
+use crate::terminal::actions::PreviewFind;
 
 pub(crate) use text::{highlighted, time_ago};
 
@@ -66,6 +66,15 @@ pub(crate) fn latest(mut cards: Vec<SessionCard>) -> Vec<SessionCard> {
     });
     cards.truncate(RECENT);
     cards
+}
+
+/// BOARD-037: what a row's transcript opens at, `{query: trimmed search
+/// query, snippet}`, the snippet being the hit's best (first) one.
+pub(crate) fn row_find(query: &str, row: &Row) -> PreviewFind {
+    PreviewFind {
+        query: js::trim(query).to_owned(),
+        snippet: row.hit.as_ref().and_then(|h| h.snippets.first().cloned()),
+    }
 }
 
 impl BoardCanvas {
@@ -188,21 +197,14 @@ impl BoardCanvas {
         self.close_search(cx);
     }
 
-    /// SRCH-013…SRCH-015: opens a row.
+    /// SRCH-013…SRCH-015: opens a row, through the board's jump (BOARD-036,
+    /// BOARD-037), which closes the search when the card is on the board.
     pub(crate) fn search_open_row(&mut self, row: &Row, cx: &mut Context<'_, Self>) {
-        let id = row.card.node.session_id.clone();
-        if row.card.node.archived {
-            let find = PreviewFind {
-                query: js::trim(&self.search_query).to_owned(),
-                snippet: row.hit.as_ref().and_then(|h| h.snippets.first().cloned()),
-            };
-            self.search_close(cx);
-            let state = self.state.clone();
-            open_preview(&state, &id, Some(find), cx);
-            return;
+        let find = row_find(&self.search_query, row);
+        self.jump_to_card(&row.card.node.session_id, Some(find), cx);
+        if !self.search_open {
+            self.overlays.search = Search::default();
         }
-        self.overlays.search = Search::default();
-        self.jump_to_card(&id, cx);
     }
 
     /// SRCH-016.
@@ -342,5 +344,42 @@ mod tests {
         let kept = latest(many);
         assert_eq!(kept.len(), RECENT);
         assert_eq!(kept[0].node.session_id, "39");
+    }
+
+    #[test]
+    fn a_row_opens_at_its_best_match_for_the_trimmed_query() {
+        // BOARD-037: `{query: searchQuery.trim(), snippet: hit.snippets[0]}`.
+        let snippet = |text: &str, timestamp: f64| nodus_domain::SearchSnippet {
+            kind: nodus_domain::SearchSnippetKind::Reply,
+            tool: None,
+            file: None,
+            agent: None,
+            text: text.into(),
+            ranges: vec![[0, 4]],
+            timestamp,
+        };
+        let row = Row {
+            card: card("gone", true, 1.0),
+            hit: Some(SessionSearchHit {
+                session_id: "gone".into(),
+                matches: 2,
+                snippets: vec![snippet("best", 20.0), snippet("next", 10.0)],
+            }),
+        };
+        let find = row_find("  tax rounding \n", &row);
+        assert_eq!(find.query, "tax rounding");
+        assert_eq!(find.snippet, Some(snippet("best", 20.0)));
+        // A title-only hit, or the latest sessions' rows, have no snippet.
+        let bare = Row {
+            card: card("gone", true, 1.0),
+            hit: None,
+        };
+        assert_eq!(
+            row_find("", &bare),
+            PreviewFind {
+                query: String::new(),
+                snippet: None
+            }
+        );
     }
 }

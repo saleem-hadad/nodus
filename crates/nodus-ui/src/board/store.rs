@@ -9,6 +9,7 @@ use gpui::{Context, Task};
 use nodus_domain::{BoardNote, BoardSection, NodePatch, Rect, SessionCard, SessionStatus, SessionUsage, ViewPatch};
 
 use crate::state::AppState;
+use crate::terminal::actions::{PreviewFind, PreviewFindState};
 
 /// `unstickNotes`: stickers on cards leaving the board fall off, onto the
 /// board where an active card was, or back where they were from an archived one.
@@ -435,8 +436,17 @@ impl AppState {
         cx.notify();
     }
 
-    /// `openPreview`: the transcript preview, closing the terminal modal.
+    /// `openPreview(sessionId)`: the transcript preview, closing the terminal
+    /// modal, opened from no search (TRANS-002).
     pub fn open_preview(&mut self, session_id: &str, cx: &mut Context<'_, Self>) {
+        self.open_preview_at(session_id, None, cx);
+    }
+
+    /// `openPreview(sessionId, find)` (TRANS-002, BOARD-037): records the
+    /// search it was opened from (none clears the last one), so the preview
+    /// opens at the match.
+    pub fn open_preview_at(&mut self, session_id: &str, find: Option<PreviewFind>, cx: &mut Context<'_, Self>) {
+        cx.set_global(PreviewFindState(find));
         self.preview_session_id = Some(session_id.to_owned());
         self.terminal_session_id = None;
         cx.notify();

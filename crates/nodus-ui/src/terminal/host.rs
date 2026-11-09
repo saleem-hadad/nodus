@@ -548,6 +548,9 @@ impl TerminalHost {
             return;
         };
         match action {
+            // TERM-049: a key the terminal took never reaches the board or the
+            // app; TERM-109: so ⌘K (a local clear) and Ctrl+K (`\x0b`) never open
+            // the board's search, which listens for keys, not a binding.
             KeyAction::Send(_) | KeyAction::WriteDirect(_) | KeyAction::Handled => {
                 cx.stop_propagation();
                 self.restart_blink(cx);

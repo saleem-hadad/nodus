@@ -719,7 +719,44 @@ fn paint_underline(window: &mut Window, style: Underline, at: Point<Pixels>, wid
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::terminal::host::ScrollbarState;
+    use crate::terminal::host::{Geometry, ScrollbarState};
+
+    #[test]
+    fn term_083_a_scaled_terminal_is_staged_in_window_sized_tiles() {
+        let viewport = size(px(1440.), px(900.));
+        // Fits: one tile, drawn where the card is.
+        let tiles = stage_tiles(size(px(704.), px(424.)), point(px(326.6), px(166.6)), viewport);
+        assert_eq!(tiles.len(), 1);
+        assert_eq!(tiles[0].0, Bounds::new(point(px(0.), px(0.)), size(px(704.), px(424.))));
+        assert_eq!(tiles[0].1, point(px(327.), px(167.)));
+        // Near the window's edge it's drawn where it fits.
+        let tiles = stage_tiles(size(px(704.), px(424.)), point(px(1300.), px(700.)), viewport);
+        assert_eq!(tiles[0].1, point(px(736.), px(476.)));
+        // Taller than the window at 1×: two tiles, each within it.
+        let tiles = stage_tiles(size(px(1000.), px(1500.)), point(px(100.), px(60.)), viewport);
+        assert_eq!(tiles.len(), 2);
+        assert_eq!(tiles[1].0, Bounds::new(point(px(0.), px(900.)), size(px(1000.), px(600.))));
+        for (tile, stage) in tiles {
+            assert!(stage.x + tile.size.width <= viewport.width && stage.y + tile.size.height <= viewport.height);
+        }
+    }
+
+    #[test]
+    fn term_083_the_pointer_maps_back_to_unscaled_cells() {
+        let g = Geometry {
+            bounds: Bounds::new(point(px(100.), px(200.)), size(px(700.), px(400.))),
+            origin: point(px(100.), px(200.)),
+            cell_w: 7.5,
+            cell_h: 18.0,
+            cols: 91,
+            rows: 22,
+            zoom: Some((point(px(100.), px(200.)), 0.5)),
+        };
+        // 37.5 px right on screen at half size is the 76th px of the grid: column 11.
+        assert_eq!(g.local(point(px(137.5), px(209.))), (75.0, 18.0));
+        assert!(g.contains(point(px(449.), px(399.))));
+        assert!(!g.contains(point(px(451.), px(399.))));
+    }
 
     #[test]
     fn term_075_the_slider_fades() {

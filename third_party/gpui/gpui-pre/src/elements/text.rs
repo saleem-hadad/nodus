@@ -281,10 +281,10 @@ impl Element for &'static str {
         _inspector_id: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         text_layout: &mut Self::RequestLayoutState,
-        _window: &mut Window,
+        window: &mut Window,
         _cx: &mut App,
     ) {
-        text_layout.prepaint(bounds, self)
+        text_layout.prepaint(bounds, self, window)
     }
 
     fn paint(
@@ -355,10 +355,10 @@ impl Element for SharedString {
         _inspector_id: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         text_layout: &mut Self::RequestLayoutState,
-        _window: &mut Window,
+        window: &mut Window,
         _cx: &mut App,
     ) {
-        text_layout.prepaint(bounds, self.as_ref())
+        text_layout.prepaint(bounds, self.as_ref(), window)
     }
 
     fn paint(
@@ -581,10 +581,10 @@ impl Element for StyledText {
         _inspector_id: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
-        _window: &mut Window,
+        window: &mut Window,
         _cx: &mut App,
     ) {
-        self.layout.prepaint(bounds, &self.text)
+        self.layout.prepaint(bounds, &self.text, window)
     }
 
     fn paint(
@@ -609,9 +609,152 @@ impl IntoElement for StyledText {
     }
 }
 
+/// Nodus patch: CSS's ellipsis as Chromium places it, for
+/// `text-overflow: ellipsis` on one line (`clamp` none) and for
+/// `-webkit-line-clamp` (`clamp` is the number of lines and how they wrap).
+/// The text is laid out as usual; when it overflows (on one line) or runs
+/// past the last line shown, that line keeps what fits before the ellipsis.
+/// For a clamp, the line first loses the spaces at its end and the ellipsis
+/// follows its last word when there is room; otherwise characters go from
+/// its end, mid-word, until there is. Nothing else is trimmed (GPUI used to
+/// drop punctuation before the ellipsis). Returns the text to lay out
+/// instead, with its runs, or none when it fits. For a clamp it also returns
+/// the width its last row is aligned by: the row as it was wrapped, without
+/// its hanging spaces, since Chromium aligns the row before it truncates it.
+fn chromium_ellipsis(
+    text: &SharedString,
+    runs: &[TextRun],
+    font_size: Pixels,
+    width: Pixels,
+    clamp: Option<(usize, crate::WrapStyle)>,
+    affix: &SharedString,
+    window: &mut Window,
+) -> Option<(SharedString, Vec<TextRun>, Option<Pixels>)> {
+    use unicode_segmentation::UnicodeSegmentation as _;
+
+    let text_system = window.text_system().clone();
+    let (wrap_width, wrap_style, max_lines) = match clamp {
+        Some((max_lines, wrap_style)) => (Some(width), wrap_style, max_lines.max(1)),
+        None => (None, crate::WrapStyle::default(), 1),
+    };
+    let lines = text_system
+        .shape_text_wrapped(text.clone(), font_size, runs, wrap_width, None, wrap_style)
+        .log_err()?;
+
+    // The last line shown, and whether anything is hidden after it.
+    let mut rows_before = 0;
+    let mut line_start = 0;
+    let mut found = None;
+    for (ix, line) in lines.iter().enumerate() {
+        let rows = line.wrap_boundaries().len() + 1;
+        if rows_before + rows >= max_lines {
+            let row = max_lines - rows_before - 1;
+            let hidden_after = rows_before + rows > max_lines || ix + 1 < lines.len();
+            found = Some((line, row, hidden_after));
+            break;
+        }
+        rows_before += rows;
+        line_start += line.len() + 1;
+    }
+    let (line, row, hidden_after) = found?;
+    let layout = &line.unwrapped_layout;
+    let glyph_at = |boundary: &crate::WrapBoundary| {
+        let glyph = &layout.runs[boundary.run_ix].glyphs[boundary.glyph_ix];
+        (glyph.index, glyph.position.x)
+    };
+    let (row_start, row_start_x) = if row == 0 {
+        (0, Pixels::ZERO)
+    } else {
+        glyph_at(&line.wrap_boundaries()[row - 1])
+    };
+    let (row_end, row_end_x) = line
+        .wrap_boundaries()
+        .get(row)
+        .map_or((line.len(), layout.width), glyph_at);
+    let overflows = row_end_x - row_start_x > width;
+    if !hidden_after && !overflows {
+        return None;
+    }
+
+    // Where each grapheme of the row starts.
+    let line_text = &line.text;
+    let x_of = |index: usize| {
+        layout
+            .runs
+            .iter()
+            .flat_map(|run| run.glyphs.iter())
+            .find(|glyph| glyph.index >= index)
+            .map_or(layout.width, |glyph| glyph.position.x)
+    };
+    let mut content_end = row_end;
+    let mut align_width = None;
+    if clamp.is_some() {
+        content_end = row_start + line_text[row_start..row_end].trim_end_matches(' ').len();
+        align_width = Some(x_of(content_end) - row_start_x);
+    }
+
+    // The ellipsis in the style of the text it follows.
+    let style_at = |index: usize| {
+        let mut start = 0;
+        for run in runs {
+            if index < start + run.len {
+                return run.clone();
+            }
+            start += run.len;
+        }
+        runs.last()
+            .cloned()
+            .unwrap_or_else(|| window.text_style().to_run(0))
+    };
+    let mut affix_run = style_at((line_start + content_end).saturating_sub(1));
+    affix_run.len = affix.len();
+    let affix_width = text_system
+        .shape_line(affix.clone(), font_size, &[affix_run], None)
+        .width;
+
+    let cut = if clamp.is_some() && x_of(content_end) - row_start_x + affix_width <= width {
+        content_end
+    } else {
+        line_text[row_start..content_end]
+            .grapheme_indices(true)
+            .map(|(offset, _)| row_start + offset)
+            .chain([content_end])
+            .take_while(|&index| x_of(index) - row_start_x + affix_width <= width)
+            .last()
+            .unwrap_or(row_start)
+    };
+
+    let cut = line_start + cut;
+    let result = SharedString::from(format!("{}{affix}", &text[..cut]));
+    let mut kept: Vec<TextRun> = Vec::with_capacity(runs.len());
+    let mut start = 0;
+    for run in runs {
+        if start >= cut {
+            break;
+        }
+        let mut kept_run = run.clone();
+        kept_run.len = run.len.min(cut - start);
+        kept.push(kept_run);
+        start += run.len;
+    }
+    match kept.last_mut() {
+        Some(run) => run.len += affix.len(),
+        None => {
+            let mut run = style_at(0);
+            run.len = affix.len();
+            kept.push(run);
+        }
+    }
+    Some((result, kept, align_width))
+}
+
 /// The Layout for TextElement. This can be used to map indices to pixels and vice versa.
 #[derive(Default, Clone)]
-pub struct TextLayout(Rc<RefCell<Option<TextLayoutInner>>>);
+pub struct TextLayout(
+    Rc<RefCell<Option<TextLayoutInner>>>,
+    // Nodus patch: the text's layout node, to paint from its unrounded origin.
+    Rc<Cell<Option<LayoutId>>>,
+);
 
 #[derive(Clone, Copy)]
 enum TextPaintPass {
@@ -628,6 +771,9 @@ struct TextLayoutInner {
     truncate_width: Option<Pixels>,
     size: Option<Size<Pixels>>,
     bounds: Option<Bounds<Pixels>>,
+    /// Nodus patch: where the lines start: the box's origin before the
+    /// layout rounds it to device pixels, as Chromium paints text from.
+    origin: Option<Point<Pixels>>,
 }
 
 impl TextLayout {
@@ -640,10 +786,14 @@ impl TextLayout {
     ) -> LayoutId {
         let text_style = window.text_style();
         let font_size = text_style.font_size.to_pixels(window.rem_size());
-        let line_height = window.pixel_snap(
+        // Nodus patch: Chromium keeps a line box's height in its layout units
+        // (1/64 of a device pixel), not rounded to a device pixel, so lines of
+        // 18.2px stack 18.2px apart; the baseline is what lands on a pixel.
+        let line_height = crate::layout_unit_floor(
             text_style
                 .line_height
                 .to_pixels(font_size.into(), window.rem_size()),
+            window.scale_factor(),
         );
 
         let runs = if let Some(runs) = runs {
@@ -651,7 +801,7 @@ impl TextLayout {
         } else {
             vec![text_style.to_run(text.len())]
         };
-        window.request_measured_layout(Default::default(), {
+        let layout_id = window.request_measured_layout_unsnapped(Default::default(), {
             let element_state = self.clone();
 
             move |known_dimensions, available_space, window, cx| {
@@ -683,6 +833,46 @@ impl TextLayout {
                         (None, "".into(), TruncateFrom::End)
                     };
 
+                // Nodus patch: a text's min-content width is its widest piece
+                // that can't break (CSS's min-content contribution), so a flex
+                // item with text shrinks to its longest word, as in Chromium,
+                // where GPUI answered with the whole line. Only a probe: the
+                // layout wrapped at every opportunity isn't kept for painting.
+                if known_dimensions.width.is_none()
+                    && available_space.width == crate::AvailableSpace::MinContent
+                    && text_style.white_space == WhiteSpace::Normal
+                {
+                    let Some(lines) = window
+                        .text_system()
+                        .shape_text_wrapped(
+                            text.clone(),
+                            font_size,
+                            &runs,
+                            Some(Pixels::ZERO),
+                            None,
+                            text_style.wrap_style(),
+                        )
+                        .log_err()
+                    else {
+                        return Size::default();
+                    };
+                    let width = lines
+                        .iter()
+                        .map(|line| line.widest_row())
+                        .fold(Pixels::ZERO, Pixels::max);
+                    let mut rows: usize = lines
+                        .iter()
+                        .map(|line| line.wrap_boundaries().len() + 1)
+                        .sum();
+                    if let Some(max_lines) = text_style.line_clamp {
+                        rows = rows.min(max_lines);
+                    }
+                    return Size {
+                        width: crate::layout_unit_ceil(width, window.scale_factor()),
+                        height: line_height * rows as f32,
+                    };
+                }
+
                 // Only use cached layout if:
                 // 1. We have a cached size
                 // 2. wrap_width matches (or both are None)
@@ -700,9 +890,35 @@ impl TextLayout {
                     return size;
                 }
 
+                let wrap_style = text_style.wrap_style();
                 let mut line_wrapper = cx.text_system().line_wrapper(text_style.font(), font_size);
+                // Nodus patch: a clamp's last row is aligned as it was wrapped.
+                let mut last_row_align_width = None;
                 let (text, runs) = if let Some(truncate_width) = truncate_width {
-                    if let Some(max_lines) = text_style.line_clamp
+                    if truncate_from == TruncateFrom::End {
+                        // Nodus patch: CSS's ellipsis, as Chromium places it.
+                        let (width, clamp) = match (text_style.line_clamp, wrap_width) {
+                            (Some(max_lines), Some(wrap_width)) => {
+                                (wrap_width, Some((max_lines, wrap_style)))
+                            }
+                            _ => (truncate_width, None),
+                        };
+                        match chromium_ellipsis(
+                            &text,
+                            &runs,
+                            font_size,
+                            width,
+                            clamp,
+                            &truncation_affix,
+                            window,
+                        ) {
+                            Some((text, runs, align_width)) => {
+                                last_row_align_width = align_width;
+                                (text, Cow::Owned(runs))
+                            }
+                            None => (text.clone(), Cow::Borrowed(&*runs)),
+                        }
+                    } else if let Some(max_lines) = text_style.line_clamp
                         && let Some(wrap_width) = wrap_width
                     {
                         line_wrapper.truncate_wrapped_line(
@@ -742,14 +958,15 @@ impl TextLayout {
                 };
                 let len = text.len();
 
-                let Some(lines) = window
+                let Some(mut lines) = window
                     .text_system()
-                    .shape_text(
+                    .shape_text_wrapped(
                         text,
                         font_size,
                         &runs,
                         wrap_width,            // Wrap if we know the width.
                         text_style.line_clamp, // Limit the number of lines if line_clamp is set.
+                        wrap_style,
                     )
                     .log_err()
                 else {
@@ -761,15 +978,25 @@ impl TextLayout {
                         truncate_width,
                         size: Some(Size::default()),
                         bounds: None,
+                        origin: None,
                     });
                     return Size::default();
                 };
+
+                if let Some(line) = lines.last_mut() {
+                    line.last_row_align_width = last_row_align_width;
+                }
 
                 let mut size: Size<Pixels> = Size::default();
                 for line in &lines {
                     let line_size = line.size(line_height);
                     size.height += line_size.height;
-                    size.width = size.width.max(line_size.width).ceil();
+                    // Nodus patch: Chromium rounds a text's width up to its
+                    // layout units, not to a whole pixel.
+                    size.width = crate::layout_unit_ceil(
+                        size.width.max(line_size.width),
+                        window.scale_factor(),
+                    );
                 }
 
                 element_state.0.borrow_mut().replace(TextLayoutInner {
@@ -780,20 +1007,25 @@ impl TextLayout {
                     truncate_width,
                     size: Some(size),
                     bounds: None,
+                    origin: None,
                 });
 
                 size
             }
-        })
+        });
+        self.1.set(Some(layout_id));
+        layout_id
     }
 
-    fn prepaint(&self, bounds: Bounds<Pixels>, text: &str) {
+    fn prepaint(&self, bounds: Bounds<Pixels>, text: &str, window: &mut Window) {
+        let origin = self.1.get().map(|id| window.unrounded_layout_origin(id));
         let mut element_state = self.0.borrow_mut();
         let element_state = element_state
             .as_mut()
             .with_context(|| format!("measurement has not been performed on {text}"))
             .unwrap();
         element_state.bounds = Some(bounds);
+        element_state.origin = origin;
     }
 
     fn paint(&self, text: &str, window: &mut Window, cx: &mut App) {
@@ -829,7 +1061,7 @@ impl TextLayout {
             .context("prepaint has not been performed")?;
 
         let line_height = element_state.line_height;
-        let mut line_origin = bounds.origin;
+        let mut line_origin = element_state.origin.unwrap_or(bounds.origin);
         let text_style = window.text_style();
         for line in &element_state.lines {
             if matches!(pass, TextPaintPass::All | TextPaintPass::Background) {
@@ -874,7 +1106,7 @@ impl TextLayout {
         }
 
         let line_height = element_state.line_height;
-        let mut line_origin = bounds.origin;
+        let mut line_origin = element_state.origin.unwrap_or(bounds.origin);
         let mut line_start_ix = 0;
         for line in &element_state.lines {
             let line_bottom = line_origin.y + line.size(line_height).height;
@@ -904,7 +1136,7 @@ impl TextLayout {
             .expect("prepaint has not been performed");
         let line_height = element_state.line_height;
 
-        let mut line_origin = bounds.origin;
+        let mut line_origin = element_state.origin.unwrap_or(bounds.origin);
         let mut line_start_ix = 0;
 
         for line in &element_state.lines {

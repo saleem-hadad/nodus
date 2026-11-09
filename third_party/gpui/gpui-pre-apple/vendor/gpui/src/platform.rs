@@ -2930,6 +2930,20 @@ pub enum TextRenderingMode {
     Grayscale,
 }
 
+/// Nodus patch: whether glyphs get the platform's font smoothing, as CSS
+/// `-webkit-font-smoothing` chooses in Chromium.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub enum FontSmoothing {
+    /// The platform's: on macOS, CoreGraphics thickens the strokes when the
+    /// user allows font smoothing (`-webkit-font-smoothing: auto`).
+    #[default]
+    PlatformDefault,
+    /// Plain grayscale anti-aliasing with no thickening
+    /// (`-webkit-font-smoothing: antialiased`). Only macOS smooths, so
+    /// elsewhere this is the same as the default.
+    Antialiased,
+}
+
 /// The options that can be configured for a file dialog prompt
 #[derive(Clone, Debug)]
 pub struct PathPromptOptions {

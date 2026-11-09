@@ -161,8 +161,15 @@ impl Element for SpacedText {
         let Some(Prepaint { line, text }) = prepaint.take() else {
             return;
         };
-        let padding_top = (self.line_height - line.ascent - line.descent) / 2.;
-        let baseline = bounds.origin.y + padding_top + line.ascent;
+        // Where Chromium puts the baseline, as the patched GPUI's own text does.
+        let baseline = bounds.origin.y
+            + gpui::chromium_baseline_offset(
+                bounds.origin.y,
+                self.line_height,
+                line.ascent,
+                line.descent,
+                window.scale_factor(),
+            );
         // Characters before each glyph, to place it with the spacing.
         let offsets: Vec<usize> = text.char_indices().map(|(i, _)| i).collect();
         for run in &line.runs {

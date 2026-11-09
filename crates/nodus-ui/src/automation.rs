@@ -113,6 +113,12 @@ fn num(v: &Value, key: &str) -> f32 {
 async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
     let name = command.get("cmd").and_then(Value::as_str).unwrap_or_default();
     let nodus = cx.update(|cx| cx.global::<window::Core>().0.clone());
+    // `"window": "capture"` sends input to, and shoots, the capture panel.
+    let panel = command.get("window").and_then(Value::as_str) == Some("capture");
+    cx.update(|cx| cx.set_global(Target { panel }));
+    if let Some(answer) = crate::capture::automation::run(name, command, &nodus, cx).await {
+        return answer;
+    }
     match name {
         "resize" => {
             let (w, h) = (num(command, "width"), num(command, "height"));
@@ -282,6 +288,7 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
                     status: serde_json::from_value(payload["status"].clone()).map_err(|e| e.to_string())?,
                     live: payload["live"].as_bool().unwrap_or(true),
                 },
+                "captureContext" => Event::CaptureContext(crate::capture::automation::context_patch(&payload)?),
                 other => return Err(format!("unknown event {other}")),
             };
             nodus.emit(event);
@@ -342,8 +349,21 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
     }
 }
 
+/// Which window a command is for: the main one, or the capture panel.
+#[derive(Default)]
+struct Target {
+    panel: bool,
+}
+
+impl gpui::Global for Target {}
+
 fn with_window<R>(cx: &mut AsyncApp, f: impl FnOnce(&mut gpui::Window, &mut App) -> R) -> Result<R, String> {
     cx.update(|cx| {
+        if cx.try_global::<Target>().is_some_and(|t| t.panel) {
+            let handle = crate::capture::PanelSlot::live(cx).ok_or("no capture panel")?;
+            return gpui::AppContext::update_window(cx, handle.into(), |_, window, cx| f(window, cx))
+                .map_err(|e| e.to_string());
+        }
         let handle = window::main_window(cx).ok_or("no main window")?;
         // Through the window, not its root view: input dispatched here
         // reaches views that update the root themselves.
@@ -365,10 +385,18 @@ async fn screenshot(cx: &mut AsyncApp, path: &str) -> Result<Value, String> {
     // Let the frame in flight land first.
     cx.background_executor().timer(Duration::from_millis(50)).await;
     let mut image = with_window(cx, |window, _| window.render_to_image().map_err(|e| e.to_string()))??;
-    // GPUI draws sRGB values and the window shows them as sRGB (its layer
-    // is tagged so); the goldens hold what Chromium sent a Display P3
+    // GPUI draws sRGB values and the window shows them as sRGB (the patched
+    // GPUI tags its layer so); the goldens hold what Chromium sent a Display P3
     // screen. Converted, the two compare value for value.
     for pixel in image.pixels_mut() {
+        // A see-through window (the capture panel) reads back premultiplied;
+        // the goldens' PNGs are straight alpha. Opaque pixels don't change.
+        let a = pixel[3];
+        if a > 0 && a < 255 {
+            for c in 0..3 {
+                pixel[c] = ((u16::from(pixel[c]) * 255 + u16::from(a) / 2) / u16::from(a)).min(255) as u8;
+            }
+        }
         let [r, g, b] = srgb_to_display_p3([pixel[0], pixel[1], pixel[2]]);
         pixel[0] = r;
         pixel[1] = g;

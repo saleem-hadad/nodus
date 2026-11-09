@@ -1,4 +1,7 @@
-use crate::{FontId, GlyphId, Pixels, PlatformTextSystem, Point, SharedString, Size, point, px};
+use crate::{
+    FontId, GlyphId, OverflowWrap, Pixels, PlatformTextSystem, Point, SharedString, Size,
+    WordBreak, WrapStyle, point, px,
+};
 use collections::{FxHashMap, FxHashSet};
 use itertools::Itertools;
 use smallvec::SmallVec;
@@ -196,6 +199,7 @@ impl LineLayout {
         text: &str,
         wrap_width: Pixels,
         max_lines: Option<usize>,
+        wrap_style: WrapStyle,
         scratch: &mut WrapScratch,
     ) -> SmallVec<[WrapBoundary; 1]> {
         let mut boundaries = SmallVec::new();
@@ -212,6 +216,7 @@ impl LineLayout {
         let WrapScratch {
             glyph_indices,
             break_indices,
+            grapheme_indices,
         } = scratch;
         glyph_indices.clear();
         glyph_indices.extend(
@@ -222,6 +227,13 @@ impl LineLayout {
         break_indices.clear();
         break_indices
             .extend(LineWrapper::break_indices(text).filter(|index| glyph_indices.contains(index)));
+        // Nodus patch: with `word-break: break-all`, a line may also break
+        // between any two graphemes of a word.
+        grapheme_indices.clear();
+        if wrap_style.word_break == WordBreak::BreakAll {
+            use unicode_segmentation::UnicodeSegmentation as _;
+            grapheme_indices.extend(text.grapheme_indices(true).map(|(index, _)| index));
+        }
         let mut glyphs = self
             .runs
             .iter()
@@ -264,6 +276,21 @@ impl LineLayout {
                     .unwrap_or(0);
                 let end = break_indices.get(segment).copied().unwrap_or(text.len());
                 current_segment = Some(start..end);
+            } else if byte != b' '
+                && current_segment.is_some()
+                && boundary > last_boundary
+                && grapheme_indices.binary_search(&index).is_ok()
+            {
+                // Nodus patch: `word-break: break-all`.
+                last_candidate_ix = Some(boundary);
+                last_candidate_x = x;
+            }
+
+            // Nodus patch: a space at the end of a line hangs past it, as
+            // CSS's `white-space: normal` lets it: it never makes the line
+            // wrap.
+            if byte == b' ' {
+                continue;
             }
 
             let next_x = glyphs.peek().map_or(self.width, |(_, _, x)| *x);
@@ -280,6 +307,11 @@ impl LineLayout {
                 if let Some(last_candidate_ix) = last_candidate_ix.take() {
                     last_boundary = last_candidate_ix;
                     last_boundary_x = last_candidate_x;
+                } else if wrap_style.overflow_wrap == OverflowWrap::Normal {
+                    // Nodus patch: `overflow-wrap: normal`: a word that
+                    // doesn't fit on a line by itself overflows it; the line
+                    // breaks at the next opportunity.
+                    continue;
                 } else {
                     last_boundary = boundary;
                     last_boundary_x = x;
@@ -489,6 +521,7 @@ pub(crate) struct LineLayoutCache {
 struct WrapScratch {
     glyph_indices: FxHashSet<usize>,
     break_indices: Vec<usize>,
+    grapheme_indices: Vec<usize>,
 }
 
 #[derive(Default)]
@@ -601,6 +634,7 @@ impl LineLayoutCache {
         runs: &[FontRun],
         wrap_width: Option<Pixels>,
         max_lines: Option<usize>,
+        wrap_style: WrapStyle,
     ) -> Arc<WrappedLineLayout>
     where
         Text: AsRef<str>,
@@ -613,6 +647,8 @@ impl LineLayoutCache {
             runs,
             wrap_width,
             force_width: None,
+            max_lines,
+            wrap_style,
         } as &dyn AsCacheKeyRef;
 
         let state = self.state.borrow();
@@ -639,6 +675,7 @@ impl LineLayoutCache {
                     text.as_ref(),
                     wrap_width,
                     max_lines,
+                    wrap_style,
                     &mut self.wrap_scratch.borrow_mut(),
                 )
             } else {
@@ -655,6 +692,8 @@ impl LineLayoutCache {
                 runs: SmallVec::from(runs),
                 wrap_width,
                 force_width: None,
+                max_lines,
+                wrap_style,
             });
 
             let mut state = self.state.borrow_mut();
@@ -686,6 +725,8 @@ impl LineLayoutCache {
             runs,
             wrap_width: None,
             force_width,
+            max_lines: None,
+            wrap_style: WrapStyle::default(),
         } as &dyn AsCacheKeyRef;
 
         let state = self.state.borrow();
@@ -719,6 +760,8 @@ impl LineLayoutCache {
                 runs: SmallVec::from(runs),
                 wrap_width: None,
                 force_width,
+                max_lines: None,
+                wrap_style: WrapStyle::default(),
             });
             let layout = Arc::new(layout);
             current_frame.lines.insert(key.clone(), layout.clone());
@@ -794,6 +837,9 @@ struct CacheKey {
     runs: SmallVec<[FontRun; 1]>,
     wrap_width: Option<Pixels>,
     force_width: Option<Pixels>,
+    // Nodus patch: lines wrap by these too.
+    max_lines: Option<usize>,
+    wrap_style: WrapStyle,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
@@ -803,6 +849,9 @@ struct CacheKeyRef<'a> {
     runs: &'a [FontRun],
     wrap_width: Option<Pixels>,
     force_width: Option<Pixels>,
+    // Nodus patch: lines wrap by these too.
+    max_lines: Option<usize>,
+    wrap_style: WrapStyle,
 }
 
 impl PartialEq for dyn AsCacheKeyRef + '_ {
@@ -827,6 +876,8 @@ impl AsCacheKeyRef for CacheKey {
             runs: self.runs.as_slice(),
             wrap_width: self.wrap_width,
             force_width: self.force_width,
+            max_lines: self.max_lines,
+            wrap_style: self.wrap_style,
         }
     }
 }
@@ -859,6 +910,11 @@ impl AsCacheKeyRef for CacheKeyRef<'_> {
 mod tests {
     use super::*;
     use crate::GlyphId;
+
+    const ANYWHERE: WrapStyle = WrapStyle {
+        overflow_wrap: OverflowWrap::Anywhere,
+        word_break: WordBreak::Normal,
+    };
 
     fn glyph_at(x: f32, index: usize) -> ShapedGlyph {
         ShapedGlyph {
@@ -903,7 +959,13 @@ mod tests {
         layout.len = "你好".len();
         assert_eq!(
             layout
-                .compute_wrap_boundaries("你好", px(15.), None, &mut WrapScratch::default())
+                .compute_wrap_boundaries(
+                    "你好",
+                    px(15.),
+                    None,
+                    ANYWHERE,
+                    &mut WrapScratch::default()
+                )
                 .as_slice(),
             &[WrapBoundary {
                 run_ix: 0,
@@ -916,7 +978,7 @@ mod tests {
         layout.len = 1;
         assert!(
             layout
-                .compute_wrap_boundaries("a", px(10.), None, &mut WrapScratch::default())
+                .compute_wrap_boundaries("a", px(10.), None, ANYWHERE, &mut WrapScratch::default())
                 .is_empty()
         );
     }
@@ -937,7 +999,13 @@ mod tests {
             layout.width = px(indices.len() as f32 * 10.);
             layout.len = text.len();
             assert_eq!(
-                layout.compute_wrap_boundaries(text, px(40.), None, &mut WrapScratch::default()),
+                layout.compute_wrap_boundaries(
+                    text,
+                    px(40.),
+                    None,
+                    ANYWHERE,
+                    &mut WrapScratch::default()
+                ),
                 expected_boundaries
                     .into_iter()
                     .map(|glyph_ix| WrapBoundary {
@@ -963,7 +1031,7 @@ mod tests {
         layout.len = text.len();
         assert_eq!(
             layout
-                .compute_wrap_boundaries(text, px(60.), None, &mut WrapScratch::default())
+                .compute_wrap_boundaries(text, px(60.), None, ANYWHERE, &mut WrapScratch::default())
                 .as_slice(),
             &[WrapBoundary {
                 run_ix: 0,

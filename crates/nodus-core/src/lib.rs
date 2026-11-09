@@ -45,11 +45,13 @@
 mod actions;
 mod app;
 mod board;
+mod capture;
 #[cfg(test)]
 mod core_tests;
 mod error;
 mod git;
 mod groups;
+mod local_storage;
 mod menu;
 mod nodus;
 mod notifications;
@@ -66,11 +68,15 @@ mod wiring;
 pub use actions::ActionsApi;
 pub use app::AppApi;
 pub use board::BoardApi;
+pub use capture::{CaptureApi, CaptureSystem, WindowSize};
 pub use error::{CommandError, CommandResult};
 pub use git::GitApi;
 pub use groups::GroupsApi;
+pub use local_storage::LocalStorageApi;
 pub use menu::MenuApi;
 pub use nodus::{Dialogs, EnvSource, Nodus, NodusConfig, PickFolder, QuitAtOnce, SettingsHook};
+/// What the windowed app gives capture, and what it answers.
+pub use nodus_capture as capture_service;
 /// Where the xAI key is sealed; tests give a synthetic one.
 pub use nodus_platform::secrets::SafeStorage;
 /// What a mic implements and runs, for the window's mics (`VoiceApi::backend`).

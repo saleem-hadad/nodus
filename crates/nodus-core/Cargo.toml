@@ -13,6 +13,7 @@ publish.workspace = true
 indexmap.workspace = true
 nodus-actions.workspace = true
 nodus-board.workspace = true
+nodus-capture.workspace = true
 nodus-domain.workspace = true
 nodus-git.workspace = true
 nodus-platform.workspace = true

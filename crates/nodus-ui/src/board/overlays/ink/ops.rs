@@ -196,8 +196,13 @@ impl BoardCanvas {
     /// Whether an input method is composing in the label.
     pub(crate) fn ink_label_composing(&self, window: &mut Window, cx: &mut Context<'_, Self>) -> bool {
         use gpui::EntityInputHandler as _;
-        let Some(label) = &self.overlays.ink.label else { return false };
-        label.input.update(cx, |s, cx| s.marked_text_range(window, cx)).is_some()
+        let Some(label) = &self.overlays.ink.label else {
+            return false;
+        };
+        label
+            .input
+            .update(cx, |s, cx| s.marked_text_range(window, cx))
+            .is_some()
     }
 
     pub(crate) fn ink_open_label(
@@ -234,11 +239,17 @@ impl BoardCanvas {
             _subscriptions: subscriptions,
         });
         // Focused once drawn, with the caret at the end.
-        window.on_next_frame(move |window, cx| {
-            input.update(cx, |s, cx| {
-                s.focus(window, cx);
-                let end = s.value().len();
-                s.set_selected_range(end..end, cx);
+        // Focused now, so the next frame draws it with the keyboard; and
+        // again once drawn, with the caret at the end.
+        input.update(cx, |s, cx| s.focus(window, cx));
+        window.on_next_frame(move |window, _| {
+            window.refresh();
+            window.on_next_frame(move |window, cx| {
+                input.update(cx, |s, cx| {
+                    s.focus(window, cx);
+                    let end = s.value().len();
+                    s.set_selected_range(end..end, cx);
+                });
             });
         });
         cx.notify();

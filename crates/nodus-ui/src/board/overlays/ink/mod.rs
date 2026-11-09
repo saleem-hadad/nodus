@@ -11,19 +11,19 @@
 
 use std::rc::Rc;
 
-use gpui::prelude::FluentBuilder as _;
 use gpui::Focusable as _;
-use gpui::{
-    AnyElement, App, AppContext as _, Bounds, Context, CursorStyle, DispatchPhase, Entity, FontWeight, Global,
-    Hitbox, HitboxBehavior, InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, ParentElement, PathBuilder, PathStyle, Pixels, Point as GPoint, Rgba, SharedString,
-    StatefulInteractiveElement, Styled, Subscription, TextRun, Window, WindowTextSystem, canvas, div, point, px,
-};
 use gpui::component::input::{Input, InputEvent, InputState};
+use gpui::prelude::FluentBuilder as _;
+use gpui::{
+    AnyElement, App, AppContext as _, Bounds, Context, CursorStyle, DispatchPhase, Entity, FontWeight, Global, Hitbox,
+    HitboxBehavior, InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    ParentElement, PathBuilder, PathStyle, Pixels, Point as GPoint, Rgba, SharedString, StatefulInteractiveElement,
+    Styled, Subscription, TextRun, Window, WindowTextSystem, canvas, div, point, px,
+};
 use lyon::tessellation::{LineCap, LineJoin, StrokeOptions};
 use nodus_board::ink_draw::{
-    self, HIT_PX, InkHistory, LABEL_FONT, LABEL_LINE, MIN_ARROW_PX, MIN_STEP_PX, MOVE_PX, PEN_WIDTH, Pt,
-    Seg, distance, flatten, points_of, simplify, size_at, stroke_at, stroke_box, strokes_along, translate,
+    self, HIT_PX, InkHistory, LABEL_FONT, LABEL_LINE, MIN_ARROW_PX, MIN_STEP_PX, MOVE_PX, PEN_WIDTH, Pt, Seg, distance,
+    flatten, points_of, simplify, size_at, stroke_at, stroke_box, strokes_along, translate,
 };
 use nodus_domain::{InkColor, InkKind, InkStroke, js};
 
@@ -34,7 +34,7 @@ use crate::components::icon::{Icon, icon};
 use crate::components::tooltip::native_tooltip;
 use crate::components::tween::enter;
 use crate::platform::keys;
-use crate::theme::tokens::{Tokens, inset_shadow, ring};
+use crate::theme::tokens::{Tokens, inset_shadow};
 use crate::theme::{self, fonts, motion, tokens::DUR_FAST};
 
 /// The ink tools.
@@ -112,9 +112,24 @@ pub(crate) struct LabelDraft {
 }
 
 enum InkGesture {
-    Draw { base: InkStroke, pts: Vec<Pt>, zoom: f64 },
-    Erase { gone: Vec<String>, last: Pt, tolerance: f64 },
-    Move { id: String, start: Pt, dx: f64, dy: f64, moved: bool, zoom: f64 },
+    Draw {
+        base: InkStroke,
+        pts: Vec<Pt>,
+        zoom: f64,
+    },
+    Erase {
+        gone: Vec<String>,
+        last: Pt,
+        tolerance: f64,
+    },
+    Move {
+        id: String,
+        start: Pt,
+        dx: f64,
+        dy: f64,
+        moved: bool,
+        zoom: f64,
+    },
 }
 
 /// The ink layer's state, per board mount.
@@ -182,4 +197,3 @@ mod dock;
 mod draw;
 mod input;
 mod ops;
-

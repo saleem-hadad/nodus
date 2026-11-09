@@ -159,7 +159,12 @@ impl BoardCanvas {
     /// The label being typed (`.ink-label-input`): in the label's font and
     /// colour, as wide as its text (at least 48 units), a dashed accent
     /// outline 3 units outside it.
-    pub(crate) fn render_label_input(&mut self, t: &Tokens, window: &mut Window, cx: &mut Context<'_, Self>) -> Option<AnyElement> {
+    pub(crate) fn render_label_input(
+        &mut self,
+        t: &Tokens,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> Option<AnyElement> {
         let label = self.overlays.ink.label.as_ref()?;
         let vp = self.viewport;
         let z = vp.zoom as f32;
@@ -187,7 +192,7 @@ impl BoardCanvas {
                     h + 2.0 * off,
                     (2.0 + 3.0) * z,
                     outline,
-                    (3.0 * outline, 3.0 * outline),
+                    (2.0 * outline, outline),
                     accent,
                     window,
                 );
@@ -196,7 +201,16 @@ impl BoardCanvas {
         .absolute()
         .size_full();
         let placeholder = text.is_empty().then(|| {
-            label_element(0.0, 0.0, size * z, Rgba { a: color.a * 0.4, ..color }).child("Label")
+            label_element(
+                0.0,
+                0.0,
+                size * z,
+                Rgba {
+                    a: color.a * 0.4,
+                    ..color
+                },
+            )
+            .child("Label")
         });
         Some(
             div()
@@ -234,13 +248,20 @@ impl BoardCanvas {
                 .child(ring)
                 .children(placeholder)
                 .child(
-                    Input::new(&label.input)
-                        .appearance(false)
-                        .px(px(0.))
-                        .py(px(0.))
-                        .h(px(h))
-                        .text_size(px(LABEL_FONT as f32 * size * z))
-                        .line_height(px(h)),
+                    // Wider than its text, so it never scrolls sideways
+                    // (`field-sizing: content` fits the text exactly).
+                    div().absolute().left_0().top_0().w(px(w + 96.0)).h(px(h)).child(
+                        // `Input::h` sizes a multi-line field; a single line takes the style's.
+                        Styled::h(
+                            Input::new(&label.input)
+                                .appearance(false)
+                                .px(px(0.))
+                                .py(px(0.))
+                                .text_size(px(LABEL_FONT as f32 * size * z))
+                                .line_height(px(h)),
+                            px(h),
+                        ),
+                    ),
                 )
                 .into_any_element(),
         )
@@ -263,10 +284,14 @@ pub(crate) fn label_element(left: f32, top: f32, scale: f32, color: Rgba) -> gpu
         .whitespace_nowrap()
 }
 
-
-
 /// Strokes a path of segments in window coordinates, round caps and joins.
-pub(crate) fn paint_line(segs: &[Seg], width: f32, color: Rgba, at: &dyn Fn(Pt) -> GPoint<Pixels>, window: &mut Window) {
+pub(crate) fn paint_line(
+    segs: &[Seg],
+    width: f32,
+    color: Rgba,
+    at: &dyn Fn(Pt) -> GPoint<Pixels>,
+    window: &mut Window,
+) {
     if segs.is_empty() || width <= 0.0 {
         return;
     }
@@ -313,7 +338,11 @@ pub(crate) fn paint_dashed_rect(
     path.line_to(p(x + w - r, y));
     path.cubic_bezier_to(p(x + w, y + r), p(x + w - r + k * r, y), p(x + w, y + r - k * r));
     path.line_to(p(x + w, y + h - r));
-    path.cubic_bezier_to(p(x + w - r, y + h), p(x + w, y + h - r + k * r), p(x + w - r + k * r, y + h));
+    path.cubic_bezier_to(
+        p(x + w - r, y + h),
+        p(x + w, y + h - r + k * r),
+        p(x + w - r + k * r, y + h),
+    );
     path.line_to(p(x + r, y + h));
     path.cubic_bezier_to(p(x, y + h - r), p(x + r - k * r, y + h), p(x, y + h - r + k * r));
     path.line_to(p(x, y + r));
@@ -322,4 +351,3 @@ pub(crate) fn paint_dashed_rect(
         window.paint_path(path, color);
     }
 }
-

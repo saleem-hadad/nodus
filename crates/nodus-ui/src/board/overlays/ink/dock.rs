@@ -15,12 +15,12 @@ impl BoardCanvas {
         let mut children: Vec<AnyElement> = Vec::new();
         for (each, name, key) in TOOLS {
             let me = me.clone();
-            let glyph = match each {
-                InkTool::Select => ov_icon(OvIcon::MousePointer2, 15., 2., Rgba::default()),
-                InkTool::Pen => icon(Icon::Pencil, 15., 2., Rgba::default()),
-                InkTool::Arrow => ov_icon(OvIcon::MoveUpRight, 15., 2., Rgba::default()),
-                InkTool::Text => ov_icon(OvIcon::Type, 15., 2., Rgba::default()),
-                InkTool::Eraser => ov_icon(OvIcon::Eraser, 15., 2., Rgba::default()),
+            let glyph = move |fg: Rgba| match each {
+                InkTool::Select => ov_icon(OvIcon::MousePointer2, 15., 2., fg),
+                InkTool::Pen => icon(Icon::Pencil, 15., 2., fg),
+                InkTool::Arrow => ov_icon(OvIcon::MoveUpRight, 15., 2., fg),
+                InkTool::Text => ov_icon(OvIcon::Type, 15., 2., fg),
+                InkTool::Eraser => ov_icon(OvIcon::Eraser, 15., 2., fg),
             };
             let title = match key {
                 Some(k) => format!("{name} ({k})"),
@@ -32,7 +32,7 @@ impl BoardCanvas {
                 tool == each,
                 false,
                 title,
-                move |el| el.child(glyph),
+                move |el, fg| el.child(glyph(fg)),
                 move |window, cx| {
                     if let Some(c) = me.upgrade() {
                         c.update(cx, |c, cx| c.ink_set_tool(each, Some(window), cx));
@@ -53,14 +53,14 @@ impl BoardCanvas {
             false,
             false,
             "Ink colour".to_owned(),
-            move |el| {
-                el.child(
-                    div()
-                        .size(px(14.))
-                        .rounded_full()
-                        .bg(dot)
-                        .shadow(vec![inset_shadow(0., 0., 0., 0.5, theme::tokens::rgba(0, 0, 0, 0.25))]),
-                )
+            move |el, _| {
+                el.child(div().size(px(14.)).rounded_full().bg(dot).shadow(vec![inset_shadow(
+                    0.,
+                    0.,
+                    0.,
+                    0.5,
+                    theme::tokens::rgba(0, 0, 0, 0.25),
+                )]))
             },
             move |_, cx| {
                 if let Some(c) = toggle.upgrade() {
@@ -110,7 +110,7 @@ impl BoardCanvas {
             false,
             empty,
             "Clear all ink".to_owned(),
-            move |el| el.child(icon(Icon::Trash2, 15., 2., Rgba::default())),
+            move |el, fg| el.child(icon(Icon::Trash2, 15., 2., fg)),
             move |window, cx| {
                 if let Some(c) = clear.upgrade() {
                     c.update(cx, |c, cx| c.ink_clear_all(window, cx));
@@ -144,30 +144,42 @@ impl BoardCanvas {
     }
 
     /// INKUI-004: the palette, to the right of the colour button.
-    pub(crate) fn render_ink_palette(&mut self, t: &Tokens, current: InkColor, window: &mut Window, cx: &mut Context<'_, Self>) -> AnyElement {
+    pub(crate) fn render_ink_palette(
+        &mut self,
+        t: &Tokens,
+        current: InkColor,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> AnyElement {
         let rise = enter(window, cx, "ink-palette-in", DUR_FAST, motion::ease_out);
         let me = cx.entity().downgrade();
         let swatches = InkColor::ALL.iter().map(|&c| {
             let me = me.clone();
-            let mut shadows = Vec::new();
-            if c == current {
-                shadows.push(ring(3.5, t.accent));
-                shadows.push(ring(2., t.bg_elevated));
-            }
-            shadows.push(inset_shadow(0., 0., 0., 0.5, theme::tokens::rgba(0, 0, 0, 0.25)));
-            div()
+            let swatch = div()
                 .id(("ink-swatch", c as usize))
+                .relative()
                 .size(px(18.))
                 .flex_none()
                 .rounded_full()
                 .bg(ink_rgba(t, c))
-                .shadow(shadows)
+                .shadow(vec![inset_shadow(0., 0., 0., 0.5, theme::tokens::rgba(0, 0, 0, 0.25))])
                 .tooltip(native_tooltip(color_name(c).into()))
                 .on_click(move |_, _, cx| {
                     if let Some(canvas) = me.upgrade() {
                         canvas.update(cx, |canvas, cx| canvas.ink_pick_color(c, cx));
                     }
+                });
+            // The current one: a 2px gap, then a 1.5px accent ring, drawn
+            // as circles (a spread shadow keeps the box's corners).
+            div()
+                .relative()
+                .size(px(18.))
+                .flex_none()
+                .when(c == current, |d| {
+                    d.child(circle(-3.5, 25., t.accent))
+                        .child(circle(-2., 22., t.bg_elevated))
                 })
+                .child(swatch)
         });
         div()
             .absolute()
@@ -196,7 +208,7 @@ pub(crate) fn tool_button(
     on: bool,
     disabled: bool,
     title: String,
-    content: impl FnOnce(gpui::Stateful<gpui::Div>) -> gpui::Stateful<gpui::Div>,
+    content: impl FnOnce(gpui::Stateful<gpui::Div>, Rgba) -> gpui::Stateful<gpui::Div>,
     on_click: impl Fn(&mut Window, &mut App) + 'static,
     window: &mut Window,
     cx: &mut App,
@@ -233,5 +245,16 @@ pub(crate) fn tool_button(
             .when(!on, |d| d.active(move |s| s.bg(pressed_bg)))
             .on_click(move |_, window, cx| on_click(window, cx))
         });
-    content(el).into_any_element()
+    content(el, fg).into_any_element()
+}
+
+/// A filled circle `size` across, `inset` from its parent's corner.
+pub(crate) fn circle(inset: f32, size: f32, color: Rgba) -> gpui::Div {
+    div()
+        .absolute()
+        .left(px(inset))
+        .top(px(inset))
+        .size(px(size))
+        .rounded_full()
+        .bg(color)
 }

@@ -58,7 +58,9 @@ impl OvIcon {
                 r#"<path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"/>"#
             }
             Self::MoveUpRight => r#"<path d="M13 5H19V11"/><path d="M19 5L5 19"/>"#,
-            Self::Type => r#"<path d="M12 4v16"/><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"/><path d="M9 20h6"/>"#,
+            Self::Type => {
+                r#"<path d="M12 4v16"/><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"/><path d="M9 20h6"/>"#
+            }
             Self::Eraser => {
                 r#"<path d="M21 21H8a2 2 0 0 1-1.42-.587l-3.994-3.999a2 2 0 0 1 0-2.828l10-10a2 2 0 0 1 2.829 0l5.999 6a2 2 0 0 1 0 2.828L12.834 21"/><path d="m5.082 11.09 8.828 8.828"/>"#
             }
@@ -88,7 +90,11 @@ impl OvIcon {
 /// An overlay icon `size` px square, its strokes `stroke` wide, in `color`.
 pub fn ov_icon(icon: OvIcon, size: f32, stroke: f32, color: impl Into<Rgba>) -> Svg {
     let color: Rgba = color.into();
-    svg().path(icon.path(stroke)).size(px(size)).flex_none().text_color(color)
+    svg()
+        .path(icon.path(stroke))
+        .size(px(size))
+        .flex_none()
+        .text_color(color)
 }
 
 /// The SVG for an asset path under `icons/overlays/`, if it names one.

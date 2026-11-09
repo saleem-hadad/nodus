@@ -13,9 +13,16 @@ impl BoardCanvas {
 
     /// Whether `p` is on the label being typed.
     pub(crate) fn on_label_input(&self, p: GPoint<Pixels>, window: &Window, cx: &App) -> bool {
-        let Some(label) = &self.overlays.ink.label else { return false };
+        let Some(label) = &self.overlays.ink.label else {
+            return false;
+        };
         let text = label.input.read(cx).value();
-        let w = label_width(window.text_system(), if text.is_empty() { "Label" } else { &text }, label.size).max(48.0);
+        let w = label_width(
+            window.text_system(),
+            if text.is_empty() { "Label" } else { &text },
+            label.size,
+        )
+        .max(48.0);
         let q = self.ink_point(p);
         let pad = 3.0;
         q[0] >= label.x - pad
@@ -95,7 +102,11 @@ impl BoardCanvas {
                 self.overlays.ink.gesture = Some(InkGesture::Draw {
                     base: InkStroke {
                         id: uuid::Uuid::new_v4().to_string(),
-                        kind: if tool == InkTool::Pen { InkKind::Pen } else { InkKind::Arrow },
+                        kind: if tool == InkTool::Pen {
+                            InkKind::Pen
+                        } else {
+                            InkKind::Arrow
+                        },
                         color,
                         points: Vec::new(),
                         size: size_at(zoom),
@@ -219,9 +230,7 @@ impl BoardCanvas {
                 let next = current.into_iter().filter(|s| !gone.contains(&s.id)).collect();
                 self.ink_commit(next, cx);
             }
-            InkGesture::Move {
-                id, dx, dy, moved, ..
-            } => {
+            InkGesture::Move { id, dx, dy, moved, .. } => {
                 if !moved {
                     cx.notify();
                     return;

@@ -753,10 +753,10 @@ No Vitest exists for the registry, the modal, the preview or the viewer. New Rus
 - [x] MODAL-025 Remove for shells
 - [x] MODAL-026 Archive for Claude; none for view brains
 - [x] MODAL-027 close button tooltip per platform/kind
-- [ ] MODAL-028 archived from outside closes window
-- [ ] MODAL-029 finished action run disposes and closes
-- [ ] MODAL-030 removed view closes its brain's window
-- [ ] MODAL-031 board shortcuts/search suppressed; menu search closes window
+- [x] MODAL-028 archived from outside closes window
+- [x] MODAL-029 finished action run disposes and closes
+- [x] MODAL-030 removed view closes its brain's window
+- [x] MODAL-031 board shortcuts/search suppressed; menu search closes window
 - [x] MODAL-032 window size
 - [x] TRANS-001 open condition, rebuild on switch
 - [x] TRANS-002 records search, closes session window

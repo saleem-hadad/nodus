@@ -57,10 +57,13 @@ pub enum Glyph {
     SquareArrowRight,
     SquareDot,
     TriangleAlert,
+    /// Not lucide: the corner grip Chromium draws on a vertically resizable
+    /// textarea (the action dialog's description).
+    ResizeGrip,
 }
 
 impl Glyph {
-    pub const ALL: [Self; 44] = [
+    pub const ALL: [Self; 45] = [
         Self::Zap,
         Self::RefreshCw,
         Self::GitMerge,
@@ -105,6 +108,7 @@ impl Glyph {
         Self::SquareArrowRight,
         Self::SquareDot,
         Self::TriangleAlert,
+        Self::ResizeGrip,
     ];
 
     pub const fn name(self) -> &'static str {
@@ -153,6 +157,7 @@ impl Glyph {
             Self::SquareArrowRight => "square-arrow-right",
             Self::SquareDot => "square-dot",
             Self::TriangleAlert => "triangle-alert",
+            Self::ResizeGrip => "resize-grip",
         }
     }
 
@@ -273,6 +278,8 @@ impl Glyph {
             Self::TriangleAlert => {
                 r#"<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>"#
             }
+            // Two strokes rising to the right, 7 and 3 units of a 10px box.
+            Self::ResizeGrip => r#"<path d="M4.8 20.4 21.4 3.8"/><path d="M14.4 20.4 21.4 13.4"/>"#,
         }
     }
 

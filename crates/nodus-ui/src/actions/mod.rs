@@ -20,6 +20,7 @@
 //! draw too.
 
 pub mod dialog;
+mod dialog_view;
 pub mod icons;
 
 use std::rc::Rc;

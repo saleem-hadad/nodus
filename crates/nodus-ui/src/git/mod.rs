@@ -466,7 +466,7 @@ fn branch_chip(model: &Entity<GitModel>, git: &GitStatus, window: &mut Window, c
                             .child(
                                 div()
                                     .flex_none()
-                                    .font_family(fonts::MONO)
+                                    .font_family(crate::terminal::MONO)
                                     .child(nodus_domain::js::slice_utf16(&c.oid, 0, 7)),
                             )
                             .child(div().min_w_0().truncate().child(format!(" · {}", c.author))),

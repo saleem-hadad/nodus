@@ -416,6 +416,16 @@ fn node(env: &Rc<BoardEnv>, card: SessionCard, selected: bool, stack: Option<Sta
     .into_any_element()
 }
 
+/// Runs `f` on the gallery's window outside any update of its view (a
+/// forced frame renders the view).
+fn in_window<R>(
+    cx: &mut AsyncApp,
+    handle: WindowHandle<Gallery>,
+    f: impl FnOnce(&mut Window, &mut App) -> R,
+) -> Result<R> {
+    cx.update(|cx| cx.update_window(handle.into(), |_, window, cx| f(window, cx)))
+}
+
 /// The theme, with the text caret hidden as the parity shots have it.
 fn set_theme(preference: ThemePreference, cx: &mut App) {
     theme::apply_preference(preference, cx);
@@ -492,29 +502,43 @@ fn main() {
                 for s in &scenes {
                     *scene.borrow_mut() = *s;
                     let (vx, vy, zoom) = s.viewport();
-                    // Away first, so hover states start from rest.
-                    let _ = handle.update(cx, |_, window, cx| {
+                    // Away first, so hover states start from rest. Every step
+                    // draws a frame at once: the pointer is hit-tested against
+                    // the last frame, and a covered window isn't asked for any.
+                    let _ = in_window(cx, handle, |window, cx| {
+                        window.refresh();
+                        window.draw(cx).clear(cx);
                         window.dispatch_event(PlatformInput::MouseMove(MouseMoveEvent {
                             position: point(px(720.), px(20.)),
                             pressed_button: None,
                             modifiers: Modifiers::default(),
                         }), cx);
                         window.refresh();
+                        window.draw(cx).clear(cx);
                     });
                     cx.background_executor().timer(Duration::from_millis(900)).await;
                     if let Some((x, y)) = s.pointer() {
                         let position = point(px(vx + x * zoom), px(52. + vy + y * zoom));
-                        let _ = handle.update(cx, |_, window, cx| {
+                        let _ = in_window(cx, handle, |window, cx| {
+                            window.refresh();
+                            window.draw(cx).clear(cx);
                             window.dispatch_event(PlatformInput::MouseMove(MouseMoveEvent {
                                 position,
                                 pressed_button: None,
                                 modifiers: Modifiers::default(),
                             }), cx);
                             window.refresh();
+                            window.draw(cx).clear(cx);
                         });
                     }
                     cx.background_executor().timer(Duration::from_millis(1400)).await;
-                    let image = handle.update(cx, |_, window, _| window.render_to_image());
+                    // A frame drawn now, even while the window is covered (macOS
+                    // stops asking for frames then), so the shot is this scene.
+                    let image = in_window(cx, handle, |window, cx| {
+                        window.refresh();
+                        window.draw(cx).clear(cx);
+                        window.render_to_image()
+                    });
                     match image {
                         Ok(Ok(mut image)) => {
                             to_p3(&mut image);

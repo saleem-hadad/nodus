@@ -3,9 +3,10 @@ use collections::{HashMap, HashSet};
 use core_foundation::{
     array::{CFArray, CFArrayRef},
     attributed_string::CFMutableAttributedString,
-    base::{CFRange, TCFType},
+    base::{CFRange, CFType, TCFType},
+    dictionary::{CFDictionary, CFDictionaryRef},
     number::CFNumber,
-    string::CFString,
+    string::{CFString, CFStringRef},
 };
 use core_graphics::{
     base::{CGFloat, CGGlyph, kCGImageAlphaPremultipliedLast},
@@ -17,8 +18,8 @@ use core_text::{
     font::CTFont,
     font_collection::CTFontCollectionRef,
     font_descriptor::{
-        CTFontDescriptor, kCTFontSlantTrait, kCTFontSymbolicTrait, kCTFontWeightTrait,
-        kCTFontWidthTrait,
+        CTFontDescriptor, kCTFontBoldTrait, kCTFontItalicTrait, kCTFontSlantTrait,
+        kCTFontSymbolicTrait, kCTFontVariationAttribute, kCTFontWeightTrait, kCTFontWidthTrait,
     },
     line::CTLine,
     string_attributes::kCTFontAttributeName,
@@ -49,7 +50,6 @@ use std::{borrow::Cow, char, convert::TryFrom, sync::Arc};
 
 #[cfg(target_os = "macos")]
 use {
-    core_foundation::base::CFType,
     gpui::{Hsla, Rgba},
     std::sync::OnceLock,
 };
@@ -145,6 +145,11 @@ impl PlatformTextSystem for AppleTextSystem {
             Ok(*font_id)
         } else {
             let mut lock = RwLockUpgradableReadGuard::upgrade(lock);
+            if is_system_ui_family(&font.family) {
+                let font_id = lock.load_system_ui_font(font)?;
+                lock.font_selections.insert(font.clone(), font_id);
+                return Ok(font_id);
+            }
             let font_key = FontKey {
                 font_family: font.family.clone(),
                 font_features: font.features.clone(),
@@ -260,7 +265,163 @@ fn font_smoothing_allowed_by_user() -> bool {
     })
 }
 
+/// Nodus patch: the family names that mean the system UI font, as CSS's
+/// `-apple-system`, `BlinkMacSystemFont` and `system-ui` do.
+fn is_system_ui_family(family: &str) -> bool {
+    matches!(
+        family,
+        ".SystemUIFont" | ".AppleSystemUIFont" | "system-ui" | "-apple-system" | "BlinkMacSystemFont"
+    )
+}
+
+/// The `wght` variation axis.
+const WEIGHT_AXIS: i64 = 0x7767_6874;
+/// The `opsz` variation axis.
+const OPTICAL_SIZE_AXIS: i64 = 0x6f70_737a;
+
+unsafe extern "C" {
+    fn CTFontCreateCopyWithAttributes(
+        font: core_text::font::CTFontRef,
+        size: CGFloat,
+        matrix: *const core_graphics::geometry::CGAffineTransform,
+        attributes: core_text::font_descriptor::CTFontDescriptorRef,
+    ) -> core_text::font::CTFontRef;
+    fn CTFontCopyVariation(font: core_text::font::CTFontRef) -> CFDictionaryRef;
+    static kCTFontVariationAxisIdentifierKey: CFStringRef;
+    static kCTFontVariationAxisMinimumValueKey: CFStringRef;
+    static kCTFontVariationAxisMaximumValueKey: CFStringRef;
+}
+
+/// Nodus patch: the system UI font at a weight and style, made the way
+/// Chromium makes it for `-apple-system` (`MatchSystemUIFont` in Blink's
+/// `font_matcher_mac.mm`): the UI font, with the bold trait from 600 up and
+/// the italic trait when slanted, then the CSS weight set exactly on the
+/// `wght` axis. Choosing among the family's named faces instead, as other
+/// families do, turns 500 into Regular (a 13px label came out 1.5px
+/// narrower than Chromium's) and 600 into a lighter face.
+///
+/// The size is a placeholder: layout and rasterization copy the font at
+/// their own size, which keeps the variation and lets CoreText choose the
+/// optical size and tracking for that size, as it does for Chromium.
+fn system_ui_font(weight: FontWeight, style: FontStyle) -> CTFont {
+    const SIZE: f64 = 16.;
+    let mut font =
+        core_text::font::new_ui_font_for_language(core_text::font::kCTFontSystemFontType, SIZE, None);
+    let mut traits = 0;
+    if style != FontStyle::Normal {
+        traits |= kCTFontItalicTrait;
+    }
+    if weight.0 >= 600. {
+        traits |= kCTFontBoldTrait;
+    }
+    if traits != 0
+        && let Some(styled) = font.clone_with_symbolic_traits(traits, traits)
+    {
+        font = styled;
+    }
+    if weight == FontWeight::NORMAL {
+        return font;
+    }
+    let value = clamp_to_axis(&font, WEIGHT_AXIS, weight.0 as f64);
+    let variations = CFDictionary::from_CFType_pairs(&[(
+        CFNumber::from(WEIGHT_AXIS),
+        CFNumber::from(value),
+    )]);
+    let attributes = CFDictionary::from_CFType_pairs(&[(
+        unsafe { CFString::wrap_under_get_rule(kCTFontVariationAttribute) },
+        variations.as_CFType(),
+    )]);
+    let descriptor = core_text::font_descriptor::new_from_attributes(&attributes);
+    unsafe {
+        let copy = CTFontCreateCopyWithAttributes(
+            font.as_concrete_TypeRef(),
+            SIZE,
+            std::ptr::null(),
+            descriptor.as_concrete_TypeRef(),
+        );
+        if copy.is_null() {
+            font
+        } else {
+            CTFont::wrap_under_create_rule(copy)
+        }
+    }
+}
+
+/// `value` within the range of the font's `axis`, as Chromium clamps it.
+fn clamp_to_axis(font: &CTFont, axis: i64, value: f64) -> f64 {
+    let number = |dict: &CFDictionary<CFString, CFType>, key: CFStringRef| {
+        dict.find(unsafe { CFString::wrap_under_get_rule(key) })
+            .and_then(|value| value.downcast::<CFNumber>())
+    };
+    for axis_info in font.get_variation_axes().iter().flat_map(|axes| axes.iter()) {
+        let id = number(&axis_info, unsafe { kCTFontVariationAxisIdentifierKey })
+            .and_then(|n| n.to_i64());
+        if id != Some(axis) {
+            continue;
+        }
+        let min = number(&axis_info, unsafe { kCTFontVariationAxisMinimumValueKey })
+            .and_then(|n| n.to_f64());
+        let max = number(&axis_info, unsafe { kCTFontVariationAxisMaximumValueKey })
+            .and_then(|n| n.to_f64());
+        if let (Some(min), Some(max)) = (min, max) {
+            return value.clamp(min, max);
+        }
+    }
+    value
+}
+
+/// Nodus patch: what identifies a native font among the loaded ones: its
+/// PostScript name, plus the variation it is set to, since instances of one
+/// variable font share a name (the system font's 400 and 500 are both
+/// `.SFNS-Regular`). The optical size is left out: CoreText sets it from
+/// the point size, which differs between a loaded font and the copy a line
+/// was laid out with.
+fn native_font_key(font: &CTFont) -> String {
+    use std::fmt::Write as _;
+    let mut key = font.postscript_name();
+    let variation = unsafe { CTFontCopyVariation(font.as_concrete_TypeRef()) };
+    if variation.is_null() {
+        return key;
+    }
+    let variation: CFDictionary<CFType, CFType> =
+        unsafe { CFDictionary::wrap_under_create_rule(variation) };
+    let (tags, values) = variation.get_keys_and_values();
+    let as_number = |pointer: *const std::ffi::c_void| {
+        unsafe { CFType::wrap_under_get_rule(pointer as _) }.downcast::<CFNumber>()
+    };
+    let mut axes = tags
+        .into_iter()
+        .zip(values)
+        .filter_map(|(tag, value)| {
+            let tag = as_number(tag)?.to_i64()?;
+            let value = as_number(value)?.to_f64()?;
+            (tag != OPTICAL_SIZE_AXIS).then_some((tag, value))
+        })
+        .collect::<Vec<_>>();
+    axes.sort_by_key(|(tag, _)| *tag);
+    for (tag, value) in axes {
+        let _ = write!(key, " {tag:x}={value}");
+    }
+    key
+}
+
 impl AppleTextSystemState {
+    /// Nodus patch: loads the system UI font for `font` (see
+    /// [`system_ui_font`]), with its features and fallbacks.
+    fn load_system_ui_font(&mut self, font: &Font) -> Result<FontId> {
+        let native = system_ui_font(font.weight, font.style);
+        let mut loaded = unsafe { FontKitFont::from_native_font(&native) };
+        apply_features_and_fallbacks(&mut loaded, &font.features, font.fallbacks.as_ref())?;
+        let native = loaded.native_font();
+        let font_id = FontId(self.fonts.len());
+        self.font_ids_by_postscript_name
+            .insert(native_font_key(&native), font_id);
+        self.postscript_names_by_font_id
+            .insert(font_id, native.postscript_name());
+        self.fonts.push(loaded);
+        Ok(font_id)
+    }
+
     fn add_fonts(&mut self, fonts: Vec<Cow<'static, [u8]>>) -> Result<()> {
         let fonts = fonts
             .into_iter()
@@ -382,7 +543,7 @@ impl AppleTextSystemState {
             let font_id = FontId(self.fonts.len());
             font_ids.push(font_id);
             self.font_ids_by_postscript_name
-                .insert(postscript_name.clone(), font_id);
+                .insert(native_font_key(&font.native_font()), font_id);
             self.postscript_names_by_font_id
                 .insert(font_id, postscript_name);
             self.fonts.push(font);
@@ -402,12 +563,12 @@ impl AppleTextSystemState {
 
     fn id_for_native_font(&mut self, requested_font: CTFont) -> FontId {
         let postscript_name = requested_font.postscript_name();
-        if let Some(font_id) = self.font_ids_by_postscript_name.get(&postscript_name) {
+        let key = native_font_key(&requested_font);
+        if let Some(font_id) = self.font_ids_by_postscript_name.get(&key) {
             *font_id
         } else {
             let font_id = FontId(self.fonts.len());
-            self.font_ids_by_postscript_name
-                .insert(postscript_name.clone(), font_id);
+            self.font_ids_by_postscript_name.insert(key, font_id);
             self.postscript_names_by_font_id
                 .insert(font_id, postscript_name);
             self.fonts

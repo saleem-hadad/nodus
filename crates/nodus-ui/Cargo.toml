@@ -41,5 +41,10 @@ raw-window-handle.workspace = true
 [dev-dependencies]
 tempfile.workspace = true
 
+# Runs on the main thread, as the Mac platform's text system needs.
+[[test]]
+name = "text_parity"
+harness = false
+
 [lints]
 workspace = true

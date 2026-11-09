@@ -8,8 +8,8 @@
 
 | Item | State |
 | --- | --- |
-| 1. sRGB-tagged layer inside GPUI (Metal; DirectX / wgpu checked) | ☐ |
-| 2. No `trak` tracking (Chromium's HarfBuzz widths at every size) | ☐ |
+| 1. sRGB-tagged layer inside GPUI (Metal; DirectX / wgpu checked) | ✅ PATCHES 6; nodus-ui's tagging removed |
+| 2. Widths at every size (the "tracking" gap) | ✅ PATCHES 7: the cause was weight 500 → Regular; tracking matches (CoreText's `trak` is what Chromium applies too) |
 | 3. Hanging trailing spaces; `overflow-wrap`, `word-break`, line clamp | ☐ |
 | 4. Chromium's baseline and glyph rounding | ☐ |
 | 5. Anti-aliasing and font smoothing | ☐ |

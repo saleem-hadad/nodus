@@ -41,7 +41,7 @@ def typed(text):
 
 AWAY = M("move", 720, 26)  # the title bar's empty middle
 STOREFRONT = (104, 220)
-OPEN_STOREFRONT = [M("click", *STOREFRONT), {"cmd": "key", "keystroke": "cmd-o"}, W(600)]
+OPEN_STOREFRONT = [W(600), M("click", *STOREFRONT), W(300), {"cmd": "key", "keystroke": "cmd-o"}, W(1200)]
 # The actions rail's items, where 0.9.4 has them (x is the rail's middle).
 RAIL_X = 1406
 RUN_TESTS, OPEN_PR, PLUS = 380, 423.5, 572.5

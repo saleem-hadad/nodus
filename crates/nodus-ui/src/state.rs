@@ -240,10 +240,13 @@ impl AppState {
             let projects = nodus.projects().list().await;
             let groups = nodus.groups().list().await;
             let stats = nodus.projects().stats().await;
+            // ACT-018: the global actions come with every refresh.
+            let global_actions = nodus.actions().global().await;
             let _ = this.update(cx, |state, cx| {
                 state.projects = projects;
                 state.groups = groups;
                 state.stats = stats;
+                state.global_actions = global_actions;
                 state.projects_loaded = true;
                 // UI-205: a selection whose project left goes with it.
                 if let Some(id) = &state.selected_id

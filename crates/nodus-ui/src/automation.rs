@@ -21,6 +21,8 @@
 //! {"cmd":"window"}                                  the window's number and size
 //! {"cmd":"terminal","action":"open",…}                the terminal's windows (terminal::driver)
 //! {"cmd":"views"}                                   views' frames: live or snapshot, and why
+//! {"cmd":"native-click","x":500,"y":300}            a click AppKit routes (into a page, or GPUI)
+//! {"cmd":"hit","x":500,"y":300}                     the native view a click there reaches
 //! {"cmd":"quit"}
 //! ```
 //!
@@ -368,6 +370,22 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
         "terminal" => crate::terminal::driver::run(command, cx).await,
         // Views' frames: live or behind a snapshot, and why (spec 04).
         "views" => Ok(cx.update(|cx| crate::views::frames::describe(cx))),
+        // A click AppKit routes itself (into a page's webview, or GPUI), and
+        // which view a click at a point would reach.
+        #[cfg(target_os = "macos")]
+        "native-click" => {
+            let (x, y) = (f64::from(num(command, "x")), f64::from(num(command, "y")));
+            let number = with_window(cx, |window, _| crate::mac::window_number(window))?.ok_or("no window")?;
+            crate::views::native_click(number, x, y);
+            Ok(Value::Null)
+        }
+        #[cfg(target_os = "macos")]
+        "hit" => {
+            let (x, y) = (f64::from(num(command, "x")), f64::from(num(command, "y")));
+            Ok(Value::String(with_window(cx, move |window, _| {
+                crate::views::hit_class(window, x, y)
+            })?))
+        }
         "quit" => {
             cx.update(|cx| cx.quit());
             Ok(Value::Null)

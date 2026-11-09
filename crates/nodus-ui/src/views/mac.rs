@@ -98,7 +98,6 @@ impl Container {
                 let _: () = msg_send![layer, setMasksToBounds: Bool::YES];
             }
         }
-        view.setHidden(true);
         parent.addSubview(&view);
         Some(Self { view })
     }
@@ -115,12 +114,6 @@ impl Container {
 
     pub fn set_edge(&self, edge: f64) {
         self.view.ivars().edge.set(edge);
-    }
-
-    pub fn set_hidden(&self, hidden: bool) {
-        if self.view.isHidden() != hidden {
-            self.view.setHidden(hidden);
-        }
     }
 
     /// Fully transparent while GPUI draws a snapshot in its place; the page
@@ -296,4 +289,97 @@ fn pixels(image: *mut AnyObject) -> Option<(u32, u32, Vec<u8>)> {
     CGContext::draw_image(Some(&ctx), rect, Some(cg));
     drop(ctx);
     Some((w as u32, h as u32, buf))
+}
+
+/// Whether the page has the window's keyboard: its webview, or a view inside
+/// it, is the window's first responder. A click in the page makes it so; a
+/// click anywhere else on the board takes it away (VIEW-051).
+pub fn has_keyboard(webview: &NSView) -> bool {
+    let Some(window) = webview.window() else {
+        return false;
+    };
+    let Some(responder) = window.firstResponder() else {
+        return false;
+    };
+    // SAFETY: isKindOfClass: on a live responder; a view's superview chain.
+    unsafe {
+        let is_view: bool = msg_send![&*responder, isKindOfClass: objc2::class!(NSView)];
+        if !is_view {
+            return false;
+        }
+        let mut view: Option<Retained<NSView>> = Some(Retained::cast_unchecked(responder));
+        while let Some(v) = view {
+            if std::ptr::eq(&*v, webview) {
+                return true;
+            }
+            view = v.superview();
+        }
+    }
+    false
+}
+
+/// Test driver: a left click at a point in the window through
+/// `-[NSWindow sendEvent:]`, so AppKit's own hit test picks the view (a
+/// page, or GPUI's). Runs off any GPUI update, on the main queue; never
+/// moves the user's pointer.
+pub fn native_click(window_number: isize, x: f64, y: f64) {
+    dispatch2::DispatchQueue::main().exec_async(move || {
+        // SAFETY: NSApplication, NSWindow and NSEvent on the main thread;
+        // every object is checked for nil before use.
+        unsafe {
+            let app: *mut AnyObject = msg_send![objc2::class!(NSApplication), sharedApplication];
+            let w: *mut AnyObject = msg_send![app, windowWithWindowNumber: window_number];
+            if w.is_null() {
+                return;
+            }
+            let content: *mut AnyObject = msg_send![w, contentView];
+            if content.is_null() {
+                return;
+            }
+            let frame: NSRect = msg_send![content, frame];
+            let loc = NSPoint::new(x, frame.size.height - y);
+            for (ty, pressure) in [(1usize, 1.0f32), (2usize, 0.0f32)] {
+                let ev: *mut AnyObject = msg_send![objc2::class!(NSEvent),
+                    mouseEventWithType: ty,
+                    location: loc,
+                    modifierFlags: 0usize,
+                    timestamp: 0.0f64,
+                    windowNumber: window_number,
+                    context: std::ptr::null_mut::<AnyObject>(),
+                    eventNumber: 0isize,
+                    clickCount: 1isize,
+                    pressure: pressure];
+                if !ev.is_null() {
+                    let _: () = msg_send![w, sendEvent: ev];
+                }
+            }
+        }
+    });
+}
+
+/// Test driver: the class of the view AppKit would hand a click at a point
+/// in the window (a page's `WryWebView`, or GPUI's view).
+pub fn hit_class(window: &Window, x: f64, y: f64) -> String {
+    let Some(content) = content_view(window) else {
+        return "-".into();
+    };
+    let py = if content.isFlipped() {
+        y
+    } else {
+        content.frame().size.height - y
+    };
+    let p = NSPoint::new(x, py);
+    // SAFETY: hitTest: takes a point in the superview's coordinates, which
+    // convertPoint:toView: gives from the content view's own.
+    unsafe {
+        let p = match content.superview() {
+            Some(sup) => content.convertPoint_toView(p, Some(&sup)),
+            None => p,
+        };
+        let hit: *mut AnyObject = msg_send![&*content, hitTest: p];
+        if hit.is_null() {
+            return "nil".into();
+        }
+        (*hit).class().name().to_string_lossy().into_owned()
+    }
 }

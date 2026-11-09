@@ -193,9 +193,8 @@ pub fn start(frames: &Rc<RefCell<Frames>>, cx: &mut App) {
 /// A frame's page posted something (VIEW-044…052).
 fn incoming(msg: &Incoming, cx: &mut App) {
     let Some(rc) = existing(cx) else { return };
-    let (project_id, view_id, version, slot, zoom, origin) = {
+    let (project_id, view_id, version, slot, zoom, origin, keyboard) = {
         let f = rc.borrow();
-        // Hover over the page, from the shell itself.
         let Some(fr) = f.by_id(msg.frame) else { return };
         (
             fr.project_id.clone(),
@@ -204,16 +203,21 @@ fn incoming(msg: &Incoming, cx: &mut App) {
             fr.slot,
             fr.geometry.map_or(1.0, |g| g.zoom),
             fr.geometry.map(|g| g.document.origin),
+            fr.web.has_keyboard(),
         )
     };
     let Ok(body) = serde_json::from_str::<Value>(&msg.body) else {
         return;
     };
+    // Hover over the page, from the shell itself.
     if let Some(hover) = body.get("h").and_then(Value::as_bool) {
         set_hovered(msg.frame, hover, cx);
         return;
     }
-    let activated = body.get("activated") == Some(&Value::Bool(true));
+    // VIEW-051: the user just clicked or pressed something in this page (the
+    // shell's transient activation, with its frame focused), and nothing
+    // else on the board since.
+    let activated = keyboard && body.get("activated") == Some(&Value::Bool(true));
     let Some(message) = body.get("m").and_then(parse) else {
         return;
     };

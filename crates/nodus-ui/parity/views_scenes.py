@@ -74,13 +74,57 @@ SCENES = {
 }
 
 
+# Not a 0.9.4 golden: a page that calls every method of window.nodus and
+# writes what came back, to check the relay end to end in a live window.
+RELAY_PAGE = """<!doctype html><html><head><style>
+body{padding:8px 12px;font:12px -apple-system,sans-serif}pre{white-space:pre-wrap;margin:44px 0 0}
+#b{position:fixed;left:10px;top:6px;width:180px;height:30px}
+</style></head><body><button id="b">start a session</button><pre id="out"></pre><script>
+var out=document.getElementById('out');
+function log(k,v){out.textContent+=k+': '+v+'\\n';}
+function tryit(k,p){p.then(function(r){log(k,JSON.stringify(r))},function(e){log(k,'ERR '+e.message)});}
+tryit('notes',nodus.notes().then(function(n){return n.length}));
+tryit('views',nodus.views().then(function(v){return v.map(function(x){return x.title})}));
+tryit('view',nodus.view(nodus.viewId).then(function(v){return v.title}));
+tryit('sessions',nodus.sessions().then(function(s){return s.length}));
+tryit('git',nodus.git().then(function(g){return g&&g.branch}));
+tryit('setState',nodus.setState({n:1}));
+tryit('openUrl',nodus.openUrl('ftp://x'));
+tryit('startNoClick',nodus.startSession('hi'));
+tryit('openSession',nodus.openSession(42));
+nodus.on('board',function(){log('event','board')});
+nodus.on('git',function(g){log('event','git '+(g?g.branch:g))});
+nodus.on('state',function(s){log('event','state '+JSON.stringify(s))});
+document.getElementById('b').onclick=function(){tryit('startClick',nodus.startSession('hello from a view',{title:'From the view'}))};
+</script></body></html>"""
+
+
+def relay_setup(world):
+    """Docs build status gets the relay page, and may start sessions."""
+    path = os.path.join(world, "userData", "state.json")
+    state = json.load(open(path))
+    for board in state["boards"].values():
+        for view in board.get("views", {}).values():
+            if view["title"] == "Docs build status":
+                view["startsSessions"] = True
+                with open(os.path.join(world, "userData", "views", view["id"], "index.html"), "w") as page:
+                    page.write(RELAY_PAGE)
+    json.dump(state, open(path, "w"))
+
+
+SETUP = {"try-relay": relay_setup}
+SCENES["try-relay"] = DOCS() + [{"cmd": "wait", "ms": 1500}, {"cmd": "views"},
+                                {"cmd": "hit", "x": 560, "y": 160}, {"cmd": "hit", "x": 300, "y": 400},
+                                {"cmd": "native-click", "x": 520, "y": 159}, {"cmd": "wait", "ms": 2500}]
+
+
 def drive(f, cmd):
     f.write(json.dumps(cmd) + "\n")
     f.flush()
     answer = json.loads(f.readline() or "{}")
     if not answer.get("ok"):
         print("  !", cmd, answer)
-    elif cmd.get("cmd") == "views":
+    elif cmd.get("cmd") in ("views", "hit"):
         print(json.dumps(answer.get("result"), indent=1))
     return answer
 
@@ -90,6 +134,8 @@ def run(scene, theme, opts):
     subprocess.run(["node", os.path.join(HERE, "seed.mjs"), opts["harness"], opts["world"], theme],
                    check=True, capture_output=True)
     world = opts["world"]
+    if scene in SETUP:
+        SETUP[scene](world)
     env = dict(os.environ, NODUS_USER_DATA=os.path.join(world, "userData"), NODUS_AUTOMATION=SOCK,
                HOME=os.path.join(world, "home"), PATH=os.path.join(world, "bin") + ":/usr/bin:/bin:/usr/sbin",
                SHELL=os.path.join(world, "bin", "fakeshell"), TZ="UTC", LANG="en_US.UTF-8",

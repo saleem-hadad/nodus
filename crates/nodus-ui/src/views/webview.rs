@@ -152,24 +152,27 @@ impl PageWebview {
     /// page's zoom too, so its CSS viewport stays the body's size in flow
     /// units. `radius` rounds the bottom corners.
     pub fn place(&self, document: Bounds<Pixels>, clip: Bounds<Pixels>, zoom: f32, radius: f32) {
-        let visible = document.intersect(&clip);
+        let mut visible = document.intersect(&clip);
         let offscreen = visible.size.width < gpui::px(1.) || visible.size.height < gpui::px(1.);
         self.offscreen.set(offscreen);
         self.set_zoom(f64::from(zoom));
         #[cfg(target_os = "macos")]
         {
             use wry::WebViewExtMacOS as _;
-            self.container.set_hidden(offscreen);
-            if !offscreen {
-                let scale = if self.view_scale { f64::from(zoom) } else { 1.0 };
-                self.page.set((document.size.width, document.size.height));
-                self.container
-                    .set_geometry(&self.webview.webview(), visible, document, radius, scale);
+            // Off screen the container shrinks to nothing rather than hiding,
+            // so WebKit still counts the page visible: it keeps running and
+            // drawing, and its next snapshot isn't blank (R13).
+            if offscreen {
+                visible = Bounds::new(document.origin, gpui::size(Pixels::ZERO, Pixels::ZERO));
             }
+            let scale = if self.view_scale { f64::from(zoom) } else { 1.0 };
+            self.page.set((document.size.width, document.size.height));
+            self.container
+                .set_geometry(&self.webview.webview(), visible, document, radius, scale);
         }
         #[cfg(not(target_os = "macos"))]
         {
-            let _ = radius;
+            let _ = (radius, &mut visible);
             let _ = self.webview.set_visible(!offscreen && self.live.get());
             let _ = self.webview.set_bounds(wry::Rect {
                 position: wry::dpi::LogicalPosition::new(
@@ -297,6 +300,19 @@ impl PageWebview {
         }
         #[cfg(not(target_os = "macos"))]
         done(None);
+    }
+
+    /// Whether the page has the window's keyboard (the user last clicked or
+    /// typed in it, not elsewhere on the board).
+    pub fn has_keyboard(&self) -> bool {
+        #[cfg(target_os = "macos")]
+        {
+            use wry::WebViewExtMacOS as _;
+            super::mac::has_keyboard(&self.webview.webview())
+        }
+        // WebView2: the shell's own check (its frame has the focus) stands.
+        #[cfg(not(target_os = "macos"))]
+        true
     }
 
     /// Gives the keyboard back to the board's window.

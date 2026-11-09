@@ -5,9 +5,8 @@
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, Bounds, Context, ElementId, FocusHandle, FontWeight, InteractiveElement, IntoElement,
-    KeyDownEvent, MouseButton, ParentElement, Pixels, StatefulInteractiveElement, Styled, Window, anchored, deferred,
-    div, img, px,
+    AnyElement, App, Bounds, Context, ElementId, FontWeight, InteractiveElement, IntoElement, KeyDownEvent,
+    MouseButton, ParentElement, Pixels, StatefulInteractiveElement, Styled, Window, anchored, deferred, div, img, px,
 };
 
 use super::frames::{self, Geometry, Slot};
@@ -47,14 +46,10 @@ fn render_parts(
     let t = theme::tokens(cx);
     let viewport = window.viewport_size();
     let focus = window.use_keyed_state(ElementId::Name("view-modal-focus".into()), cx, |_, cx| {
-        (cx.focus_handle(), false)
+        cx.focus_handle()
     });
-    let (handle, focused_once) = focus.read(cx).clone();
-    if !focused_once {
-        focus.update(cx, |f, _| f.1 = true);
-        let h = handle.clone();
-        super::inputs::focus_soon(h, window);
-    }
+    let handle = focus.read(cx).clone();
+    super::inputs::focus_once("view-modal-focus-once", &handle, window, cx);
     let shown = frames::shown(&id, Slot::Large, cx);
     let parity = crate::parity::frozen(cx);
     let ink = super::swap::ink_tool_out(cx);
@@ -67,11 +62,7 @@ fn render_parts(
         passthrough: false,
         edge: 0.0,
     };
-    let reset = focus.clone();
-    let on_close = move |window: &mut Window, cx: &mut App| {
-        reset.update(cx, |f, _| f.1 = false);
-        close(window, cx);
-    };
+    let on_close = move |window: &mut Window, cx: &mut App| close(window, cx);
     let close_x = on_close.clone();
     let close_key = on_close.clone();
     let width = px(1400.0_f32.min(f32::from(viewport.width) * 0.92));
@@ -190,15 +181,4 @@ fn close_button(
         .on_click(move |_, window, cx| on_click(window, cx))
         .tooltip(native_tooltip("Close".into()))
         .into_any_element()
-}
-
-/// The focus the large window holds, for the board's key routing.
-pub fn focus_handle(window: &mut Window, cx: &mut App) -> FocusHandle {
-    window
-        .use_keyed_state(ElementId::Name("view-modal-focus".into()), cx, |_, cx| {
-            (cx.focus_handle(), false)
-        })
-        .read(cx)
-        .0
-        .clone()
 }

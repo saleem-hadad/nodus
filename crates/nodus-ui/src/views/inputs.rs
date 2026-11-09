@@ -55,9 +55,6 @@ pub fn ask_bar(
                 InputEvent::Change => ui3.update(cx, |_, cx| cx.notify()),
                 _ => {}
             })];
-            // Focused on open, without scrolling (VIEW-131).
-            let focus = field.read(cx).focus_handle(cx);
-            focus_soon(focus, window);
             ui.update(cx, |u, _| {
                 u.ask = Some(AskBar {
                     input: field.clone(),
@@ -68,9 +65,17 @@ pub fn ask_bar(
             (field, false)
         }
     };
+    // Focused on open, without scrolling (VIEW-131).
+    let handle = field.read(cx).focus_handle(cx);
+    focus_once(
+        gpui::ElementId::Name(format!("view-ask-focus-{}", view.id).into()),
+        &handle,
+        window,
+        cx,
+    );
     let value = field.read(cx).value().to_string();
     let blank = nodus_domain::js::trim(&value).is_empty();
-    let focused = field.read(cx).focus_handle(cx).is_focused(window);
+    let focused = handle.is_focused(window);
     let (ui_send, p, v) = (ui.clone(), project, view.id.clone());
     let close = ui.clone();
     let send_label: AnyElement = if sending {
@@ -189,12 +194,19 @@ fn send(ui: &Entity<CardUi>, project_id: &str, view_id: &str, cx: &mut App) {
     );
 }
 
-/// Focuses `handle` once a frame has drawn it: a handle no frame has drawn
-/// yet doesn't keep the focus (as `text_field::focus_all`).
-pub fn focus_soon(handle: gpui::FocusHandle, window: &mut Window) {
-    window.on_next_frame(move |window, _| {
-        window.on_next_frame(move |window, cx| window.focus(&handle, cx));
-    });
+/// Focuses `handle` once, on the render after the one that first drew it (a
+/// handle no frame has drawn doesn't keep the focus). Called on every render
+/// while its element shows; it starts over once the element has gone.
+pub fn focus_once(key: impl Into<gpui::ElementId>, handle: &gpui::FocusHandle, window: &mut Window, cx: &mut App) {
+    let renders = window.use_keyed_state(key, cx, |_, _| 0u8);
+    let n = *renders.read(cx);
+    if n < 2 {
+        renders.update(cx, |r, _| *r += 1);
+        window.refresh();
+    }
+    if n == 1 {
+        window.focus(handle, cx);
+    }
 }
 
 /// The rename field (`.view-title-input`): the title, focused and all

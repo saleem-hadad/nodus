@@ -81,9 +81,6 @@ pub fn render(canvas: &BoardCanvas, window: &mut Window, cx: &mut Context<'_, Bo
                     watch.update(cx, |_, cx| cx.notify());
                 }
             });
-            // autoFocus.
-            let focus = field.read(cx).focus_handle(cx);
-            super::inputs::focus_soon(focus, window);
             state.update(cx, |s, _| {
                 s.field = Some(field.clone());
                 s._sub = Some(sub);
@@ -97,7 +94,10 @@ pub fn render(canvas: &BoardCanvas, window: &mut Window, cx: &mut Context<'_, Bo
     };
     let description = field.read(cx).value().to_string();
     let blank = nodus_domain::js::trim(&description).is_empty();
-    let focused = field.read(cx).focus_handle(cx).is_focused(window);
+    // autoFocus.
+    let handle = field.read(cx).focus_handle(cx);
+    super::inputs::focus_once("view-dialog-focus", &handle, window, cx);
+    let focused = handle.is_focused(window);
     let viewport = window.viewport_size();
 
     let close = {
@@ -245,10 +245,12 @@ pub fn render(canvas: &BoardCanvas, window: &mut Window, cx: &mut Context<'_, Bo
                 .px(px(22.))
                 .overflow_y_scroll()
                 .child(
+                    // `.action-description`'s 10px 12px, less the field's own
+                    // 8px 10px (gpui-component's medium input).
                     div()
                         .w_full()
-                        .py(px(10.))
-                        .px(px(12.))
+                        .py(px(2.))
+                        .px(px(2.))
                         .border(px(0.5))
                         .border_color(if focused { t.accent } else { t.border_strong })
                         .rounded(px(8.))
@@ -263,9 +265,7 @@ pub fn render(canvas: &BoardCanvas, window: &mut Window, cx: &mut Context<'_, Bo
                             Textarea::new(&field)
                                 .appearance(false)
                                 .disabled(creating)
-                                .px(px(0.))
-                                .py(px(0.))
-                                .h(px(18.85 * 5.)),
+                                .h(px(18.85 * 5. + 16.)),
                         ),
                 )
                 .child(

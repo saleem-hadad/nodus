@@ -106,7 +106,7 @@ if(e.source!==f.contentWindow)return;
 var d=e.data;
 if(!d||typeof d!=='object'||d.nodus!==1)return;
 var ua=navigator.userActivation;
-var activated=document.hasFocus()&&document.activeElement===f&&!!(ua&&ua.isActive);
+var activated=document.activeElement===f&&!!(ua&&ua.isActive);
 var text;
 try{text=JSON.stringify({m:d,activated:activated});}catch(err){return;}
 window.ipc.postMessage(text);

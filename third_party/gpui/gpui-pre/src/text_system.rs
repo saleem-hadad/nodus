@@ -816,6 +816,7 @@ impl WindowTextSystem {
                 layout,
                 decoration_runs,
                 text: line_text,
+                hanging_suffix: 0,
             });
 
             // Skip `\n` character.

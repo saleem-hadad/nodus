@@ -9,7 +9,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 const out = process.argv[2]
 const cases = []
-const add = (c) => cases.push({ id: cases.length, weight: 400, align: 'left', lh: null, ...c })
+// Tops land on device pixels: GPUI rounds an authored length to one before
+// layout, where Chromium keeps it in layout units, and that's a layout
+// difference, not a text one (fractional tops from text heights are covered
+// by the shell's scenes).
+const add = (c) => cases.push({ id: cases.length, weight: 400, align: 'left', lh: null, ...c, y: Math.round(c.y * 2) / 2 })
 // 1. Stacks of one-line blocks with a 2px bar under each: line boxes and baselines.
 const stacks = [[13, 18.2], [12, 16.8], [13, 16.9], [11, 15.4], [15, 21], [20, 28], [26, 36.4], [12.5, 17.5]]
 stacks.forEach(([size, lh], i) => {

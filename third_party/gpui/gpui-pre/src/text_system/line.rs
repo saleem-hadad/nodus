@@ -494,9 +494,19 @@ pub struct WrappedLine {
     /// The text that was shaped for this line.
     pub text: SharedString,
     pub(crate) decoration_runs: Vec<DecorationRun>,
+    /// Nodus patch: bytes at the end of the text that don't count when the
+    /// last row is aligned (the ellipsis `-webkit-line-clamp` adds, which
+    /// Chromium places after the aligned text).
+    pub(crate) hanging_suffix: usize,
 }
 
 impl WrappedLine {
+    /// Nodus patch: the text that counts when rows are aligned.
+    fn alignment_text(&self) -> &str {
+        let end = self.text.len().saturating_sub(self.hanging_suffix);
+        self.text.get(..end).unwrap_or(&self.text)
+    }
+
     /// The length of the underlying, unwrapped layout, in utf-8 bytes.
     #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
@@ -521,7 +531,7 @@ impl WrappedLine {
         paint_line(
             origin,
             &self.layout.unwrapped_layout,
-            &self.text,
+            self.alignment_text(),
             line_height,
             align,
             align_width,
@@ -553,7 +563,7 @@ impl WrappedLine {
         paint_line_background(
             origin,
             &self.layout.unwrapped_layout,
-            &self.text,
+            self.alignment_text(),
             line_height,
             align,
             align_width,
@@ -1075,7 +1085,8 @@ fn row_end_x(layout: &LineLayout, text: &str, boundary: Option<&WrapBoundary>) -
         .collect::<SmallVec<[_; 64]>>();
     let mut end = end;
     while let Some(glyph) = glyphs.pop() {
-        if text.as_bytes().get(glyph.index) != Some(&b' ') {
+        // A glyph past the text given hangs too (a hanging suffix).
+        if !matches!(text.as_bytes().get(glyph.index), Some(b' ') | None) {
             break;
         }
         end = glyph.position.x;
@@ -1479,6 +1490,7 @@ mod tests {
                     }),
                     text: line.text,
                     decoration_runs: line.decoration_runs.into_vec(),
+                    hanging_suffix: 0,
                 };
                 window.next_frame.scene.clear();
                 wrapped

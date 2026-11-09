@@ -846,6 +846,8 @@ impl TextLayout {
 
                 let wrap_style = text_style.wrap_style();
                 let mut line_wrapper = cx.text_system().line_wrapper(text_style.font(), font_size);
+                // Nodus patch: a clamp's ellipsis hangs after the aligned text.
+                let mut hanging_ellipsis = 0;
                 let (text, runs) = if let Some(truncate_width) = truncate_width {
                     if truncate_from == TruncateFrom::End {
                         // Nodus patch: CSS's ellipsis, as Chromium places it.
@@ -864,7 +866,12 @@ impl TextLayout {
                             &truncation_affix,
                             window,
                         ) {
-                            Some((text, runs)) => (text, Cow::Owned(runs)),
+                            Some((text, runs)) => {
+                                if clamp.is_some() {
+                                    hanging_ellipsis = truncation_affix.len();
+                                }
+                                (text, Cow::Owned(runs))
+                            }
                             None => (text.clone(), Cow::Borrowed(&*runs)),
                         }
                     } else if let Some(max_lines) = text_style.line_clamp
@@ -907,7 +914,7 @@ impl TextLayout {
                 };
                 let len = text.len();
 
-                let Some(lines) = window
+                let Some(mut lines) = window
                     .text_system()
                     .shape_text_wrapped(
                         text,
@@ -931,6 +938,10 @@ impl TextLayout {
                     });
                     return Size::default();
                 };
+
+                if let Some(line) = lines.last_mut() {
+                    line.hanging_suffix = hanging_ellipsis;
+                }
 
                 let mut size: Size<Pixels> = Size::default();
                 for line in &lines {

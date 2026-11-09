@@ -410,7 +410,8 @@ impl Render for ActionDialogView {
                 .text_color(t.text_primary)
                 .text_size(TEXT_SM)
                 .line_height(px(16.8))
-                .child(e)
+                // `.action-error.selectable`.
+                .child(crate::components::selectable::selectable("action-error", e, window, cx))
         });
         let content = div()
             .id("act-dialog")

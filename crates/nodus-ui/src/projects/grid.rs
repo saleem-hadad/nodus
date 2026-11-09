@@ -831,7 +831,12 @@ impl ProjectsView {
                                     .text_color(t.text_tertiary)
                                     .cursor_text()
                                     .truncate()
-                                    .child(target.repo_path.clone()),
+                                    .child(crate::components::selectable::selectable(
+                                        "pv-confirm-path",
+                                        target.repo_path.clone(),
+                                        window,
+                                        cx,
+                                    )),
                             ),
                     ),
             )

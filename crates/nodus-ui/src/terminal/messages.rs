@@ -66,6 +66,23 @@ fn byte_ranges(text: &str, ranges: &[[u32; 2]]) -> Vec<std::ops::Range<usize>> {
         .collect()
 }
 
+/// Text with the marked ranges (`Highlight.tsx`) that can be selected
+/// (`.selectable`), kept under `id`.
+pub fn selectable_highlighted(
+    id: impl Into<ElementId>,
+    text: &str,
+    ranges: &[[u32; 2]],
+    cx: &App,
+) -> crate::components::selectable::SelectableText {
+    let t = theme::tokens(cx);
+    let style = HighlightStyle {
+        background_color: Some(t.mark.into()),
+        ..Default::default()
+    };
+    crate::components::selectable::selectable_text(id, text.to_owned())
+        .highlights(byte_ranges(text, ranges).into_iter().map(|r| (r, style)).collect())
+}
+
 /// Text with the marked ranges (`Highlight.tsx`): the mark colour behind, text unchanged.
 pub fn highlighted(text: &str, ranges: &[[u32; 2]], cx: &App) -> StyledText {
     let t = theme::tokens(cx);
@@ -130,7 +147,7 @@ fn tool_calls(id: &ElementId, calls: &[ToolCall], all: bool, on_all: Action, top
                 cx,
             )))
         })
-        .children(calls[hidden..].iter().map(|call| {
+        .children(calls[hidden..].iter().enumerate().map(|(i, call)| {
             div()
                 .flex()
                 .items_baseline()
@@ -141,7 +158,13 @@ fn tool_calls(id: &ElementId, calls: &[ToolCall], all: bool, on_all: Action, top
                 .line_height(px(18.))
                 .child(chip(call.name.clone(), cx))
                 .when_some(call.detail.clone(), |d, detail| {
-                    d.child(div().min_w_0().truncate().text_color(t.text_tertiary).child(detail))
+                    // `.tp-call-detail.selectable`.
+                    d.child(div().min_w_0().truncate().text_color(t.text_tertiary).child(
+                        crate::components::selectable::selectable_text(
+                            (id.clone(), SharedString::from(format!("call-{}", hidden + i))),
+                            detail,
+                        ),
+                    ))
                 })
         }))
         .into_any_element()
@@ -215,7 +238,7 @@ pub fn message(p: &MessageProps<'_>, cx: &App) -> AnyElement {
                         ))
                     })
                     .cursor_text()
-                    .child(highlighted(&text, &ranges, cx)),
+                    .child(selectable_highlighted((p.id.clone(), "text"), &text, &ranges, cx)),
             )
             .when(long, |d| {
                 let label = if p.expanded { "Show less" } else { "Show more" };
@@ -261,7 +284,7 @@ pub fn message(p: &MessageProps<'_>, cx: &App) -> AnyElement {
                     .min_w_0()
                     .text_color(t.text_secondary)
                     .cursor_text()
-                    .child(highlighted(&s.text, &s.ranges, cx)),
+                    .child(selectable_highlighted((p.id.clone(), "found"), &s.text, &s.ranges, cx)),
             )
     });
 
@@ -357,7 +380,11 @@ pub fn empty_note(title: &str, detail: Option<&str>, action: Option<AnyElement>,
                     .text_size(TEXT_SM)
                     .text_color(t.text_tertiary)
                     .cursor_text()
-                    .child(SharedString::from(detail.to_owned())),
+                    // `.tp-empty-detail.selectable`.
+                    .child(crate::components::selectable::selectable_text(
+                        "tp-empty-detail",
+                        detail.to_owned(),
+                    )),
             )
         })
         .children(action)

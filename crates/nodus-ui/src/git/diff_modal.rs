@@ -9,7 +9,7 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Context, Entity, FocusHandle, FontWeight, HighlightStyle, InteractiveElement, IntoElement,
     KeyDownEvent, ListAlignment, ListState, MouseButton, ParentElement, Pixels, Render, ScrollHandle, SharedString,
-    StatefulInteractiveElement, Styled, StyledText, Subscription, Task, Window, div, list, px,
+    StatefulInteractiveElement, Styled, Subscription, Task, Window, div, list, px,
 };
 use nodus_domain::js::utf16_len;
 use nodus_domain::{GitFileChange, GitFileDiff, GitFileStatus, GitStatus};
@@ -20,6 +20,7 @@ use crate::actions::icons::{Glyph, glyph};
 use crate::components::button;
 use crate::components::modal::Modal;
 use crate::components::native_tooltip;
+use crate::components::selectable;
 use crate::git::{GIT_POLL, GitEvent, GitModel, close_diff};
 use crate::theme::tokens::*;
 use crate::theme::{self, fonts};
@@ -471,21 +472,30 @@ impl DiffModal {
             .text_size(TEXT_MD)
             .whitespace_nowrap()
             .child(status_icon(file.status, status_color(file.status, &t)))
-            .child(
-                div()
+            .child({
+                // `.diff-pane-path.selectable`: the folder and name copy as one path.
+                let path = selectable::inline_selection(
+                    SharedString::from(format!("diff-pane-path-{}", labels::file_key(file))),
+                    window,
+                    cx,
+                );
+                let dir_part = (!dir.is_empty()).then(|| {
+                    div().text_color(t.text_secondary).child(selectable::selectable_part(
+                        &path,
+                        0,
+                        dir.to_owned(),
+                        Vec::new(),
+                        cx,
+                    ))
+                });
+                let name_part = selectable::selectable_part(&path, 1, name.to_owned(), Vec::new(), cx);
+                selectable::selection_scope(&path, cx)
                     .flex()
                     .min_w_0()
                     .overflow_hidden()
-                    .when(!dir.is_empty(), |d| {
-                        d.child(div().text_color(t.text_secondary).child(dir.to_owned()))
-                    })
-                    .child(
-                        div()
-                            .flex_none()
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child(name.to_owned()),
-                    ),
-            )
+                    .children(dir_part)
+                    .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).child(name_part))
+            })
             .when_some(file.old_path.clone().filter(|p| !p.is_empty()), |d, old| {
                 d.child(
                     div()
@@ -499,13 +509,15 @@ impl DiffModal {
 
         // GIT-045: what the pane says, in this order.
         let body: AnyElement = match loaded {
-            Loaded::Error { error, .. } => notice("Couldn’t read this diff", Some(error.clone()), &t),
-            Loaded::Diff { diff, .. } if diff.binary == Some(true) => notice("Binary file not shown", None, &t),
+            Loaded::Error { error, .. } => notice("Couldn’t read this diff", Some(error.clone()), &t, window, cx),
+            Loaded::Diff { diff, .. } if diff.binary == Some(true) => {
+                notice("Binary file not shown", None, &t, window, cx)
+            }
             Loaded::Diff { diff, .. } if diff.too_large == Some(true) => {
-                notice("This diff is too large to show", None, &t)
+                notice("This diff is too large to show", None, &t, window, cx)
             }
             Loaded::Diff { parsed, .. } if parsed.summary.is_some() => {
-                notice(parsed.summary.as_deref().unwrap_or_default(), None, &t)
+                notice(parsed.summary.as_deref().unwrap_or_default(), None, &t, window, cx)
             }
             Loaded::Diff { parsed, .. } => self.lines(parsed, &labels::file_key(file), window, cx),
         };
@@ -542,11 +554,24 @@ impl DiffModal {
         let ch = window.text_system().ch_advance(font_id, TEXT_SM).unwrap_or(px(7.2));
         let num_w = ch * parsed.number_width() as f32;
         let parsed = parsed.clone();
-        list(self.lines.clone(), move |ix, _, _| {
-            diff_line(&parsed.lines[ix], ix == 0, ix + 1 == parsed.lines.len(), num_w, ch, &t)
-        })
-        .size_full()
-        .into_any_element()
+        // `.diff-text`: a drag selects across the lines' text, not their numbers.
+        let selection = selectable::text_selection(SharedString::from(format!("diff-lines-{key}")), window, cx);
+        let lines = selection.clone();
+        selectable::selection_scope(&selection, cx)
+            .size_full()
+            .child(
+                list(self.lines.clone(), move |ix, _, cx| {
+                    let line = DrawnLine {
+                        ix,
+                        count: parsed.lines.len(),
+                        num_w,
+                        ch,
+                    };
+                    diff_line(&parsed.lines[ix], line, &t, &lines, cx)
+                })
+                .size_full(),
+            )
+            .into_any_element()
     }
 }
 
@@ -588,8 +613,10 @@ impl gpui::RenderOnce for EmptyTitle {
     }
 }
 
-/// GIT-045: a message in the pane, with what went wrong under it.
-fn notice(title: &str, detail: Option<String>, t: &Tokens) -> AnyElement {
+/// GIT-045: a message in the pane, with what went wrong under it
+/// (`.diff-notice-detail.selectable`).
+fn notice(title: &str, detail: Option<String>, t: &Tokens, window: &mut Window, cx: &mut App) -> AnyElement {
+    let detail = detail.map(|detail| selectable::selectable("diff-notice-detail", detail, window, cx));
     div()
         .flex()
         .flex_col()
@@ -697,7 +724,25 @@ fn file_row(
 
 /// GIT-047: one line of the diff: old and new numbers, the sign, the text
 /// (tabs 4 wide, wrapping anywhere), the changed part highlighted.
-fn diff_line(line: &DiffLine, first: bool, last: bool, num_w: Pixels, ch: Pixels, t: &Tokens) -> AnyElement {
+/// Where a diff line is drawn: its index of `count`, and the number and
+/// sign columns' widths.
+#[derive(Clone, Copy)]
+struct DrawnLine {
+    ix: usize,
+    count: usize,
+    num_w: Pixels,
+    ch: Pixels,
+}
+
+fn diff_line(
+    line: &DiffLine,
+    drawn: DrawnLine,
+    t: &Tokens,
+    selection: &Entity<selectable::TextSelection>,
+    cx: &mut App,
+) -> AnyElement {
+    let DrawnLine { ix, count, num_w, ch } = drawn;
+    let (first, last) = (ix == 0, ix + 1 == count);
     let (bg, sign_color, word_bg) = match line.kind {
         DiffLineKind::Add => (Some(alpha(t.diff_add, 0.13)), t.diff_add, Some(alpha(t.diff_add, 0.34))),
         DiffLineKind::Del => (Some(alpha(t.diff_del, 0.11)), t.diff_del, Some(alpha(t.diff_del, 0.30))),
@@ -710,18 +755,19 @@ fn diff_line(line: &DiffLine, first: bool, last: bool, num_w: Pixels, ch: Pixels
         _ => t.text_primary,
     };
     let (text, changed) = expand_tabs(&line.text, line.changed);
-    let mut styled = StyledText::new(SharedString::from(text.clone()));
+    let mut highlights = Vec::new();
     if let (Some((start, end)), Some(word_bg)) = (changed, word_bg)
         && end > start
     {
-        styled = styled.with_highlights(vec![(
+        highlights.push((
             start..end,
             HighlightStyle {
                 background_color: Some(word_bg),
                 ..HighlightStyle::default()
             },
-        )]);
+        ));
     }
+    let styled = selectable::selectable_part(selection, ix, text, highlights, cx);
     let num = |n: Option<u64>| {
         div()
             .flex_none()

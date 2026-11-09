@@ -283,7 +283,11 @@ impl SessionWindow {
                         .cursor_text()
                         .tooltip(native_tooltip(path.clone().into()))
                         .child(term_icon(TermIcon::Folder, 12., 2., t.text_tertiary))
-                        .child(div().truncate().child(tilde_path(&path))),
+                        // `.term-cwd.selectable`.
+                        .child(div().truncate().child(crate::components::selectable::selectable_text(
+                            "term-cwd-text",
+                            tilde_path(&path),
+                        ))),
                 )
             })
             .when_some(branch, |d, branch| {

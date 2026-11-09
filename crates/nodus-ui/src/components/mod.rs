@@ -11,6 +11,7 @@ pub mod frosted;
 pub mod icon;
 pub mod modal;
 pub mod scroll;
+pub mod selectable;
 pub mod spaced_text;
 pub mod split_button;
 pub mod status_dot;

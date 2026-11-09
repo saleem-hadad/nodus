@@ -111,7 +111,11 @@ pub fn error_overlay(id: impl Into<ElementId>, title: &str, detail: Option<&str>
                             .text_size(TEXT_SM)
                             .text_color(white(0.55))
                             .cursor_text()
-                            .child(SharedString::from(detail.to_owned())),
+                            // `.term-error-detail.selectable`.
+                            .child(crate::components::selectable::selectable_text(
+                                (id.clone(), "detail"),
+                                detail.to_owned(),
+                            )),
                     )
                 })
                 .child(

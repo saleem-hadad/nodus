@@ -85,6 +85,7 @@ pub fn run(user_data: PathBuf) -> anyhow::Result<()> {
         theme::apply_preference(settings.theme, cx);
         menus::install_menus(&settings, cx);
         menus::bind_shortcuts(cx);
+        crate::components::selectable::bind_keys(cx);
         menus::register_actions(&nodus, cx);
         // CAP-038: capture gets its panel window, screen, permissions and key hook.
         crate::capture::register(&nodus, cx);

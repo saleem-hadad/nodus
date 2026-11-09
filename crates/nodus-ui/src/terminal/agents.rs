@@ -351,7 +351,16 @@ impl AgentViewer {
             .when(self.agents.is_none() && self.list_error.is_none(), |d| {
                 d.child(note("Loading…".into()))
             })
-            .when_some(self.list_error.clone(), |d, e| d.child(note(e)))
+            // `.av-list-note.selectable`.
+            .when_some(self.list_error.clone(), |d, e| {
+                d.child(
+                    div()
+                        .p(px(12.))
+                        .text_size(TEXT_SM)
+                        .text_color(t.text_tertiary)
+                        .child(crate::components::selectable::selectable_text("av-list-note", e)),
+                )
+            })
             .when(self.agents.as_ref().is_some_and(Vec::is_empty), |d| {
                 d.child(note("No agents yet.".into()))
             })

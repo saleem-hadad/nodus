@@ -369,14 +369,27 @@ impl SessionWindow {
             .gap(px(6.))
             .flex_none()
             .when(!shell, |d| {
-                // MODAL-019: the mic (its recording comes with the voice UI).
-                d.child(
-                    button("term-mic")
-                        .ghost()
-                        .square()
-                        .tooltip("Speak into this session. It’s typed in for you to send.")
-                        .child(term_icon(TermIcon::Mic, 14., 2., t.text_primary)),
-                )
+                // MODAL-019, VOICE-041: the mic; what's said is typed in at
+                // the session's prompt (resuming it if it's stopped), not sent.
+                let typing_into = this.clone();
+                let handle = window.window_handle();
+                let on_text: crate::voice::OnText = std::rc::Rc::new(move |text: String, cx: &mut gpui::App| {
+                    let view = typing_into.clone();
+                    let _ = handle.update(cx, |_, window, cx| {
+                        view.update(cx, |w, cx| w.type_in(&text, window, cx));
+                    });
+                });
+                d.child(crate::voice::session_mic(
+                    SharedString::from(format!("term-mic-{}", self.session_id)),
+                    crate::voice::SessionMicProps {
+                        project_id: self.project_id.clone(),
+                        variant: crate::voice::MicVariant::Window,
+                        scale: 1.,
+                        on_text,
+                    },
+                    window,
+                    cx,
+                ))
             })
             .when(can_resume, |d| {
                 let resume = this.clone();

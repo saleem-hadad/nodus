@@ -16,7 +16,7 @@ use nodus_core::capture_service::page::{self, bytes, host, kind_copy};
 use nodus_domain::{
     CaptureAttachment, CaptureKind, CaptureRecent, CaptureShortcut, ClipboardOffer, FolderColor, SessionStatus,
 };
-use nodus_voice::controller::{MICROPHONE_SETTINGS_LABEL, Phase, bar_scale, clock};
+use nodus_voice::controller::{MICROPHONE_SETTINGS_LABEL, Phase};
 
 use super::icons::{CapIcon, cap_icon};
 use super::panel::CapturePanel;
@@ -653,7 +653,7 @@ impl CapturePanel {
                 .child(div().child("\u{a0}new line"))
                 .into_any_element()
         } else {
-            self.render_voice_status(t, frozen, window)
+            self.render_voice_status(window, cx)
         };
         div()
             .flex()
@@ -725,62 +725,20 @@ impl CapturePanel {
     /// 05's `VoiceStatus` in the hint's place (`.voice-status`, margin-right
     /// 10): the blinking dot, the clock and the meter while recording,
     /// `Transcribing…` while transcribing, nothing while the mic opens.
-    fn render_voice_status(&self, t: Tokens, frozen: bool, window: &mut Window) -> AnyElement {
-        let row = div()
-            .flex()
-            .flex_none()
-            .items_center()
-            .gap(px(8.))
-            .mr(px(10.))
-            .text_size(px(12.))
-            .text_color(t.text_secondary)
-            .whitespace_nowrap();
-        match self.voice_state.phase {
-            Phase::Recording => {
-                // The meter moves every frame while it listens.
-                window.request_animation_frame();
-                let bars = self.voice.levels().map(|(bars, _)| bars).unwrap_or_default();
-                let dot = div().flex_none().size(px(8.)).rounded_full().bg(t.status_waiting);
-                let dot = if frozen {
-                    dot.into_any_element()
-                } else {
-                    dot.with_animation(
-                        "cap-voice-blink",
-                        Animation::new(Duration::from_millis(1200)).repeat(),
-                        |d, delta| {
-                            let half = if delta < 0.5 { delta * 2.0 } else { (1.0 - delta) * 2.0 };
-                            d.opacity(1.0 - 0.7 * motion::ease_in_out(half))
-                        },
-                    )
-                    .into_any_element()
-                };
-                row.child(dot)
-                    .child(
-                        div()
-                            .min_w(px(28.))
-                            .text_color(t.text_primary)
-                            .font_weight(FontWeight::MEDIUM)
-                            .child(clock(self.voice_state.elapsed)),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(2.))
-                            .h(px(16.))
-                            .children(bars.map(|level| {
-                                let scale = bar_scale(level) as f32;
-                                div().w(px(3.)).h(px(16. * scale)).rounded(px(2.)).bg(t.text_secondary)
-                            })),
-                    )
-                    .into_any_element()
-            }
-            Phase::Transcribing => row
-                .child(spinner("cap-voice-spin", 13., t.text_secondary, frozen))
-                .child("Transcribing…")
-                .into_any_element(),
-            Phase::Idle | Phase::Opening => row.into_any_element(),
-        }
+    fn render_voice_status(&self, window: &mut Window, cx: &mut Context<'_, Self>) -> AnyElement {
+        // The meter moves every frame while it listens (the shared status asks).
+        let levels = self.voice.levels().map(|(bars, _)| bars);
+        let status = crate::voice::voice_status_of(
+            "cap-voice",
+            self.voice_state.phase,
+            self.voice_state.elapsed,
+            levels,
+            false,
+            crate::voice::Z(1.),
+            window,
+            cx,
+        );
+        div().flex().flex_none().mr(px(10.)).children(status).into_any_element()
     }
 
     /// 05's `VoiceNotice` inside the card, under the error and the

@@ -960,6 +960,8 @@ impl BoardCanvas {
             || self.merge.is_some()
             || self.view_dialog.is_some()
             || self.search_open
+            // ACT-053: the actions rail's dialog, menu or delete confirmation.
+            || crate::actions::overlay_open(cx)
     }
 
     // ---- the archive stack ----------------------------------------------------

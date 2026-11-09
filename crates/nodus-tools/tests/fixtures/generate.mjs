@@ -2,9 +2,12 @@
 // tests check the board tools' MCP answers byte for byte against 0.9.4's,
 // on macOS and on Windows. Every id here is made up.
 //
-// Run from the repo root with Node 22:
+// The committed tools.json was generated from 0.9.4's sources. The Electron
+// app has since left this repo, so to regenerate it, point NODUS_V094 at a
+// checkout of tag v0.9.4 and run, from this repo's root, with Node 22:
 //
-//   node --experimental-strip-types crates/nodus-tools/tests/fixtures/generate.mjs
+//   git worktree add ../nodus-0.9.4 v0.9.4
+//   NODUS_V094=../nodus-0.9.4 node --experimental-strip-types crates/nodus-tools/tests/fixtures/generate.mjs
 //
 // It copies src/main/boardTools.ts and what it imports to a temporary folder,
 // swapping only Electron's app and the store for stubs.
@@ -14,7 +17,8 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
-const root = path.resolve(here, '../../../..')
+if (!process.env.NODUS_V094) throw new Error('Set NODUS_V094 to a checkout of tag v0.9.4 (see the top of this file)')
+const root = path.resolve(process.env.NODUS_V094)
 
 function copy(work, from, name, replacements = []) {
   let source = fs.readFileSync(path.join(root, from), 'utf8')

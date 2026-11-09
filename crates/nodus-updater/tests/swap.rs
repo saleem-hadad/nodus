@@ -179,11 +179,7 @@ fn the_script_is_0_9_4s_byte_for_byte() {
         "if [ -n \"$8\" ]; then open -n --env \"NODUS_USER_DATA=$8\" \"$app\"; else open -n \"$app\"; fi\n"
     ));
     assert_eq!(SWAP_SCRIPT.lines().count(), 18);
-    // Against the TypeScript itself, while it's in the repo.
-    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../src/main/updater.ts");
-    if let Ok(source) = std::fs::read_to_string(source) {
-        let start = source.find("const SWAP_SCRIPT = `").unwrap() + "const SWAP_SCRIPT = `".len();
-        let end = start + source[start..].find('`').unwrap();
-        assert_eq!(&source[start..end], SWAP_SCRIPT);
-    }
+    // Against 0.9.4's own: the `SWAP_SCRIPT` template in src/main/updater.ts
+    // at tag v0.9.4, copied out byte for byte.
+    assert_eq!(include_str!("fixtures/swap-script-0.9.4.sh"), SWAP_SCRIPT);
 }

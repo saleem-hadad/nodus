@@ -11,7 +11,7 @@
 | 1 | `PROTOCOL` → 2 (U1, default (a)) | ✅ |
 | 2 | CI and release workflows on cargo only | ✅ |
 | 3 | README and how-it-works for the Rust app | ✅ |
-| 4 | Electron sources and toolchain removed | ☐ |
+| 4 | Electron sources and toolchain removed | ✅ |
 | 5 | Workspace version 1.0.0 (the user's pick, 2026-11-10) | ☐ |
 | 6 | Final check: fmt, clippy, tests, prepush, arm64 bundle + smoke | ☐ |
 
@@ -33,3 +33,14 @@
 
 - README: only "Build from source" changed (cargo run / test, the bundle and DMG scripts, the Windows installer script); same layout and voice.
 - `docs/how-it-works.md`: the diagram (nodus-ui ⇄ nodus-core ⇄ `Nodus host`), the host running as `Nodus host` (was "as plain Node"), the xAI key "never reaches the window" (was "the main process"), the key hook (event tap / low-level hooks, was uiohook-napi), and Project layout, Built with, Development, Releasing and Troubleshooting installs rewritten for the workspace. Every user-facing section is otherwise unchanged; `NODUS_USER_DATA` is still documented.
+
+## 4. Electron removed
+
+- **Deleted:** `src/` (155 files), `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `electron-builder.yml`, `electron.vite.config.ts`, `tsconfig.json`, `tsconfig.node.json`, `tsconfig.web.json`, `vitest.config.mts`, `.nvmrc`, `scripts/postinstall.cjs`, `scripts/smoke.mjs` (now `packaging/smoke.py`), `build/entitlements.mac.plist` (the bundle signs with `packaging/macos/entitlements.plist`). `.gitignore` drops `out` (electron-vite's); `node_modules` stays for `migration/parity`'s `npm ci`, `dist` for the packages. `build/` keeps the icons (`icon.icns` goes in the bundle and DMG, `icon-win.png` is `icon.ico`'s source, `icon.png`/`icon.svg` the artwork).
+- **What depended on them, and now reads tag v0.9.4 instead:**
+  - `nodus-updater/tests/swap.rs` compared `SWAP_SCRIPT` with `src/main/updater.ts` "while it's in the repo"; it now compares with `tests/fixtures/swap-script-0.9.4.sh`, the template copied byte for byte out of v0.9.4's `updater.ts`.
+  - The four fixture generators (`nodus-sessions`, `nodus-terminal`, `nodus-tools`, `nodus-views`: `tests/fixtures/generate.mjs`) read `src/` (and `node_modules` for xterm.js) through `NODUS_V094`, a checkout of the tag, and say the committed fixtures came from v0.9.4's sources. Checked: run against `git archive v0.9.4` (Electron 44.5.1 as Node 24), all four rewrite their fixtures byte for byte unchanged.
+  - `migration/parity/capture-electron.mjs` defaults `--app` to `../nodus-0.9.4` (a `git worktree add ../nodus-0.9.4 v0.9.4`) and says so if it's missing; the README leads with that.
+  - The Node-host tests (`nodus-host/tests/wire.rs`, `nodus-sessions/tests/client.rs`) document building `host.js` from the tag.
+- `packaging/` never read `node_modules` at build time: dmgbuild, makensis and the NSIS plugins are electron-builder-binaries' pinned archives, downloaded and checked by SHA-256, and the NSIS templates are vendored.
+- **What still names Electron, on purpose:** code and docs about 0.9.4 itself, which every install upgrades from: reading its safeStorage ciphertext and Chromium Local Storage, its updater's checks (handoff gates), its installer's registry id and NSIS templates (electron-builder's, MIT), its parity goldens, and doc comments saying which `src/…` file a module ports. `migration/` is kept as the record.

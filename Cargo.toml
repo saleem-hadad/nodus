@@ -1,5 +1,7 @@
-# The native Nodus: one crate per domain, built beside the Electron app until
-# it replaces it. See migration/plan.md for how the crates fit together.
+# Nodus: one crate per domain (docs/how-it-works.md, Project layout). It
+# replaced the Electron app of 0.9.4; doc comments that say a module ports
+# `src/…` mean that app's sources at tag v0.9.4. How the crates fit together,
+# and how the move was made: migration/plan.md.
 [workspace]
 members = ["crates/*"]
 # The patched GPUI under third_party/ builds as a dependency, not a member,

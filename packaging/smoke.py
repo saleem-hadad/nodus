@@ -10,7 +10,7 @@ and each step is screenshotted in light and dark.
 `open -n --env NODUS_USER_DATA=… <bundle>`, as 0.9.4's swap script reopens
 the app it put in place (UPD-063, REL-042), instead of running it directly.
 
-The Rust port of scripts/smoke.mjs (REL-032…REL-035). The app is driven
+The Rust port of 0.9.4's scripts/smoke.mjs (REL-032…REL-035). The app is driven
 through its test driver (decision D11, NODUS_AUTOMATION; see
 crates/nodus-ui/src/automation.rs), which replaces the DevTools protocol. The
 driver has no `sessions.write` or output events yet, so the shell is typed

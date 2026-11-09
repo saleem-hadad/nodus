@@ -9,7 +9,8 @@
 //   --scene a,b        only these scenes (a trailing * matches a prefix: board-*)
 //   --theme t          light, dark or both (default both)
 //   --out dir          where the PNGs go (default migration/parity/golden next to this file)
-//   --app dir          the Electron checkout to run (default: this repository; a v0.9.4 worktree after cutover)
+//   --app dir          the checkout of tag v0.9.4 to run (default: ../nodus-0.9.4 beside this repository;
+//                      the Electron app left this repository at the cutover)
 //   --build-dir dir    where it's built (default <app>/node_modules/.cache/parity)
 //   --no-build         use the build that's there
 //   --work dir         the seeded world (default: nodus-parity in macOS's Shared folder, DEFAULT_WORK)
@@ -34,7 +35,7 @@ function parseArgs(argv) {
   const opts = {
     themes: ['light', 'dark'],
     out: path.join(here, 'golden'),
-    app: path.resolve(here, '..', '..'),
+    app: path.resolve(here, '..', '..', '..', 'nodus-0.9.4'),
     build: true,
     work: DEFAULT_WORK,
     chromiumSandbox: true
@@ -70,7 +71,9 @@ function selectScenes(patterns) {
 
 function build(opts) {
   if (!fs.existsSync(path.join(opts.app, 'src', 'main', 'index.ts'))) {
-    throw new Error(`${opts.app} isn't a checkout of the Electron app (no src/main/index.ts)`)
+    throw new Error(
+      `${opts.app} isn't a checkout of the Electron app (no src/main/index.ts): pass --app <a checkout of tag v0.9.4>`
+    )
   }
   console.log(`Building ${opts.app} into ${opts.buildDir}`)
   execFileSync(

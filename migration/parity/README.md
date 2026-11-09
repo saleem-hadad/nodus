@@ -12,15 +12,17 @@ Nothing here comes from a real machine: the projects, transcripts, repositories 
 
 ## Running it
 
-macOS, Node 22 or newer, and an Electron checkout with its dependencies installed:
+macOS, Node 22 or newer, and a checkout of tag `v0.9.4` with its dependencies installed. The Electron app left this repository at the cutover, so the goldens always come from the tag. The harness looks for it in `../nodus-0.9.4` beside this repository, unless `--app` names another folder:
 
 ```sh
-corepack pnpm install --frozen-lockfile        # in the app checkout
+git worktree add ../nodus-0.9.4 v0.9.4          # once, from this repository
+(cd ../nodus-0.9.4 && corepack pnpm install --frozen-lockfile)
 cd migration/parity && npm ci                   # playwright-core, pngjs, pixelmatch
 node capture-electron.mjs                       # every scene, light and dark (~15 min)
 node capture-electron.mjs --scene board-populated --theme dark
 node capture-electron.mjs --scene 'capture-*'   # a prefix
 node capture-electron.mjs --list
+node capture-electron.mjs --app <another v0.9.4 checkout>
 ```
 
 It builds the app into `<app>/node_modules/.cache/parity` first (never the shared `out/`; `--no-build` skips it), then for each scene and theme: writes a fresh world, launches the app on it, drives it into the scene, waits for it to settle, saves the shot and quits the app and its session host. A failed or never-settling shot is reported and the exit code is 1. `report.json` beside the shots has each one's timing and stability.
@@ -31,17 +33,9 @@ The window appears on screen while it runs. It ignores the real pointer and keyb
 
 Nothing in a run reaches the network or the user's own data: Settings scenes report the Accessibility permission as not given (so the global key hook never starts, whatever the machine allows), notifications are silenced, the capture panel treats the board window as the app in front (so no other app's window or browser tab is read) and reads an empty clipboard, and native pickers (the folder picker, the file dialog, the screenshot crosshair) are replaced by IPC stubs in the scenes that need them.
 
-### After cutover
+### The v0.9.4 checkout
 
-Once `src/` is gone from `main`, capture from the tag, with this folder from `main`:
-
-```sh
-git worktree add ../nodus-0.9.4 v0.9.4
-(cd ../nodus-0.9.4 && corepack pnpm install --frozen-lockfile)
-node migration/parity/capture-electron.mjs --app ../nodus-0.9.4
-```
-
-The harness only reads `--app`'s sources, builds them into `--app`'s own `node_modules/.cache/parity`, and runs its Electron binary.
+The harness only reads `--app`'s sources, builds them into `--app`'s own `node_modules/.cache/parity`, and runs its Electron binary. Everything else (scenes, seed, stand-ins) is this folder, from `main`.
 
 ## How a shot is made
 

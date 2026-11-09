@@ -1,5 +1,5 @@
+# The parity harness's dependencies (migration/parity: npm ci).
 node_modules
-out
 dist
 .DS_Store
 *.log

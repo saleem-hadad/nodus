@@ -4,7 +4,7 @@
      which is the same binary run as `Nodus host`). The prompt bar's mic needs
      audio-input, and floating capture needs Apple Events to read the browser
      tab in front; without them the hardened runtime blocks both.
-     build/entitlements.mac.plist also allowed JIT and unsigned executable
+     0.9.4's build/entitlements.mac.plist also allowed JIT and unsigned executable
      memory, which only V8 needed: views' pages run in WKWebView's own
      WebContent process, which carries WebKit's entitlements, not the app's.
      Library validation stays on, as it was. -->

@@ -3,16 +3,20 @@
 // the CSP, the theme, the bridge script, the guide on macOS and Windows, and
 // where the injected part goes in pages of every shape. Everything is made up.
 //
-// Run from the repo root with Node 22:
+// The committed page.json was generated from 0.9.4's sources. The Electron
+// app has since left this repo, so to regenerate it, point NODUS_V094 at a
+// checkout of tag v0.9.4 and run, from this repo's root, with Node 22:
 //
-//   node --experimental-strip-types crates/nodus-views/tests/fixtures/generate.mjs
+//   git worktree add ../nodus-0.9.4 v0.9.4
+//   NODUS_V094=../nodus-0.9.4 node --experimental-strip-types crates/nodus-views/tests/fixtures/generate.mjs
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
-const root = path.resolve(here, '../../../..')
+if (!process.env.NODUS_V094) throw new Error('Set NODUS_V094 to a checkout of tag v0.9.4 (see the top of this file)')
+const root = path.resolve(process.env.NODUS_V094)
 
 async function load(platform) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), `nodus-page-${platform}-`))

@@ -2,9 +2,14 @@
 // themselves, so the Rust tests check nodus-terminal against what 0.9.4 does
 // rather than against a reading of it. All text in them is made up.
 //
-// Run from the repo root with Node 22, after `pnpm install`:
+// The committed fixtures were generated from 0.9.4's sources and its xterm.js.
+// The Electron app has since left this repo, so to regenerate them, point
+// NODUS_V094 at a checkout of tag v0.9.4 with its dependencies installed, and
+// run, from this repo's root, with Node 22:
 //
-//   node crates/nodus-terminal/tests/fixtures/generate.mjs
+//   git worktree add ../nodus-0.9.4 v0.9.4
+//   (cd ../nodus-0.9.4 && pnpm install)
+//   NODUS_V094=../nodus-0.9.4 node crates/nodus-terminal/tests/fixtures/generate.mjs
 //
 // It bundles xterm's TypeScript sources (node_modules/@xterm/xterm/src, the
 // addons' src) with esbuild, and runs:
@@ -26,7 +31,8 @@ import { createRequire } from 'node:module'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
-const root = path.resolve(here, '../../../..')
+if (!process.env.NODUS_V094) throw new Error('Set NODUS_V094 to a checkout of tag v0.9.4 (see the top of this file)')
+const root = path.resolve(process.env.NODUS_V094)
 const modules = path.join(root, 'node_modules')
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'nodus-terminal-fixtures-'))
 const require = createRequire(path.join(modules, '.pnpm/node_modules/_.js'))

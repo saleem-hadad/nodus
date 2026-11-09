@@ -51,7 +51,7 @@ where
 }
 
 /// UPD-021: the file this machine takes. An arm64 machine gets the arm64
-/// build even when this copy is the Intel one. Names as electron-builder.yml.
+/// build even when this copy is the Intel one. Names as 0.9.4's electron-builder.yml gave them.
 pub fn asset_name(platform: Platform, arm64: bool) -> String {
     let arch = if arm64 { "arm64" } else { "x64" };
     match platform {

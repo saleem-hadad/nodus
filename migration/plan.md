@@ -180,12 +180,13 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | parity-harness | `rust/parity-harness` | golden screenshots of 0.9.4 (`migration/parity/`) | ✅ merged: harness, seed and scene list; ~98 scenes × 2 themes captured locally (gitignored) |
 | gpui-fork | `rust/gpui-fork` | `third_party/gpui/`: backdrop blur, transforms, group opacity, frame capture (D13) | ✅ merged: Metal + wgpu verified at 60 fps; DirectX 11 HLSL unverified (CI step `continue-on-error` until green) |
 | ui-shell | `rust/ui-shell` | nodus-core skeleton (P4a); nodus-ui theme, controls, title bar, menus, settings, projects grid, rail (P5); test driver (D11) | ✅ merged: UI 243, PLAT 64; shell scenes within 0.03–0.3% of the goldens; board route, live counts and Settings rows on other APIs deferred |
+| views-ui | `rust/views-ui` | P9, spec 04 UI: view cards, wry webviews with the snapshot swap, the page relay, New view / change dialogs, BOARD-129/130 | 🟡 running |
 | views-tools | `rust/views-tools` | nodus-views, nodus-tools, nodus-board notes and ink | ✅ merged: NOTE 16, INK 12, TOOL 40 (004…013/015 by host), VIEW 100; 54 VIEW UI-only to the UI tracks |
 | actions-voice-git | `rust/actions-voice-git` | nodus-actions, nodus-voice (incl. the recorder), nodus-git | ✅ merged: 97 (GIT 28, ACT 37, VOICE 32); recorder is Core Audio voice processing + Opus/WebM like MediaRecorder |
 | capture | `rust/capture` | nodus-capture backend: double tap, key hook, screen context, guess, submit | ✅ merged: 98 CAP; panel UI and page wiring to the capture-panel track |
 | core | `rust/core` | P4: wire every merged domain into nodus-core (sessions, board, views, updates, events, startup/quit), deferred core IDs, debts, headless end-to-end tests | ✅ merged (6243e7c): every domain composed; git/actions/voice wired; the windowed app launches, runs sessions through `Nodus host` and quits through the core |
 | overlays | `rust/overlays` | P8, spec 11: prompt bar, ⌘K search, merge dialog, ink layer, selection bar, on the board's `board/bar.rs` hooks | 🟡 running |
-| gpui-text | `rust/gpui-text` | patched GPUI text parity with Chromium: sRGB tagging, no SF Pro tracking, hanging trailing spaces, Chromium's rounding; Windows effects CI step | 🟡 running |
+| gpui-text | `rust/gpui-text` | patched GPUI text parity with Chromium: sRGB tagging, no SF Pro tracking, hanging trailing spaces, Chromium's rounding; Windows effects CI step | ✅ merged: PATCHES 6–10; 69/71 text cases pixel-identical to Electron 44.5.1; shell scenes now 0.04–0.8% off the goldens |
 | board-canvas | `rust/board-canvas` | P6, spec 09: the board route and canvas (pan/zoom/select/drag, sections, edges, menus, shortcuts), node plug-in interface | ✅ merged (f2f5747): 149 ticked; 13 deferred to cards/terminal/views/overlays and 13 board-side overlay hooks (`board/bar.rs`) tick when the overlays land |
 | board-cards | `rust/board-cards` | P6, spec 10: session cards, expanded card chrome, agent deck, archive stack, notes, pad (`nodus-ui/src/board/cards/`) | 🟡 running |
 | capture-panel | `rust/capture-panel2` (from `rust/capture-panel` at adc385b) | P10, spec 07 UI: the panel window and page, Settings' capture rows, File › Capture…, `nodus.capture()` | 🟡 running (fresh agent on a new branch: two stale worktrees hold `rust/capture-panel`) |
@@ -213,7 +214,8 @@ Follow-ups a merge left for when the tracks meet in `nodus-core` (P4). Strike th
 - Views need a webview for every view, on screen or not, or `update_view`'s page checks time out (the UI track keeps them alive off screen).
 - `update_view` now fails before applying anything when writing `index.html` fails; 0.9.4 applied the title and the rest first. Deliberate, invisible unless the disk is full.
 - View command output is decoded whole, not per pipe chunk, so a character split across chunks can differ from 0.9.4 (it was garbled there).
-- Text parity (from ui-shell, side by side with the goldens): GPUI applies SF Pro's built-in tracking where Chromium doesn't (13 px labels come out ~1 px narrower), wraps counting the space after a word, and rounds some text half a pixel the other way; the window's Metal layer was untagged (P3 displays oversaturated every colour) — nodus-ui tags it sRGB for now. All four belong in the patched GPUI.
+- ~~Text parity: tracking, hanging spaces, rounding, sRGB~~ (gpui-text: PATCHES 6–10; the "tracking" gap was weight 500 → Regular). Two line-clamp cases whose first line breaks inside a word still differ by 1 and 13 anti-aliased pixels.
+- The DirectX effect shaders compile with DXC; whether fxc and WARP accept them shows on the next Windows CI run (the step is `continue-on-error` there, required on macOS).
 - Thumbnails of copied images are encoded differently from Chromium's, so an image 0.9.4 already offered is offered once more after the upgrade; a non-ASCII host shows as written on a tab tile, where 0.9.4 shows punycode.
 - Changed files sort with root collation; 0.9.4 used ICU `localeCompare` in the user's locale.
 - ~~Keep one global for the core's runtime~~ (done in f2f5747). Keep one wheel arbiter (board-cards' duplicates the terminal model's; terminal-ui's wheel gate lets only one decide).
@@ -273,6 +275,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-09: gpui-text merged: text matches Chromium's (widths, wrapping, clamps, baselines, AA, sRGB); fixed nodus-capture's prune test on Windows, which had kept the Windows effects step from running; 1,170+ tests. views-ui started.
 - 2026-11-09: board-canvas merged (f2f5747): the board route and canvas as React Flow did it, with the node plug-in interface and the board's side of the overlays (`board/bar.rs`); one `CoreRuntime` global for board and terminals; 1,170 tests.
 - 2026-11-09: terminal-ui merged (590f9b6): terminal element, session window, transcript preview, agents viewer; 1,117 tests.
 - 2026-11-09: More watchdog stalls traced to agents reading full-size 2880×1800 screenshots; tracks now compare with the diff tool and look only at small crops. capture-panel continues on `rust/capture-panel2`.

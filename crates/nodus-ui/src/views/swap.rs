@@ -34,7 +34,8 @@ const STALE_AFTER: Duration = Duration::from_millis(400);
 /// A live page that changed gets a new snapshot at most this often, ready
 /// for whatever covers it next.
 const READY_EVERY: Duration = Duration::from_millis(1000);
-/// A snapshot WebKit couldn't take (a page not drawn yet) is tried again.
+/// A snapshot WebKit couldn't take (a page not drawn yet) is tried again
+/// after this, twice as long after each failure in a row, up to 16 times.
 const RETRY: Duration = Duration::from_millis(120);
 
 /// A frame's probe painted: its webview follows the body, what covers the
@@ -260,7 +261,8 @@ fn take_snapshot(id: u64, window: &mut Window, cx: &mut App) {
                     if cfg!(target_os = "macos") {
                         // Not drawn yet, or WebKit couldn't: try again shortly.
                         fr.dirty = true;
-                        fr.retry_at = Some(now + RETRY);
+                        fr.retry_at = Some(now + RETRY * 2u32.pow(fr.failed.min(4)));
+                        fr.failed += 1;
                     } else if fr.live && fr.want {
                         // Where pages can't be pictured (WebView2 for now),
                         // the page still steps aside so what covers it shows.
@@ -271,6 +273,7 @@ fn take_snapshot(id: u64, window: &mut Window, cx: &mut App) {
                     return;
                 };
                 fr.retry_at = None;
+                fr.failed = 0;
                 let old = fr.snapshot.replace(image);
                 (old, fr.want || !fr.live)
             };

@@ -56,8 +56,10 @@ pub struct Frame {
     pub occluded: bool,
     /// The page should be behind its snapshot (last check).
     pub want: bool,
-    /// A snapshot failed: the next try waits until then.
+    /// A snapshot failed: the next try waits until then, longer after each
+    /// failure in a row (`failed`).
     pub retry_at: Option<Instant>,
+    pub failed: u32,
     /// The ink its overlay shows over the live page (`ink.rs`).
     pub ink: Option<super::ink::PageInk>,
     /// The pointer is over the page (the shell says, VIEW-128's hover).
@@ -311,6 +313,7 @@ pub fn sync_board(canvas: &mut BoardCanvas, window: &mut Window, cx: &mut Contex
                         occluded: false,
                         want: false,
                         retry_at: None,
+                        failed: 0,
                         ink: None,
                         hovered: false,
                         tooltip: false,

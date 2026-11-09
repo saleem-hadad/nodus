@@ -95,9 +95,9 @@ impl BoardCanvas {
                 in_archive,
             ),
             disabled(
-                // The New view dialog is spec 04's.
+                // BOARD-144: the New view dialog (spec 04), centred at p.
                 item(&me, "New view here…", Icon::LayoutDashboard, move |c, cx| {
-                    c.open_view_dialog(Some(p), cx)
+                    c.open_view_dialog(Some(p), cx);
                 }),
                 in_archive,
             ),

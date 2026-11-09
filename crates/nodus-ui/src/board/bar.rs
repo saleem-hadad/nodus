@@ -129,7 +129,7 @@ impl BoardCanvas {
     /// `submitFromBar`: true when the bar should clear (BOARD-133…BOARD-137).
     pub fn submit_from_bar(&mut self, submission: Submission, cx: &mut Context<'_, Self>) -> Task<bool> {
         match submission {
-            Submission::Session { text } => self.start_bar_session(text, cx),
+            Submission::Session { text } => self.start_bar_session(&text, cx),
             Submission::Into { session_id, text } => self.send_to_session(session_id, text, cx),
             Submission::View { text } => {
                 // BOARD-136.
@@ -173,7 +173,7 @@ impl BoardCanvas {
     /// prompt, expanded and in auto mode, below the selected sessions or in
     /// view; the prompt rides on it as a note, or stays as one if it can't
     /// start.
-    fn start_bar_session(&mut self, text: String, cx: &mut Context<'_, Self>) -> Task<bool> {
+    fn start_bar_session(&mut self, text: &str, cx: &mut Context<'_, Self>) -> Task<bool> {
         let (sources, context) = self.bar_context();
         let dock = self.dock();
         let preferred = if sources.is_empty() {
@@ -194,7 +194,7 @@ impl BoardCanvas {
             .and_then(|b| section_at(pos, &section_views(&b.sections, &b.cards), None, CARD_SIZE));
         let note = BoardNote {
             id: uuid::Uuid::new_v4().to_string(),
-            text: text.clone(),
+            text: text.to_owned(),
             color: FolderColor::Yellow,
             x: pos.x,
             y: pos.y,
@@ -210,7 +210,7 @@ impl BoardCanvas {
         let opts = CreateSessionOptions {
             x: pos.x,
             y: pos.y,
-            initial_prompt: Some(with_context(&context, &text)),
+            initial_prompt: Some(with_context(&context, text)),
             parents: (!sources.is_empty()).then(|| sources.iter().map(|c| c.node.session_id.clone()).collect()),
             // Its prompt opens with the context, so it's named for what was asked.
             name: (!context.is_empty()).then(|| truncate(text.split('\n').next().unwrap_or_default(), 64)),

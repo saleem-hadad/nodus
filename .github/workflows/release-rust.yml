@@ -1,0 +1,272 @@
+# Releases the native Nodus: builds, signs and notarizes the macOS DMGs, builds
+# the Windows installers, runs the handoff gates (decision D12), and only when
+# every gate passed and `publish` is ticked, publishes release v<version> with
+# the four assets every installed Nodus looks for (spec 06, HANDOFF CONTRACT A).
+#
+# Started by hand (Actions › Release (Rust) › Run workflow), never by a tag, so
+# the Electron release (release.yml, on v* tags) is untouched until cutover.
+# Without `publish` it's a rehearsal: everything but the release, with the
+# packages left as the run's artifacts. How to cut a release:
+# migration/tracks/packaging.md.
+#
+# Secrets, by name only: CSC_LINK and CSC_KEY_PASSWORD (the Developer ID
+# certificate 0.9.4 is signed with, decision D10) reach only the keychain
+# step; APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID only the
+# signing step, and APPLE_TEAM_ID the gate, which compares it and never prints it.
+name: Release (Rust)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, without the v (must equal the workspace version)
+        required: true
+        type: string
+      publish:
+        description: Publish the release once every gate passes (otherwise a rehearsal)
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-rust
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - run: rustup toolchain install
+
+      # REL-003, REL-039: the version is the workspace's, three numbers with no
+      # suffix (installed copies ignore any other tag), newer than 0.9.4 and
+      # than the latest release, and not released yet.
+      - name: Check the version
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          workspace=$(cargo pkgid -p nodus | sed 's/.*[#@]//')
+          if [ "$VERSION" != "$workspace" ]; then
+            echo "::error::Version $VERSION doesn't match the workspace version $workspace"
+            exit 1
+          fi
+          newer() { python3 -c 'import sys; a, b = ([int(p) for p in v.split(".")] for v in sys.argv[1:]); sys.exit(0 if a > b else 1)' "$1" "$2"; }
+          echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::$VERSION isn't X.Y.Z"; exit 1; }
+          newer "$VERSION" 0.9.4 || { echo "::error::$VERSION isn't newer than 0.9.4"; exit 1; }
+          latest=$(gh api repos/${{ github.repository }}/releases/latest --jq .tag_name | sed 's/^v//')
+          newer "$VERSION" "$latest" || { echo "::error::$VERSION isn't newer than the latest release, $latest"; exit 1; }
+          if gh release view "v$VERSION" --repo ${{ github.repository }} >/dev/null 2>&1; then
+            echo "::error::v$VERSION is released already"
+            exit 1
+          fi
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      # REL-004: the tests before anything is packaged.
+      - run: cargo test --workspace --locked
+
+  mac:
+    needs: check
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - run: rustup toolchain install && rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      # REL-005, verbatim from release.yml: the Developer ID certificate in a
+      # throwaway keychain, where codesign finds it.
+      - name: Install the signing certificate
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          if [ -z "$CSC_LINK" ]; then
+            echo "::error::A release needs the Developer ID certificate (CSC_LINK): 0.9.4 refuses any other signature"
+            exit 1
+          fi
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password=$(openssl rand -base64 32)
+          printf '%s' "$CSC_LINK" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productbuild
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/cert.p12"
+
+      # REL-006: the Apple ID secrets go to this step only.
+      - name: Build, sign and notarize
+        env:
+          NODUS_SIGN_IDENTITY: Developer ID Application
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -z "$APPLE_ID" ] || [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ] || [ -z "$APPLE_TEAM_ID" ]; then
+            echo "::error::A release is notarized: APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID must be set"
+            exit 1
+          fi
+          packaging/macos/bundle.sh arm64
+          packaging/macos/bundle.sh x64
+          packaging/macos/dmg.sh arm64
+          packaging/macos/dmg.sh x64
+
+      # The handoff gate. 0.9.4's own DMG goes through it first, which checks
+      # the gate (it must pass what shipped) and gives the copy that runs the
+      # update, whose bundle id and team the new apps must match. Then each new
+      # DMG, through 0.9.4's checks with that copy, notarized and stapled.
+      - name: Handoff gate
+        env:
+          VERSION: ${{ inputs.version }}
+          GATE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          GATE_NOTARIZED: '1'
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.9.4 --repo ${{ github.repository }} --pattern Nodus-arm64.dmg --dir "$RUNNER_TEMP/old"
+          GATE_COPY_TO="$RUNNER_TEMP/running" packaging/macos/handoff-gate.sh "$RUNNER_TEMP/old/Nodus-arm64.dmg" arm64 0.9.4
+          GATE_COPY_TO="$RUNNER_TEMP/swapped" packaging/macos/handoff-gate.sh dist/Nodus-arm64.dmg arm64 "$VERSION" "$RUNNER_TEMP/running/Nodus.app"
+          packaging/macos/handoff-gate.sh dist/Nodus-x64.dmg x64 "$VERSION" "$RUNNER_TEMP/running/Nodus.app"
+
+      # REL-042: the swapped-in copy runs, directly and reopened by LaunchServices.
+      - name: Smoke test
+        run: |
+          python3 packaging/smoke.py "$RUNNER_TEMP/swapped/Nodus.app/Contents/MacOS/Nodus" smoke/exec
+          python3 packaging/smoke.py --open "$RUNNER_TEMP/swapped/Nodus.app/Contents/MacOS/Nodus" smoke/open
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dmg
+          path: dist/Nodus-*.dmg
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: mac-smoke
+          path: smoke
+          if-no-files-found: ignore
+
+  windows:
+    needs: check
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - run: rustup toolchain install && rustup target add x86_64-pc-windows-msvc aarch64-pc-windows-msvc
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      # REL-012, REL-027: both installers, unsigned as 0.9.4's.
+      - name: Installers
+        run: packaging/windows/installer.sh x64 && packaging/windows/installer.sh arm64
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: installers
+          path: dist/Nodus-Setup-*.exe
+          if-no-files-found: error
+
+  # The Windows handoff gate on each kind of machine a 0.9.4 runs on: an x64 PC,
+  # and Windows on Arm, where x64 copies take the arm64 installer too (UPD-021).
+  windows-gate:
+    needs: windows
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: windows-latest, old: x64, new: x64 }
+          - { runner: windows-11-arm, old: arm64, new: arm64 }
+          - { runner: windows-11-arm, old: x64, new: arm64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: installers
+          path: dist
+
+      - name: Fresh install and uninstall
+        if: matrix.old == matrix.new
+        shell: pwsh
+        run: packaging/windows/install-check.ps1 -Installer dist/Nodus-Setup-${{ matrix.new }}.exe -Version '${{ inputs.version }}'
+
+      - name: Handoff gate
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.9.4 --repo ${{ github.repository }} --pattern Nodus-Setup-${{ matrix.old }}.exe --dir "$env:RUNNER_TEMP\old"
+          packaging/windows/handoff-gate.ps1 -Old "$env:RUNNER_TEMP\old\Nodus-Setup-${{ matrix.old }}.exe" -New dist/Nodus-Setup-${{ matrix.new }}.exe -Version '${{ inputs.version }}'
+
+      - name: Smoke test
+        shell: bash
+        run: python packaging/smoke.py "$LOCALAPPDATA/Programs/nodus/Nodus.exe" smoke
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: windows-smoke-${{ matrix.old }}-to-${{ matrix.new }}
+          path: smoke
+          if-no-files-found: ignore
+
+  # Only after every gate passed. The release is made as a draft, so
+  # releases/latest doesn't hand installed copies a release without its assets
+  # (REL-014 published first and uploaded after); each asset's digest is
+  # checked (Windows copies refuse an asset without one, HANDOFF CONTRACT A5),
+  # and then it's published, not a prerelease.
+  publish:
+    needs: [mac, windows-gate]
+    if: inputs.publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: dmg
+          path: dist
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: installers
+          path: dist
+
+      - name: Publish
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          assets="Nodus-arm64.dmg Nodus-x64.dmg Nodus-Setup-x64.exe Nodus-Setup-arm64.exe"
+          for asset in $assets; do [ -f "dist/$asset" ] || { echo "::error::No $asset"; exit 1; }; done
+          gh release create "v$VERSION" --repo "$REPO" --target "$GITHUB_SHA" --title "v$VERSION" --generate-notes --draft
+          for asset in $assets; do gh release upload "v$VERSION" "dist/$asset" --repo "$REPO"; done
+          id=$(gh api "repos/$REPO/releases" --jq ".[] | select(.tag_name == \"v$VERSION\") | .id")
+          for asset in $assets; do
+            want="sha256:$(sha256sum "dist/$asset" | cut -d' ' -f1)"
+            got=$(gh api "repos/$REPO/releases/$id" --jq ".assets[] | select(.name == \"$asset\" and .state == \"uploaded\") | .digest")
+            [ "$got" = "$want" ] || { echo "::error::$asset's digest is '$got', not $want"; exit 1; }
+          done
+          gh release edit "v$VERSION" --repo "$REPO" --draft=false --prerelease=false --latest
+          tag=$(gh api "repos/$REPO/releases/latest" --jq .tag_name)
+          [ "$tag" = "v$VERSION" ] || { echo "::error::releases/latest is $tag, not v$VERSION"; exit 1; }

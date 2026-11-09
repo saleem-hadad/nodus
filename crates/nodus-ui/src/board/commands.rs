@@ -38,7 +38,7 @@ fn round(p: Point) -> Point {
 }
 
 impl BoardCanvas {
-    fn cards(&self) -> &[SessionCard] {
+    pub(crate) fn cards(&self) -> &[SessionCard] {
         self.board.as_ref().map_or(&[], |b| b.cards.as_slice())
     }
 
@@ -115,7 +115,9 @@ impl BoardCanvas {
         if archived {
             self.state.update(cx, |s, cx| s.open_preview(&id, cx));
         } else if expanded {
-            // Wakes its on-board terminal (spec 10/12's wake registry).
+            // An expanded card shows its session right there.
+            let renderers = super::nodes::renderers(cx);
+            renderers.wake(&id, cx);
         } else {
             self.state.update(cx, |s, cx| s.open_terminal(&id, cx));
         }
@@ -132,7 +134,13 @@ impl BoardCanvas {
         if targets.is_empty() {
             return;
         }
-        // Expanding wakes each terminal (spec 10/12).
+        // Expanding shows the session there, as opening it would in the modal.
+        if expanded {
+            let renderers = super::nodes::renderers(cx);
+            for c in &targets {
+                renderers.wake(&c.node.session_id, cx);
+            }
+        }
         self.patch_cards(
             targets
                 .iter()
@@ -212,7 +220,9 @@ impl BoardCanvas {
             None => spot_for_new_session(dock, self.cards(), NEW_CARD_SIZE, &others),
         };
         let pos = round(spot);
+        // BOARD-100: it joins the section a card there would.
         let joins = section.or_else(|| section_at(pos, &self.groups(), None, CARD_SIZE));
+        // BOARD-101.
         let opts = CreateSessionOptions {
             x: pos.x,
             y: pos.y,
@@ -248,6 +258,7 @@ impl BoardCanvas {
                     c.ensure_visible(pos, NEW_CARD_SIZE, cx);
                     c.state.update(cx, |s, cx| s.open_terminal(&id, cx));
                 }
+                // BOARD-102.
                 Err(err) => {
                     let what = if kind == SessionKind::Terminal {
                         "a terminal"
@@ -730,7 +741,7 @@ impl BoardCanvas {
         self.rebuild(cx);
     }
 
-    fn free_note_spot(&self, p: Point) -> Point {
+    pub(crate) fn free_note_spot(&self, p: Point) -> Point {
         let mut obstacles = card_obstacles(self.cards(), &[]);
         obstacles.extend(self.notes_in_the_way());
         find_free_spot(p, &obstacles, Some(self.dock()), NOTE_SIZE)
@@ -1265,6 +1276,9 @@ impl BoardCanvas {
         let Some(card) = self.card(session_id).cloned() else {
             return;
         };
+        self.search_open = false;
+        // BOARD-037: the transcript opens; at the match once the preview (12)
+        // takes a find.
         if card.node.archived {
             let id = session_id.to_owned();
             self.state.update(cx, |s, cx| s.open_preview(&id, cx));
@@ -1276,6 +1290,21 @@ impl BoardCanvas {
         let (w, h) = self.canvas_size();
         let to = super::viewport::centred_on(card.node.x + size.w / 2.0, card.node.y + size.h / 2.0, zoom, w, h);
         self.fly_to(to, 320.0, cx);
+        // Then the card flashes, twice over 800ms (drawn by the card, spec 10).
+        let id = session_id.to_owned();
+        let landing = crate::theme::motion::duration(cx, Duration::from_millis(320));
+        self.flash_timer = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(landing).await;
+            let _ = this.update(cx, |c, cx| {
+                c.flash = Some((id, std::time::Instant::now()));
+                cx.notify();
+            });
+            cx.background_executor().timer(Duration::from_millis(2 * 800)).await;
+            let _ = this.update(cx, |c, cx| {
+                c.flash = None;
+                cx.notify();
+            });
+        }));
     }
 
     /// Whether a flow point is in the dock (BOARD-048, BOARD-173).
@@ -1286,20 +1315,5 @@ impl BoardCanvas {
     /// Whether a flow point is inside any section frame.
     pub(crate) fn in_section(&self, p: Point) -> bool {
         self.groups().iter().any(|g| contains_point(g.frame, p))
-    }
-
-    /// The merge sources among `ids` (BOARD-109); the merge dialog is spec 11's.
-    pub fn start_merge(&mut self, ids: &[String], cx: &mut Context<'_, Self>) {
-        let sources: Vec<(String, String)> = ids
-            .iter()
-            .filter_map(|id| self.card(id))
-            .filter(|c| !is_terminal(c))
-            .map(|c| (c.node.session_id.clone(), card_title(c)))
-            .collect();
-        if sources.is_empty() {
-            return;
-        }
-        // The merge dialog (spec 11) opens with these sources.
-        let _ = (sources, cx);
     }
 }

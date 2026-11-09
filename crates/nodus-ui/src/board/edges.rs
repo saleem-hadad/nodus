@@ -37,6 +37,7 @@ pub fn edges(board: &BoardSnapshot) -> Vec<Edge> {
                     id: format!("{parent}->{}", child.node.session_id),
                     source: parent.clone(),
                     target: child.node.session_id.clone(),
+                    // BOARD-026: dashes march while the child works.
                     animated: child.status == SessionStatus::Working,
                     view: false,
                 });

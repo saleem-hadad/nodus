@@ -154,7 +154,11 @@ impl Glide {
     }
 }
 
-/// One project's board.
+/// One project's board. BOARD-004: the shell drops it when the project
+/// changes, and with it every timer it holds (title click, stack scroll, the
+/// viewport save: a move in its last 400ms is lost, as in 0.9.4) and its
+/// subscriptions to the store and the menu; the keys reach it only while the
+/// shell holds it.
 pub struct BoardCanvas {
     pub state: Entity<AppState>,
     pub menus: Entity<MenuLayer>,
@@ -200,6 +204,20 @@ pub struct BoardCanvas {
     pub(crate) naming: HashMap<String, Option<String>>,
     pub(crate) moving_section: bool,
     pub(crate) moving_archive: bool,
+
+    /// The merge dialog's sources and the focus a search gave it (spec 11).
+    pub merge: Option<Vec<super::bar::MergeSource>>,
+    pub merge_focus: Option<String>,
+    /// ⌘K search is up, and its query, kept between openings (spec 11).
+    pub search_open: bool,
+    pub search_query: String,
+    /// The New view dialog is up, for a view centred on this point or in
+    /// view (spec 04).
+    pub view_dialog: Option<Option<Point>>,
+
+    /// The card a search jump flashes, since when (BOARD-036).
+    pub(crate) flash: Option<(String, Instant)>,
+    pub(crate) flash_timer: Option<Task<()>>,
 
     pub(crate) toast: Option<(String, u64)>,
     toast_seq: u64,
@@ -282,6 +300,13 @@ impl BoardCanvas {
             naming: HashMap::new(),
             moving_section: false,
             moving_archive: false,
+            merge: None,
+            merge_focus: None,
+            search_open: false,
+            search_query: String::new(),
+            view_dialog: None,
+            flash: None,
+            flash_timer: None,
             toast: None,
             toast_seq: 0,
             toast_timer: None,
@@ -451,6 +476,7 @@ impl BoardCanvas {
             pile,
             open,
             raised: open || self.stack_raised,
+            // BOARD-078: the scroll as far as these results go.
             scroll: self.stack_scroll.min(scroll_max),
             scrollable: scroll_max > 0.0,
             results,
@@ -925,9 +951,15 @@ impl BoardCanvas {
         }
     }
 
-    /// BOARD-142: an overlay that blocks board shortcuts and menu commands.
+    /// BOARD-142: an overlay that blocks board shortcuts and menu commands:
+    /// a context menu, the confirm, the merge dialog, the New view dialog or
+    /// search (the actions rail's dialogs and menu join with spec 05's UI).
     pub fn overlay_open(&self, cx: &App) -> bool {
-        self.menus.read(cx).is_open() || self.confirm.is_some()
+        self.menus.read(cx).is_open()
+            || self.confirm.is_some()
+            || self.merge.is_some()
+            || self.view_dialog.is_some()
+            || self.search_open
     }
 
     // ---- the archive stack ----------------------------------------------------
@@ -1011,7 +1043,9 @@ impl BoardCanvas {
             archive_hot: self.archive_hot,
             section_hot: self.hot_section.clone().map(Into::into),
             naming: Rc::new(self.naming.clone()),
+            // BOARD-075.
             stack_lift: !stack.open && (stack.hover || self.archive_hot),
+            flash: self.flash.clone().map(|(id, at)| (id.into(), at)),
             stack,
             moving_archive: self.moving_archive,
             moving_section: self.moving_section,

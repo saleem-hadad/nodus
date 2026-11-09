@@ -169,6 +169,10 @@ pub struct BoardCx {
     pub moving_section: bool,
     pub scrolling_stack: bool,
     pub stack_lift: bool,
+    /// The card a search jump flashes, and when the flash started: two
+    /// 800ms rounds of `0 0 0 2px accent, 0 0 0 2px→18px accent 55%→0%`,
+    /// eased `cubic-bezier(0.2, 0.8, 0.2, 1)` (BOARD-036).
+    pub flash: Option<(SharedString, std::time::Instant)>,
     pub actions: BoardActions,
 }
 
@@ -252,7 +256,9 @@ impl BoardActions {
         self.with(cx, move |c, cx| c.open_view_session(id, cx));
     }
 
-    /// Commits a new title for a view.
+    /// Commits a new title for a view (BOARD-151, as are `open_session`,
+    /// `open_view_session`, `start_note`, `archive`, `stop`, `edit_note` and
+    /// `view_menu`).
     pub fn rename_view(&self, view_id: &str, title: &str, cx: &mut App) {
         let (id, title) = (view_id.to_owned(), title.to_owned());
         self.with(cx, move |c, cx| c.rename_view(&id, &title, cx));
@@ -363,6 +369,20 @@ pub trait NodeRenderers: 'static {
     fn view(&self, node: ViewNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut App) -> AnyElement {
         let _ = (board, window);
         placeholder(&node.node, node.view.title.clone(), cx)
+    }
+
+    /// Shows a session in its expanded card, starting or resuming it, and
+    /// focuses its terminal (`wakeCardTerminal`, XCARD-025): opening an
+    /// expanded card (BOARD-044) and expanding cards (BOARD-150, BOARD-168)
+    /// call it.
+    fn wake(&self, session_id: &str, cx: &mut App) {
+        let _ = (session_id, cx);
+    }
+
+    /// Focuses an expanded card's terminal, as clicking a window does (the
+    /// terminal registry's `focus`, BOARD-042).
+    fn focus_terminal(&self, session_id: &str, window: &mut Window, cx: &mut App) {
+        let _ = (session_id, window, cx);
     }
 }
 

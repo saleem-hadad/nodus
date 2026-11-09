@@ -3954,6 +3954,7 @@ dependencies = [
 name = "nodus"
 version = "0.9.4"
 dependencies = [
+ "embed-resource",
  "nodus-domain",
  "nodus-host",
  "nodus-host-proto",
@@ -4227,6 +4228,8 @@ dependencies = [
  "nodus-domain",
  "nodus-platform",
  "nodus-sessions",
+ "nodus-terminal",
+ "nodus-transcripts",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
  "objc2-core-graphics",

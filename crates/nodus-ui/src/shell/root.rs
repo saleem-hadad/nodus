@@ -28,6 +28,8 @@ pub struct Shell {
     grid: Option<Entity<ProjectsView>>,
     rail: Option<Entity<ProjectRail>>,
     settings: Option<Entity<SettingsDialog>>,
+    /// The session window, transcript preview and agents viewer (spec 12).
+    pub terminal_layers: Entity<crate::terminal::layers::TerminalLayers>,
     /// The board the main area shows; a fresh one per project (UI-028,
     /// BOARD-002).
     board_key: Option<String>,
@@ -39,6 +41,7 @@ impl Shell {
     pub fn new(nodus: Nodus, window: &mut Window, cx: &mut Context<'_, Self>) -> Self {
         let state = cx.new(|cx| AppState::new(nodus, cx));
         let menus = cx.new(|_| MenuLayer::default());
+        let terminal_layers = cx.new(|cx| crate::terminal::layers::TerminalLayers::new(state.clone(), cx));
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
         let subscriptions = vec![
@@ -71,6 +74,7 @@ impl Shell {
             grid: None,
             rail: None,
             settings: None,
+            terminal_layers,
             board_key: None,
             board: None,
             _subscriptions: subscriptions,
@@ -271,6 +275,7 @@ impl Render for Shell {
             }))
             .child(bar)
             .child(main)
+            .child(self.terminal_layers.clone())
             .children(self.settings.clone())
             .child(self.menus.clone())
     }

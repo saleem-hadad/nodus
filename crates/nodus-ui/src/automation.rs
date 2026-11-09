@@ -18,6 +18,7 @@
 //! {"cmd":"idle"}                                    until the window stops drawing
 //! {"cmd":"screenshot","path":"/…/scene.light.rust.png"}
 //! {"cmd":"window"}                                  the window's number and size
+//! {"cmd":"terminal","action":"open",…}                the terminal's windows (terminal::driver)
 //! {"cmd":"quit"}
 //! ```
 //!
@@ -332,6 +333,7 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
             });
             Ok(Value::Null)
         }
+        "terminal" => crate::terminal::driver::run(command, cx).await,
         "quit" => {
             cx.update(|cx| cx.quit());
             Ok(Value::Null)
@@ -345,7 +347,14 @@ fn with_window<R>(cx: &mut AsyncApp, f: impl FnOnce(&mut gpui::Window, &mut App)
         let handle = window::main_window(cx).ok_or("no main window")?;
         // Through the window, not its root view: input dispatched here
         // reaches views that update the root themselves.
-        gpui::AppContext::update_window(cx, handle.into(), |_, window, cx| f(window, cx)).map_err(|e| e.to_string())
+        gpui::AppContext::update_window(cx, handle.into(), |_, window, cx| {
+            // A driven window is often covered by others, and GPUI stops
+            // drawing a covered window: draw the current state first, so
+            // input hits what's there now and a shot shows it.
+            window.draw(cx).clear(cx);
+            f(window, cx)
+        })
+        .map_err(|e| e.to_string())
     })
 }
 

@@ -19,7 +19,11 @@ nodus-core.workspace = true
 nodus-domain.workspace = true
 nodus-platform.workspace = true
 nodus-sessions.workspace = true
+nodus-terminal.workspace = true
+nodus-transcripts.workspace = true
 resvg.workspace = true
+# Local time, as `Intl.DateTimeFormat` shows it (localtime_r / localtime_s).
+libc.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

@@ -9,6 +9,7 @@
 //! - [`layout`]: where things go (ports of `layout.ts`, `sections.ts`,
 //!   `notes.ts`).
 
+pub mod bar;
 pub mod canvas;
 pub mod cards;
 mod commands;
@@ -114,7 +115,7 @@ pub fn title_bar_button(
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
-    let (main, terminal) = (board.downgrade(), board.downgrade());
+    let (main, terminal, view) = (board.downgrade(), board.downgrade(), board.downgrade());
     SplitButton {
         id: "new-session".into(),
         label: "New Session".into(),
@@ -132,8 +133,12 @@ pub fn title_bar_button(
                 }
             })
             .hint(keys("⌘T")),
-            // The New view dialog is spec 04's.
-            MenuItem::item("New view…", Icon::LayoutDashboard, |_, _| {}),
+            // BOARD-144: the New view dialog (spec 04), centred in view.
+            MenuItem::item("New view…", Icon::LayoutDashboard, move |_, cx| {
+                if let Some(b) = view.upgrade() {
+                    b.update(cx, |b, cx| b.open_view_dialog(None, cx));
+                }
+            }),
         ],
         menu_label: "More ways to start".into(),
     }

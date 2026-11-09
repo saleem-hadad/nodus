@@ -15,6 +15,7 @@
 pub mod archive;
 mod board;
 pub mod cards;
+pub mod compose;
 mod create;
 pub mod geometry;
 mod handlers;

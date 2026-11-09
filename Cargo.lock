@@ -4221,6 +4221,7 @@ dependencies = [
  "gpui-kit",
  "image",
  "indexmap",
+ "libc",
  "nodus-core",
  "nodus-domain",
  "nodus-platform",
@@ -4236,6 +4237,8 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+ "unicode-linebreak",
+ "unicode-segmentation",
 ]
 
 [[package]]

@@ -22,7 +22,10 @@ impl BoardApi<'_> {
     /// capture track is wired.
     pub async fn load(&self, project_id: &str) -> CommandResult<BoardSnapshot> {
         self.nodus
-            .on_core(async { self.nodus.inner.board.load(project_id).on("board:load") })
+            .on_core(async {
+                self.nodus.inner.capture.board_opened(project_id);
+                self.nodus.inner.board.load(project_id).on("board:load")
+            })
             .await
     }
 

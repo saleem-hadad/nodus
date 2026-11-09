@@ -45,6 +45,7 @@
 mod actions;
 mod app;
 mod board;
+mod capture;
 #[cfg(test)]
 mod core_tests;
 mod error;
@@ -66,6 +67,7 @@ mod wiring;
 pub use actions::ActionsApi;
 pub use app::AppApi;
 pub use board::BoardApi;
+pub use capture::{CaptureApi, CaptureSystem, WindowSize};
 pub use error::{CommandError, CommandResult};
 pub use git::GitApi;
 pub use groups::GroupsApi;
@@ -75,6 +77,8 @@ pub use nodus::{Dialogs, EnvSource, Nodus, NodusConfig, PickFolder, QuitAtOnce, 
 pub use nodus_platform::secrets::SafeStorage;
 /// What a mic implements and runs, for the window's mics (`VoiceApi::backend`).
 pub use nodus_voice::controller::{VoiceBackend, VoiceController};
+/// What the windowed app gives capture, and what it answers.
+pub use nodus_capture as capture_service;
 pub use notifications::Notifications;
 pub use projects::ProjectsApi;
 pub use sessions::SessionsApi;

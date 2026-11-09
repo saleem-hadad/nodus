@@ -170,6 +170,8 @@ pub(crate) struct Inner {
     pub(crate) actions: Actions,
     /// The xAI key and transcribing recordings (05).
     pub(crate) voice: Voice,
+    /// Floating capture (07).
+    pub(crate) capture: crate::capture::CaptureCore,
     /// `BOARD_TOOL_RULES`, as arguments.
     board_tool_rules: Vec<String>,
 }
@@ -275,6 +277,14 @@ impl Nodus {
                 Arc::new(CoreMetas(transcripts)),
                 Arc::clone(&sink),
             );
+            let capture = crate::capture::CaptureCore::new(
+                core,
+                &store,
+                config.user_data.clone(),
+                env.clone(),
+                Arc::clone(&sink),
+                &config.runtime,
+            );
             let updater = Updater::new(
                 Arc::new(CoreUpdaterApp(core.clone())),
                 config
@@ -307,6 +317,7 @@ impl Nodus {
                         .secrets
                         .unwrap_or_else(|| Arc::new(SafeStorage::system(&config.user_data))),
                 ),
+                capture,
                 board_tool_rules: nodus_tools::BOARD_TOOL_RULES.iter().map(|&r| r.to_owned()).collect(),
             }
         });
@@ -376,6 +387,8 @@ impl Nodus {
     /// downloaded on macOS, starts the swap that puts it in once the app has
     /// gone (UPD-057, `will-quit`). Capture's key hook (step 1) is capture's.
     pub fn shutdown(&self) {
+        // Step 1: capture's key hook and permission poll (CAP-039).
+        self.inner.capture.stop();
         self.inner.host.disconnect();
         self.inner.board.watcher().unwatch_all();
         self.inner.views.flush();
@@ -421,6 +434,11 @@ impl Nodus {
     /// `window.api.updates`.
     pub fn updates(&self) -> UpdatesApi<'_> {
         UpdatesApi { nodus: self }
+    }
+
+    /// `window.api.capture` (07).
+    pub fn capture(&self) -> crate::CaptureApi<'_> {
+        crate::CaptureApi { nodus: self }
     }
 
     /// What the application menu's own items do (01): Check for Updates…

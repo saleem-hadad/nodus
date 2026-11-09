@@ -365,8 +365,8 @@ async fn screenshot(cx: &mut AsyncApp, path: &str) -> Result<Value, String> {
     // Let the frame in flight land first.
     cx.background_executor().timer(Duration::from_millis(50)).await;
     let mut image = with_window(cx, |window, _| window.render_to_image().map_err(|e| e.to_string()))??;
-    // GPUI draws sRGB values and the window shows them as sRGB (its layer
-    // is tagged so); the goldens hold what Chromium sent a Display P3
+    // GPUI draws sRGB values and the window shows them as sRGB (the patched
+    // GPUI tags its layer so); the goldens hold what Chromium sent a Display P3
     // screen. Converted, the two compare value for value.
     for pixel in image.pixels_mut() {
         let [r, g, b] = srgb_to_display_p3([pixel[0], pixel[1], pixel[2]]);

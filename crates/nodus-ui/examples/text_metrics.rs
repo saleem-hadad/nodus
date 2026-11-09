@@ -7,6 +7,8 @@
 //! the system UI font. Prints every row that differs by more than 0.02px,
 //! and the font's ascent and descent at each size.
 
+#![allow(clippy::print_stdout, reason = "an example reports on stdout")]
+
 use gpui_kit::{Font, FontRun, FontStyle, FontWeight, px};
 
 fn main() -> anyhow::Result<()> {

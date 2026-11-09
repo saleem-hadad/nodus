@@ -92,6 +92,10 @@ Fix: our port doesn't take #63793, so the fills the effect shaders call are this
 
 `Window::render_to_image` and the `PlatformWindow::render_to_image` it calls existed upstream behind `test-support`; the patch removes the gates in gpui-pre, gpui-pre-apple, gpui-pre-macos and gpui-pre-windows and documents the method. The renderer's offscreen path goes through the same effect layers.
 
+### 6. sRGB colour space (Nodus, track gpui-text)
+
+GPUI's colours are sRGB values, but upstream left the window's `CAMetalLayer` untagged unless a window asks for Display P3, so on a wide-gamut display the window server showed them unconverted and every saturated colour came out more vivid than the same CSS colour in Chromium (`#007aff` reached a P3 screen as `#007aff` instead of Chromium's `#3579fa`). `MetalRenderer::configure_layer` now tags the layer `kCGColorSpaceSRGB` (still Display P3 when `use_display_p3` is set), so macOS converts for the display as it does for a browser. DirectX: a flip-model `B8G8R8A8_UNORM` swap chain is already sRGB (`DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709`); `tag_swap_chain_srgb` sets it explicitly through `IDXGISwapChain3::SetColorSpace1` so Windows' colour management treats it as a browser's. wgpu has no colour-space API: it picks a non-sRGB surface format, so the values reach the compositor as sRGB, which is what Linux compositors and a web canvas assume.
+
 ## Verification
 
 - `crates/nodus-ui/examples/effects.rs` (see `migration/tracks/gpui-fork.md`): frosted panels at blur 30/saturate 1.8 and 20/1.6 over moving cards, a note rotated 3–7° with CoreText-rendered text, a 3° sticker, the pad's sheet turning about its top edge, `group_opacity` beside `.opacity`, hit testing through the rotation (synthetic mouse moves; the window never takes focus), and a capture written to PNG. `EFFECTS_STRICT=1` exits 1 if a check fails; CI runs it on macOS and Windows.

@@ -9,7 +9,7 @@ use gpui::{
 use image::RgbaImage;
 use objc2::{Message, rc::Retained, runtime::ProtocolObject};
 use objc2_core_foundation::{CFRetained, CGSize};
-use objc2_core_graphics::{CGColorSpace, kCGColorSpaceDisplayP3};
+use objc2_core_graphics::{CGColorSpace, kCGColorSpaceDisplayP3, kCGColorSpaceSRGB};
 use objc2_core_video::{
     CVMetalTexture, CVMetalTextureCache, CVMetalTextureGetTexture, CVPixelBufferGetHeight,
     CVPixelBufferGetHeightOfPlane, CVPixelBufferGetPixelFormatType, CVPixelBufferGetWidth,
@@ -199,14 +199,21 @@ impl MetalRenderer {
     ) {
         layer.setDevice(Some(device));
         layer.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
-        if use_display_p3 {
-            // SAFETY: The constant is extern, from Core Graphics
-            let display_p3_name = unsafe { kCGColorSpaceDisplayP3 };
-            if let Some(display_p3_color_space) = CGColorSpace::with_name(Some(display_p3_name)) {
-                layer.setColorspace(Some(&display_p3_color_space));
-            } else {
-                log::error!("unable to create the Display P3 color space");
-            }
+        // Nodus patch: GPUI's colours are sRGB, so an untagged layer would send
+        // them to a wide-gamut (Display P3) screen unconverted and every
+        // saturated colour would look more vivid than the same CSS colour in a
+        // browser. Tagged sRGB, the window server converts them to the
+        // display's space, as Chromium does with CSS colours.
+        // SAFETY: The constants are extern, from Core Graphics
+        let (name, space_name) = if use_display_p3 {
+            (unsafe { kCGColorSpaceDisplayP3 }, "Display P3")
+        } else {
+            (unsafe { kCGColorSpaceSRGB }, "sRGB")
+        };
+        if let Some(color_space) = CGColorSpace::with_name(Some(name)) {
+            layer.setColorspace(Some(&color_space));
+        } else {
+            log::error!("unable to create the {space_name} color space");
         }
         // Support direct-to-display rendering if the window is not transparent
         // https://developer.apple.com/documentation/metal/managing-your-game-window-for-metal-in-macos

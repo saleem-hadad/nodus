@@ -199,16 +199,18 @@ impl Render for Shell {
                 .unwrap_or_default(),
         };
         let bar = title_bar(&self.state, actions, window, cx);
-        // The actions rail (05) on the board's right edge, until the board
-        // view (09) mounts it itself with its hooks.
+        // The actions rail (05) on the board's right edge; the board canvas
+        // starts its runs (ACT-031).
         let action_rail = matches!(route, Route::Board(_)).then(|| {
-            crate::actions::action_rail(
-                &self.state,
-                &self.menus,
-                crate::actions::RailHooks::default(),
-                window,
-                cx,
-            )
+            let hooks = crate::actions::RailHooks {
+                run: self.board.clone().map(|board| {
+                    std::rc::Rc::new(move |action: &nodus_domain::ProjectAction, cx: &mut gpui::App| {
+                        let (id, name) = (action.id.clone(), action.name.clone());
+                        board.update(cx, |c, cx| c.run_action(id, name, cx));
+                    }) as std::rc::Rc<dyn Fn(&nodus_domain::ProjectAction, &mut gpui::App)>
+                }),
+            };
+            crate::actions::action_rail(&self.state, &self.menus, hooks, window, cx)
         });
         let menus_open = self.menus.read(cx).is_open();
 

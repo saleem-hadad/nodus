@@ -467,12 +467,6 @@ impl Nodus {
         VoiceApi { nodus: self }
     }
 
-    /// The core's tokio runtime, for work the window starts that runs on
-    /// tokio's timers and tasks (a mic's `VoiceController`).
-    pub fn runtime(&self) -> &Handle {
-        &self.inner.runtime
-    }
-
     /// Every event from now on (`window.api.on.*`). Each subscriber gets each
     /// event; drop the receiver to unsubscribe (PLAT-127).
     pub fn subscribe(&self) -> broadcast::Receiver<Event> {

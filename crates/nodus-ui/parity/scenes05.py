@@ -51,7 +51,7 @@ DESCRIBE = typed("Check the bundle size of each route against main")
 # scene: (seed answers, steps)
 SCENES = {
     "git-log": ({}, OPEN_STOREFRONT + [W(800), M("move", 380, 26), W(400), M("move", 381, 26), W(600)]),
-    "git-diff": ({}, OPEN_STOREFRONT + [W(800), M("click", 528, 26), W(1200), AWAY]),
+    "git-diff": ({}, OPEN_STOREFRONT + [W(2000), M("click", 528, 26), W(1200), AWAY]),
     "actions-rail": ({}, OPEN_STOREFRONT + SLIDE_OUT + [M("move", RAIL_X, OPEN_PR), W(300)]),
     "actions-run": ({}, OPEN_STOREFRONT + SLIDE_OUT + [M("click", RAIL_X, RUN_TESTS), W(1500), M("move", 900, 600),
                                                      W(900)] + SLIDE_OUT + [M("move", RAIL_X, RUN_TESTS), W(900)]),

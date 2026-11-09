@@ -8,10 +8,13 @@
 //! action's session fans out beside it; while the rail is hidden a sliver on
 //! the edge says something runs, red when it needs the user.
 //!
-//! The board view mounts it with [`action_rail`] over the board's area (the
-//! rail sits at its right edge), passing [`RailHooks`] for what is the
-//! board's: where a run's card would go, the board toast, and the overlay
-//! flag that holds the board's shortcuts.
+//! The shell mounts it with [`action_rail`] over the board's area (the rail
+//! sits at its right edge), passing [`RailHooks`] for what is the board
+//! canvas's: starting a run (`BoardCanvas::run_action`, which places it, puts
+//! its card in the store and toasts a failure). The board's own `run_finished`
+//! says what a finished run did (ACT-039), and [`overlay_open`] tells it
+//! while the rail's dialog, menu or confirmation holds its shortcuts
+//! (ACT-053).
 //!
 //! [`icons`] are spec 05's lucide icons, which the git controls and the mics
 //! draw too.
@@ -29,7 +32,7 @@ use gpui::{
     anchored, canvas, deferred, div, point, px,
 };
 use nodus_actions::rail::{self as logic, HintAt, Press, Rail};
-use nodus_domain::{CreateSessionOptions, Event, ProjectAction, SessionCard, SessionStatus};
+use nodus_domain::{CreateSessionOptions, ProjectAction, SessionCard, SessionStatus};
 
 use self::dialog::ActionDialogView;
 use self::icons::{Glyph, glyph};
@@ -45,28 +48,26 @@ use crate::state::AppState;
 use crate::theme::tokens::*;
 use crate::theme::{self, motion};
 
-/// What the board does for the rail (0.9.4's `onRun` and `onOverlayChange`
-/// props, and the board's `showToast`). Each has a stand-in for a board that
-/// doesn't give one.
+/// What the board does for the rail (0.9.4's `onRun` prop).
 #[derive(Clone, Default)]
 pub struct RailHooks {
-    /// ACT-031: where a new session card would go (`spotForNewSession`),
-    /// kept for the run in case it's taken over. Without it, the board's
-    /// origin.
-    pub spot: Option<Rc<dyn Fn(&mut App) -> Point<f64>>>,
-    /// The board toast (09: 4.2 s, replaced by the next).
-    pub toast: Option<Rc<dyn Fn(String, &mut App)>>,
-    /// ACT-053: a dialog, menu or confirmation of the rail is open.
-    pub overlay: Option<Rc<dyn Fn(bool, &mut App)>>,
+    /// ACT-031 (`runAction`): the board starts a run at the spot a new
+    /// session card would take, kept for the run in case it's taken over,
+    /// puts its card in the store and toasts `Couldn't run …` when it fails.
+    /// Without it, the rail starts it at the board's origin itself.
+    pub run: Option<Rc<dyn Fn(&ProjectAction, &mut App)>>,
 }
 
-impl RailHooks {
-    fn toast(&self, message: String, cx: &mut App, state: &Entity<AppState>) {
-        match &self.toast {
-            Some(toast) => toast(message, cx),
-            None => state.update(cx, |s, cx| s.show_toast(message, cx)),
-        }
-    }
+/// ACT-053: whether the rail's dialog, context menu or delete confirmation
+/// is up (the board holds its shortcuts and menu commands meanwhile).
+#[derive(Default)]
+struct RailOverlay(bool);
+
+impl gpui::Global for RailOverlay {}
+
+/// ACT-053: the rail tells the board an overlay of its own is open.
+pub fn overlay_open(cx: &App) -> bool {
+    cx.try_global::<RailOverlay>().is_some_and(|o| o.0)
 }
 
 /// The rail of the board `state` shows, made once per board (a fresh one for
@@ -121,39 +122,12 @@ pub struct ActionRail {
     fan_for: Option<(String, Vec<String>)>,
     /// The fan's clock (`useNow`): a frame each second while it shows.
     _tick: Option<Task<()>>,
-    /// The board loaded for the rail while no board view loads one.
-    stand_in: StandIn,
-    _events: Task<()>,
-}
-
-/// Until the board view (09) loads boards into the window's state, the rail
-/// loads its board itself, once, and again when the core says it changed.
-#[derive(Default, PartialEq, Eq)]
-enum StandIn {
-    #[default]
-    Untried,
-    Loading,
-    Loaded,
-    /// Someone else loads boards.
-    Off,
 }
 
 impl ActionRail {
     fn new(state: Entity<AppState>, menus: Entity<MenuLayer>, project_id: String, cx: &mut Context<'_, Self>) -> Self {
-        let mut rx = state.read(cx).nodus.subscribe();
-        let events = cx.spawn(async move |this, cx| {
-            loop {
-                match rx.recv().await {
-                    Ok(event) => {
-                        if this.update(cx, |r, cx| r.on_event(event, cx)).is_err() {
-                            break;
-                        }
-                    }
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
-                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-                }
-            }
-        });
+        // ACT-053: on unmount it reports false.
+        cx.on_release(|_, cx| cx.set_global(RailOverlay(false))).detach();
         Self {
             state,
             menus,
@@ -169,63 +143,7 @@ impl ActionRail {
             fan_height: Rc::default(),
             fan_for: None,
             _tick: None,
-            stand_in: StandIn::Untried,
-            _events: events,
         }
-    }
-
-    fn on_event(&mut self, event: Event, cx: &mut Context<'_, Self>) {
-        match event {
-            // ACT-039: a finished run has left the board; say what it did.
-            Event::RunFinished(run) if run.project_id == self.project_id => {
-                self.state.update(cx, |s, cx| {
-                    if s.terminal_session_id.as_deref() == Some(run.session_id.as_str()) {
-                        s.terminal_session_id = None;
-                        cx.notify();
-                    }
-                });
-                let message = logic::finished_toast(&run.action_name, run.message.as_deref());
-                self.hooks.clone().toast(message, cx, &self.state);
-            }
-            Event::BoardChanged { project_id } if project_id == self.project_id && self.stand_in == StandIn::Loaded => {
-                self.load_board(cx);
-            }
-            _ => {}
-        }
-    }
-
-    /// The stand-in for the store's `loadBoard` (see [`StandIn`]).
-    fn ensure_board(&mut self, cx: &mut Context<'_, Self>) {
-        if self.stand_in != StandIn::Untried {
-            return;
-        }
-        let s = self.state.read(cx);
-        if s.board.is_some() || s.board_loading {
-            self.stand_in = StandIn::Off;
-            return;
-        }
-        self.load_board(cx);
-    }
-
-    fn load_board(&mut self, cx: &mut Context<'_, Self>) {
-        self.stand_in = StandIn::Loading;
-        let nodus = self.state.read(cx).nodus.clone();
-        let project = self.project_id.clone();
-        cx.spawn(async move |this, cx| {
-            let board = nodus.board().load(&project).await;
-            let _ = this.update(cx, |r, cx| {
-                r.stand_in = StandIn::Loaded;
-                if let Ok(board) = board {
-                    r.state.update(cx, |s, cx| {
-                        if s.route.project_id() == Some(project.as_str()) {
-                            s.board = Some(board);
-                            cx.notify();
-                        }
-                    });
-                }
-            });
-        })
-        .detach();
     }
 
     /// ACT-047: the project's own actions, then the global ones.
@@ -290,11 +208,7 @@ impl ActionRail {
 
     /// `openTerminal`.
     fn open_terminal(&mut self, session_id: String, cx: &mut Context<'_, Self>) {
-        self.state.update(cx, |s, cx| {
-            s.terminal_session_id = Some(session_id);
-            s.preview_session_id = None;
-            cx.notify();
-        });
+        self.state.update(cx, |s, cx| s.open_terminal(&session_id, cx));
     }
 
     /// ACT-056: a run going opens it; otherwise a press starts one.
@@ -308,17 +222,15 @@ impl ActionRail {
         }
     }
 
-    /// ACT-031 (`runAction`): a session on the action's prompt, at the spot
-    /// a new card would take; its card goes into the store, where the rail
-    /// finds it and the canvas leaves it out (ACT-032).
+    /// ACT-031 (`runAction`): a session on the action's prompt, started by
+    /// the board at the spot a new card would take; its card goes into the
+    /// store, where the rail finds it and the canvas leaves it out (ACT-032).
     fn run(&mut self, action: ProjectAction, cx: &mut Context<'_, Self>) {
-        let spot = match &self.hooks.spot {
-            Some(spot) => spot.clone()(cx),
-            None => point(0., 0.),
-        };
+        if let Some(run) = self.hooks.run.clone() {
+            run(&action, cx);
+            return;
+        }
         let opts = CreateSessionOptions {
-            x: nodus_domain::js::round(spot.x),
-            y: nodus_domain::js::round(spot.y),
             action_id: Some(action.id.clone()),
             ..CreateSessionOptions::default()
         };
@@ -327,10 +239,10 @@ impl ActionRail {
         cx.spawn(async move |this, cx| {
             let created = nodus.sessions().create(&project, &opts).await;
             let _ = this.update(cx, |r, cx| match created {
-                Ok(card) => r.state.update(cx, |s, cx| upsert_card(s, card, cx)),
+                Ok(card) => r.state.update(cx, |s, cx| s.upsert_card(card, cx)),
                 Err(err) => {
                     let message = logic::run_failed_toast(&action.name, &err.ipc_message());
-                    r.hooks.clone().toast(message, cx, &r.state);
+                    r.state.update(cx, |s, cx| s.show_toast(message, cx));
                 }
             });
         })
@@ -445,33 +357,9 @@ impl ActionRail {
         let open = self.dialog.is_some() || self.menu.is_some() || self.confirm.is_some();
         if open != self.overlay_told {
             self.overlay_told = open;
-            if let Some(overlay) = self.hooks.overlay.clone() {
-                overlay(open, cx);
-            }
+            cx.set_global(RailOverlay(open));
         }
     }
-}
-
-impl Drop for ActionRail {
-    fn drop(&mut self) {
-        // ACT-053: on unmount it reports false (the board's hook is told on
-        // its next render; nothing to call without an App here).
-        self.overlay_told = false;
-    }
-}
-
-/// `upsertCard`: replaces the card with the same session, or adds it.
-pub fn upsert_card(s: &mut AppState, card: SessionCard, cx: &mut Context<'_, AppState>) {
-    let Some(board) = s.board.as_mut() else { return };
-    match board
-        .cards
-        .iter_mut()
-        .find(|c| c.node.session_id == card.node.session_id)
-    {
-        Some(existing) => *existing = card,
-        None => board.cards.push(card),
-    }
-    cx.notify();
 }
 
 /// ACT-017 (`setActions`): the project the core changed replaces the list's
@@ -570,7 +458,6 @@ fn measure(
 
 impl Render for ActionRail {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
-        self.ensure_board(cx);
         self.tell_overlay(cx);
         let t = theme::tokens(cx);
         let blocks = self.blocks(cx);

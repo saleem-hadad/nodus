@@ -171,7 +171,8 @@ impl Mic {
         let state = controller.state();
         Self {
             controller,
-            runtime: nodus.runtime().clone(),
+            // The controller's timers and tasks run on the core's runtime.
+            runtime: crate::board::core_rt(cx).unwrap_or_else(Handle::current),
             nodus: nodus.clone(),
             state,
             on_text,

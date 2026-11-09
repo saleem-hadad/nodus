@@ -1,0 +1,320 @@
+//! Views' frames (spec 04 VIEW-027…030, decision D3): a webview for every
+//! view with a page while its board is open, on screen or not, so pages load
+//! and page checks get their `loaded` (R13); one more for the view open
+//! large. Each frame follows its card's body every frame, and shows a
+//! snapshot GPUI draws in its place whenever GPUI must draw over it or move
+//! it (`swap.rs`).
+
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::sync::Arc;
+use std::time::Instant;
+
+use gpui::{
+    AnyWindowHandle, App, Bounds, Context, EntityId, Global, Hitbox, HitboxBehavior, IntoElement, Pixels, RenderImage,
+    Styled, Window, canvas,
+};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+
+use super::webview::{Incoming, PageWebview};
+use crate::board::canvas::BoardCanvas;
+
+/// Which frame of a view: its card's, or the large window's (a view can
+/// have both at once, VIEW-029).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Slot {
+    Card,
+    Large,
+}
+
+/// One frame and how it's shown.
+pub struct Frame {
+    pub id: u64,
+    pub project_id: String,
+    pub view_id: String,
+    pub slot: Slot,
+    /// The version the frame registered with, which its `loaded` reports
+    /// (VIEW-046).
+    pub version: u32,
+    pub title: String,
+    pub web: PageWebview,
+    // How it's shown.
+    /// The page shows (and takes the pointer); else GPUI draws `snapshot`.
+    pub live: bool,
+    pub snapshot: Option<Arc<RenderImage>>,
+    pub snapshot_at: Option<Instant>,
+    /// The page may have changed since the snapshot.
+    pub dirty: bool,
+    pub pending: bool,
+    /// Drawn this frame (its card's probe painted).
+    pub drawn: bool,
+    /// What the last draw asked for.
+    pub geometry: Option<Geometry>,
+    /// The probe's hitbox in the frame just drawn.
+    pub probe: Option<Hitbox>,
+    /// Something GPUI drew covers the page (last check).
+    pub occluded: bool,
+    /// The pointer is over the page (the shell says, VIEW-128's hover).
+    pub hovered: bool,
+    /// One of the card's own tooltips is up over the page.
+    pub tooltip: bool,
+    pub zoom_changed: Option<Instant>,
+}
+
+/// Where a frame was drawn, and what for.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Geometry {
+    /// The body, in window coordinates.
+    pub document: Bounds<Pixels>,
+    /// What of it may show.
+    pub clip: Bounds<Pixels>,
+    pub zoom: f32,
+    pub radius: f32,
+    /// Its own reasons to be a snapshot: dragged, resized, an ink tool out,
+    /// the marquee over it, parity shots.
+    pub forced: bool,
+    /// The pointer goes to the board (VIEW-141).
+    pub passthrough: bool,
+    /// The resize handles' reach into the page.
+    pub edge: f32,
+}
+
+/// Every frame, for the open board.
+pub struct Frames {
+    pub project_id: Option<String>,
+    canvas: Option<EntityId>,
+    pub window: Option<AnyWindowHandle>,
+    pub frames: Vec<Frame>,
+    next_id: u64,
+    pub tx: UnboundedSender<Incoming>,
+    rx: Option<UnboundedReceiver<Incoming>>,
+    /// The view open large (VIEW-147).
+    pub large: Option<String>,
+    dark: Option<bool>,
+    pub check_scheduled: bool,
+    pub settle_scheduled: bool,
+}
+
+#[derive(Clone)]
+struct FramesGlobal(Rc<RefCell<Frames>>);
+
+impl Global for FramesGlobal {}
+
+/// The frames, made on first use.
+pub fn frames(cx: &mut App) -> Rc<RefCell<Frames>> {
+    if let Some(g) = cx.try_global::<FramesGlobal>() {
+        return g.0.clone();
+    }
+    let (tx, rx) = unbounded_channel();
+    let frames = Rc::new(RefCell::new(Frames {
+        project_id: None,
+        canvas: None,
+        window: None,
+        frames: Vec::new(),
+        next_id: 1,
+        tx,
+        rx: Some(rx),
+        large: None,
+        dark: None,
+        check_scheduled: false,
+        settle_scheduled: false,
+    }));
+    cx.set_global(FramesGlobal(frames.clone()));
+    frames
+}
+
+/// The frames if there are any, without making them.
+pub fn existing(cx: &App) -> Option<Rc<RefCell<Frames>>> {
+    cx.try_global::<FramesGlobal>().map(|g| g.0.clone())
+}
+
+impl Frames {
+    pub fn get(&self, view_id: &str, slot: Slot) -> Option<&Frame> {
+        self.frames.iter().find(|f| f.view_id == view_id && f.slot == slot)
+    }
+
+    pub fn get_mut(&mut self, view_id: &str, slot: Slot) -> Option<&mut Frame> {
+        self.frames.iter_mut().find(|f| f.view_id == view_id && f.slot == slot)
+    }
+
+    pub fn by_id(&self, id: u64) -> Option<&Frame> {
+        self.frames.iter().find(|f| f.id == id)
+    }
+
+    pub fn by_id_mut(&mut self, id: u64) -> Option<&mut Frame> {
+        self.frames.iter_mut().find(|f| f.id == id)
+    }
+
+    /// What the shells post, for the relay to read (once).
+    pub fn take_rx(&mut self) -> Option<UnboundedReceiver<Incoming>> {
+        self.rx.take()
+    }
+
+    /// Drops every frame (the board closed).
+    pub fn clear(&mut self) {
+        self.frames.clear();
+        self.large = None;
+        self.project_id = None;
+        self.canvas = None;
+    }
+}
+
+/// What a card or the large window shows in its body this frame.
+#[derive(Clone, Default)]
+pub struct Shown {
+    /// There's a frame for it.
+    pub framed: bool,
+    /// GPUI draws this snapshot (the page is behind it, transparent).
+    pub snapshot: Option<Arc<RenderImage>>,
+    /// The pointer is over the page.
+    pub hovered: bool,
+}
+
+/// How a view's frame shows this frame.
+pub fn shown(view_id: &str, slot: Slot, cx: &App) -> Shown {
+    let Some(frames) = existing(cx) else {
+        return Shown::default();
+    };
+    let frames = frames.borrow();
+    frames.get(view_id, slot).map_or_else(Shown::default, |f| Shown {
+        framed: true,
+        snapshot: if f.live { None } else { f.snapshot.clone() },
+        hovered: f.hovered,
+    })
+}
+
+/// Keeps a frame for every view with a page on the open board (VIEW-030:
+/// `version > 0`), and the large window's while it's open; brings their
+/// versions, titles and backgrounds up to date (VIEW-027, VIEW-029).
+pub fn sync_board(canvas: &mut BoardCanvas, window: &mut Window, cx: &mut Context<'_, BoardCanvas>) {
+    let rc = frames(cx);
+    let entity = cx.entity_id();
+    let first = {
+        let mut f = rc.borrow_mut();
+        let first = f.canvas != Some(entity);
+        if first || f.project_id.as_deref() != Some(canvas.project_id.as_str()) {
+            f.clear();
+            f.project_id = Some(canvas.project_id.clone());
+            f.canvas = Some(entity);
+        }
+        f.window = Some(window.window_handle());
+        first
+    };
+    if first {
+        // BOARD-004: the board's frames go with it.
+        let drop_rc = rc.clone();
+        cx.on_release(move |_, _| {
+            let mut f = drop_rc.borrow_mut();
+            if f.canvas == Some(entity) {
+                f.clear();
+            }
+        })
+        .detach();
+        super::relay::start(&rc, cx);
+        super::relay::board_mounted(cx);
+    }
+    let Some(board) = canvas.board().cloned() else { return };
+    let t = crate::theme::tokens(cx);
+    let nodus = cx.global::<crate::shell::window::Core>().0.clone();
+    let mut f = rc.borrow_mut();
+    let theme_changed = f.dark != Some(t.dark);
+    f.dark = Some(t.dark);
+    // Frames for views that went, or lost their page, go.
+    let large = f.large.clone();
+    f.frames.retain(|fr| {
+        board.views.iter().any(|v| {
+            v.id == fr.view_id && v.version > 0 && (fr.slot == Slot::Card || large.as_deref() == Some(v.id.as_str()))
+        })
+    });
+    if let Some(id) = &large
+        && !board.views.iter().any(|v| &v.id == id)
+    {
+        f.large = None;
+    }
+    let mut wanted: Vec<(&nodus_domain::BoardView, Slot)> = board
+        .views
+        .iter()
+        .filter(|v| v.version > 0)
+        .map(|v| (v, Slot::Card))
+        .collect();
+    if let Some(v) = large.as_ref().and_then(|id| board.views.iter().find(|v| &v.id == id))
+        && v.version > 0
+    {
+        wanted.push((v, Slot::Large));
+    }
+    for (view, slot) in wanted {
+        match f.get_mut(&view.id, slot) {
+            Some(fr) => {
+                if fr.version != view.version || fr.title != view.title || theme_changed {
+                    fr.web.update(view.version, &view.title, t.bg_elevated);
+                    fr.version = view.version;
+                    fr.title.clone_from(&view.title);
+                    fr.dirty = true;
+                }
+            }
+            None => {
+                let id = f.next_id;
+                f.next_id += 1;
+                let made = PageWebview::new(
+                    window,
+                    id,
+                    &view.id,
+                    view.version,
+                    &view.title,
+                    t.bg_elevated,
+                    nodus.clone(),
+                    f.tx.clone(),
+                );
+                match made {
+                    Ok(web) => f.frames.push(Frame {
+                        id,
+                        project_id: canvas.project_id.clone(),
+                        view_id: view.id.clone(),
+                        slot,
+                        version: view.version,
+                        title: view.title.clone(),
+                        web,
+                        live: true,
+                        snapshot: None,
+                        snapshot_at: None,
+                        dirty: true,
+                        pending: false,
+                        drawn: false,
+                        geometry: None,
+                        probe: None,
+                        occluded: false,
+                        hovered: false,
+                        tooltip: false,
+                        zoom_changed: None,
+                    }),
+                    Err(err) => tracing::warn!("[views] couldn't make a webview: {err}"),
+                }
+            }
+        }
+    }
+    // Drawn again below; a frame no card paints this time hides.
+    for fr in &mut f.frames {
+        fr.drawn = false;
+    }
+}
+
+/// The body's probe: an invisible box over a frame's body, last in its card,
+/// so whatever GPUI hit-tests above it covers the page. Painting it places
+/// the frame's webview there.
+pub fn probe(
+    view_id: String,
+    slot: Slot,
+    geometry: impl Fn(Bounds<Pixels>, Bounds<Pixels>) -> Geometry + 'static,
+) -> impl IntoElement {
+    canvas(
+        |bounds, window, _| window.insert_hitbox(bounds, HitboxBehavior::Normal),
+        move |bounds, hitbox, window, cx| {
+            let g = geometry(bounds, window.content_mask().bounds);
+            super::swap::placed(&view_id, slot, g, hitbox, window, cx);
+        },
+    )
+    .absolute()
+    .top_0()
+    .left_0()
+    .size_full()
+}

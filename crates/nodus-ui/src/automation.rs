@@ -8,6 +8,7 @@
 //! {"cmd":"core","method":"settings.update","args":[{"theme":"dark"}]}
 //! {"cmd":"menu","command":"settings"}               a menu command, as the menu sends it
 //! {"cmd":"key","keystroke":"cmd-o"}                 a keystroke through GPUI
+//! {"cmd":"type","text":"Hello"}                    text typed into what has the keyboard
 //! {"cmd":"modifiers","meta":true}                   modifiers held (⌘ for the rail's numbers)
 //! {"cmd":"mouse","kind":"click","x":100,"y":200}    move | down | up | click | double | right
 //! {"cmd":"scroll","x":720,"y":400,"dy":-600}       a wheel scroll at a point
@@ -144,6 +145,36 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
             let keystroke = Keystroke::parse(spec).map_err(|e| e.to_string())?;
             with_window(cx, move |window, cx| {
                 window.dispatch_keystroke(keystroke, cx);
+            })?;
+            Ok(Value::Null)
+        }
+        "type" => {
+            // Text typed into whatever has the keyboard, a character at a time.
+            let text = command
+                .get("text")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            with_window(cx, move |window, cx| {
+                for ch in text.chars() {
+                    let s = ch.to_string();
+                    let key = if ch == ' ' {
+                        "space".to_owned()
+                    } else {
+                        s.to_lowercase()
+                    };
+                    window.dispatch_keystroke(
+                        Keystroke {
+                            modifiers: Modifiers {
+                                shift: ch.is_uppercase(),
+                                ..Modifiers::default()
+                            },
+                            key,
+                            key_char: Some(s),
+                        },
+                        cx,
+                    );
+                }
             })?;
             Ok(Value::Null)
         }

@@ -108,6 +108,8 @@ uuid = { version = "1.29", features = ["serde", "v4"] }
 windows-sys = "0.61"
 # WinRT, for toasts; COM, for WASAPI capture.
 windows = { version = "0.62", default-features = false, features = ["std"] }
+# Views' pages in the system webview, WKWebView or WebView2 (decision D3).
+wry = { version = "=0.57.1", default-features = false }
 
 # Our patched GPUI (D13): the gpui-pre crates we change, vendored with their
 # names and version kept, so gpui-kit and gpui-component resolve to them and

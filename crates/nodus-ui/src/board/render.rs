@@ -775,6 +775,8 @@ impl Render for BoardCanvas {
         let hint = empty.then(|| self.render_hint(window, cx));
         let toast = self.render_toast(window, cx);
         let confirm = self.render_confirm(window, cx);
+        // Spec 04: views' webviews kept in step, their large window and the New view dialog.
+        let views_layer = crate::views::board_layer(self, window, cx);
 
         div()
             .id("board-canvas")
@@ -813,6 +815,7 @@ impl Render for BoardCanvas {
             .child(minimap)
             .children(toast)
             .children(confirm)
+            .children(views_layer)
             .into_any_element()
     }
 }

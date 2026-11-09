@@ -174,6 +174,22 @@ pub struct BoardCx {
     /// eased `cubic-bezier(0.2, 0.8, 0.2, 1)` (BOARD-036).
     pub flash: Option<(SharedString, std::time::Instant)>,
     pub actions: BoardActions,
+    /// What the pointer and the viewport are doing, for views' pages, which
+    /// let the pointer through and show a snapshot meanwhile (VIEW-141, D3).
+    pub pointer: BoardPointer,
+}
+
+/// What the pointer and the viewport are doing on the board.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct BoardPointer {
+    /// Nodes (or a section with its cards) are being dragged.
+    pub dragging: bool,
+    /// The marquee being drawn, in canvas pixels: x, y, w, h.
+    pub marquee: Option<(f64, f64, f64, f64)>,
+    /// The post-marquee selection rectangle is up.
+    pub selection_rect: bool,
+    /// The viewport is moving: a wheel, a pinch, a pan or a flight.
+    pub moving: bool,
 }
 
 /// What nodes can ask of the board (`BoardContext.ts`'s `BoardActions`, and
@@ -365,8 +381,12 @@ pub trait NodeRenderers: 'static {
         placeholder(&node.node, "Notes".to_owned(), cx)
     }
 
-    /// `ViewNode` (spec 04).
+    /// `ViewNode` (spec 04): the views' own renderer ([`ViewRenderer`])
+    /// when it's installed.
     fn view(&self, node: ViewNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut App) -> AnyElement {
+        if let Some(render) = cx.try_global::<ViewRenderer>().map(|r| r.0.clone()) {
+            return render(node, board, window, cx);
+        }
         let _ = (board, window);
         placeholder(&node.node, node.view.title.clone(), cx)
     }
@@ -401,6 +421,16 @@ impl NodeRenderers for Placeholders {}
 pub fn install(renderers: impl NodeRenderers, cx: &mut App) {
     cx.set_global(Renderers(Rc::new(renderers)));
 }
+
+/// Draws view nodes, whichever [`NodeRenderers`] is installed: `crate::views`
+/// (spec 04) sets it at start-up, so the cards' renderers needn't know views.
+pub type RenderView = dyn Fn(ViewNode<'_>, &BoardCx, &mut Window, &mut App) -> AnyElement;
+
+/// The view renderer in use.
+#[derive(Clone)]
+pub struct ViewRenderer(pub Rc<RenderView>);
+
+impl Global for ViewRenderer {}
 
 /// The renderers in use: the installed ones, else placeholders.
 pub fn renderers(cx: &App) -> Rc<dyn NodeRenderers> {

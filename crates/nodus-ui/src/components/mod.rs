@@ -13,6 +13,7 @@ pub mod modal;
 pub mod scroll;
 pub mod selectable;
 pub mod spaced_text;
+pub mod spellcheck;
 pub mod split_button;
 pub mod status_dot;
 pub mod switch;

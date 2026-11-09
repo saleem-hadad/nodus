@@ -361,6 +361,15 @@ impl CapturePanel {
                     .text_size(px(15.))
                     .line_height(px(22.)),
             )
+            // PLAT-137: the capture box asks for spellcheck explicitly.
+            .child(crate::components::spellcheck::underlines(
+                "cap-field-spelling".into(),
+                &self.field,
+                px(15.),
+                px(22.),
+                window,
+                cx,
+            ))
             .into_any_element()
     }
 

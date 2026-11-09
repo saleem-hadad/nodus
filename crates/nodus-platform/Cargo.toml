@@ -30,7 +30,7 @@ block2.workspace = true
 dispatch2.workspace = true
 libc.workspace = true
 objc2.workspace = true
-objc2-app-kit = { workspace = true, features = ["NSApplication", "NSDockTile", "NSResponder", "NSWorkspace"] }
+objc2-app-kit = { workspace = true, features = ["NSApplication", "NSDockTile", "NSResponder", "NSSpellChecker", "NSWorkspace"] }
 objc2-application-services = { workspace = true, features = ["AXUIElement", "HIServices"] }
 objc2-av-foundation = { workspace = true, features = ["AVCaptureDevice", "AVMediaFormat", "block2"] }
 objc2-core-foundation = { workspace = true, features = ["CFDictionary", "CFNumber", "CFString"] }
@@ -39,8 +39,10 @@ objc2-foundation = { workspace = true, features = [
     "NSArray",
     "NSBundle",
     "NSEnumerator",
+    "NSObjCRuntime",
     "NSObject",
     "NSPathUtilities",
+    "NSRange",
     "NSString",
     "NSURL",
 ] }
@@ -58,9 +60,10 @@ objc2-user-notifications = { workspace = true, features = [
 security-framework.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-windows = { workspace = true, features = ["Data_Xml_Dom", "Foundation", "UI_Notifications"] }
+windows = { workspace = true, features = ["Data_Xml_Dom", "Foundation", "UI_Notifications", "Win32_Globalization", "Win32_System_Com"] }
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
+    "Win32_Globalization",
     "Win32_Security",
     "Win32_Security_Cryptography",
     "Win32_Storage_FileSystem",

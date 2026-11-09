@@ -14,6 +14,7 @@ use super::dialog::{ActionDialogView, NAME_MAX};
 use super::icons::{Glyph, glyph};
 use crate::components::modal::Modal;
 use crate::components::native_tooltip;
+use crate::components::spellcheck;
 use crate::components::switch::switch;
 use crate::components::{Kind, button, child_id};
 use crate::theme::tokens::*;
@@ -117,6 +118,15 @@ impl ActionDialogView {
             .mr(px(-WRAP_MARGIN));
         let field = field_frame(t, focused, drafting)
             .child(textarea)
+            // PLAT-137: Chromium's spellcheck underlines.
+            .child(spellcheck::underlines(
+                "act-description-spelling".into(),
+                &self.description,
+                TEXT_MD,
+                px(DESCRIPTION_LH),
+                window,
+                cx,
+            ))
             // `resize: vertical`: Chromium's grip in the corner.
             .child(div().absolute().right(px(0.5)).bottom(px(0.5)).child(glyph(
                 Glyph::ResizeGrip,
@@ -252,7 +262,15 @@ impl ActionDialogView {
                         .text_size(TEXT_MD)
                         .line_height(px(31.))
                         .h(px(31.)),
-                ),
+                )
+                .child(spellcheck::underlines(
+                    "act-name-spelling".into(),
+                    &self.name,
+                    TEXT_MD,
+                    px(31.),
+                    window,
+                    cx,
+                )),
         );
         let selected = self.model.selected_icon();
         let icons: Vec<AnyElement> = ActionIcon::ALL
@@ -290,7 +308,15 @@ impl ActionDialogView {
                             .line_height(px(PROMPT_LH))
                             .h(px(160. - 1. - 4.))
                             .mr(px(-WRAP_MARGIN)),
-                    ),
+                    )
+                    .child(spellcheck::underlines(
+                        "act-prompt-spelling".into(),
+                        &self.prompt,
+                        TEXT_SM,
+                        px(PROMPT_LH),
+                        window,
+                        cx,
+                    )),
             );
         vec![
             name.into_any_element(),

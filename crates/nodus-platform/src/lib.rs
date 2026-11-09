@@ -22,5 +22,6 @@ pub mod pipe;
 pub mod process;
 pub mod secrets;
 pub mod shell;
+pub mod spell;
 
 pub use env::{ClaudeNotFound, Env, ShellCommand};

@@ -213,7 +213,16 @@ pub fn sync_board(canvas: &mut BoardCanvas, window: &mut Window, cx: &mut Contex
         })
         .detach();
         super::relay::start(&rc, cx);
-        super::relay::board_mounted(cx);
+        // The git status pages hear is the window's (the title bar's model),
+        // not a read of their own.
+        let git = crate::git::GitModel::get(&canvas.state, window, cx);
+        let status = git.read(cx).status.clone();
+        super::relay::board_mounted(status.as_ref(), cx);
+        cx.observe(&git, |_, git, cx| {
+            let status = git.read(cx).status.clone();
+            super::relay::git_changed(status.as_ref(), cx);
+        })
+        .detach();
     }
     let Some(board) = canvas.board().cloned() else { return };
     let t = crate::theme::tokens(cx);

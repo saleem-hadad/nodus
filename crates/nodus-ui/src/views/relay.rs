@@ -10,7 +10,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use gpui::{App, Context, Global, Modifiers, ScrollDelta, ScrollEvent, Task, TouchPhase, WeakEntity, point, px};
-use nodus_domain::{BoardNote, BoardView, Event, SessionCard, ViewReport};
+use nodus_domain::{BoardNote, BoardView, Event, GitStatus, SessionCard, ViewReport};
 use serde_json::{Value, json};
 
 use super::frames::{Frames, Slot, existing};
@@ -19,9 +19,6 @@ use crate::board::canvas::BoardCanvas;
 
 /// `{event: 'board'}` goes out this long after the board last changed (VIEW-055).
 const BOARD_DEBOUNCE: Duration = Duration::from_millis(300);
-/// How often the board's git status is read again while the window has focus
-/// (`GIT_POLL_MS`).
-const GIT_POLL: Duration = Duration::from_millis(4000);
 
 /// What a page posted, as the relay sorts it (VIEW-044…048).
 #[derive(Debug, Clone, PartialEq)]
@@ -121,8 +118,8 @@ struct Relay {
     /// What the board last told pages about: its cards, notes and views.
     last: Option<(Vec<SessionCard>, Vec<BoardNote>, Vec<BoardView>)>,
     board_timer: Option<Task<()>>,
+    /// The git status pages were last told about, as JSON.
     git: Option<String>,
-    git_reading: bool,
 }
 
 #[derive(Clone)]
@@ -163,27 +160,8 @@ pub fn start(frames: &Rc<RefCell<Frames>>, cx: &mut App) {
                 }) => {
                     cx.update(|cx| view_event(&view_id, event.as_str(), payload, cx));
                 }
-                Ok(Event::Status { .. }) => {
-                    // Claude edits files during a turn: read the git status again.
-                    cx.update(read_git);
-                }
                 Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-            }
-        }
-    })
-    .detach();
-    // GIT_POLL_MS: catches branch switches and edits made elsewhere.
-    cx.spawn(async move |cx| {
-        loop {
-            cx.background_executor().timer(GIT_POLL).await;
-            let focused = cx.update(|cx| {
-                crate::shell::window::main_window(cx)
-                    .and_then(|h| h.update(cx, |_, window, _| window.is_window_active()).ok())
-                    .unwrap_or(false)
-            });
-            if focused {
-                cx.update(read_git);
             }
         }
     })
@@ -424,17 +402,17 @@ pub fn view_event(view_id: &str, name: &str, payload: Value, cx: &mut App) {
     }
 }
 
-/// The board mounted: `board` 300ms later, and `git` with what's known, which
-/// is nothing yet (VIEW-055).
-pub fn board_mounted(cx: &mut App) {
+/// The board mounted: `board` 300ms later, and `git` with what the window
+/// knows of it, usually nothing yet (VIEW-055: the board's effect runs with
+/// the store's `git` as it is then).
+pub fn board_mounted(git: Option<&GitStatus>, cx: &mut App) {
     let r = relay(cx);
     {
         let mut r = r.borrow_mut();
         r.last = None;
         r.git = None;
     }
-    deliver_where(&event("git", Some(Value::Null)), |_| true, cx);
-    read_git(cx);
+    git_changed(git, cx);
 }
 
 /// Every board render: `board` to every frame 300ms after its cards, notes
@@ -458,47 +436,20 @@ pub fn board_changed(canvas: &BoardCanvas, cx: &mut Context<'_, BoardCanvas>) {
     }));
 }
 
-/// Reads the board's git status, and tells pages when it changed (VIEW-055).
-/// Only while some view has a page.
-fn read_git(cx: &mut App) {
-    let Some(rc) = existing(cx) else { return };
-    let project_id = {
-        let f = rc.borrow();
-        if f.frames.is_empty() {
-            return;
-        }
-        let Some(id) = f.project_id.clone() else { return };
-        id
-    };
+/// The window's git status changed (VIEW-055: `broadcastToViews('git', git)`
+/// on each new value of the store's `git`). It's the git UI's model, read on
+/// 0.9.4's rules (GIT-021…023: the board's route, every session status, the
+/// window gaining focus, every 4s while it has focus), which keeps the old
+/// value when a read finds nothing new; pages hear only real changes.
+pub fn git_changed(git: Option<&GitStatus>, cx: &mut App) {
+    let payload = serde_json::to_value(git).unwrap_or(Value::Null);
+    let text = nodus_domain::json::to_string(&payload).unwrap_or_default();
     let r = relay(cx);
-    if std::mem::replace(&mut r.borrow_mut().git_reading, true) {
+    if r.borrow().git.as_deref() == Some(text.as_str()) {
         return;
     }
-    let nodus = cx.global::<crate::shell::window::Core>().0.clone();
-    let rt = crate::board::core_rt(cx);
-    cx.spawn(async move |cx| {
-        let status = crate::board::on_core(&rt, {
-            let project_id = project_id.clone();
-            async move { nodus.git().status(&project_id).await.ok().flatten() }
-        })
-        .await;
-        cx.update(|cx| {
-            let r = relay(cx);
-            r.borrow_mut().git_reading = false;
-            let still = existing(cx).is_some_and(|f| f.borrow().project_id.as_deref() == Some(project_id.as_str()));
-            if !still {
-                return;
-            }
-            let payload = serde_json::to_value(&status).unwrap_or(Value::Null);
-            let text = nodus_domain::json::to_string(&payload).unwrap_or_default();
-            let changed = r.borrow().git.as_deref() != Some(text.as_str());
-            if changed {
-                r.borrow_mut().git = Some(text);
-                deliver_where(&event("git", Some(payload)), |_| true, cx);
-            }
-        });
-    })
-    .detach();
+    r.borrow_mut().git = Some(text);
+    deliver_where(&event("git", Some(payload)), |_| true, cx);
 }
 
 #[cfg(test)]

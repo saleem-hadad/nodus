@@ -14,10 +14,11 @@ pub enum TermIcon {
     GitBranch,
     LoaderCircle,
     Mic,
+    SquareTerminal,
 }
 
 impl TermIcon {
-    const ALL: [Self; 7] = [
+    const ALL: [Self; 8] = [
         Self::Play,
         Self::RotateCcw,
         Self::Square,
@@ -25,6 +26,7 @@ impl TermIcon {
         Self::GitBranch,
         Self::LoaderCircle,
         Self::Mic,
+        Self::SquareTerminal,
     ];
 
     pub fn name(self) -> &'static str {
@@ -36,6 +38,7 @@ impl TermIcon {
             Self::GitBranch => "git-branch",
             Self::LoaderCircle => "loader-circle",
             Self::Mic => "mic",
+            Self::SquareTerminal => "square-terminal",
         }
     }
 
@@ -54,6 +57,9 @@ impl TermIcon {
             Self::LoaderCircle => r#"<path d="M21 12a9 9 0 1 1-6.219-8.56"/>"#,
             Self::Mic => {
                 r#"<path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/>"#
+            }
+            Self::SquareTerminal => {
+                r#"<path d="m7 11 2-2-2-2"/><path d="M11 13h4"/><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>"#
             }
         }
     }

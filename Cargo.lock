@@ -4226,6 +4226,7 @@ dependencies = [
  "nodus-domain",
  "nodus-platform",
  "nodus-sessions",
+ "nodus-terminal",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
  "objc2-core-graphics",

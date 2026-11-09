@@ -8,3 +8,15 @@
 //! Ports `src/renderer/src/terminal/`.
 
 pub mod icons;
+pub mod element;
+pub mod glyphs;
+pub mod host;
+pub mod keymap;
+pub mod metrics;
+pub mod store;
+pub mod actions;
+pub mod confirm;
+pub mod layers;
+pub mod overlays;
+pub mod session_window;
+pub mod driver;

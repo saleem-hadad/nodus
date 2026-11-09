@@ -83,6 +83,15 @@ impl Env {
         Self::resolve(base, std::env::home_dir().as_deref()).await
     }
 
+    /// These variables as the environment, resolved as [`Env::init`] resolves
+    /// the login shell's: the folders Claude Code installs to added to the
+    /// end of the PATH (under `home`), `claude` found on it and its version
+    /// asked. For a server that brings its own environment, and tests that
+    /// put a stand-in `claude` first on the PATH.
+    pub async fn with_vars(base: EnvMap, home: Option<&Path>) -> Self {
+        Self::resolve(base, home).await
+    }
+
     async fn resolve(mut base: EnvMap, home: Option<&Path>) -> Self {
         path_search::add_fallback_dirs(&mut base, home);
         let claude_path = claude::find(base.get("PATH").map_or("", String::as_str));

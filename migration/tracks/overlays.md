@@ -37,10 +37,10 @@
 | --- | --- | --- |
 | bar-focused, bar-typing, bar-view, bar-note, board-selected | 0.05–0.07% | 0.05–0.07% |
 | bar-slash-menu | 0.11% | 0.11% |
-| bar-one-selected | 1.3% (the token's tooltip: fixed in the scene, it parks the pointer) | 1.3% |
+| bar-one-selected | 0.06% | 0.06% |
 | bar-several-selected | 4.4% (the golden's board is scrolled 52px left: a Chromium focus-scroll quirk only the light shot has) | 0.07% |
 | search-empty, search-results | 0.4%, 1.0% | 0.4%, 1.0% |
-| search-none | 0.01% | (typed before the field took the keyboard; fixed) |
+| search-none | 0.01% | 0.00% |
 | merge-progress | 0.2% | 0.2% |
 | merge-ready, merge-failed | 1.6%, 1.5% (text rasterisation, line rounding) | 1.2%, 1.0% |
 | ink-pen, ink-arrow, ink-eraser, ink-palette (dock) | 0.00–0.38% | 0.00–0.39% |

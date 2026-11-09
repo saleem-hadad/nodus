@@ -709,22 +709,22 @@ No Vitest exists for the registry, the modal, the preview or the viewer. New Rus
 - [x] TERM-090 window focuses on attach and on resolve
 - [x] TERM-091 reattach resumes
 - [x] TERM-092 detach only from own container
-- [ ] TERM-093 expanded card start rule
+- [x] TERM-093 expanded card start rule
 - [x] TERM-094 not-started overlay buttons
-- [ ] TERM-095 wake semantics and 1500 ms focus window
-- [ ] TERM-096 wake queued before card renders
-- [ ] TERM-097 open/expand wakes expanded cards
-- [ ] TERM-098 card follows a session started elsewhere
-- [ ] TERM-099 card hosts only when started and not in the window
+- [x] TERM-095 wake semantics and 1500 ms focus window
+- [x] TERM-096 wake queued before card renders
+- [x] TERM-097 open/expand wakes expanded cards
+- [x] TERM-098 card follows a session started elsewhere
+- [x] TERM-099 card hosts only when started and not in the window
 - [x] TERM-100 card focus rules (body pointer-down, title click)
 - [x] TERM-101 card loading/error overlays
-- [ ] TERM-102 card mic types in and wakes
-- [ ] TERM-103 card body clicks don't reach board, not a drag handle
+- [x] TERM-102 card mic types in and wakes
+- [x] TERM-103 card body clicks don't reach board, not a drag handle
 - [x] TERM-104 wheel gesture starting on terminal scrolls it, board stays
 - [x] TERM-105 gesture started elsewhere keeps panning board
 - [x] TERM-106 Ctrl+wheel/pinch goes to board zoom
 - [x] TERM-107 wheel over non-hosting card body pans board
-- [ ] TERM-108 closing the window leaves the card expanded with the terminal
+- [x] TERM-108 closing the window leaves the card expanded with the terminal
 - [x] TERM-109 board ⌘K yields to a focused terminal
 - [x] MODAL-001 open condition, one session, rebuild on switch
 - [x] MODAL-002 window/preview/navigation/showCard exclusivity

@@ -639,7 +639,7 @@ No Vitest exists for the registry, the modal, the preview or the viewer. New Rus
 - [x] TERM-020 attach during opening shares the open
 - [x] TERM-021 attach of exited resets then reopens
 - [x] TERM-022 attach of ready moves, fits, resizes
-- [ ] TERM-023 refit on container resize, once per frame
+- [x] TERM-023 refit on container resize, once per frame
 - [x] TERM-024 resize sent only in ready
 - [x] TERM-025 input written unless exited (type-ahead during opening)
 - [x] TERM-026 needsOpen / hasOutput semantics
@@ -650,7 +650,7 @@ No Vitest exists for the registry, the modal, the preview or the viewer. New Rus
 - [x] TERM-031 queued words only into the same ready terminal
 - [x] TERM-032 file drop pastes quoted paths + space, focuses
 - [x] TERM-033 shell quoting rule
-- [ ] TERM-034 drops without files ignored, no navigation
+- [x] TERM-034 drops without files ignored, no navigation
 - [x] TERM-035 paste newline conversion and bracketing (empty too)
 - [x] TERM-036 ⇧Enter in Claude → ESC CR, swallowed, bypasses guards
 - [x] TERM-037 ⇧Enter in shell → CR
@@ -665,14 +665,14 @@ No Vitest exists for the registry, the modal, the preview or the viewer. New Rus
 - [x] TERM-046 Ctrl shortcut letters by key code on non-Latin layouts
 - [x] TERM-047 other Windows Ctrl keys and AltGr go to the program
 - [x] TERM-048 Esc → `\x1b`, never closes, never reaches board
-- [ ] TERM-049 consumed keys don't reach board/app shortcuts
+- [x] TERM-049 consumed keys don't reach board/app shortcuts
 - [x] TERM-050 key encoding table
 - [x] TERM-051 Mac ⌥ composes; ⌥ with special keys uses modifiers
 - [x] TERM-052 Windows Alt+printable → ESC prefix
 - [x] TERM-053 ⇧PgUp/⇧PgDn scroll rows−1
 - [x] TERM-054 input scrolls to bottom and clears selection
-- [ ] TERM-055 IME composition at cursor
-- [ ] TERM-056 selection gestures
+- [x] TERM-055 IME composition at cursor
+- [x] TERM-056 selection gestures
 - [x] TERM-057 selection cleared on input and row-count resize
 - [x] TERM-058 selection colours focused/unfocused
 - [x] TERM-059 copied text format per platform
@@ -680,10 +680,10 @@ No Vitest exists for the registry, the modal, the preview or the viewer. New Rus
 - [x] TERM-061 right-click: Mac selects word, no menu
 - [x] TERM-062 Alt/⌥-click moves cursor
 - [x] TERM-063 mouse reporting and forced selection rules
-- [ ] TERM-064 pointer shapes
+- [x] TERM-064 pointer shapes
 - [x] TERM-065 URL detection incl. wrapped lines
-- [ ] TERM-066 link hover underline + hand
-- [ ] TERM-067 link click opens http(s) in browser only
+- [x] TERM-066 link hover underline + hand
+- [x] TERM-067 link click opens http(s) in browser only
 - [x] TERM-068 OSC 8 links and confirm text
 - [x] TERM-069 wheel scroll math in normal buffer
 - [x] TERM-070 wheel in alt buffer → one arrow per event
@@ -691,33 +691,33 @@ No Vitest exists for the registry, the modal, the preview or the viewer. New Rus
 - [x] TERM-072 prevented wheel ignored
 - [x] TERM-073 follow output at bottom; stable when scrolled up
 - [x] TERM-074 10 000 lines scrollback
-- [ ] TERM-075 scrollbar size, colours, fade
-- [ ] TERM-076 cursor shape, colours, blink, inactive outline, init
+- [x] TERM-075 scrollbar size, colours, fade
+- [x] TERM-076 cursor shape, colours, blink, inactive outline, init
 - [x] TERM-077 focus reporting
 - [x] TERM-078 colour query and DA replies
 - [x] TERM-079 text attributes
-- [ ] TERM-080 custom box/block/powerline glyphs
+- [x] TERM-080 custom box/block/powerline glyphs
 - [x] TERM-081 Unicode 11 widths
 - [x] TERM-082 synchronized output 2026
-- [ ] TERM-083 pointer mapping at board zoom
+- [x] TERM-083 pointer mapping at board zoom
 - [x] TERM-084 terminal colours same in light and dark
 - [x] TERM-085 focus(id) semantics
 - [x] TERM-086 initial phase
 - [x] TERM-087 phase loading on attach when needed
 - [x] TERM-088 phase ready on output or resolved-with-output
 - [x] TERM-089 phase error with message
-- [ ] TERM-090 window focuses on attach and on resolve
+- [x] TERM-090 window focuses on attach and on resolve
 - [x] TERM-091 reattach resumes
 - [x] TERM-092 detach only from own container
 - [ ] TERM-093 expanded card start rule
-- [ ] TERM-094 not-started overlay buttons
+- [x] TERM-094 not-started overlay buttons
 - [ ] TERM-095 wake semantics and 1500 ms focus window
 - [ ] TERM-096 wake queued before card renders
 - [ ] TERM-097 open/expand wakes expanded cards
 - [ ] TERM-098 card follows a session started elsewhere
 - [ ] TERM-099 card hosts only when started and not in the window
-- [ ] TERM-100 card focus rules (body pointer-down, title click)
-- [ ] TERM-101 card loading/error overlays
+- [x] TERM-100 card focus rules (body pointer-down, title click)
+- [x] TERM-101 card loading/error overlays
 - [ ] TERM-102 card mic types in and wakes
 - [ ] TERM-103 card body clicks don't reach board, not a drag handle
 - [x] TERM-104 wheel gesture starting on terminal scrolls it, board stays
@@ -725,80 +725,80 @@ No Vitest exists for the registry, the modal, the preview or the viewer. New Rus
 - [x] TERM-106 Ctrl+wheel/pinch goes to board zoom
 - [x] TERM-107 wheel over non-hosting card body pans board
 - [ ] TERM-108 closing the window leaves the card expanded with the terminal
-- [ ] TERM-109 board ⌘K yields to a focused terminal
-- [ ] MODAL-001 open condition, one session, rebuild on switch
-- [ ] MODAL-002 window/preview/navigation/showCard exclusivity
-- [ ] MODAL-003 Esc never closes
-- [ ] MODAL-004 backdrop closes
-- [ ] MODAL-005 ⌘W / Ctrl+Shift+W close order
-- [ ] MODAL-006 closing keeps the process running
-- [ ] MODAL-007 attaches with focus
-- [ ] MODAL-008 pointer-down in body focuses
-- [ ] MODAL-009 loading pill texts, non-blocking
-- [ ] MODAL-010 loading label fixed at open, resuming after Resume
-- [ ] MODAL-011 error overlay + Try again
-- [ ] MODAL-012 status icon/dot and label texts
-- [ ] MODAL-013 status colours
-- [ ] MODAL-014 title fallback
-- [ ] MODAL-015 shell cwd with ~
-- [ ] MODAL-016 branch
-- [ ] MODAL-017 session id copy, Copied 1400 ms
-- [ ] MODAL-018 usage stats
+- [x] TERM-109 board ⌘K yields to a focused terminal
+- [x] MODAL-001 open condition, one session, rebuild on switch
+- [x] MODAL-002 window/preview/navigation/showCard exclusivity
+- [x] MODAL-003 Esc never closes
+- [x] MODAL-004 backdrop closes
+- [x] MODAL-005 ⌘W / Ctrl+Shift+W close order
+- [x] MODAL-006 closing keeps the process running
+- [x] MODAL-007 attaches with focus
+- [x] MODAL-008 pointer-down in body focuses
+- [x] MODAL-009 loading pill texts, non-blocking
+- [x] MODAL-010 loading label fixed at open, resuming after Resume
+- [x] MODAL-011 error overlay + Try again
+- [x] MODAL-012 status icon/dot and label texts
+- [x] MODAL-013 status colours
+- [x] MODAL-014 title fallback
+- [x] MODAL-015 shell cwd with ~
+- [x] MODAL-016 branch
+- [x] MODAL-017 session id copy, Copied 1400 ms
+- [x] MODAL-018 usage stats
 - [ ] MODAL-019 mic types in, resumes, focuses
-- [ ] MODAL-020 Resume/Restart availability and action
-- [ ] MODAL-021 Stop availability
-- [ ] MODAL-022 Stop immediate vs confirmed
-- [ ] MODAL-023 confirm dialog copy
-- [ ] MODAL-024 window stays open after Stop
-- [ ] MODAL-025 Remove for shells
-- [ ] MODAL-026 Archive for Claude; none for view brains
-- [ ] MODAL-027 close button tooltip per platform/kind
+- [x] MODAL-020 Resume/Restart availability and action
+- [x] MODAL-021 Stop availability
+- [x] MODAL-022 Stop immediate vs confirmed
+- [x] MODAL-023 confirm dialog copy
+- [x] MODAL-024 window stays open after Stop
+- [x] MODAL-025 Remove for shells
+- [x] MODAL-026 Archive for Claude; none for view brains
+- [x] MODAL-027 close button tooltip per platform/kind
 - [ ] MODAL-028 archived from outside closes window
 - [ ] MODAL-029 finished action run disposes and closes
 - [ ] MODAL-030 removed view closes its brain's window
 - [ ] MODAL-031 board shortcuts/search suppressed; menu search closes window
-- [ ] MODAL-032 window size
-- [ ] TRANS-001 open condition, rebuild on switch
-- [ ] TRANS-002 records search, closes session window
-- [ ] TRANS-003 close by Esc/backdrop/⌘W/X
-- [ ] TRANS-004 read once, skeleton
-- [ ] TRANS-005 error + Try again
-- [ ] TRANS-006 empty text
-- [ ] TRANS-007 header title/range/count/branch
-- [ ] TRANS-008 initial scroll (match centred or bottom)
-- [ ] TRANS-009 found message rule
-- [ ] TRANS-010 term highlighting
-- [ ] TRANS-011 found message styling, expanded
-- [ ] TRANS-012 found tool call line
-- [ ] TRANS-013 author and time
-- [ ] TRANS-014 trimmed plain text, no markdown
-- [ ] TRANS-015 collapse 12 lines / 1200 chars
-- [ ] TRANS-016 user box, assistant plain, notice quiet
-- [ ] TRANS-017 calls vs tool chips
-- [ ] TRANS-018 last 8 calls + Show N earlier
-- [ ] TRANS-019 time format
-- [ ] TRANS-020 range format
-- [ ] TRANS-021 Restore & Open
-- [ ] TRANS-022 free slot beside archive algorithm
-- [ ] TRANS-023 selectable parts
-- [ ] TRANS-024 ⌘K back to search
-- [ ] AGV-001 open condition, rebuild per session only
-- [ ] AGV-002 blur on open
-- [ ] AGV-003 close by Esc/backdrop/⌘W/X
-- [ ] AGV-004 list refresh triggers and 1500 ms poll
-- [ ] AGV-005 list loading/error/empty
-- [ ] AGV-006 nested newest-first list with indent
-- [ ] AGV-007 item content and selection highlight
-- [ ] AGV-008 click selects
-- [ ] AGV-009 default selection rule
-- [ ] AGV-010 header content
-- [ ] AGV-011 elapsed ticking
-- [ ] AGV-012 no-agent detail text
-- [ ] AGV-013 transcript refresh triggers, no flash
-- [ ] AGV-014 stick to bottom within 48 px
-- [ ] AGV-015 transcript authors
-- [ ] AGV-016 transcript error text
-- [ ] AGV-017 empty transcript texts
-- [ ] AGV-018 live line texts
-- [ ] AGV-019 live line red while waiting
-- [ ] AGV-020 messages via transcript component, no highlight
+- [x] MODAL-032 window size
+- [x] TRANS-001 open condition, rebuild on switch
+- [x] TRANS-002 records search, closes session window
+- [x] TRANS-003 close by Esc/backdrop/⌘W/X
+- [x] TRANS-004 read once, skeleton
+- [x] TRANS-005 error + Try again
+- [x] TRANS-006 empty text
+- [x] TRANS-007 header title/range/count/branch
+- [x] TRANS-008 initial scroll (match centred or bottom)
+- [x] TRANS-009 found message rule
+- [x] TRANS-010 term highlighting
+- [x] TRANS-011 found message styling, expanded
+- [x] TRANS-012 found tool call line
+- [x] TRANS-013 author and time
+- [x] TRANS-014 trimmed plain text, no markdown
+- [x] TRANS-015 collapse 12 lines / 1200 chars
+- [x] TRANS-016 user box, assistant plain, notice quiet
+- [x] TRANS-017 calls vs tool chips
+- [x] TRANS-018 last 8 calls + Show N earlier
+- [x] TRANS-019 time format
+- [x] TRANS-020 range format
+- [x] TRANS-021 Restore & Open
+- [x] TRANS-022 free slot beside archive algorithm
+- [x] TRANS-023 selectable parts
+- [x] TRANS-024 ⌘K back to search
+- [x] AGV-001 open condition, rebuild per session only
+- [x] AGV-002 blur on open
+- [x] AGV-003 close by Esc/backdrop/⌘W/X
+- [x] AGV-004 list refresh triggers and 1500 ms poll
+- [x] AGV-005 list loading/error/empty
+- [x] AGV-006 nested newest-first list with indent
+- [x] AGV-007 item content and selection highlight
+- [x] AGV-008 click selects
+- [x] AGV-009 default selection rule
+- [x] AGV-010 header content
+- [x] AGV-011 elapsed ticking
+- [x] AGV-012 no-agent detail text
+- [x] AGV-013 transcript refresh triggers, no flash
+- [x] AGV-014 stick to bottom within 48 px
+- [x] AGV-015 transcript authors
+- [x] AGV-016 transcript error text
+- [x] AGV-017 empty transcript texts
+- [x] AGV-018 live line texts
+- [x] AGV-019 live line red while waiting
+- [x] AGV-020 messages via transcript component, no highlight

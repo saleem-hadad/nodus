@@ -407,6 +407,8 @@ pub fn fan(
         );
     let mut column = div()
         .id(anim::key(node, "fan"))
+        // DECK-029
+        .aria_label("Agents")
         .absolute()
         .left(z.px(x))
         .top(z.px(y))

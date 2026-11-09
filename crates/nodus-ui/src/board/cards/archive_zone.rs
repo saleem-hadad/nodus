@@ -458,6 +458,8 @@ fn search(env: &Rc<BoardEnv>, count: usize, visible: bool, window: &mut Window, 
     let env_key = env.clone();
     let mut el = div()
         .id(anim::key(ID, "search-box"))
+        // ARCH-021
+        .aria_label("Search archived sessions")
         .absolute()
         .left(z.px(ARCHIVE_PAD))
         .top(z.px(STACK_SEARCH_Y))
@@ -525,6 +527,7 @@ fn search(env: &Rc<BoardEnv>, count: usize, visible: bool, window: &mut Window, 
             el = el.child(
                 div()
                     .id(anim::key(ID, "search-clear"))
+                    .aria_label("Clear search")
                     .flex_none()
                     .size(z.px(15.))
                     .rounded_full()
@@ -533,7 +536,6 @@ fn search(env: &Rc<BoardEnv>, count: usize, visible: bool, window: &mut Window, 
                     .justify_center()
                     .bg(t.text_tertiary)
                     .cursor(CursorStyle::Arrow)
-                    .tooltip(native_tooltip("Clear search".into()))
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .on_click(move |_, window, cx| {
                         cx.stop_propagation();

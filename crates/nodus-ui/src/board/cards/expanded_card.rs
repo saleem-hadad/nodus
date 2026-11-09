@@ -441,6 +441,8 @@ fn tools(
         );
         let run = running(agents);
         let mut b = b
+            .aria_label("Agents")
+            .aria_expanded(open)
             .px(z.px(7.))
             .tooltip(native_tooltip(present::deck_tooltip(agents).into()))
             .child(card_icon(CardIcon::Bot, z.f(14.), 2.0, color));
@@ -515,6 +517,7 @@ fn tools(
     if !shell && card.live {
         // XCARD-012
         let (b, color) = tool(env, &id, "tool-stop", false, false, None, window, cx);
+        let b = b.aria_label("Stop");
         let env2 = env.clone();
         let sid = id.clone();
         group = group.child(
@@ -531,6 +534,7 @@ fn tools(
     if !shell {
         // XCARD-013
         let (b, color) = tool(env, &id, "tool-archive", false, false, None, window, cx);
+        let b = b.aria_label("Archive");
         let env2 = env.clone();
         let sid = id.clone();
         group = group.child(
@@ -545,6 +549,7 @@ fn tools(
     {
         // XCARD-014
         let (b, color) = tool(env, &id, "tool-window", false, false, None, window, cx);
+        let b = b.aria_label("Open in a window");
         let env2 = env.clone();
         let sid = id.clone();
         group = group.child(
@@ -559,6 +564,7 @@ fn tools(
     {
         // XCARD-015
         let (b, color) = tool(env, &id, "tool-collapse", false, false, None, window, cx);
+        let b = b.aria_label("Collapse");
         let env2 = env.clone();
         let sid = id.clone();
         group = group.child(

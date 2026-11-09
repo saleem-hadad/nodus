@@ -165,6 +165,7 @@ pub fn sticker(
         .child(
             div()
                 .id(key("sticker-remove"))
+                .aria_label("Delete note")
                 .absolute()
                 .top(z.px(-6.))
                 .right(z.px(-6.))

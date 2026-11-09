@@ -348,6 +348,7 @@ fn play(
     let env2 = env.clone();
     div()
         .id(anim::key(&id, "play"))
+        .aria_label("Start a Claude session on this note")
         .absolute()
         .right(z.px(10.))
         .bottom(z.px(10.))

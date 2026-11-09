@@ -432,6 +432,8 @@ fn compact(
     let parts = handles.clone();
     let mut body = div()
         .id(anim::key(&id, "card"))
+        // CARD-043
+        .aria_label(present::aria_label(card))
         .absolute()
         .left_0()
         .top_0()
@@ -629,6 +631,7 @@ fn corner(
         group = group.child(
             div()
                 .id(anim::key(&id, part))
+                .aria_label(tip.split(" (").next().unwrap_or_default().to_owned())
                 .flex()
                 .items_center()
                 .justify_center()
@@ -706,6 +709,7 @@ fn footer(
         );
     }
     // CARD-039: the agents button.
+    let fan_open = handles.open(cx) && !agents.is_empty();
     let agents_button = |count: String,
                          running: Option<(gpui::Div, usize)>,
                          hook: Option<agent_deck::HoverHook>,
@@ -725,6 +729,7 @@ fn footer(
         let h2 = hover.clone();
         div()
             .id(anim::key(&id, "foot-agents"))
+            .aria_expanded(fan_open)
             .flex()
             .flex_none()
             .items_center()

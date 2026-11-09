@@ -33,8 +33,15 @@ pub struct CanvasActions(pub BoardActions);
 
 impl CanvasActions {
     fn state(&self, cx: &App) -> Option<gpui::Entity<AppState>> {
-        Some(self.0.canvas.upgrade()?.read(cx).state.clone())
+        app_state(cx)
     }
+}
+
+/// The app's state, from the main window's shell: never through the
+/// canvas, which is being updated while it draws its nodes (and may be when
+/// a node's action runs), so reading it there would panic.
+fn app_state(cx: &App) -> Option<gpui::Entity<AppState>> {
+    Some(crate::shell::window::main_shell(cx)?.read(cx).state.clone())
 }
 
 impl CardActions for CanvasActions {
@@ -57,11 +64,9 @@ impl CardActions for CanvasActions {
     fn edit_note(&self, project_id: &str, note: &BoardNote, text: &str, cx: &mut App) {
         // NOTEUI-015: once the board has gone (another project, or closed),
         // the text goes straight to the note's own project.
-        let here = self
-            .0
-            .canvas
-            .upgrade()
-            .is_some_and(|c| c.read(cx).project_id == project_id);
+        let here = app_state(cx)
+            .and_then(|s| s.read(cx).board.as_ref().map(|b| b.project.id == project_id))
+            .unwrap_or(false);
         if here {
             self.0.edit_note(note, text, cx);
         } else if let Some(core) = cx.try_global::<Core>().map(|c| c.0.clone()) {
@@ -177,7 +182,7 @@ impl CardActions for CanvasActions {
 
 /// The board's context as the cards read it.
 pub fn env(board: &BoardCx, zoom: f32, window: &Window, cx: &mut App) -> Rc<BoardEnv> {
-    let state = board.actions.canvas.upgrade().map(|c| c.read(cx).state.clone());
+    let state = app_state(cx);
     let state = state.as_ref().map(|s| s.read(cx));
     let repo_path = state
         .and_then(|s| s.board.as_ref())
@@ -328,8 +333,9 @@ impl NodeRenderers for CardRenderers {
 /// projects.
 fn signature_for(note: &BoardNote, board: &BoardCx, cx: &App) -> Option<super::present::Signature> {
     note.from.as_ref()?;
-    let canvas = board.actions.canvas.upgrade()?;
-    let state = canvas.read(cx).state.read(cx);
+    let _ = board;
+    let state = app_state(cx)?;
+    let state = state.read(cx);
     let cards = state.board.as_ref().map_or(&[][..], |b| &b.cards[..]);
     super::present::signature(note, cards, &state.projects)
 }

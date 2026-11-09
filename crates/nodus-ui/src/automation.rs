@@ -18,6 +18,7 @@
 //! {"cmd":"idle"}                                    until the window stops drawing
 //! {"cmd":"screenshot","path":"/…/scene.light.rust.png"}
 //! {"cmd":"window"}                                  the window's number and size
+//! {"cmd":"terminal","action":"open",…}                the terminal's windows (terminal::driver)
 //! {"cmd":"quit"}
 //! ```
 //!
@@ -332,6 +333,7 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
             });
             Ok(Value::Null)
         }
+        "terminal" => crate::terminal::driver::run(command, cx).await,
         "quit" => {
             cx.update(|cx| cx.quit());
             Ok(Value::Null)

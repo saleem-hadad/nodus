@@ -145,7 +145,7 @@ One file per domain in `migration/features/`. Each lists every behavior with an 
 | 09-board-canvas.md | BoardView: pan/zoom, selection, drag, shortcuts, context menus, sections, archive, layout, edges | ✅ 177 | ☐ |
 | 10-board-cards-notes.md | session cards, expanded cards, agent deck, archive stack, notes and the pad | ✅ 203 | ☐ |
 | 11-board-overlays.md | prompt bar (sidekick), ⌘K search, merge dialog, ink layer, selection bar | ✅ 111 | ☐ |
-| 12-terminal-ui.md | terminal registry, modal, transcript preview, agent viewer, xterm behavior | ✅ 185 | 83/185 |
+| 12-terminal-ui.md | terminal registry, modal, transcript preview, agent viewer, xterm behavior | ✅ 185 | 171/185 |
 
 ## Phases
 
@@ -160,7 +160,7 @@ Tracks after P1 run in parallel where the dependency column allows.
 | P4 | `nodus-core`: every command and event in api.ts, tested headless | P2, P3 | ✅ all but `capture.*` (capture-panel track) |
 | P5 | UI foundation: app shell, theme tokens (light/dark), title bar, menus, settings, projects grid, project rail | P1, S1 | ✅ merged (ui-shell) |
 | P6 | Board canvas: pan/zoom/select/drag, cards, sections, archive, notes, edges, controls, context menus, shortcuts | P4, P5 | 🟡 board-canvas + board-cards running |
-| P7 | Terminal: element, modal, expanded cards, transcript preview, agent viewer | P2, P5 | 🟡 model merged; terminal-ui running |
+| P7 | Terminal: element, modal, expanded cards, transcript preview, agent viewer | P2, P5 | ✅ merged; expanded cards plug in through `terminal::card::CardTerminals` |
 | P8 | Overlays: prompt bar, ⌘K search, merge dialog, ink, selection bar, agent deck | P6 | ☐ |
 | P9 | Views (wry), board tools, actions, voice, git UI | P6 | ☐ |
 | P10 | Capture panel, notifications, Dock badge, updater | P6 | ☐ |
@@ -189,8 +189,8 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | board-cards | `rust/board-cards` | P6, spec 10: session cards, expanded card chrome, agent deck, archive stack, notes, pad (`nodus-ui/src/board/cards/`) | 🟡 running |
 | capture-panel | `rust/capture-panel2` (from `rust/capture-panel` at adc385b) | P10, spec 07 UI: the panel window and page, Settings' capture rows, File › Capture…, `nodus.capture()` | 🟡 running (fresh agent on a new branch: two stale worktrees hold `rust/capture-panel`) |
 | packaging | `rust/packaging` | P11: macOS bundle + DMGs, Windows NSIS (electron-builder templates), signing/notarizing, CI packaging + native smoke test, `release-rust.yml` with D12 handoff gates; publishes nothing | ✅ merged (bec0388): `packaging/`, `rust-package.yml`, `release-rust.yml`; arm64 DMG passes 0.9.4's checks locally (ad-hoc); Windows and signing first run in CI / with the certificate |
-| actions-git-voice-ui | `rust/actions-git-voice-ui` | P9, spec 05 UI: actions rail and dialog, branch chip + commits popover + diff modal, session mic and recording look | ⏸ paused (3 commits; resume when a slot frees) |
-| terminal-ui | `rust/terminal-ui` | P7, spec 12 UI: the GPUI terminal element, session window, transcript preview, agents viewer | 🟡 running |
+| actions-git-voice-ui | `rust/actions-git-voice-ui` | P9, spec 05 UI: actions rail and dialog, branch chip + commits popover + diff modal, session mic and recording look | 🟡 running (fresh agent from 4 commits) |
+| terminal-ui | `rust/terminal-ui` | P7, spec 12 UI: the GPUI terminal element, session window, transcript preview, agents viewer | ✅ merged (590f9b6): TERM 17, MODAL 27, TRANS 24, AGV 20; windows within 0.04–0.6% of the goldens; expanded-card start/wake rules (TERM-093…108) to board-cards, MODAL-019's recording to the voice UI |
 | terminal | `rust/terminal` | nodus-terminal (GPUI-free): alacritty model, xterm key encoder, query answers, widths, registry | ✅ merged: 83 TERM; 26 drawing/focus/timing TERM + MODAL/TRANS/AGV to the terminal UI track |
 
 ### Integration debts
@@ -215,6 +215,7 @@ Follow-ups a merge left for when the tracks meet in `nodus-core` (P4). Strike th
 - Text parity (from ui-shell, side by side with the goldens): GPUI applies SF Pro's built-in tracking where Chromium doesn't (13 px labels come out ~1 px narrower), wraps counting the space after a word, and rounds some text half a pixel the other way; the window's Metal layer was untagged (P3 displays oversaturated every colour) — nodus-ui tags it sRGB for now. All four belong in the patched GPUI.
 - Thumbnails of copied images are encoded differently from Chromium's, so an image 0.9.4 already offered is offered once more after the upgrade; a non-ASCII host shows as written on a tab tile, where 0.9.4 shows punycode.
 - Changed files sort with root collation; 0.9.4 used ICU `localeCompare` in the user's locale.
+- When board-canvas and board-cards merge: keep one global for the core's runtime (board-canvas and terminal-ui each define one), and one wheel arbiter (board-cards' duplicates the terminal model's; terminal-ui's wheel gate lets only one decide).
 - The test driver (`NODUS_AUTOMATION`) listens only on Unix sockets, so the Windows smoke test checks only the window and quit; add a named-pipe listener in `automation.rs`.
 - Six host behaviors are implemented but have no test of their own: HOST-033, 043, 090, 098, the 4 s hard exit in HOST-064 and the 20 s relay timeout in HOST-086. Add tests in P4 and tick them.
 - The 0.9.4 `pty.ts` → Rust host check was run by hand under vitest and not committed (it has to live in `src/main`); repeat it before cutover.
@@ -271,6 +272,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-09: terminal-ui merged (590f9b6): terminal element, session window, transcript preview, agents viewer; 1,117 tests.
 - 2026-11-09: More watchdog stalls traced to agents reading full-size 2880×1800 screenshots; tracks now compare with the diff tool and look only at small crops. capture-panel continues on `rust/capture-panel2`.
 - 2026-11-09: packaging merged (bec0388): macOS bundles and DMGs as 0.9.4's, electron-builder's NSIS templates for Windows, handoff gates replaying 0.9.4's updater, a native smoke test, `rust-package.yml` in CI and a hand-started `release-rust.yml` that refuses to publish on a failed gate. 1,092 tests.
 - 2026-11-09: Agents kept dying to the 10-minute no-progress watchdog: with seven tracks building GPUI at once, one `cargo` call ran past it. Now at most five tracks run, each with `CARGO_BUILD_JOBS=4` and long builds in the background; board-cards, terminal-ui, board-canvas and gpui-text restarted as fresh agents from their branches (work committed), capture-panel and actions-git-voice-ui paused. A WIP sweep briefly committed a stale worktree's snapshot onto rust/capture-panel; reset locally, never pushed. The old worktree `.claude/worktrees/agent-abd95dd991086fde4` is stale: don't commit there.

@@ -21,6 +21,7 @@ pub mod projects;
 pub mod settings;
 pub mod shell;
 pub mod state;
+pub mod terminal;
 pub mod theme;
 
 pub use app::run;

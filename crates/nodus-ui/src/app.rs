@@ -65,6 +65,7 @@ pub fn run(user_data: PathBuf) -> anyhow::Result<()> {
         let _ = applied_tx.send(settings.clone());
     }));
 
+    // The core's runtime, for UI code that starts core work needing one (terminals).
     let core_runtime = runtime.handle().clone();
     let app = gpui::application().with_assets(Assets);
     // PLAT-030: a Dock click with no window opens one.

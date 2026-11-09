@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Nodus.app's Info.plist. packaging/macos/bundle.sh fills in @VERSION@ (the
+     workspace version, which must equal the release tag: 0.9.4's updater
+     compares CFBundleShortVersionString with it) and @YEAR@ (the build year).
+     These are the keys 0.9.4's bundle has that still mean something without
+     Electron (spec 06, HANDOFF CONTRACT table D), with the same values.
+     Dropped: NSPrincipalClass, NSMainNibFile, ElectronAsarIntegrity,
+     LSEnvironment (Electron's allocator workaround) and the DT* build keys.
+     There are no .lproj folders, so CFBundleDevelopmentRegion says English. -->
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleDisplayName</key>
+  <string>Nodus</string>
+  <key>CFBundleExecutable</key>
+  <string>Nodus</string>
+  <key>CFBundleIconFile</key>
+  <string>icon.icns</string>
+  <key>CFBundleIdentifier</key>
+  <string>dev.saleem.nodus</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleName</key>
+  <string>Nodus</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>@VERSION@</string>
+  <key>CFBundleVersion</key>
+  <string>@VERSION@</string>
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.developer-tools</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>13.0</string>
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsArbitraryLoads</key>
+    <true/>
+    <key>NSAllowsLocalNetworking</key>
+    <true/>
+    <key>NSExceptionDomains</key>
+    <dict>
+      <key>127.0.0.1</key>
+      <dict>
+        <key>NSIncludesSubdomains</key>
+        <false/>
+        <key>NSTemporaryExceptionAllowsInsecureHTTPLoads</key>
+        <true/>
+        <key>NSTemporaryExceptionAllowsInsecureHTTPSLoads</key>
+        <false/>
+        <key>NSTemporaryExceptionMinimumTLSVersion</key>
+        <string>1.0</string>
+        <key>NSTemporaryExceptionRequiresForwardSecrecy</key>
+        <false/>
+      </dict>
+      <key>localhost</key>
+      <dict>
+        <key>NSIncludesSubdomains</key>
+        <false/>
+        <key>NSTemporaryExceptionAllowsInsecureHTTPLoads</key>
+        <true/>
+        <key>NSTemporaryExceptionAllowsInsecureHTTPSLoads</key>
+        <false/>
+        <key>NSTemporaryExceptionMinimumTLSVersion</key>
+        <string>1.0</string>
+        <key>NSTemporaryExceptionRequiresForwardSecrecy</key>
+        <false/>
+      </dict>
+    </dict>
+  </dict>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>Floating capture reads the link and title of the browser tab in front, to send along with what you write.</string>
+  <key>NSAudioCaptureUsageDescription</key>
+  <string>This app needs access to audio capture</string>
+  <key>NSBluetoothAlwaysUsageDescription</key>
+  <string>This app needs access to Bluetooth</string>
+  <key>NSBluetoothPeripheralUsageDescription</key>
+  <string>This app needs access to Bluetooth</string>
+  <key>NSCameraUsageDescription</key>
+  <string>This app needs access to the camera</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+  <key>NSHumanReadableCopyright</key>
+  <string>Copyright © @YEAR@ Saleem Hadad</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Nodus listens only while you record with the mic button, to turn what you say into a prompt.</string>
+  <key>NSPrefersDisplaySafeAreaCompatibilityMode</key>
+  <false/>
+  <key>NSQuitAlwaysKeepsWindows</key>
+  <false/>
+  <key>NSRequiresAquaSystemAppearance</key>
+  <false/>
+  <key>NSSupportsAutomaticGraphicsSwitching</key>
+  <true/>
+</dict>
+</plist>

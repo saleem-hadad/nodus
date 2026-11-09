@@ -282,9 +282,28 @@ pub fn voice_status(
     window: &mut Window,
     cx: &mut App,
 ) -> Option<AnyElement> {
+    let m = mic.read(cx);
+    let (phase, elapsed) = (m.state.phase, m.state.elapsed);
+    let levels = m.levels().map(|(bars, _)| bars);
+    voice_status_of(id, phase, elapsed, levels, hide_dot, z, window, cx)
+}
+
+/// [`voice_status`] for any `VoiceController`'s state (the capture panel
+/// holds its controller itself): its phase, elapsed ms and, while
+/// recording, the bars' levels in [`BAR_BANDS`] order.
+#[allow(clippy::too_many_arguments)]
+pub fn voice_status_of(
+    id: impl Into<ElementId>,
+    phase: Phase,
+    elapsed: Duration,
+    levels: Option<[f64; 5]>,
+    hide_dot: bool,
+    z: Z,
+    window: &mut Window,
+    cx: &mut App,
+) -> Option<AnyElement> {
     let id = id.into();
     let t = theme::tokens(cx);
-    let m = mic.read(cx);
     let row = || {
         div()
             .flex()
@@ -295,10 +314,9 @@ pub fn voice_status(
             .line_height(z.px(16.8))
             .whitespace_nowrap()
     };
-    match m.state.phase {
+    match phase {
         Phase::Recording => {
-            let levels = m.levels().map_or([0.0; 5], |(bars, _)| bars);
-            let elapsed = m.state.elapsed;
+            let levels = levels.unwrap_or([0.0; 5]);
             window.request_animation_frame();
             let frozen = parity::frozen(cx);
             let dot = (!hide_dot).then(|| {

@@ -3,10 +3,11 @@
 // with the state changes the shell's scenes make first.
 import path from 'node:path'
 const [harness, work, theme, ...mutations] = process.argv.slice(2)
-const { seed } = await import(path.join(path.resolve(harness), 'seed', 'index.mjs'))
+const { seed, withExtra } = await import(path.join(path.resolve(harness), 'seed', 'index.mjs'))
 const storefront = (s) => s.projects.find((p) => p.name === 'storefront').id
 const MUTATIONS = {
   slowNaming: () => {},
+  run: (s) => withExtra('run')(s),
   empty: (s) => {
     s.projects = []
     s.groups = []

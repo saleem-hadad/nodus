@@ -307,10 +307,21 @@ pub fn title_bar(state: &Entity<AppState>, actions: Vec<AnyElement>, window: &mu
                         .square()
                         .icon(Icon::Menu, 16., 2.)
                         .colors(t.text_secondary, t.text_primary)
-                        .tooltip("Menu"),
+                        .tooltip("Menu")
+                        // UI-099, PLAT-060: the whole application menu.
+                        .on_click(|_, _, cx| {
+                            crate::shell::windows_chrome::AppMenu::toggle(
+                                crate::shell::windows_chrome::menu_origin(),
+                                cx,
+                            );
+                        }),
                 )
                 .mr(px(-8.)),
             )
+        })
+        // PLAT-018: the caption buttons in the room the bar leaves them.
+        .when(!platform.is_mac(), |d| {
+            d.child(crate::shell::windows_chrome::caption_buttons(window, cx))
         })
         .child(crumbs)
         .child(right)

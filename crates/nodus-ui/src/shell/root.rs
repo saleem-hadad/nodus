@@ -292,5 +292,9 @@ impl Render for Shell {
             .child(self.terminal_layers.clone())
             .children(self.settings.clone())
             .child(self.menus.clone())
+            // UI-099: the ☰ button's application menu, off a Mac.
+            .when(!Platform::CURRENT.is_mac(), |d| {
+                d.child(crate::shell::windows_chrome::AppMenu::entity(cx))
+            })
     }
 }

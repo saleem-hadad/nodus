@@ -6,3 +6,4 @@ pub mod menus;
 pub mod root;
 pub mod title_bar;
 pub mod window;
+pub mod windows_chrome;

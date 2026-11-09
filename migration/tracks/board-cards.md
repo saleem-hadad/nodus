@@ -6,7 +6,7 @@
 
 ## Status
 
-Every component is drawn natively and plugged into the board. 202 of 203 behaviors are done (179 here, 23 by the canvas under spec 09's IDs); one is deferred to the voice UI. Checked side by side with the goldens in both themes, through the real app (`scenes.py`) and the cards gallery (`examples/board_cards.rs`).
+Every component is drawn natively and plugged into the board. All 203 behaviors are done (180 here, 23 by the canvas under spec 09's IDs). Checked side by side with the goldens in both themes, through the real app (`scenes.py`) and the cards gallery (`examples/board_cards.rs`).
 
 ## How it plugs into the canvas
 
@@ -37,14 +37,16 @@ Every component is drawn natively and plugged into the board. 202 of 203 behavio
 Checked against the goldens where a golden shows the behavior (looks, layout, copy, both themes); the rest (interactions, timings, states no golden captures) against the TypeScript and `present.rs`'s tests. Timings: CSS transitions and keyframes keep their durations, delays, fill modes and easings, `ease-stack`'s 29 stops and `ease-spring` overshooting included (the fan's deal, the sticker's landing, the stack, the search field, the pad's peel).
 
 - **CARD** (53): CARD-001…CARD-048; CARD-049 (the title's press is reported; the 240ms wait and double-click rename are the canvas's, BOARD-043/047); CARD-050…CARD-053 by the canvas (`edges.rs`, `render.rs`: facing-side edges, the dashes' march, the 420ms glides).
-- **XCARD** (31): XCARD-001…XCARD-009, XCARD-011…XCARD-032 (the terminal through `CardTerminals`; XCARD-017's click is the canvas's, calling `focus_terminal`).
+- **XCARD** (32): XCARD-001…XCARD-032 (the terminal through `CardTerminals`; the mic is the voice UI's `voice::card_mic`, typing in and waking the card; XCARD-017's click is the canvas's, calling `focus_terminal`).
 - **DECK** (29): DECK-001…DECK-029 (DECK-014's z 1400 through `BoardActions::raise`).
 - **ARCH** (40): ARCH-001…ARCH-005, ARCH-007…ARCH-011, ARCH-013…ARCH-017, ARCH-019…ARCH-028, ARCH-032…ARCH-036 here; ARCH-006, ARCH-012, ARCH-018, ARCH-029…ARCH-031, ARCH-037…ARCH-040 by the canvas (`scene.rs`: z rules, pile order, results, clipping, glides, closing, travel, drops, count).
 - **NOTEUI** (49): NOTEUI-001…NOTEUI-026, NOTEUI-031…NOTEUI-044 here; NOTEUI-027…NOTEUI-030 and NOTEUI-045…NOTEUI-049 by the canvas (note z, glides, bounces, delete, the pad's drop, click and menu, travel with the archive).
 
+Also done for spec 12 here: TERM-093, TERM-095…TERM-099, TERM-102, TERM-103, TERM-108 (the expanded card's start, wake, hosting, mic and click rules); and for spec 09 the card's side of BOARD-036 (the flash), BOARD-042 and BOARD-044 (`focus_terminal`, `wake`).
+
 ## Deferred
 
-- XCARD-010: the session mic is the actions-git-voice-ui track's (spec 05). The card asks `TerminalHost::mic` for it and draws the idle button until it's there; `type_in` and the wake are wired.
+(none)
 
 ## Checked side by side
 
@@ -52,8 +54,20 @@ Real app, `python3 crates/nodus-ui/parity/scenes.py <scene> --golden <dir> --wor
 
 | Scene | Light | Dark |
 | --- | --- | --- |
-| board-expanded (live terminals, usage) | 0.72 % | 0.77 % |
-| board-expanded-stopped | 0.42 % | 0.47 % |
+| board-populated | 0.72 % | 0.77 % |
+| board-card-hover | 0.80 % | 0.85 % |
+| board-selected (the selection bar is spec 11's) | 1.98 % | 1.30 % |
+| board-deck-fanned | 0.92 % | 0.95 % |
+| board-archive-hover | 0.82 % | 0.88 % |
+| board-archive-open (30px blur, saturate 1.8) | 0.75 % | 0.80 % |
+| board-note-selected | 0.95 % | 0.84 % |
+| board-note-editing | 0.98 % | 0.87 % |
+| board-pad-hover (the peel; GPUI draws the tooltip) | 1.11 % | 1.14 % |
+| board-zoomed-in / board-zoomed-out | 1.09 % / 0.67 % | 1.25 % / 0.72 % |
+| board-expanded (live terminals, usage, the mic) | 0.67 % | 0.71 % |
+| board-expanded-stopped | 0.35 % | 0.39 % |
+
+What's left in these is text rasterisation, the parts of the board other tracks draw (prompt bar, ink, selection bar, minimap), and the terminal card's folder, which reads `<scratch>/…` rather than `~/nodus-parity/…` because the world wasn't under `/Users`.
 
 Gallery, `cargo run -p nodus-ui --example board_cards -- <dir>` (nodes only: no title bar, prompt bar, sections, edges or ink, so a whole frame differs by 1–2.5 % from those alone): every card, deck, fan, archive (folded, hovered, open), note and pad scene, cropped region by region. The open panel's blurred backdrop and the dashes' period (7.19 device px at 80 %) now match to the pixel value.
 
@@ -62,4 +76,4 @@ Gallery, `cargo run -p nodus-ui --example board_cards -- <dir>` (nodes only: no 
 - Text rasterisation and placement (gpui-text's): SF Pro's tracking, and baselines that round half a device pixel the other way; a few labels sit a device pixel off (the title bar's usage line, the archive and pad header labels, a fan row's tool line).
 - Dashed borders and shadow rings are paths with 4× MSAA where Chromium covers edges analytically: edge pixels can differ by an eighth of coverage.
 - GPUI snaps layout lengths to device pixels where Chromium keeps fractions, so some boxes sit up to a device pixel off (e.g. children of a 1.5px border at 80 %).
-- The gallery's simulated pointer shows GPUI-drawn tooltips that the goldens (native tooltips) don't capture.
+- Tooltips are GPUI-drawn (`components/tooltip.rs`), so they show in shots where the goldens' native ones don't; the pad's top sheet's wraps one word a line.

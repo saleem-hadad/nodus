@@ -54,7 +54,7 @@ use crate::{
     PlatformKeyboardLayout, PlatformKeyboardMapper, Point, PowerMode, Priority, PromptBuilder,
     PromptButton, PromptHandle, PromptLevel, Render, RenderImage, RenderablePromptHandle,
     Reservation, ScreenCaptureSource, SharedString, SubscriberSet, Subscription, SvgRenderer,
-    SystemNotification, SystemNotificationResponse, Task, TextRenderingMode, TextSystem,
+    SystemNotification, SystemNotificationResponse, Task, TextRenderingMode, TextSystem, FontSmoothing,
     ThermalState, Window, WindowAppearance, WindowButtonLayout, WindowHandle, WindowId,
     WindowInvalidator, WindowingRequest,
     colors::{Colors, GlobalColors},
@@ -970,6 +970,8 @@ pub struct App {
     #[cfg(any(test, feature = "test-support", debug_assertions))]
     pub(crate) name: Option<&'static str>,
     pub(crate) text_rendering_mode: Rc<Cell<TextRenderingMode>>,
+    /// Nodus patch: CSS `-webkit-font-smoothing`, for every window.
+    pub(crate) font_smoothing: Rc<Cell<FontSmoothing>>,
 
     pub(crate) window_update_stack: Vec<WindowId>,
     pub(crate) mode: GpuiMode,
@@ -1024,6 +1026,7 @@ impl App {
                 platform: platform.clone(),
                 text_system,
                 text_rendering_mode: Rc::new(Cell::new(TextRenderingMode::default())),
+                font_smoothing: Rc::new(Cell::new(FontSmoothing::default())),
                 mode: GpuiMode::Production,
                 actions: Rc::new(ActionRegistry::default()),
                 pending_updates: 0,
@@ -1863,6 +1866,18 @@ impl App {
     /// Returns the current text rendering mode for the application.
     pub fn text_rendering_mode(&self) -> TextRenderingMode {
         self.text_rendering_mode.get()
+    }
+
+    /// Nodus patch: sets whether glyphs get the platform's font smoothing
+    /// (CSS `-webkit-font-smoothing`), for every window. Glyphs already
+    /// drawn keep theirs until they are drawn again.
+    pub fn set_font_smoothing(&mut self, smoothing: FontSmoothing) {
+        self.font_smoothing.set(smoothing);
+    }
+
+    /// Nodus patch: whether glyphs get the platform's font smoothing.
+    pub fn font_smoothing(&self) -> FontSmoothing {
+        self.font_smoothing.get()
     }
 
     /// Returns the operating system's power mode, or [`PowerMode::Unknown`]

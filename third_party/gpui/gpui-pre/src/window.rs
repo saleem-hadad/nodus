@@ -21,7 +21,7 @@ use crate::{
     Replay, ResizeEdge, SMOOTH_SVG_SCALE_FACTOR, SUBPIXEL_VARIANTS_X, SUBPIXEL_VARIANTS_Y,
     ScaledPixels, Scene, Shadow, SharedString, Size, StrikethroughStyle, Style, SubpixelSprite,
     Subscription, SystemWindowTab, SystemWindowTabController, TabStopMap, Task,
-    TextInputConfiguration, TextInputStateChange, TextRenderingMode, TextStyle,
+    TextInputConfiguration, TextInputStateChange, TextRenderingMode, FontSmoothing, TextStyle,
     TextStyleRefinement, ThermalState, TransformationMatrix, Underline, UnderlineStyle,
     WindowAppearance, WindowBackgroundAppearance, WindowBounds, WindowControls, WindowDecorations,
     WindowInsets, WindowOptions, WindowParams, WindowTextSystem, WindowVisibility, point,
@@ -1240,6 +1240,7 @@ pub struct Window {
     sprite_atlas: Arc<dyn PlatformAtlas>,
     text_system: Rc<WindowTextSystem>,
     text_rendering_mode: Rc<Cell<TextRenderingMode>>,
+    font_smoothing: Rc<Cell<FontSmoothing>>,
     rem_size: Pixels,
     /// The stack of override values for the window's rem size.
     ///
@@ -2373,6 +2374,7 @@ impl Window {
             sprite_atlas,
             text_system,
             text_rendering_mode: cx.text_rendering_mode.clone(),
+            font_smoothing: cx.font_smoothing.clone(),
             rem_size: px(16.),
             rem_size_override_stack: SmallVec::new(),
             viewport_size: content_size,
@@ -5233,7 +5235,12 @@ impl Window {
         );
         let integer_origin = quantized_origin.map(|c| ScaledPixels(c.trunc()));
         let subpixel_rendering = self.should_use_subpixel_rendering(font_id, font_size);
-        let dilation = self.text_system().glyph_dilation_for_color(color);
+        // Nodus patch: `-webkit-font-smoothing: antialiased` draws without
+        // the platform's stroke thickening.
+        let dilation = match self.font_smoothing.get() {
+            FontSmoothing::Antialiased => 0,
+            FontSmoothing::PlatformDefault => self.text_system().glyph_dilation_for_color(color),
+        };
         let params = RenderGlyphParams {
             font_id,
             glyph_id,

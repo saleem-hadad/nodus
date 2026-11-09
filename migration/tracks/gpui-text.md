@@ -12,7 +12,7 @@
 | 2. Widths at every size (the "tracking" gap) | ✅ PATCHES 7: the cause was weight 500 → Regular; tracking matches (CoreText's `trak` is what Chromium applies too) |
 | 3. Hanging trailing spaces; `overflow-wrap`, `word-break`, line clamp | ☐ |
 | 4. Chromium's baseline and glyph rounding | ☐ |
-| 5. Anti-aliasing and font smoothing | ☐ |
+| 5. Anti-aliasing and font smoothing | ✅ PATCHES 8: `-webkit-font-smoothing: antialiased` (no CoreGraphics thickening); grayscale AA as Chromium |
 | Scene diffs before / after | ☐ |
 | Windows `effects` CI step | ☐ |
 

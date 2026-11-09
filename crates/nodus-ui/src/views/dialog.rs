@@ -4,12 +4,14 @@
 //! the description and the view shows up on the board at once, building.
 
 use gpui::Focusable as _;
+use gpui::component::Sizable as _;
 use gpui::component::input::{InputEvent, Textarea, TextareaState};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, AppContext as _, Context, ElementId, Entity, FontWeight, InteractiveElement, IntoElement,
-    KeyDownEvent, MouseButton, ParentElement, StatefulInteractiveElement, Styled, Subscription, WeakEntity, Window,
-    div, linear_color_stop, linear_gradient, px,
+    AnyElement, App, AppContext as _, Context, CursorStyle, DispatchPhase, ElementId, Entity, FontWeight,
+    InteractiveElement, IntoElement, KeyDownEvent, MouseButton, MouseMoveEvent, MouseUpEvent, ParentElement,
+    PathBuilder, Pixels, Rgba, StatefulInteractiveElement, Styled, Subscription, WeakEntity, Window, canvas, div,
+    linear_color_stop, linear_gradient, point, px,
 };
 
 use super::parts::fade;
@@ -44,12 +46,31 @@ pub const EXAMPLES: [(&str, &str); 5] = [
     ),
 ];
 
+/// The box's placeholder, drawn by the dialog: the field's own stays on one
+/// line, where Chromium wraps a textarea's.
+const PLACEHOLDER: &str =
+    "For example: a table of the last 3 Vercel deployments, with the commit, who deployed it and the status.";
+/// `.action-description`: 13px at 1.45, `rows="5"`, 10px 12px of padding.
+const LINE: f32 = 13. * 1.45;
+const PAD_Y: f32 = 10.;
+const PAD_X: f32 = 12.;
+/// The box's height at 5 rows, and the least its grip shrinks it to (a line).
+const FIELD_H: f32 = 5. * LINE + 2. * PAD_Y;
+const FIELD_MIN_H: f32 = LINE + 2. * PAD_Y;
+/// The field wraps 10px short of its width (gpui-component's RIGHT_MARGIN);
+/// Chromium wraps at the padding.
+const WRAP_MARGIN: f32 = 10.;
+
 /// The dialog's state while it's up.
 #[derive(Default)]
 pub struct DialogUi {
     field: Option<Entity<TextareaState>>,
     creating: bool,
     error: Option<String>,
+    /// The box's height once its grip has been dragged (`resize: vertical`).
+    field_h: Option<f32>,
+    /// The grip's drag: where it started, and the height then.
+    grip: Option<(Pixels, f32)>,
     _sub: Option<Subscription>,
 }
 
@@ -70,9 +91,7 @@ pub fn render(canvas: &BoardCanvas, window: &mut Window, cx: &mut Context<'_, Bo
             let field = cx.new(|cx| {
                 TextareaState::new(window, cx)
                     .rows(5)
-                    .placeholder(
-                        "For example: a table of the last 3 Vercel deployments, with the commit, who deployed it and the status.",
-                    )
+                    .soft_wrap(true)
                     .context_menu(false)
             });
             let watch = state.clone();
@@ -91,9 +110,9 @@ pub fn render(canvas: &BoardCanvas, window: &mut Window, cx: &mut Context<'_, Bo
             field
         }
     };
-    let (creating, error) = {
+    let (creating, error, field_h) = {
         let s = state.read(cx);
-        (s.creating, s.error.clone())
+        (s.creating, s.error.clone(), s.field_h.unwrap_or(FIELD_H))
     };
     let description = field.read(cx).value().to_string();
     let blank = nodus_domain::js::trim(&description).is_empty();
@@ -248,12 +267,13 @@ pub fn render(canvas: &BoardCanvas, window: &mut Window, cx: &mut Context<'_, Bo
                 .px(px(22.))
                 .overflow_y_scroll()
                 .child(
-                    // `.action-description`'s 10px 12px, less the field's own
-                    // 8px 10px (gpui-component's medium input).
+                    // `.action-input.action-description`: 0.5px border, 8px
+                    // corners, 10px 12px of padding (Size::Large's), five
+                    // rows, the placeholder wrapping, and the grip
+                    // `resize: vertical` gives it.
                     div()
+                        .relative()
                         .w_full()
-                        .py(px(2.))
-                        .px(px(2.))
                         .border(px(0.5))
                         .border_color(if focused { t.accent } else { t.border_strong })
                         .rounded(px(8.))
@@ -262,14 +282,33 @@ pub fn render(canvas: &BoardCanvas, window: &mut Window, cx: &mut Context<'_, Bo
                         .when(creating, |d| d.opacity(0.6))
                         .font_family(fonts::UI)
                         .text_size(TEXT_MD)
-                        .line_height(px(18.85))
+                        .line_height(px(LINE))
                         .text_color(t.text_primary)
+                        // Under the field, so its caret draws over it.
+                        .when(description.is_empty(), |d| {
+                            d.child(
+                                div()
+                                    .absolute()
+                                    .top(px(PAD_Y))
+                                    .left(px(PAD_X))
+                                    .right(px(PAD_X))
+                                    .max_h(px((field_h - 2. * PAD_Y).max(0.)))
+                                    .overflow_hidden()
+                                    .text_color(t.text_tertiary)
+                                    .child(PLACEHOLDER),
+                            )
+                        })
                         .child(
                             Textarea::new(&field)
                                 .appearance(false)
+                                .with_size(gpui::component::Size::Large)
                                 .disabled(creating)
-                                .h(px(18.85 * 5. + 16.)),
-                        ),
+                                .text_size(TEXT_MD)
+                                .line_height(px(LINE))
+                                .h(px(field_h))
+                                .mr(px(-WRAP_MARGIN)),
+                        )
+                        .child(grip(&state, &t, cx)),
                 )
                 .child(
                     div()
@@ -352,6 +391,86 @@ pub fn render(canvas: &BoardCanvas, window: &mut Window, cx: &mut Context<'_, Bo
 
     let width = px(620.0_f32.min(f32::from(viewport.width) - 48.));
     Some(Modal::new(ElementId::Name("view-dialog-modal".into()), width, close).render(content, window, cx))
+}
+
+/// The box's resize grip (`resize: vertical`): Chromium's two diagonal
+/// strokes in its bottom-right corner, shaded in the dark theme (as the
+/// merge dialog's instruction draws them). Dragging it makes the box taller
+/// or shorter, a line at the least; the dialog's body scrolls past its height.
+fn grip(state: &Entity<DialogUi>, t: &Tokens, cx: &App) -> AnyElement {
+    let (line, shade) = if t.dark {
+        (rgba(255, 255, 255, 0.62), Some(rgba(0, 0, 0, 0.9)))
+    } else {
+        (rgba(0, 0, 0, 0.55), None)
+    };
+    let dragging = state.read(cx).grip.is_some();
+    let drag = state.clone();
+    let strokes = canvas(
+        |_, _, _| {},
+        move |bounds, _, window, _| {
+            // The corner, inside the box's border.
+            let c = point(bounds.right(), bounds.bottom());
+            let seg = |a: (f32, f32), b: (f32, f32), d: f32, color: Rgba, window: &mut Window| {
+                let mut path = PathBuilder::stroke(px(1.));
+                path.move_to(point(c.x + px(a.0 + d), c.y + px(a.1 + d)));
+                path.line_to(point(c.x + px(b.0 + d), c.y + px(b.1 + d)));
+                if let Ok(path) = path.build() {
+                    window.paint_path(path, color);
+                }
+            };
+            let long = ((-7.8, -1.45), (-0.9, -8.35));
+            let short = ((-3.75, -1.15), (-0.9, -3.95));
+            for (a, b) in [long, short] {
+                if let Some(shade) = shade {
+                    seg(a, b, -0.5, shade, window);
+                }
+                seg(a, b, 0., line, window);
+            }
+            if dragging {
+                let s = drag.clone();
+                window.on_mouse_event(move |e: &MouseMoveEvent, phase, _, cx| {
+                    if phase == DispatchPhase::Capture {
+                        s.update(cx, |s, cx| {
+                            if let Some((y, h)) = s.grip {
+                                s.field_h = Some((h + f32::from(e.position.y - y)).max(FIELD_MIN_H));
+                                cx.notify();
+                            }
+                        });
+                    }
+                });
+                let s = drag.clone();
+                window.on_mouse_event(move |_: &MouseUpEvent, phase, _, cx| {
+                    if phase == DispatchPhase::Capture {
+                        s.update(cx, |s, cx| {
+                            s.grip = None;
+                            cx.notify();
+                        });
+                    }
+                });
+            }
+        },
+    )
+    .size_full();
+    let press = state.clone();
+    div()
+        .id("view-dialog-grip")
+        .absolute()
+        .right(px(0.5))
+        .bottom(px(0.5))
+        .size(px(12.))
+        // The corner is the grip's, not the text's (Chromium's resizer).
+        .occlude()
+        .cursor(CursorStyle::ResizeUpDown)
+        .on_mouse_down(MouseButton::Left, move |e, window, cx| {
+            cx.stop_propagation();
+            window.prevent_default();
+            press.update(cx, |s, cx| {
+                s.grip = Some((e.position.y, s.field_h.unwrap_or(FIELD_H)));
+                cx.notify();
+            });
+        })
+        .child(strokes)
+        .into_any_element()
 }
 
 /// VIEW-154: creates the view; the dialog closes on success, says why not on

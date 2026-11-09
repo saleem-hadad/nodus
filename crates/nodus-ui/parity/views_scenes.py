@@ -205,6 +205,11 @@ SCENES["try-resize"] = DOCS() + [M("click", *HEAD), {"cmd": "wait", "ms": 200}, 
 SCENES["try-drag"] = DOCS() + [M("down", *HEAD), M("drag", HEAD[0] + 2, HEAD[1] + 2),
                                M("drag", HEAD[0] + 60, HEAD[1] + 300), {"cmd": "views"}, {"cmd": "hit", "x": 900, "y": 300},
                                M("up", HEAD[0] + 60, HEAD[1] + 300), {"cmd": "wait", "ms": 800}, {"cmd": "views"}]
+# The New view box empty (its placeholder wraps), and its grip dragged 60px down.
+NEW_VIEW = DOCS() + [M("right", 1100, 720), {"cmd": "wait", "ms": 300}, M("click", 1150, 787), {"cmd": "wait", "ms": 400}]
+SCENES["try-new-empty"] = NEW_VIEW
+SCENES["try-new-grip"] = NEW_VIEW + [M("down", 1001, 449), M("drag", 1001, 480), M("drag", 1001, 509),
+                                     M("up", 1001, 509), {"cmd": "wait", "ms": 300}]
 SCENES["try-create"] = DOCS() + [M("right", 1100, 720), {"cmd": "wait", "ms": 300}, M("click", 1150, 787),
                                  {"cmd": "wait", "ms": 400}, {"cmd": "type", "text": "Open issues labelled docs"},
                                  {"cmd": "key", "keystroke": "cmd-enter"}, {"cmd": "wait", "ms": 3000}]

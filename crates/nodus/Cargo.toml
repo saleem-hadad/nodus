@@ -14,6 +14,10 @@ nodus-host.workspace = true
 nodus-store.workspace = true
 nodus-ui.workspace = true
 
+# Nodus.exe's icon and version strings (build.rs, Windows only).
+[build-dependencies]
+embed-resource = "3.0.12"
+
 [dev-dependencies]
 nodus-domain.workspace = true
 nodus-host-proto.workspace = true

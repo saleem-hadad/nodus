@@ -120,6 +120,9 @@ SCENES = {
     "bar-several-selected": ([], STOREFRONT + [AWAY, M("click", *SF_COUPONS, shift=True),
                                                M("click", *SF_SEARCH_PLAN, shift=True), M("click", *FIELD)]
                              + typed("What do these two have in common?")),
+    "search-empty": ([], STOREFRONT + [AWAY, W(300), K("cmd-k"), W(300)]),
+    "search-results": ([], STOREFRONT + [AWAY, W(300), K("cmd-k"), W(300)] + typed("coupon") + [W(1500)]),
+    "search-none": ([], STOREFRONT + [AWAY, W(300), K("cmd-k"), W(300)] + typed("zebra") + [W(1500)]),
     "board-selected": ([], STOREFRONT + [M("click", 1030, 300, shift=True), M("click", 495, 560, shift=True), AWAY]),
 }
 
@@ -163,6 +166,10 @@ def run(scene, theme, opts):
             drive(f, step)
             drive(f, W(60))
         drive(f, {"cmd": "idle"})
+        # A covered window doesn't draw its animation frames: draw every
+        # view again now that they've run their course.
+        drive(f, {"cmd": "parity", "frozen": True, "now": NOW})
+        drive(f, W(100))
         out = os.path.join(opts["golden"], f"{scene}.{theme}.rust.png")
         drive(f, {"cmd": "screenshot", "path": out})
         print("shot", out)

@@ -3,9 +3,7 @@
 //! 6px below over 220ms.
 
 use gpui::prelude::FluentBuilder as _;
-use gpui::{
-    AnyElement, Context, InteractiveElement, IntoElement, MouseButton, ParentElement, Styled, Window, div, px,
-};
+use gpui::{AnyElement, Context, InteractiveElement, IntoElement, MouseButton, ParentElement, Styled, Window, div, px};
 
 use crate::board::canvas::BoardCanvas;
 use crate::board::hud::rgba_mix;
@@ -19,7 +17,12 @@ use crate::theme::{self, fonts, motion};
 
 impl BoardCanvas {
     /// The toast and the selection bar, top to bottom.
-    pub(crate) fn render_above(&mut self, col_w: f32, window: &mut Window, cx: &mut Context<'_, Self>) -> Vec<AnyElement> {
+    pub(crate) fn render_above(
+        &mut self,
+        col_w: f32,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> Vec<AnyElement> {
         let mut out = Vec::new();
         if let Some(toast) = self.render_bar_toast(col_w, window, cx) {
             out.push(toast);

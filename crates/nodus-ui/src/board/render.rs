@@ -779,6 +779,7 @@ impl Render for BoardCanvas {
         let hint = empty.then(|| self.render_hint(window, cx));
         // BOARD-138: the toast is stacked above the prompt bar (spec 11).
         let bar = self.render_bar(window, cx);
+        let search = self.render_search(window, cx);
         let confirm = self.render_confirm(window, cx);
         let ink_input = self.render_ink_input(cx);
         let ink_layer = self.render_ink_layer(window, cx);
@@ -826,6 +827,7 @@ impl Render for BoardCanvas {
             .child(pill)
             .child(minimap)
             .child(bar)
+            .children(search)
             .children(confirm)
             .into_any_element()
     }

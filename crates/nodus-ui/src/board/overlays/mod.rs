@@ -6,13 +6,14 @@
 pub mod bar;
 pub mod icons;
 pub mod ink;
+pub mod search;
 pub mod selection;
 
 use std::time::Duration;
 
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, App, BoxShadow, IntoElement, ParentElement, Rgba, Styled,
-    Transformation, div, percentage, px,
+    Animation, AnimationExt as _, AnyElement, App, BoxShadow, IntoElement, ParentElement, Rgba, Styled, Transformation,
+    div, percentage, px,
 };
 
 use crate::components::icon::{Icon, icon};
@@ -28,6 +29,7 @@ pub const INK_Z_BELOW: i32 = super::scene::RAISED_Z;
 pub struct Overlays {
     pub(crate) ink: ink::Ink,
     pub(crate) bar: bar::Bar,
+    pub(crate) search: search::Search,
 }
 
 /// Whether the text is empty once trimmed as JavaScript trims.

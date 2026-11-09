@@ -115,7 +115,11 @@ impl BoardCanvas {
             bar.text = value;
             return;
         }
-        let typed = if bar.target.is_none() { take_command(&value) } else { None };
+        let typed = if bar.target.is_none() {
+            take_command(&value)
+        } else {
+            None
+        };
         match typed {
             Some((target, rest)) => {
                 bar.target = Some(target);
@@ -132,7 +136,9 @@ impl BoardCanvas {
     /// Sets the field's text from the bar, the caret at the end.
     pub(crate) fn bar_set_text(&mut self, text: String, window: &mut Window, cx: &mut Context<'_, Self>) {
         self.overlays.bar.text = text.clone();
-        let Some(field) = self.overlays.bar.field.clone() else { return };
+        let Some(field) = self.overlays.bar.field.clone() else {
+            return;
+        };
         self.overlays.bar.setting = true;
         field.update(cx, |s, cx| {
             s.set_value(text, window, cx);
@@ -220,8 +226,12 @@ impl BoardCanvas {
 
     /// Applies a focus the board asked for, once drawn with a window.
     pub(crate) fn bar_take_focus_request(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
-        let Some(start) = self.overlays.bar.focus_request.take() else { return };
-        let Some(field) = self.overlays.bar.field.clone() else { return };
+        let Some(start) = self.overlays.bar.focus_request.take() else {
+            return;
+        };
+        let Some(field) = self.overlays.bar.field.clone() else {
+            return;
+        };
         if let Some(start) = start
             && self.overlays.bar.text.is_empty()
             && self.overlays.bar.target.is_none()

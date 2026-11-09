@@ -3,12 +3,12 @@
 //! button, and the mic beside it (BAR-001…BAR-008, BAR-013, BAR-019,
 //! BAR-035).
 
-use gpui::prelude::FluentBuilder as _;
 use gpui::component::Sizable as _;
 use gpui::component::input::Textarea;
+use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, CursorStyle, InteractiveElement, IntoElement, MouseButton, ParentElement, Rgba,
-    StatefulInteractiveElement, Styled, Window, div, linear_color_stop, linear_gradient, px,
+    AnyElement, Context, CursorStyle, Focusable as _, InteractiveElement, IntoElement, MouseButton, ParentElement,
+    Rgba, StatefulInteractiveElement, Styled, Window, div, linear_color_stop, linear_gradient, px,
 };
 use nodus_board::compose::Target;
 
@@ -48,6 +48,16 @@ impl BoardCanvas {
     /// toast and the selection bar above the row.
     pub(crate) fn render_bar(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> AnyElement {
         let field = self.bar_field(window, cx);
+        // The field's focus, as the frame has it (its events may not fire
+        // for a focus given from outside).
+        let focused = field.read(cx).focus_handle(cx).is_focused(window);
+        if focused != self.overlays.bar.focused {
+            self.overlays.bar.focused = focused;
+            if !focused {
+                // BAR-016: blurring resets the menu's dismissal.
+                self.overlays.bar.menu_dismissed = false;
+            }
+        }
         self.bar_follow_into();
         self.bar_take_focus_request(window, cx);
         if std::mem::take(&mut self.overlays.bar.clear_pending) {
@@ -101,8 +111,22 @@ impl BoardCanvas {
         let t = theme::tokens(cx);
         let open = self.bar_open();
         // The pill's preferred width glides 520 ↔ 600; it shrinks, never grows, to fit.
-        let basis = transition(window, cx, "bar-basis", if open { 600f32 } else { 520. }, DUR_MED, motion::ease_out);
-        let lift = transition(window, cx, "bar-shadow", if open { 1f32 } else { 0. }, DUR_MED, motion::ease);
+        let basis = transition(
+            window,
+            cx,
+            "bar-basis",
+            if open { 600f32 } else { 520. },
+            DUR_MED,
+            motion::ease_out,
+        );
+        let lift = transition(
+            window,
+            cx,
+            "bar-shadow",
+            if open { 1f32 } else { 0. },
+            DUR_MED,
+            motion::ease,
+        );
         let pill_w = basis.min(col_w - 62.);
         let shadow = mix_layers(&t.shadow_md, &t.shadow_lg, lift);
         let pill = self.render_pill(pill_w, shadow, window, cx);
@@ -270,15 +294,12 @@ impl BoardCanvas {
     /// status line come with the voice UI (05); this is its idle look.
     fn render_orb(&mut self, t: &Tokens, window: &mut Window, cx: &mut Context<'_, Self>) -> AnyElement {
         let hovered = window.use_keyed_state("bar-orb-hover", cx, |_, _| false);
-        let target = if *hovered.read(cx) { t.text_primary } else { t.text_secondary };
-        let fg = transition(
-            window,
-            cx,
-            "bar-orb-fg",
-            target,
-            DUR_FAST,
-            motion::ease,
-        );
+        let target = if *hovered.read(cx) {
+            t.text_primary
+        } else {
+            t.text_secondary
+        };
+        let fg = transition(window, cx, "bar-orb-fg", target, DUR_FAST, motion::ease);
         div()
             .id("bar-orb")
             .flex_none()
@@ -312,7 +333,13 @@ impl BoardCanvas {
             (None, Some(i)) => format!("into-{}", i.session_id),
             (None, None) => return None,
         };
-        let pop = enter(window, cx, gpui::ElementId::Name(format!("bar-token-in-{key}").into()), DUR_FAST, motion::ease_out);
+        let pop = enter(
+            window,
+            cx,
+            gpui::ElementId::Name(format!("bar-token-in-{key}").into()),
+            DUR_FAST,
+            motion::ease_out,
+        );
         let me = cx.entity().downgrade();
         let (bg, fg, lead, label, clear_label): (Rgba, Rgba, AnyElement, String, &str) = match (target, into) {
             (Some(Target::View), _) => {

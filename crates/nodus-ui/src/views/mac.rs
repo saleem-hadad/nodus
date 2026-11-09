@@ -318,6 +318,28 @@ pub fn has_keyboard(webview: &NSView) -> bool {
     false
 }
 
+/// Gives the keyboard back to GPUI's view after a press on the board: AppKit
+/// leaves it with the page the user last clicked, where a browser would move
+/// the focus off the frame. On the main queue, off any GPUI update (the
+/// responder change calls back into GPUI).
+pub fn keyboard_to_board(window_number: isize) {
+    dispatch2::DispatchQueue::main().exec_async(move || {
+        // SAFETY: NSApplication and NSWindow on the main thread, checked
+        // for nil; makeFirstResponder: takes the window's content view.
+        unsafe {
+            let app: *mut AnyObject = msg_send![objc2::class!(NSApplication), sharedApplication];
+            let w: *mut AnyObject = msg_send![app, windowWithWindowNumber: window_number];
+            if w.is_null() {
+                return;
+            }
+            let content: *mut AnyObject = msg_send![w, contentView];
+            if !content.is_null() {
+                let _: Bool = msg_send![w, makeFirstResponder: content];
+            }
+        }
+    });
+}
+
 /// Test driver: a left click at a point in the window through
 /// `-[NSWindow sendEvent:]`, so AppKit's own hit test picks the view (a
 /// page, or GPUI's). Runs off any GPUI update, on the main queue; never

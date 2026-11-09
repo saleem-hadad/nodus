@@ -779,19 +779,19 @@ Suggested new Rust tests (not in 0.9.4, for behaviors with no test): `ago`/`flat
 
 ## Parity checklist
 
-- [ ] CAP-001 One panel window, created lazily (first open or 3 s after hook start), reused, recreated if destroyed
-- [ ] CAP-002 Window: hidden, frameless, transparent `#00000000`, no shadow, fixed, no taskbar, always on top, title `Nodus Capture`
-- [ ] CAP-003 Accepts first mouse (receipt link works without focus)
-- [ ] CAP-004 macOS NSPanel: key without activating Nodus
-- [ ] CAP-005 macOS: all Spaces + over full-screen apps, Dock icon kept
-- [ ] CAP-006 Level `pop-up-menu` (101)
-- [ ] CAP-007 Width 652, initial height 320
+- [x] CAP-001 One panel window, created lazily (first open or 3 s after hook start), reused, recreated if destroyed
+- [x] CAP-002 Window: hidden, frameless, transparent `#00000000`, no shadow, fixed, no taskbar, always on top, title `Nodus Capture`
+- [x] CAP-003 Accepts first mouse (receipt link works without focus)
+- [x] CAP-004 macOS NSPanel: key without activating Nodus
+- [x] CAP-005 macOS: all Spaces + over full-screen apps, Dock icon kept
+- [x] CAP-006 Level `pop-up-menu` (101)
+- [x] CAP-007 Width 652, initial height 320
 - [x] CAP-008 Placed on pointer's display: centred, top = 20 % of work area − 40, height kept
 - [x] CAP-009 `capture:resize` clamps 120–900, rounds, keeps top/width, ignores bad input
-- [ ] CAP-010 Page reports `ceil(max(stage bottom, menu bottom + 48))` on change; no click-through
-- [ ] CAP-011 No navigation; http(s) new-window → browser
-- [ ] CAP-012 Blur hides after 50 ms re-check, except busy / resting / < 250 ms after show
-- [ ] CAP-013 Closed window reference dropped
+- [x] CAP-010 Page reports `ceil(max(stage bottom, menu bottom + 48))` on change; no click-through
+- [x] CAP-011 No navigation; http(s) new-window → browser
+- [x] CAP-012 Blur hides after 50 ms re-check, except busy / resting / < 250 ms after show
+- [x] CAP-013 Closed window reference dropped
 - [x] CAP-014 Shown/context events; nothing sent while loading; `capture:ready` returns stored context while open
 - [x] CAP-015 Open order: own-focus check, front app, place, targets snapshot, shown event, show+focus, then clipboard, then tab
 - [x] CAP-016 Hide cancels the guess, clears resting, hides (never closes)
@@ -820,16 +820,16 @@ Suggested new Rust tests (not in 0.9.4, for behaviors with no test): `ago`/`flat
 - [x] CAP-039 Quit clears poll and stops hook
 - [x] CAP-040 Allow…: tccutil reset (packaged), AX prompt, open Accessibility pane, sync, return state
 - [x] CAP-041 Dev builds never run tccutil reset
-- [ ] CAP-042 File › Capture… first File item + separator, no accelerator, always opens
+- [x] CAP-042 File › Capture… first File item + separator, no accelerator, always opens
 - [x] CAP-043 `capture:show` opens like the menu
 - [x] CAP-044 `capture:shortcut` returns state
 - [x] CAP-045 Front app via lsappinfo (1000 ms timeouts), macOS only
 - [x] CAP-046 lsappinfo parsing: bundleID, quoted name or last id segment
-- [ ] CAP-047 Front app name only feeds the guess and tab reading
+- [x] CAP-047 Front app name only feeds the guess and tab reading
 - [x] CAP-048 Readable browser bundle ids (2 Safari + 10 Chromium)
 - [x] CAP-049 Tab script per family; odd ids → none
 - [x] CAP-050 osascript 60 s; URL must be http(s); title = rest joined by space
-- [ ] CAP-051 Tab attachment inserted first unless one exists
+- [x] CAP-051 Tab attachment inserted first unless one exists
 - [x] CAP-052 Clipboard offer: trimmed text ≤ 20 000 first, else first image/* item
 - [x] CAP-053 Thumbnail ≤ 360 px wide, PNG data URL
 - [x] CAP-054 Taking clipboard: text, or image saved to captures/ with copied: true
@@ -840,11 +840,11 @@ Suggested new Rust tests (not in 0.9.4, for behaviors with no test): `ago`/`flat
 - [x] CAP-059 Allow-screen opens Privacy_ScreenCapture (macOS only)
 - [x] CAP-060 Files: absolute dropped paths, or multi-select open dialog aside
 - [x] CAP-061 Describe ≤ 20 files/dirs: name, size (0 for dirs); errors skipped
-- [ ] CAP-062 Drag over/leave/drop on the card; paths from dropped files
+- [x] CAP-062 Drag over/leave/drop on the card; paths from dropped files
 - [x] CAP-063 Launch sweep of captures/ older than 30 days by mtime
-- [ ] CAP-064 Guess after 700 ms pause, ≥ 3 chars, no choice, text changed
-- [ ] CAP-065 Empty text resets guess, choice and in-flight state
-- [ ] CAP-066 Ask: run counter, stale answers dropped, null keeps previous guess
+- [x] CAP-064 Guess after 700 ms pause, ≥ 3 chars, no choice, text changed
+- [x] CAP-065 Empty text resets guess, choice and in-flight state
+- [x] CAP-066 Ask: run counter, stale answers dropped, null keeps previous guess
 - [x] CAP-067 Main guess uses opened-on targets and app, text ≤ 20 000, cleaned attachments
 - [x] CAP-068 guessCapture cancels previous; empty text/no projects → null; no claude → reject
 - [x] CAP-069 Spawn: exact argv, temp cwd, login env, stdin closed, hidden window
@@ -859,50 +859,50 @@ Suggested new Rust tests (not in 0.9.4, for behaviors with no test): `ago`/`flat
 - [x] CAP-078 Status words waiting/working/idle/stopped
 - [x] CAP-079 Screen lines: app, tab, image, file, text wording
 - [x] CAP-080 readGuess fallbacks: project, kind, into→session, reason, session's project
-- [ ] CAP-081 Page start: transparent doc, subscribe, ask ready
-- [ ] CAP-082 Initial state from saved draft, attachments, history, offer key
-- [ ] CAP-083 On shown: clear receipt/menu/error/notice, replace context, refresh, focus caret end (twice); draft kept
+- [x] CAP-081 Page start: transparent doc, subscribe, ask ready
+- [x] CAP-082 Initial state from saved draft, attachments, history, offer key
+- [x] CAP-083 On shown: clear receipt/menu/error/notice, replace context, refresh, focus caret end (twice); draft kept
 - [x] CAP-084 Route = choice > guess > fallback (default or first project)
-- [ ] CAP-085 No projects / has text definitions
-- [ ] CAP-086 Header contents: project / thinking line / kind badge + label + project
-- [ ] CAP-087 Header disabled until targets load and when no projects; click toggles menu
-- [ ] CAP-088 Header right: `Your choice` / `Claude's guess` + Tab cap / empty-state line
-- [ ] CAP-089 Field: label, placeholders, 3 rows, autofocus, spellcheck; typing resets history/error
-- [ ] CAP-090 Field auto-height max 200 px, min 90
-- [ ] CAP-091 Tiles row when attachments or offer; offer last
-- [ ] CAP-092 Tab tile: host without www, title or URL, tooltip URL
-- [ ] CAP-093 Image tile: thumb, `Screenshot` / `Copied image`, tooltip path
-- [ ] CAP-094 File tile: name, size B/KB/MB, no size for 0
-- [ ] CAP-095 Copied-text tile
-- [ ] CAP-096 Remove × on hover/focus, refocus field
-- [ ] CAP-097 Drop outline 2 px accent
-- [ ] CAP-098 Clipboard offer key, dashed tile, take on click, mark offered key done
-- [ ] CAP-099 Paperclip → dialog → attach
-- [ ] CAP-100 Scan → attach / notice / nothing; refocus
-- [ ] CAP-101 Screenshot notice copy + Open System Settings
-- [ ] CAP-102 Error line and when it clears
-- [ ] CAP-103 Mic: append transcript, labels, disabled states, status replaces hint, Settings → capture:settings
-- [ ] CAP-104 Esc while mic busy cancels voice only
-- [ ] CAP-105 Hint `⇧↩` / `Shift+Enter` new line
-- [ ] CAP-106 Send button verbs, `Working it out…`, ↩ cap, disabled rules
-- [ ] CAP-107 Menu open/close rules (outside pointer-down, Esc, project/session pick)
-- [ ] CAP-108 Menu reason when guessed and non-empty
-- [ ] CAP-109 Make column: 4 kinds, hints, into disabled `No sessions are running`
-- [ ] CAP-110 Project column with check
-- [ ] CAP-111 Into column: ≤ 8 sessions incl. waiting (disabled, `Needs you`), empty line, other projects `<n> sessions` / `no sessions`
-- [ ] CAP-112 Menu footer Tab/Esc
-- [ ] CAP-113 Pick kind rules (into fallbacks, nothing when no sendable session)
-- [ ] CAP-114 Tab/⇧Tab cycle, into skipped when none sendable, only with text
-- [ ] CAP-115 Pick project (into → first sendable or new session)
-- [ ] CAP-116 Pick session
-- [ ] CAP-117 Permission/unavailable banner copy and Allow…
-- [ ] CAP-118 Targets polled every 2000 ms while visible
-- [ ] CAP-119 IME composition ignored
-- [ ] CAP-120 Return sends, ⇧Return new line
-- [ ] CAP-121 Esc closes menu, else hides
-- [ ] CAP-122 ↑/↓ history browsing rules
-- [ ] CAP-123 Send flow: wait for guess, checks, submit, history (50), offer done, clear, receipt, refresh, timer
-- [ ] CAP-124 Send error message (IPC prefix stripped); draft kept
+- [x] CAP-085 No projects / has text definitions
+- [x] CAP-086 Header contents: project / thinking line / kind badge + label + project
+- [x] CAP-087 Header disabled until targets load and when no projects; click toggles menu
+- [x] CAP-088 Header right: `Your choice` / `Claude's guess` + Tab cap / empty-state line
+- [x] CAP-089 Field: label, placeholders, 3 rows, autofocus, spellcheck; typing resets history/error
+- [x] CAP-090 Field auto-height max 200 px, min 90
+- [x] CAP-091 Tiles row when attachments or offer; offer last
+- [x] CAP-092 Tab tile: host without www, title or URL, tooltip URL
+- [x] CAP-093 Image tile: thumb, `Screenshot` / `Copied image`, tooltip path
+- [x] CAP-094 File tile: name, size B/KB/MB, no size for 0
+- [x] CAP-095 Copied-text tile
+- [x] CAP-096 Remove × on hover/focus, refocus field
+- [x] CAP-097 Drop outline 2 px accent
+- [x] CAP-098 Clipboard offer key, dashed tile, take on click, mark offered key done
+- [x] CAP-099 Paperclip → dialog → attach
+- [x] CAP-100 Scan → attach / notice / nothing; refocus
+- [x] CAP-101 Screenshot notice copy + Open System Settings
+- [x] CAP-102 Error line and when it clears
+- [x] CAP-103 Mic: append transcript, labels, disabled states, status replaces hint, Settings → capture:settings
+- [x] CAP-104 Esc while mic busy cancels voice only
+- [x] CAP-105 Hint `⇧↩` / `Shift+Enter` new line
+- [x] CAP-106 Send button verbs, `Working it out…`, ↩ cap, disabled rules
+- [x] CAP-107 Menu open/close rules (outside pointer-down, Esc, project/session pick)
+- [x] CAP-108 Menu reason when guessed and non-empty
+- [x] CAP-109 Make column: 4 kinds, hints, into disabled `No sessions are running`
+- [x] CAP-110 Project column with check
+- [x] CAP-111 Into column: ≤ 8 sessions incl. waiting (disabled, `Needs you`), empty line, other projects `<n> sessions` / `no sessions`
+- [x] CAP-112 Menu footer Tab/Esc
+- [x] CAP-113 Pick kind rules (into fallbacks, nothing when no sendable session)
+- [x] CAP-114 Tab/⇧Tab cycle, into skipped when none sendable, only with text
+- [x] CAP-115 Pick project (into → first sendable or new session)
+- [x] CAP-116 Pick session
+- [x] CAP-117 Permission/unavailable banner copy and Allow…
+- [x] CAP-118 Targets polled every 2000 ms while visible
+- [x] CAP-119 IME composition ignored
+- [x] CAP-120 Return sends, ⇧Return new line
+- [x] CAP-121 Esc closes menu, else hides
+- [x] CAP-122 ↑/↓ history browsing rules
+- [x] CAP-123 Send flow: wait for guess, checks, submit, history (50), offer done, clear, receipt, refresh, timer
+- [x] CAP-124 Send error message (IPC prefix stripped); draft kept
 - [x] CAP-125 Submit validation and errors in order; prompt = withScreen
 - [x] CAP-126 Session: 720×480 spot, auto mode expanded, yellow note with typed text stuck on it
 - [x] CAP-127 Into: session check, 03 send path, title from sessionTitle
@@ -918,24 +918,24 @@ Suggested new Rust tests (not in 0.9.4, for behaviors with no test): `ago`/`flat
 - [x] CAP-137 describeAttachments wording and order
 - [x] CAP-138 withScreen
 - [x] CAP-139 Fence longer than any backtick run, min 3
-- [ ] CAP-140 Receipt replaces the page
-- [ ] CAP-141 Note receipt: sticky with 160-char text, caption `On <project>’s board · Open`
-- [ ] CAP-142 Receipt card: top line, title, body line, footer, `· auto mode`
-- [ ] CAP-143 Session sticker 70 chars, title padding 56
-- [ ] CAP-144 Open link clears receipt and opens card/board
+- [x] CAP-140 Receipt replaces the page
+- [x] CAP-141 Note receipt: sticky with 160-char text, caption `On <project>’s board · Open`
+- [x] CAP-142 Receipt card: top line, title, body line, footer, `· auto mode`
+- [x] CAP-143 Session sticker 70 chars, title padding 56
+- [x] CAP-144 Open link clears receipt and opens card/board
 - [x] CAP-145 `capture:open` hides then openCard
-- [ ] CAP-146 Receipt entrance 280 ms spring from 1.5× / +18 px / 0.4
-- [ ] CAP-147 Receipt hides after 2600 ms; re-show cancels
+- [x] CAP-146 Receipt entrance 280 ms spring from 1.5× / +18 px / 0.4
+- [x] CAP-147 Receipt hides after 2600 ms; re-show cancels
 - [x] CAP-148 Session check filters and title fallbacks (`Untitled session`)
 - [x] CAP-149 Targets: non-archived projects, sessions by activity, recents, default
 - [x] CAP-150 Record → recent resolution rules (`New view` title)
 - [x] CAP-151 Default project rule (capture vs openedAt vs last board)
-- [ ] CAP-152 Recent cards: mark, project, age, title, status, waiting ring, open
-- [ ] CAP-153 More pill with 4th/5th titles and ↑ hint
+- [x] CAP-152 Recent cards: mark, project, age, title, status, waiting ring, open
+- [x] CAP-153 More pill with 4th/5th titles and ↑ hint
 - [x] CAP-154 board:load records last board (memory only)
 - [x] CAP-155 Capture record prepended, cap 20, saved
 - [x] CAP-156 `captures` array read/write as is
-- [ ] CAP-157 Draft, attachments, history, clipboardDone persisted per machine
+- [x] CAP-157 Draft, attachments, history, clipboardDone persisted per machine
 - [x] CAP-158 captures/<uuid>.png, never deleted except by the sweep
 - [x] CAP-159 `capture:settings` hides and opens Settings in the board window
 - [x] CAP-160 `capture:hide` hides
@@ -944,15 +944,15 @@ Suggested new Rust tests (not in 0.9.4, for behaviors with no test): `ago`/`flat
 - [x] CAP-163 Into a session that became waiting → error, text kept
 - [x] CAP-164 Vanished into session → `a session`, then error on send
 - [x] CAP-165 Banner stays after Allow… until next show
-- [ ] CAP-166 Restored tab blocks the new front tab
-- [ ] CAP-167 Already-seen clipboard not offered, across restarts
+- [x] CAP-166 Restored tab blocks the new front tab
+- [x] CAP-167 Already-seen clipboard not offered, across restarts
 - [x] CAP-168 Opened over Nodus: no app, no tab, clipboard still
 - [x] CAP-169 Archived project's recents show a blank name
-- [ ] CAP-170 Future createdAt shows `now`
+- [x] CAP-170 Future createdAt shows `now`
 - [x] CAP-171 Dropped directories as size-less file tiles
-- [ ] CAP-172 Draft thumbnails kept in page storage
+- [x] CAP-172 Draft thumbnails kept in page storage
 - [x] CAP-173 Old subdirectory stops the sweep
-- [ ] CAP-174 macOS Dock-click quirk with the hidden panel (decide with 01)
-- [ ] CAP-175 Windows close-doesn't-quit quirk with the hidden panel (decide with 01)
+- [x] CAP-174 macOS Dock-click quirk with the hidden panel (decide with 01)
+- [x] CAP-175 Windows close-doesn't-quit quirk with the hidden panel (decide with 01)
 - [x] CAP-176 One guess process at a time
-- [ ] CAP-177 No polling while hidden
+- [x] CAP-177 No polling while hidden

@@ -246,6 +246,8 @@ pub struct BoardCanvas {
     pub(crate) section_field: Option<(String, Entity<gpui::component::input::InputState>)>,
     pub(crate) section_field_sub: Option<Subscription>,
     pub(crate) clock: Instant,
+    /// The prompt bar, search, the merge dialog and the ink (spec 11).
+    pub(crate) overlays: super::overlays::Overlays,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -331,6 +333,7 @@ impl BoardCanvas {
             section_field: None,
             section_field_sub: None,
             clock: Instant::now(),
+            overlays: super::overlays::Overlays::default(),
             _subscriptions: subscriptions,
         };
         canvas.sync(cx);
@@ -960,6 +963,8 @@ impl BoardCanvas {
             || self.merge.is_some()
             || self.view_dialog.is_some()
             || self.search_open
+            // ACT-053: the actions rail's dialog, menu or delete confirmation.
+            || crate::actions::overlay_open(cx)
     }
 
     // ---- the archive stack ----------------------------------------------------
@@ -1050,6 +1055,7 @@ impl BoardCanvas {
             moving_archive: self.moving_archive,
             moving_section: self.moving_section,
             scrolling_stack: self.stack_scrolling,
+            ink_tool: self.overlays.ink.tool != super::overlays::ink::InkTool::Select,
             actions: BoardActions {
                 canvas: cx.entity().downgrade(),
                 title_pressed: self.title_pressed.clone(),

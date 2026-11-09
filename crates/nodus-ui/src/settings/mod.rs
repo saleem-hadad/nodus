@@ -54,6 +54,8 @@ pub struct SettingsDialog {
     key_field: Entity<InputState>,
     /// The capture shortcut's state, once read (07).
     shortcut: Option<CaptureShortcut>,
+    /// UI-132: reads it while Settings is open.
+    _shortcut_poll: gpui::Task<()>,
     /// Where the voice key comes from; None while loading (05).
     key_source: Option<Option<VoiceKeySource>>,
     key_error: Option<String>,
@@ -128,6 +130,7 @@ impl SettingsDialog {
             check: cx.focus_handle(),
             auto_update: cx.focus_handle(),
         };
+        let shortcut_poll = poll_shortcut(&state, cx);
         Self {
             state,
             previous_focus,
@@ -135,6 +138,7 @@ impl SettingsDialog {
             stops,
             key_field,
             shortcut: None,
+            _shortcut_poll: shortcut_poll,
             key_source: None,
             key_error: None,
             scroll: ScrollHandle::new(),
@@ -529,7 +533,27 @@ impl Render for SettingsDialog {
                         Some("macOS lets an app hear a key pressed in other apps only with this permission. Click Allow… and turn Nodus on in Privacy & Security › Accessibility. Already on there? It was given to another copy of Nodus: Allow… clears it so macOS asks again.".into()),
                         t,
                     ),
-                    Some(button("capture-allow").primary().label("Allow…").into_any_element()),
+                    Some({
+                        // UI-133: asks for the permission (07) and shows the state it returns.
+                        let this = cx.entity();
+                        let nodus = self.state.read(cx).nodus.clone();
+                        button("capture-allow")
+                            .primary()
+                            .label("Allow…")
+                            .on_click(move |_, _, cx| {
+                                let nodus = nodus.clone();
+                                let this = this.clone();
+                                cx.spawn(async move |cx| {
+                                    let shortcut = nodus.capture().allow().await;
+                                    this.update(cx, |s, cx| {
+                                        s.shortcut = Some(shortcut);
+                                        cx.notify();
+                                    });
+                                })
+                                .detach();
+                            })
+                            .into_any_element()
+                    }),
                 )
                 .mt(px(14.))
                 .into_any_element(),
@@ -558,8 +582,14 @@ impl Render for SettingsDialog {
             capture_rows.push(
                 plain_row(
                     row_hint_only(&format!("{ready}File › Capture… opens it too."), t),
-                    // Opens the capture panel, once the capture track is in (07).
-                    Some(button("capture-try").label("Try It").into_any_element()),
+                    // Opens the capture panel (07, CAP-043).
+                    Some({
+                        let nodus = self.state.read(cx).nodus.clone();
+                        button("capture-try")
+                            .label("Try It")
+                            .on_click(move |_, _, cx| crate::capture::show(&nodus, cx))
+                            .into_any_element()
+                    }),
                 )
                 .mt(px(14.))
                 .into_any_element(),
@@ -929,6 +959,43 @@ pub fn update_text(state: &UpdateState) -> Option<String> {
 
 #[allow(dead_code)]
 fn _settings(_: AppSettings) {}
+
+/// UI-132: while Settings is open, the capture shortcut's state is read at
+/// once and then every 2 s, and again at once when `settings.capture` changes.
+fn poll_shortcut(state: &Entity<AppState>, cx: &mut Context<'_, SettingsDialog>) -> gpui::Task<()> {
+    const EVERY: std::time::Duration = std::time::Duration::from_millis(2000);
+    const STEP: std::time::Duration = std::time::Duration::from_millis(100);
+    let state = state.clone();
+    cx.spawn(async move |this, cx| {
+        loop {
+            let (nodus, capture) = cx.update(|cx| {
+                let s = state.read(cx);
+                (s.nodus.clone(), s.settings.as_ref().map(|s| s.capture))
+            });
+            let shortcut = nodus.capture().shortcut().await;
+            if this
+                .update(cx, |s, cx| {
+                    if s.shortcut != Some(shortcut) {
+                        s.shortcut = Some(shortcut);
+                        cx.notify();
+                    }
+                })
+                .is_err()
+            {
+                return;
+            }
+            let mut waited = std::time::Duration::ZERO;
+            while waited < EVERY {
+                cx.background_executor().timer(STEP).await;
+                waited += STEP;
+                let now = cx.update(|cx| state.read(cx).settings.as_ref().map(|s| s.capture));
+                if now != capture {
+                    break;
+                }
+            }
+        }
+    })
+}
 
 #[cfg(test)]
 mod tests {

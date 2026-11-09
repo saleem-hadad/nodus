@@ -45,6 +45,7 @@ pub struct Button {
     hover_color: Option<Rgba>,
     pressed_bg: bool,
     width: Option<Pixels>,
+    height: Option<Pixels>,
     corners: Option<Corners<Pixels>>,
     no_left_border: bool,
     no_shadow: bool,
@@ -68,6 +69,7 @@ pub fn button(id: impl Into<ElementId>) -> Button {
         hover_color: None,
         pressed_bg: false,
         width: None,
+        height: None,
         corners: None,
         no_left_border: false,
         no_shadow: false,
@@ -134,6 +136,12 @@ impl Button {
         self.width = Some(width);
         self
     }
+    /// A height other than 28px (the selection bar's 30px merge button).
+    pub fn height(mut self, height: Pixels) -> Self {
+        self.height = Some(height);
+        self
+    }
+
     pub fn corners(mut self, corners: Corners<Pixels>) -> Self {
         self.corners = Some(corners);
         self
@@ -212,7 +220,7 @@ impl RenderOnce for Button {
             .flex_none()
             .items_center()
             .gap(px(6.))
-            .h(px(28.))
+            .h(self.height.unwrap_or(px(28.)))
             .when(self.square, |d| d.w(px(28.)).justify_center())
             .when(!self.square && self.width.is_none(), |d| d.px(px(12.)))
             .when_some(self.width, |d, w| d.w(w).justify_center())

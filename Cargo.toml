@@ -78,6 +78,8 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 # GPUI's single-colour svg() can't draw.
 raw-window-handle = "0.6.2"
 resvg = { version = "0.46.0", default-features = false }
+# Round caps and joins for the board's ink (GPUI tessellates paths with lyon).
+lyon = "1.0"
 indexmap = { version = "2.14", features = ["serde"] }
 # Watches transcript folders (FSEvents on macOS, ReadDirectoryChangesW on Windows).
 notify = "8.2"
@@ -99,6 +101,10 @@ tempfile = "3.27"
 thiserror = "2.0"
 tokio = { version = "1.54", features = ["io-util", "macros", "process", "rt", "rt-multi-thread", "sync", "time"] }
 tracing = "0.1.44"
+# Line breaks and graphemes as Chromium finds them (UAX #14, #29), for the
+# board's wrapped and clamped text. gpui-component already depends on both.
+unicode-linebreak = "0.1.5"
+unicode-segmentation = "1.13"
 # The widths alacritty_terminal gives characters (the same crate it uses).
 unicode-width = "0.2"
 # WHATWG URL parsing, as `new URL()` does.

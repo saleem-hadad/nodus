@@ -959,7 +959,7 @@ Risks and unknowns:
 - [ ] PLAT-045 AppKit-added menu items match 0.9.4
 - [x] PLAT-046 Check for Updates… → settings + check(true)
 - [x] PLAT-047 Settings… → settings
-- [ ] PLAT-048 Capture… → openPanel
+- [x] PLAT-048 Capture… → openPanel
 - [x] PLAT-049 File/Edit commands → menu commands
 - [x] PLAT-050 Star on GitHub URL
 - [x] PLAT-051 Report a Bug… URL

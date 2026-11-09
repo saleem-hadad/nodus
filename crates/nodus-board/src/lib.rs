@@ -20,6 +20,8 @@ mod create;
 pub mod geometry;
 mod handlers;
 pub mod ink;
+pub mod ink_draw;
+pub mod merge;
 pub mod notes;
 mod runs;
 pub mod stop;

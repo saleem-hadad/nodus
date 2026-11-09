@@ -384,7 +384,8 @@ fn body(
     let radius = if bottom_round { 14.0 * z } else { 0.0 };
     let id = view.id.clone();
     let pointer = board.pointer;
-    let ink = super::swap::ink_tool_out(cx);
+    // An ink tool is out: strokes draw over the page (INKUI-018, D3).
+    let ink = board.ink_tool;
     let parity = crate::parity::frozen(cx);
     let geometry = {
         move |document: Bounds<Pixels>, clip: Bounds<Pixels>| {

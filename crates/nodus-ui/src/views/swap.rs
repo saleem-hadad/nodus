@@ -12,7 +12,7 @@
 
 use std::time::{Duration, Instant};
 
-use gpui::{App, Bounds, Hitbox, Pixels, Window, point, px};
+use gpui::{App, Bounds, DispatchPhase, Hitbox, MouseDownEvent, Pixels, Window, point, px};
 
 use super::frames::{Frame, Geometry, Slot, frames};
 
@@ -22,18 +22,6 @@ const ZOOM_SETTLE: Duration = Duration::from_millis(180);
 const RELAYOUT: Duration = Duration::from_millis(150);
 /// A snapshot shown this long while the page may have changed is taken again.
 const STALE_AFTER: Duration = Duration::from_millis(400);
-
-/// An ink tool is out (spec 11's ink layer sets it): every page shows its
-/// snapshot, so strokes can be drawn over it.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct InkToolOut(pub bool);
-
-impl gpui::Global for InkToolOut {}
-
-/// Whether an ink tool is out.
-pub fn ink_tool_out(cx: &App) -> bool {
-    cx.try_global::<InkToolOut>().is_some_and(|i| i.0)
-}
 
 /// A frame's probe painted: its webview follows the body, and after the
 /// frame lands the swap is decided.
@@ -67,7 +55,26 @@ pub fn placed(view_id: &str, slot: Slot, g: Geometry, hitbox: Hitbox, window: &m
     drop(f);
     if schedule {
         window.on_next_frame(after_frame);
+        // A press anywhere GPUI draws takes the keyboard off the page the
+        // user last clicked, as a click outside a frame blurs it (VIEW-051,
+        // VIEW-149: the board's keys are the board's again).
+        window.on_mouse_event(|_: &MouseDownEvent, phase, window, cx| {
+            if phase == DispatchPhase::Capture {
+                keyboard_to_board(window, cx);
+            }
+        });
     }
+}
+
+fn keyboard_to_board(window: &mut Window, cx: &mut App) {
+    let Some(rc) = super::frames::existing(cx) else { return };
+    let any = rc.borrow().frames.iter().any(|fr| fr.web.has_keyboard());
+    #[cfg(target_os = "macos")]
+    if any && let Some(number) = crate::mac::window_number(window) {
+        super::mac::keyboard_to_board(number);
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (any, window);
 }
 
 fn zooming(fr: &Frame, now: Instant) -> bool {
@@ -79,7 +86,6 @@ fn zooming(fr: &Frame, now: Instant) -> bool {
 fn after_frame(window: &mut Window, cx: &mut App) {
     let rc = frames(cx);
     let parity = crate::parity::frozen(cx);
-    let ink = ink_tool_out(cx);
     let now = Instant::now();
     let mut refresh = false;
     let mut settle = false;
@@ -101,7 +107,7 @@ fn after_frame(window: &mut Window, cx: &mut App) {
                 .is_some_and(|probe| !fr.web.offscreen() && covered(probe, visible, window));
             let zoom_moving = zooming(fr, now);
             settle |= zoom_moving;
-            let want = parity || ink || g.forced || fr.occluded || fr.tooltip || zoom_moving;
+            let want = parity || g.forced || fr.occluded || fr.tooltip || zoom_moving;
             if want {
                 let fresh = !fr.dirty && fr.snapshot.is_some();
                 if fr.live && fresh {

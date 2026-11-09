@@ -108,6 +108,16 @@ SCENES = {
                                                {"cmd": "wait", "ms": 300}]),
     "board-deck-fanned": ([], STOREFRONT_LIVE + [M("move", *AT(544, 263)), {"cmd": "wait", "ms": 400}]),
     "board-expanded-stopped": ([], OPEN("infra") + [AWAY]),
+    # Resume session on in-certs, Start shell on the terminal card (the
+    # overlay buttons, centred in the cards' bodies), then in-certs' status
+    # line as `app.usage('in-certs')` reports it.
+    "board-expanded": ([], OPEN("infra") + [
+        M("click", 577, 319), {"cmd": "wait", "ms": 1500},
+        M("click", 1118, 319), {"cmd": "wait", "ms": 1500},
+        {"cmd": "emit", "event": "usage", "payload": {"sessionId": sid("in-certs"), "usage": {
+            "model": "Opus 5.5", "contextPercent": 42, "contextTokens": 84000, "contextSize": 200000,
+            "costUsd": 1.84, "durationMs": 1394000, "at": 4102444800000}}},
+        {"cmd": "wait", "ms": 600}, AWAY]),
     "projects-empty": (["empty"], []),
     "projects-grid": ([], []),
     "projects-focus": (["focusOn"], []),
@@ -175,6 +185,10 @@ def run(scene, theme, opts):
             drive(f, step)
             drive(f, {"cmd": "wait", "ms": 120})
         drive(f, {"cmd": "idle"})
+        # A frame drawn now: macOS stops asking a covered window for frames,
+        # so a transition (the archive panel's 460ms growth) may not have
+        # been drawn to its end.
+        drive(f, {"cmd": "terminal", "action": "draw"})
         out = os.path.join(opts["golden"], f"{scene}.{theme}.rust.png")
         drive(f, {"cmd": "screenshot", "path": out})
         print("shot", out)

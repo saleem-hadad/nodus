@@ -97,16 +97,19 @@ pub fn title_bar(state: &Entity<AppState>, actions: Vec<AnyElement>, window: &mu
                         }
                     }
                 };
-                d.child(no_drag(
-                    button("titlebar-back")
-                        .ghost()
-                        .square()
-                        .icon(Icon::ChevronLeft, 18., 2.)
-                        .colors(t.text_secondary, t.text_primary)
-                        .tooltip("Back to Projects")
-                        .on_click(go_to_projects.clone()),
-                ))
-                .child(div().w(px(2.)).flex_none())
+                d.child(
+                    no_drag(
+                        button("titlebar-back")
+                            .ghost()
+                            .square()
+                            .icon(Icon::ChevronLeft, 18., 2.)
+                            .colors(t.text_secondary, t.text_primary)
+                            .tooltip("Back to Projects")
+                            .on_click(go_to_projects.clone()),
+                    )
+                    // `.titlebar-back { margin-right: 2px }`, beside the crumbs' 4px gap.
+                    .mr(px(2.)),
+                )
                 .child(no_drag(
                     div()
                         .id("titlebar-crumb-link")
@@ -141,7 +144,8 @@ pub fn title_bar(state: &Entity<AppState>, actions: Vec<AnyElement>, window: &mu
                     )
                     .min_w_0(),
                 )
-                // The git controls (05) go here.
+                // The git controls (05), and the Changes window.
+                .children(crate::git::title_bar_git(state, window, cx))
             }
         });
 

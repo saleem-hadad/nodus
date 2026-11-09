@@ -279,7 +279,19 @@ impl AssetSource for Assets {
         {
             return Ok(Some(Cow::Owned(icon.svg_source(stroke).into_bytes())));
         }
+        if let Some(rest) = path.strip_prefix("icons/cards/") {
+            return Ok(crate::board::cards::icons::load(rest));
+        }
         if let Some(svg) = crate::terminal::icons::load(path) {
+            return Ok(Some(Cow::Owned(svg)));
+        }
+        if let Some(svg) = crate::capture::icons::load(path) {
+            return Ok(Some(Cow::Owned(svg)));
+        }
+        if let Some(svg) = crate::actions::icons::load(path) {
+            return Ok(Some(Cow::Owned(svg)));
+        }
+        if let Some(svg) = crate::board::overlays::icons::load(path) {
             return Ok(Some(Cow::Owned(svg)));
         }
         gpui::assets::Assets.load(path)

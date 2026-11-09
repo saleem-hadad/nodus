@@ -53,13 +53,12 @@ fn render_parts(
     super::inputs::focus_once("view-modal-focus-once", &handle, window, cx);
     let shown = frames::shown(&id, Slot::Large, cx);
     let parity = crate::parity::frozen(cx);
-    let ink = super::swap::ink_tool_out(cx);
     let geometry = move |document: Bounds<Pixels>, clip: Bounds<Pixels>| Geometry {
         document,
         clip,
         zoom: 1.0,
         radius: 18.0,
-        forced: parity || ink,
+        forced: parity,
         passthrough: false,
         edge: 0.0,
     };

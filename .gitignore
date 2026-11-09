@@ -22,3 +22,5 @@ migration/parity/golden/
 # The Rust UI's shots beside the goldens, and their diffs (crates/nodus-ui/parity).
 migration/parity/golden/*.rust.png
 migration/parity/rust-diffs/
+# Except a LevelDB log Electron 44 wrote with made-up values, which a test reads.
+!crates/nodus-core/src/local_storage/testdata/*.log

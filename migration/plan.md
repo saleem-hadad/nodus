@@ -165,7 +165,7 @@ Tracks after P1 run in parallel where the dependency column allows.
 | P9 | Views (wry), board tools, actions, voice, git UI | P6 | ☐ |
 | P10 | Capture panel, notifications, Dock badge, updater | P6 | ✅ merged (notifications and the Dock badge need the packaged app to see) |
 | P11 | Packaging: .app and DMGs (same bundle id, Info.plist keys, entitlements, signing, notarizing), Windows NSIS (same flags), release workflow; 0.9.4 → Rust update test | P10 | 🟡 merged; waits on Windows CI, the real certificate, and the UI tracks |
-| P12 | Parity audit (every checklist item, screenshots light and dark), then cutover: delete Electron, update README and docs, release | P11 | ☐ |
+| P12 | Parity audit (every checklist item, screenshots light and dark), then cutover: delete Electron, update README and docs, release | P11 | 🟡 audit-shell started (specs 01–08) |
 
 ## Tracks
 
@@ -185,6 +185,7 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | actions-voice-git | `rust/actions-voice-git` | nodus-actions, nodus-voice (incl. the recorder), nodus-git | ✅ merged: 97 (GIT 28, ACT 37, VOICE 32); recorder is Core Audio voice processing + Opus/WebM like MediaRecorder |
 | capture | `rust/capture` | nodus-capture backend: double tap, key hook, screen context, guess, submit | ✅ merged: 98 CAP; panel UI and page wiring to the capture-panel track |
 | core | `rust/core` | P4: wire every merged domain into nodus-core (sessions, board, views, updates, events, startup/quit), deferred core IDs, debts, headless end-to-end tests | ✅ merged (6243e7c): every domain composed; git/actions/voice wired; the windowed app launches, runs sessions through `Nodus host` and quits through the core |
+| audit-shell | `rust/audit-shell` | P12 slice: resolve every unticked ID in specs 01–03, 05–08 (tick with evidence, implement, or defer with a reason); selectable static text; action-name paste; test driver on Windows named pipes; Windows chrome (☰ menu, caption buttons, single instance) | 🟡 running |
 | overlays | `rust/overlays` | P8, spec 11: prompt bar, ⌘K search, merge dialog, ink layer, selection bar, on the board's `board/bar.rs` hooks | 🟡 running |
 | gpui-text | `rust/gpui-text` | patched GPUI text parity with Chromium: sRGB tagging, no SF Pro tracking, hanging trailing spaces, Chromium's rounding; Windows effects CI step | ✅ merged: PATCHES 6–10; 69/71 text cases pixel-identical to Electron 44.5.1; shell scenes now 0.04–0.8% off the goldens |
 | board-canvas | `rust/board-canvas` | P6, spec 09: the board route and canvas (pan/zoom/select/drag, sections, edges, menus, shortcuts), node plug-in interface | ✅ merged (f2f5747): 149 ticked; 13 deferred to cards/terminal/views/overlays and 13 board-side overlay hooks (`board/bar.rs`) tick when the overlays land |

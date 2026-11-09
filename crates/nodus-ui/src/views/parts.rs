@@ -73,7 +73,7 @@ pub fn on_core<T: Send + 'static>(
     let rt = crate::board::core_rt(cx);
     cx.spawn(async move |cx| {
         let value = crate::board::on_core(&rt, fut).await;
-        let _ = cx.update(|cx| done(value, cx));
+        cx.update(|cx| done(value, cx));
     })
     .detach();
 }

@@ -76,10 +76,13 @@ pub fn render(canvas: &BoardCanvas, window: &mut Window, cx: &mut Context<'_, Bo
                     .context_menu(false)
             });
             let watch = state.clone();
-            let sub = window.subscribe(&field, cx, move |_, e: &InputEvent, _, cx| {
-                if matches!(e, InputEvent::Change) {
-                    watch.update(cx, |_, cx| cx.notify());
-                }
+            let me = me.clone();
+            let sub = window.subscribe(&field, cx, move |field, e: &InputEvent, _, cx| match e {
+                InputEvent::Change => watch.update(cx, |_, cx| cx.notify()),
+                // VIEW-154: ⌘Enter in the box (the field takes it as its
+                // secondary Enter before the dialog's key listener sees it).
+                InputEvent::PressEnter { secondary: true, .. } => create_view(&me, &watch, &field, at, cx),
+                _ => {}
             });
             state.update(cx, |s, _| {
                 s.field = Some(field.clone());
@@ -375,7 +378,7 @@ fn create_view(
     let (me, state) = (me.clone(), state.clone());
     cx.spawn(async move |cx| {
         let result = task.await;
-        let _ = cx.update(|cx| match result {
+        cx.update(|cx| match result {
             Ok(()) => {
                 state.update(cx, |s, _| s.creating = false);
                 if let Some(c) = me.upgrade() {

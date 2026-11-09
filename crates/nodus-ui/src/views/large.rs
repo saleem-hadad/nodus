@@ -3,6 +3,7 @@
 //! Escape (while the board, not the page, has the keyboard), a press on the
 //! backdrop or ✕ closes it.
 
+use gpui::StyledImage as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Bounds, Context, ElementId, FontWeight, InteractiveElement, IntoElement, KeyDownEvent,
@@ -63,8 +64,8 @@ fn render_parts(
         edge: 0.0,
     };
     let on_close = move |window: &mut Window, cx: &mut App| close(window, cx);
-    let close_x = on_close.clone();
-    let close_key = on_close.clone();
+    let close_x = on_close;
+    let close_key = on_close;
     let width = px(1400.0_f32.min(f32::from(viewport.width) * 0.92));
     let content = div()
         .id(ElementId::Name(format!("view-modal-{id}").into()))
@@ -131,6 +132,7 @@ fn render_parts(
             deferred(
                 anchored().position(document.origin).child(
                     img(image)
+                        .object_fit(gpui::ObjectFit::Fill)
                         .w(document.size.width)
                         .h(document.size.height)
                         .rounded_bl(RADIUS_XL)

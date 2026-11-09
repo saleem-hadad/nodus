@@ -8,6 +8,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Duration;
 
+use gpui::StyledImage as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     Animation, AnimationExt as _, AnyElement, App, Bounds, BoxShadow, ElementId, Entity, FontWeight,
@@ -137,7 +138,8 @@ fn card_shadow(t: &Tokens, hovered: bool, waiting: bool, selected: bool, draggin
     }
 }
 
-/// `ViewNode`: the card in its node's box.
+/// `ViewNode`: the card in its node's box. (By value: the canvas's renderer type.)
+#[allow(clippy::needless_pass_by_value)]
 pub fn render(node: ViewNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut App) -> AnyElement {
     let t = theme::tokens(cx);
     let view = node.view.clone();
@@ -412,6 +414,7 @@ fn body(
         .when_some(shown.snapshot.clone(), |d, image| {
             d.child(
                 img(image)
+                    .object_fit(gpui::ObjectFit::Fill)
                     .absolute()
                     .top_0()
                     .left_0()

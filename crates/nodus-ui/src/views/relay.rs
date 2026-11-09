@@ -161,11 +161,11 @@ pub fn start(frames: &Rc<RefCell<Frames>>, cx: &mut App) {
                     payload,
                     ..
                 }) => {
-                    let _ = cx.update(|cx| view_event(&view_id, event.as_str(), payload, cx));
+                    cx.update(|cx| view_event(&view_id, event.as_str(), payload, cx));
                 }
                 Ok(Event::Status { .. }) => {
                     // Claude edits files during a turn: read the git status again.
-                    let _ = cx.update(read_git);
+                    cx.update(read_git);
                 }
                 Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
@@ -254,7 +254,7 @@ fn incoming(msg: &Incoming, cx: &mut App) {
             let answer = answer(&nodus, &project_id, &view_id, &method, args, activated, cx);
             cx.spawn(async move |cx| {
                 let result = answer.await;
-                let _ = cx.update(|cx| deliver_to(frame, &reply(&id, result), cx));
+                cx.update(|cx| deliver_to(frame, &reply(&id, result), cx));
             })
             .detach();
         }
@@ -454,7 +454,7 @@ pub fn board_changed(canvas: &BoardCanvas, cx: &mut Context<'_, BoardCanvas>) {
     rel.last = Some((board.cards.clone(), board.notes.clone(), board.views.clone()));
     rel.board_timer = Some(cx.spawn(async move |_, cx| {
         cx.background_executor().timer(BOARD_DEBOUNCE).await;
-        let _ = cx.update(|cx| deliver_where(&event("board", None), |_| true, cx));
+        cx.update(|cx| deliver_where(&event("board", None), |_| true, cx));
     }));
 }
 
@@ -482,7 +482,7 @@ fn read_git(cx: &mut App) {
             async move { nodus.git().status(&project_id).await.ok().flatten() }
         })
         .await;
-        let _ = cx.update(|cx| {
+        cx.update(|cx| {
             let r = relay(cx);
             r.borrow_mut().git_reading = false;
             let still = existing(cx).is_some_and(|f| f.borrow().project_id.as_deref() == Some(project_id.as_str()));

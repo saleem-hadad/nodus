@@ -59,6 +59,8 @@ pub struct Frame {
     /// One of the card's own tooltips is up over the page.
     pub tooltip: bool,
     pub zoom_changed: Option<Instant>,
+    /// When the body last changed size: the page lays out again first.
+    pub resized: Option<Instant>,
 }
 
 /// Where a frame was drawn, and what for.
@@ -286,6 +288,7 @@ pub fn sync_board(canvas: &mut BoardCanvas, window: &mut Window, cx: &mut Contex
                         hovered: false,
                         tooltip: false,
                         zoom_changed: None,
+                        resized: None,
                     }),
                     Err(err) => tracing::warn!("[views] couldn't make a webview: {err}"),
                 }
@@ -321,6 +324,7 @@ pub fn describe(cx: &App) -> serde_json::Value {
                     "offscreen": fr.web.offscreen(),
                     "drawn": fr.drawn,
                     "hovered": fr.hovered,
+                    "keyboard": fr.web.has_keyboard(),
                     "forced": g.map(|g| g.forced),
                     "passthrough": g.map(|g| g.passthrough),
                     "zoom": g.map(|g| g.zoom),

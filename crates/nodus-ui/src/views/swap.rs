@@ -18,6 +18,8 @@ use super::frames::{Frame, Geometry, Slot, frames};
 
 /// The zoom must hold this long before the page follows it live.
 const ZOOM_SETTLE: Duration = Duration::from_millis(180);
+/// A page whose body changed size gets this long to lay out again.
+const RELAYOUT: Duration = Duration::from_millis(150);
 /// A snapshot shown this long while the page may have changed is taken again.
 const STALE_AFTER: Duration = Duration::from_millis(400);
 
@@ -48,6 +50,7 @@ pub fn placed(view_id: &str, slot: Slot, g: Geometry, hitbox: Hitbox, window: &m
             }
             if prev.document.size != g.document.size {
                 fr.dirty = true;
+                fr.resized = Some(now);
             }
         }
         fr.drawn = true;
@@ -63,7 +66,7 @@ pub fn placed(view_id: &str, slot: Slot, g: Geometry, hitbox: Hitbox, window: &m
     }
     drop(f);
     if schedule {
-        window.on_next_frame(|window, cx| after_frame(window, cx));
+        window.on_next_frame(after_frame);
     }
 }
 
@@ -106,7 +109,12 @@ fn after_frame(window: &mut Window, cx: &mut App) {
                     refresh = true;
                 } else if fr.dirty && !fr.pending {
                     let stale = fr.snapshot_at.is_none_or(|t| now.duration_since(t) >= STALE_AFTER);
-                    if fr.live || stale || parity {
+                    // A body that just changed size lays its page out again
+                    // first; a picture now would be of the old layout.
+                    let relaying = fr.resized.is_some_and(|t| now.duration_since(t) < RELAYOUT);
+                    if relaying {
+                        settle = true;
+                    } else if fr.live || stale || parity {
                         shoot.push(fr.id);
                     } else {
                         settle = true;
@@ -140,7 +148,7 @@ fn after_frame(window: &mut Window, cx: &mut App) {
             cx.background_executor()
                 .timer(ZOOM_SETTLE + Duration::from_millis(20))
                 .await;
-            let _ = cx.update(|cx| {
+            cx.update(|cx| {
                 if let Some(rc) = super::frames::existing(cx) {
                     rc.borrow_mut().settle_scheduled = false;
                 }
@@ -171,18 +179,25 @@ fn take_snapshot(id: u64, window: &mut Window, cx: &mut App) {
     let async_cx = cx.to_async();
     fr.web.snapshot(move |image| {
         // WebKit's completion runs from the run loop, outside GPUI: hop in.
-        let _ = async_cx.update(|cx| {
-            {
+        async_cx.update(|cx| {
+            let old = {
                 let mut f = rc2.borrow_mut();
                 let Some(fr) = f.by_id_mut(id) else { return };
                 fr.pending = false;
-                if let Some(image) = image {
-                    fr.snapshot = Some(image);
+                let old = image.and_then(|image| {
                     fr.snapshot_at = Some(Instant::now());
-                }
-                if fr.live && fr.snapshot.is_some() {
+                    fr.snapshot.replace(image)
+                });
+                // Where pages can't be pictured (WebView2 for now), the page
+                // still steps aside so what covers it shows.
+                if fr.live && (fr.snapshot.is_some() || cfg!(not(target_os = "macos"))) {
                     go_snapshot(fr);
                 }
+                old
+            };
+            // The old picture's texture goes from the atlas.
+            if let Some(old) = old {
+                cx.drop_image(old, None);
             }
             let _ = handle.update(cx, |_, window, _| window.refresh());
         });

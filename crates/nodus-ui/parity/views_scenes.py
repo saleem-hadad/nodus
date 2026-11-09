@@ -112,10 +112,52 @@ def relay_setup(world):
     json.dump(state, open(path, "w"))
 
 
-SETUP = {"try-relay": relay_setup}
+WHEEL_PAGE = """<!doctype html><html><body><p>wheel</p><script>
+setTimeout(function(){parent.postMessage({nodus:1,wheel:{dx:0,dy:200,mode:0,x:10,y:10}},'*')},500);
+</script></body></html>"""
+
+
+def page_setup(html):
+    def setup(world):
+        path = os.path.join(world, "userData", "state.json")
+        state = json.load(open(path))
+        for board in state["boards"].values():
+            for view in board.get("views", {}).values():
+                if view["title"] == "Docs build status":
+                    with open(os.path.join(world, "userData", "views", view["id"], "index.html"), "w") as page:
+                        page.write(html)
+    return setup
+
+
+SETUP = {"try-relay": relay_setup, "try-wheel": page_setup(WHEEL_PAGE)}
+# A scroll the page has no use for pans the board (VIEW-047): the board moves up 200px.
+SCENES["try-wheel"] = DOCS() + [{"cmd": "wait", "ms": 1500}, {"cmd": "views"}]
+# The page takes the keyboard on a click, and gives it back on a click on the board (VIEW-051).
+SCENES["try-keyboard"] = DOCS() + [{"cmd": "native-click", "x": 560, "y": 250}, {"cmd": "wait", "ms": 400},
+                                   {"cmd": "views"}, {"cmd": "native-click", "x": 1100, "y": 720},
+                                   {"cmd": "wait", "ms": 400}, {"cmd": "views"}]
 SCENES["try-relay"] = DOCS() + [{"cmd": "wait", "ms": 1500}, {"cmd": "views"},
                                 {"cmd": "hit", "x": 560, "y": 160}, {"cmd": "hit", "x": 300, "y": 400},
                                 {"cmd": "native-click", "x": 520, "y": 159}, {"cmd": "wait", "ms": 2500}]
+
+
+# Interactions to look at (not 0.9.4 goldens).
+HEAD = (600, TOOL_Y)  # Docs build status's title bar, clear of its tools
+CORNER = AT(1200, 360)  # its bottom-right corner
+SCENES["try-rename"] = DOCS() + [M("double", 530, TOOL_Y), {"cmd": "wait", "ms": 300},
+                                 {"cmd": "key", "keystroke": "cmd-a"}, {"cmd": "type", "text": "Builds"},
+                                 {"cmd": "key", "keystroke": "enter"}, {"cmd": "wait", "ms": 300}, AWAY]
+SCENES["try-refresh"] = DOCS() + [M("move", *BUILD), {"cmd": "wait", "ms": 200}, M("click", *TOOL(4)),
+                                  {"cmd": "wait", "ms": 2500}]
+SCENES["try-resize"] = DOCS() + [M("click", *HEAD), {"cmd": "wait", "ms": 200}, M("down", *CORNER),
+                                 M("drag", CORNER[0] + 40, CORNER[1] + 40), M("drag", CORNER[0] + 100, CORNER[1] + 100),
+                                 {"cmd": "views"}, M("up", CORNER[0] + 100, CORNER[1] + 100), {"cmd": "wait", "ms": 800}]
+SCENES["try-drag"] = DOCS() + [M("down", *HEAD), M("drag", HEAD[0] + 2, HEAD[1] + 2),
+                               M("drag", HEAD[0] + 60, HEAD[1] + 300), {"cmd": "views"}, {"cmd": "hit", "x": 900, "y": 300},
+                               M("up", HEAD[0] + 60, HEAD[1] + 300), {"cmd": "wait", "ms": 800}, {"cmd": "views"}]
+SCENES["try-create"] = DOCS() + [M("right", 1100, 720), {"cmd": "wait", "ms": 300}, M("click", 1150, 787),
+                                 {"cmd": "wait", "ms": 400}, {"cmd": "type", "text": "Open issues labelled docs"},
+                                 {"cmd": "key", "keystroke": "cmd-enter"}, {"cmd": "wait", "ms": 3000}]
 
 
 def drive(f, cmd):

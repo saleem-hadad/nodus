@@ -727,6 +727,109 @@ mod tests {
         nodus.capture().resize(400.0);
     }
 
+    /// A key hook that counts how often it starts and stops.
+    #[derive(Clone, Default)]
+    struct CountingHook(Arc<std::sync::Mutex<(u32, u32)>>);
+
+    impl CountingHook {
+        fn counts(&self) -> (u32, u32) {
+            *self.0.lock().unwrap()
+        }
+    }
+
+    struct Running(Arc<std::sync::Mutex<(u32, u32)>>);
+
+    impl KeyHook for CountingHook {
+        fn start(&self, _sink: HookSink) -> Result<Box<dyn RunningHook>, String> {
+            self.0.lock().unwrap().0 += 1;
+            Ok(Box::new(Running(Arc::clone(&self.0))))
+        }
+    }
+
+    impl RunningHook for Running {
+        fn stop(self: Box<Self>) -> Result<(), String> {
+            self.0.lock().unwrap().1 += 1;
+            Ok(())
+        }
+    }
+
+    /// Accessibility granted.
+    struct Trusted;
+
+    impl Permissions for Trusted {
+        fn accessibility_trusted(&self) -> bool {
+            true
+        }
+
+        fn request_accessibility(&self) -> BoxFuture<'_, bool> {
+            Box::pin(async { false })
+        }
+
+        fn open_screen_capture_settings(&self) {}
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn follows_the_setting_with_the_key_hook_and_stops_it_on_quit() {
+        let (_dir, nodus) = nodus();
+        let hook = CountingHook::default();
+        // CAP-038: registering matches the hook to the setting (on by default).
+        nodus.capture().register(CaptureSystem {
+            hook: Arc::new(hook.clone()),
+            permissions: Arc::new(Trusted),
+            ..CaptureSystem::headless()
+        });
+        assert_eq!(hook.counts(), (1, 0));
+        assert_eq!(nodus.capture().shortcut().await, CaptureShortcut::Ready);
+        // CAP-037, CAP-038: every settings change syncs it.
+        nodus
+            .settings()
+            .update_json(serde_json::json!({ "capture": false }))
+            .await;
+        assert_eq!(hook.counts(), (1, 1));
+        assert_eq!(nodus.capture().shortcut().await, CaptureShortcut::Off);
+        nodus
+            .settings()
+            .update_json(serde_json::json!({ "capture": true }))
+            .await;
+        assert_eq!(hook.counts(), (2, 1));
+        // A change elsewhere leaves a running hook alone.
+        nodus
+            .settings()
+            .update_json(serde_json::json!({ "notify": false }))
+            .await;
+        assert_eq!(hook.counts(), (2, 1));
+        // CAP-039, PLAT-032 step 1: quitting stops it.
+        nodus.shutdown();
+        assert_eq!(hook.counts(), (2, 2));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn hears_which_board_opened_before_it_loads() {
+        let (dir, nodus) = nodus();
+        let first = project(&nodus, dir.path()).await;
+        let other = dir.path().join("repos").join("docs-site");
+        std::fs::create_dir_all(&other).unwrap();
+        let second = nodus
+            .projects()
+            .add(Some(other.to_string_lossy().into_owned()))
+            .await
+            .unwrap()
+            .unwrap()
+            .id;
+        // CAP-151, CAP-154: with nothing captured yet, the board opened last
+        // is where a capture goes.
+        nodus.board().load(&first).await.unwrap();
+        assert_eq!(
+            nodus.capture().targets().await.default_project_id.as_deref(),
+            Some(first.as_str())
+        );
+        nodus.board().load(&second).await.unwrap();
+        assert_eq!(
+            nodus.capture().targets().await.default_project_id.as_deref(),
+            Some(second.as_str())
+        );
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn describes_dropped_files() {
         let (dir, nodus) = nodus();

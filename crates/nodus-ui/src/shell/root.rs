@@ -199,6 +199,17 @@ impl Render for Shell {
                 .unwrap_or_default(),
         };
         let bar = title_bar(&self.state, actions, window, cx);
+        // The actions rail (05) on the board's right edge, until the board
+        // view (09) mounts it itself with its hooks.
+        let action_rail = matches!(route, Route::Board(_)).then(|| {
+            crate::actions::action_rail(
+                &self.state,
+                &self.menus,
+                crate::actions::RailHooks::default(),
+                window,
+                cx,
+            )
+        });
         let menus_open = self.menus.read(cx).is_open();
 
         let main = div()
@@ -222,7 +233,8 @@ impl Render for Shell {
                             .map(|d| match &self.board {
                                 Some(board) if board.read(cx).board().is_some() => d.child(board.clone()),
                                 _ => d.child(crate::board::loading(self.state.read(cx).board_loading, cx)),
-                            }),
+                            })
+                            .children(action_rail),
                     )
                     .children(self.rail.clone()),
             });

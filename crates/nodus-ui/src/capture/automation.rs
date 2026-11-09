@@ -39,14 +39,24 @@ pub async fn run(name: &str, command: &Value, nodus: &Nodus, cx: &mut AsyncApp) 
             cx.update(|cx| {
                 if crate::parity::frozen(cx) {
                     gpui::component::theme::Theme::global_mut(cx).caret = gpui::transparent_black();
-                    for w in cx.windows() {
-                        let _ = w.update(cx, |_, window, _| window.refresh());
-                    }
                 }
             });
-            cx.background_executor()
-                .timer(std::time::Duration::from_millis(60))
-                .await;
+            // Frames come from the display; with the display asleep none do.
+            // Draw by hand a few times, so entrances finish and a window that
+            // asked to change size has its new size, then shoot.
+            for _ in 0..3 {
+                cx.update(|cx| {
+                    for w in cx.windows() {
+                        let _ = w.update(cx, |_, window, cx| {
+                            window.refresh();
+                            window.draw(cx).clear(cx);
+                        });
+                    }
+                });
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(350))
+                    .await;
+            }
             None
         }
         _ => None,

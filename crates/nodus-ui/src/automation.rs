@@ -389,6 +389,14 @@ async fn screenshot(cx: &mut AsyncApp, path: &str) -> Result<Value, String> {
     // GPUI tags its layer so); the goldens hold what Chromium sent a Display P3
     // screen. Converted, the two compare value for value.
     for pixel in image.pixels_mut() {
+        // A see-through window (the capture panel) reads back premultiplied;
+        // the goldens' PNGs are straight alpha. Opaque pixels don't change.
+        let a = pixel[3];
+        if a > 0 && a < 255 {
+            for c in 0..3 {
+                pixel[c] = ((u16::from(pixel[c]) * 255 + u16::from(a) / 2) / u16::from(a)).min(255) as u8;
+            }
+        }
         let [r, g, b] = srgb_to_display_p3([pixel[0], pixel[1], pixel[2]]);
         pixel[0] = r;
         pixel[1] = g;

@@ -65,10 +65,15 @@ impl CapturePanel {
         let card = self.render_card(t, ink, window, cx);
         let banner = self.render_banner(t, cx);
         let recents = self.render_recents(t, ink, window, cx);
+        // Chromium's paint order: the banner, then the card (`position:
+        // relative`) with its shadow over the banner, then the recents (their
+        // filling animation makes each a layer) over the card's shadow. The
+        // reversed column lays them out card, banner, recents.
         stage(STAGE_TOP)
-            .child(card)
+            .flex_col_reverse()
+            .children(recents.map(|r| gpui::deferred(r).into_any_element()))
             .children(banner)
-            .children(recents)
+            .child(card)
             .child(self.measure())
             .into_any_element()
     }

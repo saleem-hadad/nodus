@@ -3,7 +3,7 @@
 
 usage: capture_scenes.py [scene-prefix ...] [--theme light|dark]
                          [--harness <migration/parity>] [--golden <dir>]
-                         [--world <dir>] [--bin <nodus binary>]
+                         [--world <dir>] [--bin <nodus binary>] [--node <node 22+>]
 
 The same scenes as migration/parity/scenes/capture.mjs, driven through the
 test driver (crates/nodus-ui/src/automation.rs, capture/automation.rs): the
@@ -11,7 +11,8 @@ panel opens through File › Capture…'s path, reads nothing from the screen or
 the clipboard (the driver's stand-ins answer instead, as the harness's stubs
 do), and its own window is shot with its see-through margin, as
 <golden>/<scene>.<theme>.rust.png. Compare with compare.mjs. Needs the
-harness's pngjs on NODE_PATH for the screenshot thumbnail.
+harness's pngjs on NODE_PATH for the screenshot thumbnail, and Node 22 or
+newer: the claude stand-in it seeds runs on the node that seeded it.
 """
 import json
 import os
@@ -98,14 +99,14 @@ SCENES = {
     "capture-receipt-note": (
         {"noCaptures": True, "guessNote": True},
         lambda ids: show() + [typed("Remember to ask Sam about the coupon limits"), wait(3500),
-                              {"cmd": "key", "keystroke": "enter", **P}, wait(600)],
+                              {"cmd": "key", "keystroke": "enter", **P}, wait(200)],
     ),
     "capture-receipt-session": (
         {"noCaptures": True},
         lambda ids: [stub("submit", {"kind": "session", "projectId": ids["storefront"], "projectName": "storefront",
                                      "title": TEXT, "sessionId": ids["capNew"]})]
         + show()
-        + [typed(TEXT), wait(3500), {"cmd": "key", "keystroke": "enter", **P}, wait(600)],
+        + [typed(TEXT), wait(3500), {"cmd": "key", "keystroke": "enter", **P}, wait(200)],
     ),
     "capture-permission": (
         {"noCaptures": True},
@@ -132,7 +133,7 @@ def run(scene, theme, opts):
     spec, steps = SCENES[scene]
     spec = dict(spec)
     seeded = subprocess.run(
-        ["node", os.path.join(HERE, "capture_seed.mjs"), opts["harness"], opts["world"], theme, json.dumps(spec)],
+        [opts["node"], os.path.join(HERE, "capture_seed.mjs"), opts["harness"], opts["world"], theme, json.dumps(spec)],
         check=True, capture_output=True, text=True,
     )
     ids = json.loads(seeded.stdout.strip().splitlines()[-1])
@@ -160,7 +161,9 @@ def run(scene, theme, opts):
         for step in steps(ids):
             drive(f, step)
             drive(f, wait(80))
-        drive(f, {"cmd": "idle"})
+        # The receipt goes 2.6 s after it comes, so it's taken straight away.
+        if not scene.startswith("capture-receipt"):
+            drive(f, {"cmd": "idle"})
         out = os.path.join(opts["golden"], f"{scene}.{theme}.rust.png")
         drive(f, {"cmd": "screenshot", "path": out, **P})
         print("shot", out)
@@ -183,12 +186,13 @@ def main():
         "golden": os.path.join(REPO, "migration", "parity", "golden"),
         "world": os.path.join(tempfile.gettempdir(), "nodus-capture-parity"),
         "bin": os.path.join(REPO, "target", "debug", "nodus"),
+        "node": "node",
     }
     themes = ["light", "dark"]
-    for flag in ["--harness", "--golden", "--world", "--bin", "--theme"]:
+    for flag in ["--harness", "--golden", "--world", "--bin", "--theme", "--node"]:
         if flag in args:
             i = args.index(flag)
-            value = os.path.abspath(args[i + 1]) if flag != "--theme" else args[i + 1]
+            value = os.path.abspath(args[i + 1]) if flag not in ("--theme", "--node") else args[i + 1]
             del args[i : i + 2]
             if flag == "--theme":
                 themes = [value]

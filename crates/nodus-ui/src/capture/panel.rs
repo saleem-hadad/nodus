@@ -141,9 +141,10 @@ impl CapturePanel {
                     p.on_field_changed(value, cx);
                 }
             }),
-            // CAP-012: the panel lost the keyboard.
+            // CAP-012: the panel lost the keyboard. The test driver never gives
+            // it the keyboard, and ignores blurs as the harness does.
             cx.observe_window_activation(window, |p, window, _| {
-                if !window.is_window_active() {
+                if !window.is_window_active() && !crate::shell::window::quiet() {
                     p.nodus.capture().blurred();
                 }
             }),

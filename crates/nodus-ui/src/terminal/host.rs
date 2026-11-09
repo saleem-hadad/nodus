@@ -164,8 +164,16 @@ pub struct TerminalHost {
     attached: bool,
     fit: Option<(usize, usize)>,
     pub(crate) geometry: Option<Geometry>,
-    /// The card's zoom about the given point, set by the card's wrapper.
-    pub(crate) zoom: Option<(Point<Pixels>, f32)>,
+    /// The board's zoom when the host is an expanded card's (1 in the
+    /// session window): the terminal is laid out and drawn at 1× and its
+    /// picture scaled, as 0.9.4's canvas was under the board's transform
+    /// (TERM-083).
+    pub(crate) scale: f32,
+    /// Who a wheel gesture over a card's terminal belongs to, when the card
+    /// decides that itself (TERM-104…TERM-106); else [`BoardWheel`].
+    wheel_gate: Option<WheelGate>,
+    /// Focus asked for before the terminal was attached here (a card's wake, TERM-095).
+    focus_pending: bool,
     /// What was drawn last, kept while a synchronized update holds (TERM-082).
     pub(crate) shown: Option<Arc<Snapshot>>,
     hold_timer: Option<Task<()>>,
@@ -190,6 +198,10 @@ impl Focusable for TerminalHost {
 }
 
 type AttachFuture = Pin<Box<dyn Future<Output = Result<(), String>>>>;
+
+/// Says whether a wheel event over a card's terminal scrolls it (true) or
+/// belongs to the board's gesture (false); called with whether Ctrl is held.
+pub type WheelGate = std::rc::Rc<dyn Fn(bool, &mut App) -> bool>;
 
 /// The browser's wheel gestures on the board, shared by every card (TERM-104).
 #[derive(Default)]
@@ -269,7 +281,9 @@ impl TerminalHost {
             attached: false,
             fit: None,
             geometry: None,
-            zoom: None,
+            scale: 1.0,
+            wheel_gate: None,
+            focus_pending: false,
             shown: None,
             hold_timer: None,
             blink_on: true,
@@ -321,9 +335,34 @@ impl TerminalHost {
         if !self.attached {
             return;
         }
+        self.focus_pending = false;
         window.focus(&self.focus, cx);
         self.registry.focus(&self.session_id);
         self.restart_blink(cx);
+    }
+
+    /// Focuses the terminal now if it's attached here, else as soon as it is
+    /// (an expanded card woken before its terminal was in place, TERM-095).
+    pub fn request_focus(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        if self.attached {
+            self.focus_terminal(window, cx);
+        } else {
+            self.focus_pending = true;
+        }
+    }
+
+    /// The board's zoom for a card's terminal (TERM-083).
+    pub fn set_scale(&mut self, scale: f32, cx: &mut Context<'_, Self>) {
+        let scale = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
+        if self.scale != scale {
+            self.scale = scale;
+            cx.notify();
+        }
+    }
+
+    /// The card's own wheel arbitration (TERM-104).
+    pub fn set_wheel_gate(&mut self, gate: Option<WheelGate>) {
+        self.wheel_gate = gate;
     }
 
     /// Whether this terminal has the keyboard.
@@ -403,8 +442,9 @@ impl TerminalHost {
                 .detach();
             }
         }
-        if self.config.focus_on_attach {
-            // TERM-090: focused right after the attach starts.
+        if self.config.focus_on_attach || self.focus_pending {
+            // TERM-090: focused right after the attach starts (a card: once
+            // when a wake asked for it before the terminal was here).
             self.defer_focus(window, cx);
         }
     }
@@ -933,11 +973,16 @@ impl TerminalHost {
         let Some(g) = self.geometry else { return };
         // TERM-104…TERM-106: on the board, the gesture's first event decides.
         if self.config.card {
-            let route = cx
-                .default_global::<BoardWheel>()
-                .0
-                .route(now_ms(), true, event.modifiers.control);
-            if route != WheelRoute::Terminal {
+            let ours = match self.wheel_gate.clone() {
+                Some(gate) => gate(event.modifiers.control, cx),
+                None => {
+                    cx.default_global::<BoardWheel>()
+                        .0
+                        .route(now_ms(), true, event.modifiers.control)
+                        == WheelRoute::Terminal
+                }
+            };
+            if !ours {
                 return;
             }
         }

@@ -24,6 +24,59 @@ use super::store::Terminals;
 use crate::shell::window;
 use crate::state::Route;
 
+/// A stand-in expanded card (the `card` action).
+#[derive(Debug, Clone)]
+struct TestCard {
+    session_id: String,
+    shell: bool,
+    project_id: String,
+    /// The card's flow rect.
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    /// The board's viewport: flow (0, 0) lands at (vx, 52 + vy).
+    vx: f32,
+    vy: f32,
+    zoom: f32,
+}
+
+#[derive(Default)]
+struct TestCards(Vec<TestCard>);
+
+impl gpui::Global for TestCards {}
+
+/// The stand-in cards' bodies, as `.card-term` lays them out: below the 40 px
+/// title bar, padding 8 4 8 12, the terminal background, all at the zoom.
+pub fn test_cards(window: &mut gpui::Window, cx: &mut gpui::App) -> Vec<gpui::AnyElement> {
+    use gpui::{IntoElement, ParentElement, Styled, div, px};
+    let Some(cards) = cx.try_global::<TestCards>().map(|c| c.0.clone()) else {
+        return Vec::new();
+    };
+    cards
+        .into_iter()
+        .map(|c| {
+            let z = c.zoom;
+            let terminals = super::card::CardTerminals::new(c.project_id.clone(), z, cx);
+            terminals.set_enabled(&c.session_id, c.shell, true, cx);
+            let el = terminals.element(&c.session_id, window, cx);
+            div()
+                .absolute()
+                .left(px(c.vx + c.x * z))
+                .top(px(52.0 + c.vy + (c.y + 40.0) * z))
+                .w(px(c.w * z))
+                .h(px((c.h - 40.0) * z))
+                .pt(px(8.0 * z))
+                .pr(px(4.0 * z))
+                .pb(px(8.0 * z))
+                .pl(px(12.0 * z))
+                .bg(super::element::rgb(super::element::TERM_BG))
+                .children(el.map(|el| div().relative().size_full().child(el)))
+                .into_any_element()
+        })
+        .collect()
+}
+
 fn text(v: &Value, key: &str) -> String {
     v.get(key).and_then(Value::as_str).unwrap_or_default().to_owned()
 }
@@ -159,6 +212,30 @@ pub async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
                 cx.background_executor().timer(std::time::Duration::from_millis(100)).await;
             }
             Err(format!("{id} never became {want}"))
+        }
+        // A stand-in for an expanded card's body on a zoomed board, until the
+        // board's cards host terminals: the flow rect of the card's body
+        // (under its 40 px title bar), the viewport's offset and zoom.
+        "card" => {
+            let id = text(command, "session");
+            let num = |k: &str, d: f64| command.get(k).and_then(Value::as_f64).unwrap_or(d) as f32;
+            let card = TestCard {
+                session_id: id,
+                shell: command.get("shell").and_then(Value::as_bool).unwrap_or(false),
+                project_id: text(command, "project"),
+                x: num("x", 0.0),
+                y: num("y", 0.0),
+                w: num("w", 720.0),
+                h: num("h", 480.0),
+                vx: num("vx", 0.0),
+                vy: num("vy", 0.0),
+                zoom: num("zoom", 1.0),
+            };
+            cx.update(|cx| {
+                cx.default_global::<TestCards>().0.push(card);
+                cx.refresh_windows();
+            });
+            Ok(Value::Null)
         }
         "route" => Ok(cx.update(|cx| {
             let s = state.read(cx);

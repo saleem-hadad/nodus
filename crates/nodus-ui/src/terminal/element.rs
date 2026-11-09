@@ -13,7 +13,8 @@ use std::time::Instant;
 use gpui::{
     App, Bounds, ContentMask, DispatchPhase, Element, ElementId, ElementInputHandler, Entity, GlobalElementId,
     Hitbox, HitboxBehavior, Hsla, InspectorElementId, IntoElement, LayoutId, MouseMoveEvent, MouseUpEvent,
-    PathBuilder, Pixels, Point, Rgba, Style, TextRun, Window, fill, point, px, relative, size,
+    PathBuilder, Pixels, Point, Rgba, Style, TextRun, Window, fill, point, px, relative, size, Corners,
+    ElementTransform, LayerEffects,
 };
 use nodus_terminal::palette::{self, Rgb};
 use nodus_terminal::{CursorKind, Snapshot, Underline};
@@ -81,7 +82,6 @@ pub struct Prepaint {
     snapshot: Option<Arc<Snapshot>>,
     runs: Vec<GlyphRun>,
     hitbox: Hitbox,
-    focused: bool,
     cursor_on: bool,
     link: Option<nodus_terminal::links::Link>,
     marked: Option<(String, Arc<gpui::LineLayout>)>,
@@ -126,13 +126,23 @@ impl Element for TerminalElement {
     ) -> Prepaint {
         let m = metrics::metrics(window);
         let dpr = m.dpr;
+        // TERM-083: on a zoomed board the card's box is scaled; the terminal
+        // is laid out (and fitted) at 1× and its picture scaled.
+        let outer = bounds;
+        let scale = self.host.read(cx).scale;
+        let scaled = scale != 1.0;
+        let bounds = if scaled {
+            Bounds::new(outer.origin, size(outer.size.width / scale, outer.size.height / scale))
+        } else {
+            outer
+        };
         self.host
             .update(cx, |host, cx| host.layout(bounds.size, &m, window, cx));
         // The canvas sits on whole device pixels.
         let snap = |v: Pixels| px((f32::from(v) * dpr).round() / dpr);
         let origin = point(snap(bounds.origin.x), snap(bounds.origin.y));
 
-        let (snapshot, geometry, focused, cursor_on, link, marked, zoom) = self.host.update(cx, |host, cx| {
+        let (snapshot, geometry, cursor_on, link, marked) = self.host.update(cx, |host, cx| {
             let fresh = host
                 .registry
                 .with_terminal(&host.session_id, |t| t.snapshot())
@@ -161,20 +171,17 @@ impl Element for TerminalElement {
                 cell_h: m.cell_h(),
                 cols,
                 rows,
-                zoom: host.zoom,
+                zoom: scaled.then_some((bounds.origin, scale)),
             };
             host.geometry = Some(geometry);
             (
                 snapshot,
                 geometry,
-                host.is_focused(window),
                 host.blink_on || parity::frozen(cx),
                 host.hovered_link.clone(),
                 host.marked.clone(),
-                host.zoom,
             )
         });
-        let _ = zoom;
 
         // Glyph runs, row by row, one per font.
         let mut runs = Vec::new();
@@ -266,14 +273,13 @@ impl Element for TerminalElement {
             window.request_animation_frame();
         }
 
-        let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
+        let hitbox = window.insert_hitbox(outer, HitboxBehavior::Normal);
         Prepaint {
             metrics: m,
             geometry,
             snapshot,
             runs,
             hitbox,
-            focused,
             cursor_on,
             link,
             marked,
@@ -293,13 +299,6 @@ impl Element for TerminalElement {
         window: &mut Window,
         cx: &mut App,
     ) {
-        let m = p.metrics;
-        let dpr = m.dpr;
-        let d = |v: f32| px(v / dpr);
-        let (cw, ch) = (m.device_cell_w(), m.device_cell_h());
-        let origin = p.geometry.origin;
-        let cell_origin = |row: usize, col: usize| point(origin.x + d(col as f32 * cw), origin.y + d(row as f32 * ch));
-
         // The text input and the pointer's shape.
         let focus = self.host.read(cx).focus.clone();
         window.handle_input(&focus, ElementInputHandler::new(bounds, self.host.clone()), cx);
@@ -322,185 +321,263 @@ impl Element for TerminalElement {
             });
         }
 
-        window.with_content_mask(Some(ContentMask { bounds }), |window| {
-            window.paint_quad(fill(bounds, rgb(TERM_BG)));
-            let Some(s) = p.snapshot.clone() else {
-                return;
-            };
-            let grid = Bounds::new(origin, size(d(s.cols as f32 * cw), d(s.rows as f32 * ch)));
-            window.paint_quad(fill(grid, rgb(s.background)));
+        let g = p.geometry;
+        match g.zoom {
+            None => draw(p, window, point(px(0.), px(0.))),
+            // TERM-083: drawn at 1× into a layer, then scaled into the card.
+            Some((at, scale)) => {
+                let viewport = window.viewport_size();
+                for (tile, stage) in stage_tiles(g.bounds.size, at, viewport) {
+                    // The tile's top-left in the terminal's own space.
+                    let local = tile.origin;
+                    let shift = point(
+                        stage.x - local.x - g.bounds.origin.x,
+                        stage.y - local.y - g.bounds.origin.y,
+                    );
+                    let t = at - stage + point(local.x * scale, local.y * scale);
+                    let effects = LayerEffects {
+                        transform: Some(
+                            ElementTransform::default()
+                                .origin(0., 0.)
+                                .translate(t.x, t.y)
+                                .scale(scale),
+                        ),
+                        ..LayerEffects::default()
+                    };
+                    let stage_bounds = Bounds::new(stage, tile.size);
+                    window.paint_effect_layer(stage_bounds, Corners::default(), &effects, |window| {
+                        window.with_content_mask(Some(ContentMask { bounds: stage_bounds }), |window| {
+                            draw(p, window, shift);
+                        });
+                    });
+                }
+            }
+        }
+    }
+}
 
-            // The cursor's cell, drawn as a block (TERM-076).
-            let cursor = s.cursor.filter(|c| c.row < s.rows && c.col < s.cols);
-            let block = cursor.filter(|c| c.focused && c.kind == CursorKind::Block && (p.cursor_on || !c.blink));
+/// Where each part of a scaled terminal is drawn before it's scaled: a layer
+/// holds only what fits in the window, so a terminal bigger than the window
+/// at 1× is drawn in window-sized tiles. Each is the tile's box in the
+/// terminal (from its top-left) and where it's drawn, as near to `at` as fits.
+pub fn stage_tiles(
+    terminal: gpui::Size<Pixels>,
+    at: Point<Pixels>,
+    viewport: gpui::Size<Pixels>,
+) -> Vec<(Bounds<Pixels>, Point<Pixels>)> {
+    let (w, h) = (f32::from(terminal.width), f32::from(terminal.height));
+    let (vw, vh) = (
+        f32::from(viewport.width).floor().max(1.0),
+        f32::from(viewport.height).floor().max(1.0),
+    );
+    let mut tiles = Vec::new();
+    let mut y = 0.0;
+    while y < h {
+        let th = (h - y).min(vh);
+        let mut x = 0.0;
+        while x < w {
+            let tw = (w - x).min(vw);
+            let sx = (f32::from(at.x) + x).round().clamp(0.0, (vw - tw).max(0.0));
+            let sy = (f32::from(at.y) + y).round().clamp(0.0, (vh - th).max(0.0));
+            tiles.push((
+                Bounds::new(point(px(x), px(y)), size(px(tw), px(th))),
+                point(px(sx), px(sy)),
+            ));
+            x += vw;
+        }
+        y += vh;
+    }
+    tiles
+}
 
-            // Backgrounds, merged along each row.
-            for (row, cells) in s.cells.iter().enumerate() {
-                let mut col = 0;
-                while col < cells.len() {
-                    let cell = &cells[col];
-                    if cell.bg_is_default {
-                        col += 1;
+/// The grid, its decorations, the cursor, the composition and the slider,
+/// moved by `shift` (where a scaled terminal is drawn before it's scaled).
+fn draw(p: &Prepaint, window: &mut Window, shift: Point<Pixels>) {
+    let m = p.metrics;
+    let dpr = m.dpr;
+    let d = |v: f32| px(v / dpr);
+    let (cw, ch) = (m.device_cell_w(), m.device_cell_h());
+    let origin = p.geometry.origin + shift;
+    let bounds = Bounds::new(p.geometry.bounds.origin + shift, p.geometry.bounds.size);
+    let cell_origin = |row: usize, col: usize| point(origin.x + d(col as f32 * cw), origin.y + d(row as f32 * ch));
+    window.with_content_mask(Some(ContentMask { bounds }), |window| {
+        window.paint_quad(fill(bounds, rgb(TERM_BG)));
+        let Some(s) = p.snapshot.clone() else {
+            return;
+        };
+        let grid = Bounds::new(origin, size(d(s.cols as f32 * cw), d(s.rows as f32 * ch)));
+        window.paint_quad(fill(grid, rgb(s.background)));
+
+        // The cursor's cell, drawn as a block (TERM-076).
+        let cursor = s.cursor.filter(|c| c.row < s.rows && c.col < s.cols);
+        let block = cursor.filter(|c| c.focused && c.kind == CursorKind::Block && (p.cursor_on || !c.blink));
+
+        // Backgrounds, merged along each row.
+        for (row, cells) in s.cells.iter().enumerate() {
+            let mut col = 0;
+            while col < cells.len() {
+                let cell = &cells[col];
+                if cell.bg_is_default {
+                    col += 1;
+                    continue;
+                }
+                let start = col;
+                let bg = cell.bg;
+                while col < cells.len() && !cells[col].bg_is_default && cells[col].bg == bg {
+                    col += 1;
+                }
+                let at = cell_origin(row, start);
+                window.paint_quad(fill(
+                    Bounds::new(at, size(d((col - start) as f32 * cw), d(ch))),
+                    rgb(bg),
+                ));
+            }
+        }
+        if let Some(c) = block {
+            let w = if c.wide { 2.0 } else { 1.0 };
+            window.paint_quad(fill(
+                Bounds::new(cell_origin(c.row, c.col), size(d(w * cw), d(ch))),
+                rgb(c.color),
+            ));
+        }
+
+        let glyph_color = |row: usize, col: usize| -> Hsla {
+            let cell = &s.cells[row][col];
+            if block.is_some_and(|c| c.row == row && c.col == col) {
+                return rgb(palette::theme::CURSOR_ACCENT);
+            }
+            let mut color = rgb(cell.fg);
+            if cell.dim {
+                color.a *= palette::theme::DIM_OPACITY;
+            }
+            color
+        };
+
+        // Glyphs, each at its cell.
+        let size_px = TermMetrics::font_size();
+        for run in &p.runs {
+            let baseline_y = origin.y + d(run.row as f32 * ch + m.baseline);
+            for shaped in &run.layout.runs {
+                for glyph in &shaped.glyphs {
+                    let i = run.starts.partition_point(|(start, _)| *start <= glyph.index);
+                    let Some(&(_, col)) = run.starts.get(i.saturating_sub(1)) else {
                         continue;
+                    };
+                    let at = point(origin.x + d(col as f32 * cw), baseline_y);
+                    if glyph.is_emoji {
+                        let _ = window.paint_emoji(at, shaped.font_id, glyph.id, size_px);
+                    } else {
+                        let color = glyph_color(run.row, col);
+                        let _ = window.paint_glyph(at, shaped.font_id, glyph.id, size_px, color);
                     }
-                    let start = col;
-                    let bg = cell.bg;
-                    while col < cells.len() && !cells[col].bg_is_default && cells[col].bg == bg {
-                        col += 1;
+                }
+            }
+        }
+
+        // Custom glyphs, decorations.
+        for (row, cells) in s.cells.iter().enumerate() {
+            for (col, cell) in cells.iter().enumerate() {
+                if cell.width == 0 {
+                    continue;
+                }
+                let at = cell_origin(row, col);
+                let color = glyph_color(row, col);
+                if !cell.invisible {
+                    let mut chars = cell.text.chars();
+                    if let (Some(c), None) = (chars.next(), chars.next())
+                        && let Some(glyph) = glyphs::custom_glyph(c, cw, ch, dpr, size_px.into())
+                    {
+                        paint_custom(window, &glyph, at, cw, ch, dpr, color);
                     }
-                    let at = cell_origin(row, start);
+                }
+                let span = f32::from(cell.width.max(1));
+                if cell.underline != Underline::None {
+                    let mut color = rgb(cell.underline_color);
+                    if cell.dim {
+                        color.a *= palette::theme::DIM_OPACITY;
+                    }
+                    paint_underline(window, cell.underline, at, span * cw, &m, color);
+                }
+                if cell.strikethrough {
+                    // `floor(charHeight / 2)` less half a pixel, 2 device px at 2×.
+                    let lw = (13.0 * dpr / 10.0).floor().max(1.0);
+                    let y = m.cell.device_char_top as f32 + (m.cell.device_char_height as f32 / 2.0).floor() - 0.5;
                     window.paint_quad(fill(
-                        Bounds::new(at, size(d((col - start) as f32 * cw), d(ch))),
-                        rgb(bg),
+                        Bounds::new(point(at.x, at.y + d(y - lw / 2.0)), size(d(span * cw), d(lw))),
+                        color,
                     ));
                 }
             }
-            if let Some(c) = block {
-                let w = if c.wide { 2.0 } else { 1.0 };
-                window.paint_quad(fill(
-                    Bounds::new(cell_origin(c.row, c.col), size(d(w * cw), d(ch))),
-                    rgb(c.color),
-                ));
-            }
+        }
 
-            let glyph_color = |row: usize, col: usize| -> Hsla {
-                let cell = &s.cells[row][col];
-                if block.is_some_and(|c| c.row == row && c.col == col) {
-                    return rgb(palette::theme::CURSOR_ACCENT);
+        // TERM-066: a hovered link is underlined in its cells' colour.
+        if let Some(link) = &p.link {
+            let top = p.history - p.display_offset;
+            for row in 0..s.rows {
+                for col in 0..s.cols {
+                    let lp = nodus_terminal::links::LinkPoint {
+                        x: col + 1,
+                        y: top + row + 1,
+                    };
+                    if link.contains(lp, s.cols) {
+                        let color = rgb(s.cells[row][col].fg);
+                        let at = cell_origin(row, col);
+                        let y = (m.cell.device_cell_height - 1.0) as f32;
+                        window.paint_quad(fill(Bounds::new(point(at.x, at.y + d(y)), size(d(cw), d(1.0))), color));
+                    }
                 }
-                let mut color = rgb(cell.fg);
-                if cell.dim {
-                    color.a *= palette::theme::DIM_OPACITY;
-                }
-                color
+            }
+        }
+
+        // The cursor's other shapes, and the unfocused outline (TERM-076).
+        if let Some(c) = cursor {
+            let w = if c.wide { 2.0 * cw } else { cw };
+            let at = cell_origin(c.row, c.col);
+            let color = rgb(c.color);
+            let rect = |window: &mut Window, x: f32, y: f32, rw: f32, rh: f32| {
+                window.paint_quad(fill(Bounds::new(point(at.x + d(x), at.y + d(y)), size(d(rw), d(rh))), color));
             };
-
-            // Glyphs, each at its cell.
-            let size_px = TermMetrics::font_size();
-            for run in &p.runs {
-                let baseline_y = origin.y + d(run.row as f32 * ch + m.baseline);
-                for shaped in &run.layout.runs {
-                    for glyph in &shaped.glyphs {
-                        let i = run.starts.partition_point(|(start, _)| *start <= glyph.index);
-                        let Some(&(_, col)) = run.starts.get(i.saturating_sub(1)) else {
-                            continue;
-                        };
-                        let at = point(origin.x + d(col as f32 * cw), baseline_y);
-                        if glyph.is_emoji {
-                            let _ = window.paint_emoji(at, shaped.font_id, glyph.id, size_px);
-                        } else {
-                            let color = glyph_color(run.row, col);
-                            let _ = window.paint_glyph(at, shaped.font_id, glyph.id, size_px, color);
-                        }
-                    }
+            if !c.focused {
+                rect(window, 0.0, 0.0, dpr, ch);
+                rect(window, 0.0, ch - dpr, w, dpr);
+                rect(window, 0.0, 0.0, w, dpr);
+                rect(window, w - dpr, 0.0, dpr, ch);
+            } else if p.cursor_on || !c.blink {
+                match c.kind {
+                    CursorKind::Block => {}
+                    CursorKind::Bar => rect(window, 0.0, 0.0, dpr, ch),
+                    CursorKind::Underline => rect(window, 0.0, ch - dpr, w, dpr),
                 }
             }
+        }
 
-            // Custom glyphs, decorations.
-            for (row, cells) in s.cells.iter().enumerate() {
-                for (col, cell) in cells.iter().enumerate() {
-                    if cell.width == 0 {
-                        continue;
-                    }
-                    let at = cell_origin(row, col);
-                    let color = glyph_color(row, col);
-                    if !cell.invisible {
-                        let mut chars = cell.text.chars();
-                        if let (Some(c), None) = (chars.next(), chars.next())
-                            && let Some(glyph) = glyphs::custom_glyph(c, cw, ch, dpr, size_px.into())
-                        {
-                            paint_custom(window, &glyph, at, cw, ch, dpr, color);
-                        }
-                    }
-                    let span = f32::from(cell.width.max(1));
-                    if cell.underline != Underline::None {
-                        let mut color = rgb(cell.underline_color);
-                        if cell.dim {
-                            color.a *= palette::theme::DIM_OPACITY;
-                        }
-                        paint_underline(window, cell.underline, at, span * cw, &m, color);
-                    }
-                    if cell.strikethrough {
-                        // `floor(charHeight / 2)` less half a pixel, 2 device px at 2×.
-                        let lw = (13.0 * dpr / 10.0).floor().max(1.0);
-                        let y = m.cell.device_char_top as f32 + (m.cell.device_char_height as f32 / 2.0).floor() - 0.5;
-                        window.paint_quad(fill(
-                            Bounds::new(point(at.x, at.y + d(y - lw / 2.0)), size(d(span * cw), d(lw))),
-                            color,
-                        ));
-                    }
+        // TERM-055: the composition at the cursor, white on black.
+        if let (Some((_, layout)), Some(c)) = (&p.marked, s.cursor.or(cursor)) {
+            let at = cell_origin(c.row, c.col);
+            let width = layout.width.max(d(cw));
+            window.paint_quad(fill(
+                Bounds::new(at, size(width, d(ch))),
+                rgb(palette::theme::COMPOSITION_BACKGROUND),
+            ));
+            let baseline = point(at.x, at.y + d(m.baseline));
+            for shaped in &layout.runs {
+                for glyph in &shaped.glyphs {
+                    let gp = point(baseline.x + glyph.position.x, baseline.y);
+                    let _ = window.paint_glyph(
+                        gp,
+                        shaped.font_id,
+                        glyph.id,
+                        size_px,
+                        rgb(palette::theme::COMPOSITION_FOREGROUND),
+                    );
                 }
             }
+        }
 
-            // TERM-066: a hovered link is underlined in its cells' colour.
-            if let Some(link) = &p.link {
-                let top = p.history - p.display_offset;
-                for row in 0..s.rows {
-                    for col in 0..s.cols {
-                        let lp = nodus_terminal::links::LinkPoint {
-                            x: col + 1,
-                            y: top + row + 1,
-                        };
-                        if link.contains(lp, s.cols) {
-                            let color = rgb(s.cells[row][col].fg);
-                            let at = cell_origin(row, col);
-                            let y = (m.cell.device_cell_height - 1.0) as f32;
-                            window.paint_quad(fill(Bounds::new(point(at.x, at.y + d(y)), size(d(cw), d(1.0))), color));
-                        }
-                    }
-                }
-            }
-
-            // The cursor's other shapes, and the unfocused outline (TERM-076).
-            if let Some(c) = cursor {
-                let w = if c.wide { 2.0 * cw } else { cw };
-                let at = cell_origin(c.row, c.col);
-                let color = rgb(c.color);
-                let rect = |window: &mut Window, x: f32, y: f32, rw: f32, rh: f32| {
-                    window.paint_quad(fill(Bounds::new(point(at.x + d(x), at.y + d(y)), size(d(rw), d(rh))), color));
-                };
-                if !c.focused {
-                    rect(window, 0.0, 0.0, dpr, ch);
-                    rect(window, 0.0, ch - dpr, w, dpr);
-                    rect(window, 0.0, 0.0, w, dpr);
-                    rect(window, w - dpr, 0.0, dpr, ch);
-                } else if p.cursor_on || !c.blink {
-                    match c.kind {
-                        CursorKind::Block => {}
-                        CursorKind::Bar => rect(window, 0.0, 0.0, dpr, ch),
-                        CursorKind::Underline => rect(window, 0.0, ch - dpr, w, dpr),
-                    }
-                }
-            }
-
-            // TERM-055: the composition at the cursor, white on black.
-            if let (Some((_, layout)), Some(c)) = (&p.marked, s.cursor.or(cursor)) {
-                let at = cell_origin(c.row, c.col);
-                let width = layout.width.max(d(cw));
-                window.paint_quad(fill(
-                    Bounds::new(at, size(width, d(ch))),
-                    rgb(palette::theme::COMPOSITION_BACKGROUND),
-                ));
-                let baseline = point(at.x, at.y + d(m.baseline));
-                for shaped in &layout.runs {
-                    for glyph in &shaped.glyphs {
-                        let gp = point(baseline.x + glyph.position.x, baseline.y);
-                        let _ = window.paint_glyph(
-                            gp,
-                            shaped.font_id,
-                            glyph.id,
-                            size_px,
-                            rgb(palette::theme::COMPOSITION_FOREGROUND),
-                        );
-                    }
-                }
-            }
-
-            if let Some((slider, color)) = p.scrollbar {
-                window.paint_quad(fill(slider, color));
-            }
-        });
-    }
+        if let Some((slider, color)) = p.scrollbar {
+            window.paint_quad(fill(Bounds::new(slider.origin + shift, slider.size), color));
+        }
+    });
 }
 
 /// The slider's opacity: shown while scrolling or hovered, faded out 500 ms

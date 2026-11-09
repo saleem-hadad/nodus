@@ -84,7 +84,10 @@ impl TerminalLayers {
 impl Render for TerminalLayers {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         self.sync(window, cx);
+        // The test driver's stand-in expanded cards, under the windows.
+        let cards = super::driver::test_cards(window, cx);
         div()
+            .children(cards)
             .children(self.preview.clone())
             .children(self.session.clone())
             .children(self.agents.clone())

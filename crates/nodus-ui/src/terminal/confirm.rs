@@ -6,7 +6,7 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, ElementId, FocusHandle, FontWeight, InteractiveElement, IntoElement, KeyDownEvent, ParentElement,
+    AnyElement, App, ElementId, FocusHandle, FontWeight, InteractiveElement, KeyDownEvent, ParentElement,
     SharedString, Styled, Window, div, px,
 };
 use nodus_core::StopConfirmation;

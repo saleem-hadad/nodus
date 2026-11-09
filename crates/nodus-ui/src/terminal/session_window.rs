@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, AppContext as _, ClickEvent, Context, Entity, FocusHandle, FontWeight, InteractiveElement,
+    AnyElement, AppContext as _, ClickEvent, Context, Entity, FocusHandle, FontWeight, InteractiveElement,
     IntoElement, MouseButton, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Subscription,
     Task, Window, div, px, relative,
 };
@@ -444,6 +444,8 @@ impl SessionWindow {
             .pl(px(16.))
             .pr(px(10.))
             .bg(t.bg_elevated)
+            // The panel clips to its rounded corners (`overflow: hidden`).
+            .rounded_t(RADIUS_XL)
             .border_b(px(0.5))
             .border_color(t.separator)
             .child(status_el)
@@ -467,6 +469,7 @@ impl SessionWindow {
             .pb(px(10.))
             .pl(px(14.))
             .bg(rgb(TERM_BG))
+            .rounded_b(RADIUS_XL)
             // MODAL-008: a press anywhere in the body, padding too, focuses the terminal.
             .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                 host.update(cx, |h, cx| h.focus_terminal(window, cx));

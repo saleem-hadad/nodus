@@ -58,6 +58,15 @@ SCENES = {
     "terminal-stop-confirm": storefront()
     + [T("open", session="@sf-skeleton"), {"cmd": "wait", "ms": 1200}, "click-stop"],
     "transcript-preview": storefront() + [T("preview", session="@sf-arch-01"), {"cmd": "wait", "ms": 600}],
+    # Stand-in card bodies where infra's board has its expanded cards (flow
+    # 400,0 and 1152,0, 720x480; viewport 30,80 at 0.72), until the board's
+    # cards host terminals: compare the terminal bodies only.
+    "board-expanded": [
+        T("board", project="@infra"),
+        T("card", session="@in-certs", project="@infra", x=400, y=0, vx=30, vy=80, zoom=0.72),
+        T("card", session="@in-shell", project="@infra", shell=True, x=1152, y=0, vx=30, vy=80, zoom=0.72),
+        {"cmd": "wait", "ms": 1500},
+    ],
     "agent-viewer": storefront()
     + [T("agents", session="@sf-skeleton", agent="@@sf-a3"), {"cmd": "wait", "ms": 800}],
 }

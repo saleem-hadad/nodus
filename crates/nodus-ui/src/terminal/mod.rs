@@ -17,6 +17,7 @@ pub const MONO: &str = "Menlo";
 pub const MONO: &str = crate::theme::fonts::MONO;
 
 pub mod icons;
+pub mod card;
 pub mod element;
 pub mod glyphs;
 pub mod host;

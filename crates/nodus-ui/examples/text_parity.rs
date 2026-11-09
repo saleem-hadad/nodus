@@ -77,7 +77,15 @@ impl Render for Cases {
             };
             root = root.child(el);
             if case["bar"].as_bool() == Some(true) {
-                root = root.child(div().absolute().left(px(x + 30.)).top(px(y + lh)).w(px(20.)).h(px(2.)).bg(black()));
+                root = root.child(
+                    div()
+                        .absolute()
+                        .left(px(x + 30.))
+                        .top(px(y + lh))
+                        .w(px(20.))
+                        .h(px(2.))
+                        .bg(black()),
+                );
             }
         }
         root
@@ -91,7 +99,9 @@ fn main() {
         .and_then(|path| std::fs::read_to_string(path).ok())
         .and_then(|json| serde_json::from_str(&json).ok())
         .unwrap_or_default();
-    let out = args.next().map_or_else(|| std::env::temp_dir().join("text_parity.png"), PathBuf::from);
+    let out = args
+        .next()
+        .map_or_else(|| std::env::temp_dir().join("text_parity.png"), PathBuf::from);
     application().run(move |cx: &mut App| {
         cx.set_font_smoothing(FontSmoothing::Antialiased);
         let size = size(px(WIDTH), px(HEIGHT));

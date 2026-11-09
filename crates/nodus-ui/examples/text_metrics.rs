@@ -12,7 +12,9 @@
 use gpui_kit::{Font, FontRun, FontStyle, FontWeight, px};
 
 fn main() -> anyhow::Result<()> {
-    let path = std::env::args().nth(1).ok_or_else(|| anyhow::anyhow!("usage: text_metrics <chromium.json>"))?;
+    let path = std::env::args()
+        .nth(1)
+        .ok_or_else(|| anyhow::anyhow!("usage: text_metrics <chromium.json>"))?;
     let rows: Vec<serde_json::Value> = serde_json::from_str(&std::fs::read_to_string(path)?)?;
     let platform = gpui_kit::platform::current_platform(true);
     let text_system = platform.text_system();
@@ -29,7 +31,10 @@ fn main() -> anyhow::Result<()> {
             style: FontStyle::Normal,
         };
         let id = text_system.font_id(&font)?;
-        let run = FontRun { font_id: id, len: text.len() };
+        let run = FontRun {
+            font_id: id,
+            len: text.len(),
+        };
         let width = f32::from(text_system.layout_line(text, px(size), &[run]).width);
         let diff = width - chromium;
         worst = worst.max(diff.abs());
@@ -39,7 +44,11 @@ fn main() -> anyhow::Result<()> {
         if text == "a" && weight == 400.0 {
             let m = text_system.font_metrics(id);
             let scale = size / m.units_per_em as f32;
-            println!("{size:>5} ascent {:.4} descent {:.4}", m.ascent * scale, -m.descent * scale);
+            println!(
+                "{size:>5} ascent {:.4} descent {:.4}",
+                m.ascent * scale,
+                -m.descent * scale
+            );
         }
     }
     println!("worst {worst:.4}px");

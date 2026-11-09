@@ -49,10 +49,16 @@ mod mac {
             let font_id = text_system.font_id(&system_font(weight)).expect("system font");
             assert!(!ids.contains(&font_id), "{weight} has a font of its own");
             ids.push(font_id);
-            let run = FontRun { font_id, len: text.len() };
+            let run = FontRun {
+                font_id,
+                len: text.len(),
+            };
             let layout = text_system.layout_line(text, px(13.), &[run]);
             let width = f32::from(layout.width);
-            assert!(width > previous + 2., "{weight} ({width}) is wider than the weight below ({previous})");
+            assert!(
+                width > previous + 2.,
+                "{weight} ({width}) is wider than the weight below ({previous})"
+            );
             previous = width;
             assert_eq!(layout.runs.len(), 1);
             assert_eq!(layout.runs[0].font_id, font_id, "{weight} is drawn at its weight");

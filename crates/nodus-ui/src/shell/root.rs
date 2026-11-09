@@ -9,6 +9,7 @@ use gpui::{
 };
 use nodus_core::Nodus;
 
+use crate::board::canvas::{BoardCanvas, new_canvas};
 use crate::components::context_menu::MenuLayer;
 use crate::platform::Platform;
 use crate::projects::grid::ProjectsView;
@@ -27,8 +28,10 @@ pub struct Shell {
     grid: Option<Entity<ProjectsView>>,
     rail: Option<Entity<ProjectRail>>,
     settings: Option<Entity<SettingsDialog>>,
-    /// The board the main area shows; a fresh one per project (UI-028).
+    /// The board the main area shows; a fresh one per project (UI-028,
+    /// BOARD-002).
     board_key: Option<String>,
+    board: Option<Entity<BoardCanvas>>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -50,6 +53,10 @@ impl Shell {
                     if let Some(rail) = this.rail.clone() {
                         rail.update(cx, ProjectRail::hide_numbers);
                     }
+                    // The board lets go of Space (React Flow's key state).
+                    if let Some(board) = this.board.clone() {
+                        board.update(cx, |b, _| b.release_keys());
+                    }
                 }
             }),
             // UI-160: so does resizing the window.
@@ -65,6 +72,7 @@ impl Shell {
             rail: None,
             settings: None,
             board_key: None,
+            board: None,
             _subscriptions: subscriptions,
         }
     }
@@ -85,6 +93,7 @@ impl Shell {
                 // UI-029: the rail starts over the next time a board opens.
                 self.rail = None;
                 self.board_key = None;
+                self.board = None;
             }
             Route::Board(id) => {
                 self.grid = None;
@@ -92,6 +101,11 @@ impl Shell {
                     let state = self.state.clone();
                     let menus = self.menus.clone();
                     self.rail = Some(cx.new(|cx| ProjectRail::new(state, menus, cx)));
+                }
+                if self.board_key.as_ref() != Some(id) || self.board.is_none() {
+                    let state = self.state.clone();
+                    let menus = self.menus.clone();
+                    self.board = Some(new_canvas(state, menus, id.clone(), cx));
                 }
                 self.board_key = Some(id.clone());
             }
@@ -142,6 +156,15 @@ impl Shell {
             cx.stop_propagation();
             return;
         }
+        // The board's keys (BOARD-156…BOARD-170), unless a field has the keyboard.
+        if let Some(board) = self.board.clone() {
+            let board_focus = board.read(cx).focus.clone();
+            let typing = window.focused(cx).is_some_and(|f| f != self.focus && f != board_focus);
+            if board.update(cx, |b, cx| b.on_key_down(e, typing, cx)) {
+                cx.stop_propagation();
+                return;
+            }
+        }
         if let Some(grid) = self.grid.clone()
             && grid.update(cx, |g, cx| g.on_key_down(e, window, cx))
         {
@@ -164,8 +187,12 @@ impl Render for Shell {
         let pinned = self.state.read(cx).pin_rail();
         let actions = match route {
             Route::Projects => vec![new_project_button(&self.state)],
-            // The board's own buttons come with the board track (09).
-            Route::Board(_) => Vec::new(),
+            // BOARD-147: the board's split button.
+            Route::Board(_) => self
+                .board
+                .clone()
+                .map(|board| vec![crate::board::title_bar_button(&board, &self.menus, window, cx)])
+                .unwrap_or_default(),
         };
         let bar = title_bar(&self.state, actions, window, cx);
         let menus_open = self.menus.read(cx).is_open();
@@ -179,14 +206,19 @@ impl Render for Shell {
                 Route::Projects => d.children(self.grid.clone()),
                 Route::Board(_) => d
                     .child(
-                        // UI-026, UI-027: the board, beside a pinned rail.
+                        // UI-026, UI-027: the board, beside a pinned rail;
+                        // BOARD-001: the loading surface until it's in.
                         div()
                             .absolute()
                             .top_0()
                             .bottom_0()
                             .right_0()
                             .left(if pinned { RAIL_W } else { px(0.) })
-                            .bg(t.bg_canvas),
+                            .bg(t.bg_canvas)
+                            .map(|d| match &self.board {
+                                Some(board) if board.read(cx).board().is_some() => d.child(board.clone()),
+                                _ => d.child(crate::board::loading(self.state.read(cx).board_loading, cx)),
+                            }),
                     )
                     .children(self.rail.clone()),
             });
@@ -216,6 +248,9 @@ impl Render for Shell {
             .on_key_up(cx.listener(|this, e: &KeyUpEvent, _, cx| {
                 if let Some(rail) = this.rail.clone() {
                     rail.update(cx, |r, cx| r.on_key_up(e, cx));
+                }
+                if let Some(board) = this.board.clone() {
+                    board.update(cx, |b, cx| b.on_key_up(e, cx));
                 }
             }))
             .on_modifiers_changed(cx.listener(|this, e: &ModifiersChangedEvent, _, cx| {

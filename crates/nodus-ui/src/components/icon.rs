@@ -30,10 +30,29 @@ pub enum Icon {
     Folders,
     FolderMinus,
     FolderPlus,
+    Minus,
+    Maximize,
+    Maximize2,
+    Minimize2,
+    AppWindowMac,
+    Ban,
+    Bot,
+    Eye,
+    Group,
+    LayoutDashboard,
+    Loader2,
+    PencilLine,
+    Play,
+    RefreshCw,
+    Sparkles,
+    Square,
+    SquareDashed,
+    StickyNote,
+    Ungroup,
 }
 
 impl Icon {
-    const ALL: [Self; 20] = [
+    const ALL: [Self; 39] = [
         Self::ChevronLeft,
         Self::ChevronRight,
         Self::ChevronDown,
@@ -54,6 +73,25 @@ impl Icon {
         Self::Folders,
         Self::FolderMinus,
         Self::FolderPlus,
+        Self::Minus,
+        Self::Maximize,
+        Self::Maximize2,
+        Self::Minimize2,
+        Self::AppWindowMac,
+        Self::Ban,
+        Self::Bot,
+        Self::Eye,
+        Self::Group,
+        Self::LayoutDashboard,
+        Self::Loader2,
+        Self::PencilLine,
+        Self::Play,
+        Self::RefreshCw,
+        Self::Sparkles,
+        Self::Square,
+        Self::SquareDashed,
+        Self::StickyNote,
+        Self::Ungroup,
     ];
 
     pub fn name(self) -> &'static str {
@@ -78,6 +116,25 @@ impl Icon {
             Self::Folders => "folders",
             Self::FolderMinus => "folder-minus",
             Self::FolderPlus => "folder-plus",
+            Self::Minus => "minus",
+            Self::Maximize => "maximize",
+            Self::Maximize2 => "maximize-2",
+            Self::Minimize2 => "minimize-2",
+            Self::AppWindowMac => "app-window-mac",
+            Self::Ban => "ban",
+            Self::Bot => "bot",
+            Self::Eye => "eye",
+            Self::Group => "group",
+            Self::LayoutDashboard => "layout-dashboard",
+            Self::Loader2 => "loader-circle",
+            Self::PencilLine => "pencil-line",
+            Self::Play => "play",
+            Self::RefreshCw => "refresh-cw",
+            Self::Sparkles => "sparkles",
+            Self::Square => "square",
+            Self::SquareDashed => "square-dashed",
+            Self::StickyNote => "sticky-note",
+            Self::Ungroup => "ungroup",
         }
     }
 
@@ -125,6 +182,55 @@ impl Icon {
             }
             Self::FolderPlus => {
                 r#"<path d="M12 10v6"/><path d="M9 13h6"/><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>"#
+            }
+            Self::Minus => r#"<path d="M5 12h14"/>"#,
+            Self::Maximize => {
+                r#"<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>"#
+            }
+            Self::Maximize2 => {
+                r#"<path d="M15 3h6v6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/><path d="M9 21H3v-6"/>"#
+            }
+            Self::Minimize2 => {
+                r#"<path d="m14 10 7-7"/><path d="M20 10h-6V4"/><path d="m3 21 7-7"/><path d="M4 14h6v6"/>"#
+            }
+            Self::AppWindowMac => {
+                r#"<rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.01"/><path d="M10 8h.01"/><path d="M14 8h.01"/>"#
+            }
+            Self::Ban => r#"<circle cx="12" cy="12" r="10"/><path d="M4.929 4.929 19.07 19.071"/>"#,
+            Self::Bot => {
+                r#"<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>"#
+            }
+            Self::Eye => {
+                r#"<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>"#
+            }
+            Self::Group => {
+                r#"<path d="M3 7V5c0-1.1.9-2 2-2h2"/><path d="M17 3h2c1.1 0 2 .9 2 2v2"/><path d="M21 17v2c0 1.1-.9 2-2 2h-2"/><path d="M7 21H5c-1.1 0-2-.9-2-2v-2"/><rect width="7" height="5" x="7" y="7" rx="1"/><rect width="7" height="5" x="10" y="12" rx="1"/>"#
+            }
+            Self::LayoutDashboard => {
+                r#"<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>"#
+            }
+            Self::Loader2 => r#"<path d="M21 12a9 9 0 1 1-6.219-8.56"/>"#,
+            Self::PencilLine => {
+                r#"<path d="M13 21h8"/><path d="m15 5 4 4"/><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/>"#
+            }
+            Self::Play => {
+                r#"<path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/>"#
+            }
+            Self::RefreshCw => {
+                r#"<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>"#
+            }
+            Self::Sparkles => {
+                r#"<path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/>"#
+            }
+            Self::Square => r#"<rect width="18" height="18" x="3" y="3" rx="2"/>"#,
+            Self::SquareDashed => {
+                r#"<path d="M5 3a2 2 0 0 0-2 2"/><path d="M19 3a2 2 0 0 1 2 2"/><path d="M21 19a2 2 0 0 1-2 2"/><path d="M5 21a2 2 0 0 1-2-2"/><path d="M9 3h1"/><path d="M9 21h1"/><path d="M14 3h1"/><path d="M14 21h1"/><path d="M3 9v1"/><path d="M21 9v1"/><path d="M3 14v1"/><path d="M21 14v1"/>"#
+            }
+            Self::StickyNote => {
+                r#"<path d="M21 9a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 15 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z"/><path d="M15 3v5a1 1 0 0 0 1 1h5"/>"#
+            }
+            Self::Ungroup => {
+                r#"<rect x="11" y="14" width="10" height="7" rx="2"/><rect x="3" y="3" width="10" height="7" rx="2"/>"#
             }
         }
     }

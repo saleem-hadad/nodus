@@ -45,8 +45,8 @@ use std::rc::Rc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, Global, IntoElement, ParentElement, Pixels, Point, SharedString, Size, Styled, WeakEntity,
-    Window, div,
+    AnyElement, App, Global, IntoElement, ParentElement, Pixels, Point, SharedString, Size, Styled, WeakEntity, Window,
+    div,
 };
 use nodus_domain::{BoardNote, BoardView, NodePatch, Rect, SessionCard, ViewPatch};
 
@@ -219,13 +219,13 @@ impl BoardActions {
     /// Archives active sessions, asking first when one is running (BOARD-110).
     pub fn archive(&self, ids: &[String], cx: &mut App) {
         let ids = ids.to_vec();
-        self.with(cx, move |c, cx| c.archive_cards(ids, cx));
+        self.with(cx, move |c, cx| c.archive_cards(&ids, cx));
     }
 
     /// Stops sessions, asking first when one is mid-turn (BOARD-112).
     pub fn stop(&self, ids: &[String], cx: &mut App) {
         let ids = ids.to_vec();
-        self.with(cx, move |c, cx| c.stop_cards(ids, cx));
+        self.with(cx, move |c, cx| c.stop_cards(&ids, cx));
     }
 
     /// Saves what's written on a note (BOARD-124).
@@ -272,12 +272,12 @@ impl BoardActions {
 
     /// Opens the archive stack (BOARD-071).
     pub fn open_stack(&self, cx: &mut App) {
-        self.with(cx, |c, cx| c.open_stack(cx));
+        self.with(cx, BoardCanvas::open_stack);
     }
 
     /// Folds the archive stack (BOARD-071).
     pub fn close_stack(&self, cx: &mut App) {
-        self.with(cx, |c, cx| c.close_stack(cx));
+        self.with(cx, BoardCanvas::close_stack);
     }
 
     /// Opens the first result (Enter in the archive search, BOARD-073).
@@ -286,7 +286,7 @@ impl BoardActions {
         // Leave the field first so Escape closes the preview, not the panel.
         window.blur(cx);
         if let Some(canvas) = canvas.upgrade() {
-            canvas.update(cx, |c, cx| c.submit_stack(cx));
+            canvas.update(cx, BoardCanvas::submit_stack);
         }
     }
 
@@ -403,6 +403,7 @@ fn placeholder(node: &NodeState, label: String, cx: &App) -> AnyElement {
         .border(fu(1.))
         .border_color(if node.selected { t.accent } else { t.border })
         .text_size(fu(13.))
+        .line_height(fu(18.2))
         .text_color(t.text_secondary)
         .overflow_hidden()
         .when(!label.is_empty(), |d| d.child(label))

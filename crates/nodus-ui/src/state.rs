@@ -41,6 +41,11 @@ pub enum StateEvent {
     /// The grid should start renaming the selected folder, etc.; also any
     /// change the window chrome follows (the menu's Focus Mode tick).
     SettingsChanged,
+    /// A menu command the board handles (`new-session`, `new-terminal`,
+    /// `search`, BOARD-171).
+    BoardMenu(MenuCommand),
+    /// An action run finished (`ev:run-finished`, BOARD-106).
+    RunFinished(nodus_domain::ActionRunResult),
 }
 
 /// `useApp` and `useProjectsUi`.
@@ -143,10 +148,21 @@ impl AppState {
     /// UI-043).
     fn on_event(&mut self, event: Event, cx: &mut Context<'_, Self>) {
         match event {
-            Event::Status { .. } | Event::PtyExit { .. } => {
-                // Status changes on the open board's cards come with the board track.
+            Event::Status {
+                session_id,
+                status,
+                live,
+            } => {
+                self.set_status(&session_id, status, live, cx);
                 self.schedule_stats_refresh(cx);
             }
+            Event::PtyExit { .. } => self.schedule_stats_refresh(cx),
+            Event::AgentStatus {
+                session_id,
+                agent_id,
+                status,
+            } => self.set_agent_status(&session_id, &agent_id, status, cx),
+            Event::Usage { session_id, usage } => self.set_usage(&session_id, usage, cx),
             Event::BoardChanged { project_id } => {
                 if self.route.project_id() == Some(project_id.as_str()) {
                     self.load_board(&project_id, cx);
@@ -155,6 +171,7 @@ impl AppState {
             Event::ProjectsChanged => self.refresh_projects(cx).detach(),
             Event::Menu(command) => self.on_menu(command, cx),
             Event::OpenCard(request) => self.show_card(request, cx),
+            Event::RunFinished(run) => cx.emit(StateEvent::RunFinished(run)),
             Event::UpdateStatus(status) => {
                 self.update_status = Some(status);
                 cx.notify();
@@ -171,7 +188,9 @@ impl AppState {
             MenuCommand::NewProject => self.add_project(None, false, cx),
             MenuCommand::ToggleFocus => self.toggle_focus_mode(cx),
             // The board's own (09, 11).
-            MenuCommand::NewSession | MenuCommand::NewTerminal | MenuCommand::Search => {}
+            MenuCommand::NewSession | MenuCommand::NewTerminal | MenuCommand::Search => {
+                cx.emit(StateEvent::BoardMenu(command));
+            }
         }
     }
 
@@ -245,12 +264,9 @@ impl AppState {
         }));
     }
 
-    /// UI-050, UI-051. The board's API comes with the board track; until then
-    /// a board opens empty.
+    /// UI-050, UI-051 (`board/store.rs`).
     pub fn load_board(&mut self, project_id: &str, cx: &mut Context<'_, Self>) {
-        let _ = project_id;
-        self.board_loading = false;
-        cx.notify();
+        self.fetch_board(project_id, cx);
     }
 
     pub fn load_settings(&mut self, cx: &mut Context<'_, Self>) {

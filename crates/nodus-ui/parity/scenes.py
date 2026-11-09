@@ -12,6 +12,7 @@ the test driver (crates/nodus-ui/src/automation.rs) and saves the shot as
 goldens. Compare with compare.mjs. Never touches the real userData: the
 world has its own HOME and NODUS_USER_DATA.
 """
+import hashlib
 import json
 import os
 import socket
@@ -34,8 +35,67 @@ AWAY = M("move", 720, 26)  # the title bar's empty middle
 STOREFRONT = (104, 220)
 OPEN_STOREFRONT = [M("click", *STOREFRONT), {"cmd": "key", "keystroke": "cmd-o"}, {"cmd": "wait", "ms": 300}]
 
+# storefront opens at x 60, y 96, zoom 0.8 under the 52px title bar: flow -> window.
+def AT(x, y):
+    return (60 + x * 0.8, 52 + 96 + y * 0.8)
+
+
+def OPEN(name):
+    return [{"cmd": "open", "project": name}, {"cmd": "wait", "ms": 1000}]
+
+
+def sid(key):
+    """The seed's session id for a key (`sessionId` in seed/world.mjs)."""
+    h = hashlib.sha1(f"nodus-parity:session:{key}".encode()).hexdigest()
+    return f"{h[0:8]}-{h[8:12]}-4{h[13:16]}-a{h[17:20]}-{h[20:32]}"
+
+
+def STATUS(key, status, live=True):
+    return {"cmd": "emit", "event": "status", "payload": {"sessionId": sid(key), "status": status, "live": live}}
+
+
+# storefront's sessions as `storefront()` in scenes/helpers.mjs starts them.
+STOREFRONT_LIVE = OPEN("storefront") + [
+    STATUS("sf-skeleton", "working"), STATUS("sf-tax", "waiting"),
+    STATUS("sf-cart", "done"), STATUS("sf-terminal", "done")]
+
+
+EMPTY = AT(1150, 690)  # the empty board below the terminal card
+STACK = AT(172, 200)  # the archive stack's top card
+
 # scene: (seed mutations, steps)
 SCENES = {
+    "board-empty": ([], OPEN("mobile-app") + [AWAY]),
+    "board-populated": ([], STOREFRONT_LIVE + [AWAY]),
+    "board-zoomed-out": (["zoomOut"], STOREFRONT_LIVE + [AWAY]),
+    "board-zoomed-in": (["zoomIn"], STOREFRONT_LIVE + [AWAY]),
+    "board-marquee": ([], STOREFRONT_LIVE + [
+        M("down", *EMPTY), M("drag", EMPTY[0] - 150, EMPTY[1] - 100),
+        M("drag", EMPTY[0] - 330, EMPTY[1] - 260)]),
+    "board-menu-pane": ([], STOREFRONT_LIVE + [M("right", *EMPTY)]),
+    "board-menu-archived": ([], STOREFRONT_LIVE + [M("right", *STACK)]),
+    "board-selected": ([], STOREFRONT_LIVE + [
+        M("click", 1030, 300, shift=True), M("click", 495, 560, shift=True), AWAY]),
+    "board-section-naming": (["slowNaming"], STOREFRONT_LIVE + [
+        M("click", 495, 560, shift=True), M("click", 776, 560, shift=True),
+        {"cmd": "key", "keystroke": "cmd-g"}, {"cmd": "wait", "ms": 700}, AWAY]),
+    "board-section-rename": ([], STOREFRONT_LIVE + [M("double", 700, 163), {"cmd": "wait", "ms": 300}, AWAY]),
+    "board-toast": (["run"], OPEN("storefront") + [{"cmd": "wait", "ms": 400}, AWAY]),
+    # 0.9.4 clicks the card's Archive button; selecting it and pressing ⌫ asks the same.
+    "board-confirm-archive": ([], STOREFRONT_LIVE + [
+        M("click", 497, 300, shift=True), {"cmd": "key", "keystroke": "backspace"}, AWAY]),
+    # Not 0.9.4 goldens: interactions to look at.
+    "try-drag-out": ([], STOREFRONT_LIVE + [
+        M("down", 1030, 300), M("drag", 1031, 301), M("drag", 1080, 500), M("drag", 1130, 640),
+        M("up", 1130, 640), {"cmd": "wait", "ms": 600}, AWAY]),
+    "try-click1": ([], STOREFRONT_LIVE + [M("click", 497, 300)]),
+    "try-click2": ([], STOREFRONT_LIVE + [M("down", 497, 300), M("up", 497, 300)]),
+    "try-click3": ([], OPEN("storefront") + [M("click", 497, 300, shift=True)]),
+    "try-select-all": ([], STOREFRONT_LIVE + [{"cmd": "key", "keystroke": "cmd-a"}, AWAY]),
+    "try-wait": ([], OPEN("storefront") + [{"cmd": "wait", "ms": 4000}, AWAY]),
+    "try-pane-note": ([], STOREFRONT_LIVE + [M("right", *EMPTY), {"cmd": "wait", "ms": 200},
+        M("click", 1020, 761), {"cmd": "wait", "ms": 600}, AWAY]),
+    "board-menu-section": ([], STOREFRONT_LIVE + [M("right", 700, 163)]),
     "projects-empty": (["empty"], []),
     "projects-grid": ([], []),
     "projects-focus": (["focusOn"], []),
@@ -80,7 +140,8 @@ def run(scene, theme, opts):
     world = opts["world"]
     env = dict(os.environ, NODUS_USER_DATA=os.path.join(world, "userData"), NODUS_AUTOMATION=SOCK,
                HOME=os.path.join(world, "home"), PATH=os.path.join(world, "bin") + ":/usr/bin:/bin:/usr/sbin",
-               SHELL=os.path.join(world, "bin", "fakeshell"), TZ="UTC", LANG="en_US.UTF-8")
+               SHELL=os.path.join(world, "bin", "fakeshell"), TZ="UTC", LANG="en_US.UTF-8",
+               PARITY_RESPONSES=os.path.join(world, "responses.json"))
     if os.path.exists(SOCK):
         os.remove(SOCK)
     log = open(os.path.join(world, "app.log"), "w")
@@ -115,6 +176,9 @@ def run(scene, theme, opts):
             app.wait(timeout=5)
         except subprocess.TimeoutExpired:
             app.kill()
+        # A session host a scene started outlives the app, as it's meant to:
+        # stop it, so the next scene's world starts without one.
+        subprocess.run(["pkill", "-f", os.path.join(world, "userData", "host")], check=False)
 
 
 def main():

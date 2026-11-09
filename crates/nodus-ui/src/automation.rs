@@ -13,6 +13,7 @@
 //! {"cmd":"scroll","x":720,"y":400,"dy":-600}       a wheel scroll at a point
 //! {"cmd":"files","kind":"entered","x":700,"y":400,"paths":["/…"]}   entered | pending | submit | exited
 //! {"cmd":"emit","event":"updateStatus","payload":{"state":"ready","version":"0.9.5","current":"0.9.4"}}
+//! {"cmd":"open","project":"storefront"}          a project's board, by name
 //! {"cmd":"wait","ms":300}
 //! {"cmd":"idle"}                                    until the window stops drawing
 //! {"cmd":"screenshot","path":"/…/scene.light.rust.png"}
@@ -274,6 +275,12 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
             let event = match what {
                 "updateStatus" => Event::UpdateStatus(serde_json::from_value(payload).map_err(|e| e.to_string())?),
                 "projectsChanged" => Event::ProjectsChanged,
+                // A session's status, as the session host reports it.
+                "status" => Event::Status {
+                    session_id: payload["sessionId"].as_str().unwrap_or_default().to_owned(),
+                    status: serde_json::from_value(payload["status"].clone()).map_err(|e| e.to_string())?,
+                    live: payload["live"].as_bool().unwrap_or(true),
+                },
                 other => return Err(format!("unknown event {other}")),
             };
             nodus.emit(event);
@@ -307,6 +314,23 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
                 .ok_or("screenshot needs a path")?
                 .to_owned();
             screenshot(cx, &path).await
+        }
+        "open" => {
+            // A project's board by name, as a double-click on its folder opens it.
+            let name = command.get("project").and_then(Value::as_str).unwrap_or_default();
+            let projects = nodus.projects().list().await;
+            let id = projects
+                .iter()
+                .find(|p| p.name == name)
+                .map(|p| p.id.clone())
+                .ok_or("no such project")?;
+            cx.update(|cx| {
+                if let Some(shell) = window::main_shell(cx) {
+                    let state = shell.read(cx).state.clone();
+                    state.update(cx, |s, cx| s.navigate(crate::state::Route::Board(id), cx));
+                }
+            });
+            Ok(Value::Null)
         }
         "quit" => {
             cx.update(|cx| cx.quit());

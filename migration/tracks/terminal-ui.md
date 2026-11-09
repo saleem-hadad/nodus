@@ -9,7 +9,7 @@
 
 ## Status
 
-✅ ready to merge (after two stalls). Done: TERM 22 of the 26 the model track left (plus TERM-104…107's UI side),
+✅ ready to merge (after two stalls). Done: TERM 17 of the 26 the model track left (plus TERM-104…107's UI side),
 MODAL 28 of 32, TRANS 24 of 24, AGV 20 of 20. Deferred: TERM-093, 095–099, 102, 103, 108 (the expanded card's own rules,
 board-cards and board-canvas) and MODAL-028…031 (the board's store and search). Every terminal scene is within
 0.04–0.6 % of its golden in both themes (text rasterisation only); see "Checked against the goldens".

@@ -270,6 +270,8 @@ Places where the code and the docs disagree, or where matching 0.9.4 exactly mea
 
 ## Decisions for the user
 
+**Approved by the user (2026-11-10):** (1) merge the cutover branch, removing Electron from `main`; (2) the first Rust release is **1.0.0**; (3) run the release workflow (signed and notarized in CI, published only past the handoff gates). Order: the polish tracks and the final parity sweep land, the cutover merges, CI is green on macOS and Windows, then the release runs.
+
 Chromium gives 0.9.4 things a native app has no direct equivalent for. Each needs a call before P5 lands; the port's default is in the last column.
 
 | Spec | What Chromium gives today | Proposed native behavior |
@@ -287,6 +289,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-10: The user approved the cutover, version 1.0.0 for the first Rust release, and running the release workflow.
 - 2026-11-10: audit-shell merged (67aa3fe): every unticked ID in specs 01–03 and 05–08 resolved; also fixed two Windows CI breakers (the installer script's sed on `D:\\a\\nodus`, program lookup on the child's PATH); 1,290+ tests.
 - 2026-11-10: cross-wiring merged (875ce8c): ⌘K into the transcript preview at the match, session windows closing (and their terminals disposed) with their card, run or view; a stale search match no longer leaks into later previews.
 - 2026-11-10: views-ui merged (75672a9): views on the board in WKWebView with the snapshot swap, scaled by a CSS transform as 0.9.4 did, the relay, dialogs; 1,264+ tests. views-polish next.

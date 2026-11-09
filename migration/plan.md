@@ -142,7 +142,7 @@ One file per domain in `migration/features/`. Each lists every behavior with an 
 | 06-updater-release.md | updater, packaging, signing, CI, release, smoke test, 0.9.4 → Rust handoff | ✅ 132 | 99/132 |
 | 07-capture.md | floating capture: panel window, double tap, screen context, guess, submit | ✅ 177 | 98/177 |
 | 08-projects-shell-ui.md | App, title bar, settings, projects grid, project rail, tokens and global styles, menus, modals | ✅ 305 | 265/305 |
-| 09-board-canvas.md | BoardView: pan/zoom, selection, drag, shortcuts, context menus, sections, archive, layout, edges | ✅ 177 | ☐ |
+| 09-board-canvas.md | BoardView: pan/zoom, selection, drag, shortcuts, context menus, sections, archive, layout, edges | ✅ 177 | 149/177 |
 | 10-board-cards-notes.md | session cards, expanded cards, agent deck, archive stack, notes and the pad | ✅ 203 | ☐ |
 | 11-board-overlays.md | prompt bar (sidekick), ⌘K search, merge dialog, ink layer, selection bar | ✅ 111 | ☐ |
 | 12-terminal-ui.md | terminal registry, modal, transcript preview, agent viewer, xterm behavior | ✅ 185 | 171/185 |
@@ -159,7 +159,7 @@ Tracks after P1 run in parallel where the dependency column allows.
 | P3 | Data domains: transcripts, board, git, search, summarize, naming, status machine, agents | P1 | ☐ |
 | P4 | `nodus-core`: every command and event in api.ts, tested headless | P2, P3 | ✅ all but `capture.*` (capture-panel track) |
 | P5 | UI foundation: app shell, theme tokens (light/dark), title bar, menus, settings, projects grid, project rail | P1, S1 | ✅ merged (ui-shell) |
-| P6 | Board canvas: pan/zoom/select/drag, cards, sections, archive, notes, edges, controls, context menus, shortcuts | P4, P5 | 🟡 board-canvas + board-cards running |
+| P6 | Board canvas: pan/zoom/select/drag, cards, sections, archive, notes, edges, controls, context menus, shortcuts | P4, P5 | 🟡 canvas merged; board-cards running |
 | P7 | Terminal: element, modal, expanded cards, transcript preview, agent viewer | P2, P5 | ✅ merged; expanded cards plug in through `terminal::card::CardTerminals` |
 | P8 | Overlays: prompt bar, ⌘K search, merge dialog, ink, selection bar, agent deck | P6 | ☐ |
 | P9 | Views (wry), board tools, actions, voice, git UI | P6 | ☐ |
@@ -185,7 +185,7 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | capture | `rust/capture` | nodus-capture backend: double tap, key hook, screen context, guess, submit | ✅ merged: 98 CAP; panel UI and page wiring to the capture-panel track |
 | core | `rust/core` | P4: wire every merged domain into nodus-core (sessions, board, views, updates, events, startup/quit), deferred core IDs, debts, headless end-to-end tests | ✅ merged (6243e7c): every domain composed; git/actions/voice wired; the windowed app launches, runs sessions through `Nodus host` and quits through the core |
 | gpui-text | `rust/gpui-text` | patched GPUI text parity with Chromium: sRGB tagging, no SF Pro tracking, hanging trailing spaces, Chromium's rounding; Windows effects CI step | 🟡 running |
-| board-canvas | `rust/board-canvas` | P6, spec 09: the board route and canvas (pan/zoom/select/drag, sections, edges, menus, shortcuts), node plug-in interface | 🟡 running |
+| board-canvas | `rust/board-canvas` | P6, spec 09: the board route and canvas (pan/zoom/select/drag, sections, edges, menus, shortcuts), node plug-in interface | ✅ merged (f2f5747): 151 ticked; 13 deferred to cards/terminal/views/overlays and 13 board-side overlay hooks (`board/bar.rs`) tick when the overlays land |
 | board-cards | `rust/board-cards` | P6, spec 10: session cards, expanded card chrome, agent deck, archive stack, notes, pad (`nodus-ui/src/board/cards/`) | 🟡 running |
 | capture-panel | `rust/capture-panel2` (from `rust/capture-panel` at adc385b) | P10, spec 07 UI: the panel window and page, Settings' capture rows, File › Capture…, `nodus.capture()` | 🟡 running (fresh agent on a new branch: two stale worktrees hold `rust/capture-panel`) |
 | packaging | `rust/packaging` | P11: macOS bundle + DMGs, Windows NSIS (electron-builder templates), signing/notarizing, CI packaging + native smoke test, `release-rust.yml` with D12 handoff gates; publishes nothing | ✅ merged (bec0388): `packaging/`, `rust-package.yml`, `release-rust.yml`; arm64 DMG passes 0.9.4's checks locally (ad-hoc); Windows and signing first run in CI / with the certificate |
@@ -215,7 +215,7 @@ Follow-ups a merge left for when the tracks meet in `nodus-core` (P4). Strike th
 - Text parity (from ui-shell, side by side with the goldens): GPUI applies SF Pro's built-in tracking where Chromium doesn't (13 px labels come out ~1 px narrower), wraps counting the space after a word, and rounds some text half a pixel the other way; the window's Metal layer was untagged (P3 displays oversaturated every colour) — nodus-ui tags it sRGB for now. All four belong in the patched GPUI.
 - Thumbnails of copied images are encoded differently from Chromium's, so an image 0.9.4 already offered is offered once more after the upgrade; a non-ASCII host shows as written on a tab tile, where 0.9.4 shows punycode.
 - Changed files sort with root collation; 0.9.4 used ICU `localeCompare` in the user's locale.
-- When board-canvas and board-cards merge: keep one global for the core's runtime (board-canvas and terminal-ui each define one), and one wheel arbiter (board-cards' duplicates the terminal model's; terminal-ui's wheel gate lets only one decide).
+- ~~Keep one global for the core's runtime~~ (done in f2f5747). Keep one wheel arbiter (board-cards' duplicates the terminal model's; terminal-ui's wheel gate lets only one decide).
 - The test driver (`NODUS_AUTOMATION`) listens only on Unix sockets, so the Windows smoke test checks only the window and quit; add a named-pipe listener in `automation.rs`.
 - Six host behaviors are implemented but have no test of their own: HOST-033, 043, 090, 098, the 4 s hard exit in HOST-064 and the 20 s relay timeout in HOST-086. Add tests in P4 and tick them.
 - The 0.9.4 `pty.ts` → Rust host check was run by hand under vitest and not committed (it has to live in `src/main`); repeat it before cutover.
@@ -272,6 +272,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-09: board-canvas merged (f2f5747): the board route and canvas as React Flow did it, with the node plug-in interface and the board's side of the overlays (`board/bar.rs`); one `CoreRuntime` global for board and terminals; 1,170 tests.
 - 2026-11-09: terminal-ui merged (590f9b6): terminal element, session window, transcript preview, agents viewer; 1,117 tests.
 - 2026-11-09: More watchdog stalls traced to agents reading full-size 2880×1800 screenshots; tracks now compare with the diff tool and look only at small crops. capture-panel continues on `rust/capture-panel2`.
 - 2026-11-09: packaging merged (bec0388): macOS bundles and DMGs as 0.9.4's, electron-builder's NSIS templates for Windows, handoff gates replaying 0.9.4's updater, a native smoke test, `rust-package.yml` in CI and a hand-started `release-rust.yml` that refuses to publish on a failed gate. 1,092 tests.

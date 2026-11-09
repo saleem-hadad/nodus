@@ -706,8 +706,8 @@ No macOS test exists in TypeScript. Recommended Rust additions, marked as such s
 - [x] UPD-010 Clean-up starts at start-up; every check awaits it
 - [x] UPD-011 macOS registers the swap on will-quit; Windows registers nothing
 - [x] UPD-012 Auto check at 30 000 ms, then every 14 400 000 ms from start, only while `autoUpdate` is on at that tick
-- [ ] UPD-013 `settings:update` with truthy `autoUpdate` runs a non-asked check
-- [ ] UPD-014 `autoUpdate` defaults to true (`!== false`)
+- [x] UPD-013 `settings:update` with truthy `autoUpdate` runs a non-asked check
+- [x] UPD-014 `autoUpdate` defaults to true (`!== false`)
 - [x] UPD-015 `check()` is a no-op while busy, staged or off
 - [x] UPD-016 Lookup: `checking`, GET LATEST_URL with Accept + `Nodus/<v>` UA, 20 s timeout, no token
 - [x] UPD-017 Lookup throws/times out → `Couldn’t reach GitHub to check for updates.`
@@ -769,10 +769,10 @@ No macOS test exists in TypeScript. Recommended Rust additions, marked as such s
 - [x] UPD-073 macOS force-detaches leftover `mount-*` before deleting
 - [x] UPD-074 Everything else deleted (rm -rf / fs.rm); errors logged `[updater] cleanup failed`
 - [x] UPD-075 Missing `updates/` is fine
-- [ ] UPD-076 `updates:status` returns the status
-- [ ] UPD-077 `updates:check` runs `check(true)`, resolves after the lookup
-- [ ] UPD-078 `updates:install` runs `restartToUpdate()`
-- [ ] UPD-079 Menu `Check for Updates…` opens Settings then `check(true)`; Mac app menu after About, else File after Settings…
+- [x] UPD-076 `updates:status` returns the status
+- [x] UPD-077 `updates:check` runs `check(true)`, resolves after the lookup
+- [x] UPD-078 `updates:install` runs `restartToUpdate()`
+- [x] UPD-079 Menu `Check for Updates…` opens Settings then `check(true)`; Mac app menu after About, else File after Settings…
 - [ ] UPD-080 `useUpdateStatus` null until the first answer, then follows events
 - [ ] UPD-081 Title-bar `Restart to Update` only in `ready`, with the platform tooltip
 - [ ] UPD-082 Settings `Updates`: `Nodus <current>` + state hint strings

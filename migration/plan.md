@@ -135,11 +135,11 @@ One file per domain in `migration/features/`. Each lists every behavior with an 
 | File | Covers (Electron sources) | Spec | Ported |
 | --- | --- | --- | --- |
 | 01-platform-shell.md | app lifecycle, menu, env, store, settings, preload/IPC plumbing | ✅ 141 | 75/141 |
-| 02-session-host-status.md | host, host protocol, pty client, hooks status machine, agents, usage, notifications | ✅ 225 | 210/225 |
-| 03-sessions-transcripts.md | session create/open/send/kill, claude args, discovery, board merge, search, summarize, naming, geometry | ✅ 205 | 194/205 |
+| 02-session-host-status.md | host, host protocol, pty client, hooks status machine, agents, usage, notifications | ✅ 225 | 222/225 |
+| 03-sessions-transcripts.md | session create/open/send/kill, claude args, discovery, board merge, search, summarize, naming, geometry | ✅ 205 | 205/205 |
 | 04-board-tools-views.md | board tools MCP, notes placement, views (main + renderer), view page, ink storage | ✅ 222 | 168/222 |
 | 05-actions-voice-git.md | actions rail, voice prompts, git status/diff/log and their UI | ✅ 183 | 99/183 |
-| 06-updater-release.md | updater, packaging, signing, CI, release, smoke test, 0.9.4 → Rust handoff | ✅ 132 | 73/132 |
+| 06-updater-release.md | updater, packaging, signing, CI, release, smoke test, 0.9.4 → Rust handoff | ✅ 132 | 79/132 |
 | 07-capture.md | floating capture: panel window, double tap, screen context, guess, submit | ✅ 177 | 98/177 |
 | 08-projects-shell-ui.md | App, title bar, settings, projects grid, project rail, tokens and global styles, menus, modals | ✅ 305 | 243/305 |
 | 09-board-canvas.md | BoardView: pan/zoom, selection, drag, shortcuts, context menus, sections, archive, layout, edges | ✅ 177 | ☐ |
@@ -157,7 +157,7 @@ Tracks after P1 run in parallel where the dependency column allows.
 | P1 | Workspace, Rust CI job (macOS + Windows), `nodus-domain`, `nodus-store` (round-trips a real state.json), `nodus-platform` env | P0 | ✅ merged (93 tests) |
 | P2 | Session host: `nodus-host-proto`, `nodus-host`, `nodus-sessions` client; wire tests against the Node host both ways | P1 | ✅ merged (host, status) |
 | P3 | Data domains: transcripts, board, git, search, summarize, naming, status machine, agents | P1 | ☐ |
-| P4 | `nodus-core`: every command and event in api.ts, tested headless | P2, P3 | 🟡 skeleton merged (a9d528f); track core running |
+| P4 | `nodus-core`: every command and event in api.ts, tested headless | P2, P3 | 🟡 all but actions/voice/git/capture merged, tested headless |
 | P5 | UI foundation: app shell, theme tokens (light/dark), title bar, menus, settings, projects grid, project rail | P1, S1 | ✅ merged (ui-shell) |
 | P6 | Board canvas: pan/zoom/select/drag, cards, sections, archive, notes, edges, controls, context menus, shortcuts | P4, P5 | 🟡 board-canvas + board-cards running |
 | P7 | Terminal: element, modal, expanded cards, transcript preview, agent viewer | P2, P5 | ☐ |
@@ -183,7 +183,7 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | views-tools | `rust/views-tools` | nodus-views, nodus-tools, nodus-board notes and ink | ✅ merged: NOTE 16, INK 12, TOOL 40 (004…013/015 by host), VIEW 100; 54 VIEW UI-only to the UI tracks |
 | actions-voice-git | `rust/actions-voice-git` | nodus-actions, nodus-voice (incl. the recorder), nodus-git | ✅ merged: 97 (GIT 28, ACT 37, VOICE 32); recorder is Core Audio voice processing + Opus/WebM like MediaRecorder |
 | capture | `rust/capture` | nodus-capture backend: double tap, key hook, screen context, guess, submit | ✅ merged: 98 CAP; panel UI and page wiring to the capture-panel track |
-| core | `rust/core` | P4: wire every merged domain into nodus-core (sessions, board, views, updates, events, startup/quit), deferred core IDs, debts, headless end-to-end tests | 🟡 running |
+| core | `rust/core` | P4: wire every merged domain into nodus-core (sessions, board, views, updates, events, startup/quit), deferred core IDs, debts, headless end-to-end tests | 🟡 first part merged (3cd11cf): composition, board/sessions/views/updates/menu APIs, debts, headless e2e; next: git/actions/voice wiring |
 | gpui-text | `rust/gpui-text` | patched GPUI text parity with Chromium: sRGB tagging, no SF Pro tracking, hanging trailing spaces, Chromium's rounding; Windows effects CI step | 🟡 running |
 | board-canvas | `rust/board-canvas` | P6, spec 09: the board route and canvas (pan/zoom/select/drag, sections, edges, menus, shortcuts), node plug-in interface | 🟡 running |
 | board-cards | `rust/board-cards` | P6, spec 10: session cards, expanded card chrome, agent deck, archive stack, notes, pad (`nodus-ui/src/board/cards/`) | 🟡 running |
@@ -266,6 +266,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-09: core's first part merged (3cd11cf): the whole app runs headless in tests with a stand-in claude and the real Rust host; integration debts resolved; 1,088 tests. Weekly usage limit hit on one account; resumed on another.
 - 2026-11-09: parity-harness merged: `node migration/parity/capture-electron.mjs` regenerates the goldens from 0.9.4 with synthetic seeded data (see migration/parity/README.md). capture-panel restarted fresh after stalling with nothing committed.
 - 2026-11-09: terminal merged (75ea2b4): nodus-terminal checked against xterm.js 6's own code (3,083 key presses, 23 screens cell by cell, every code point's width, 18 registry scenarios); 1,070 tests. Every other running agent stopped at a usage limit again; resumed after the reset.
 - 2026-11-09: Windows CI ran the Rust tests for the first time: all passed except one quoting test whose expectation was wrong (fixed in cd25612). gpui-text, board-canvas, board-cards and capture-panel started.

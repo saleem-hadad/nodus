@@ -803,7 +803,7 @@ Risks:
 - [x] HOST-030 Hook token
 - [x] HOST-031 Ready log
 - [x] HOST-032 Unused host
-- [ ] HOST-033 Crash-proof
+- [x] HOST-033 Crash-proof
 - [x] HOST-034 Log lines
 - [x] HOST-035 Background process
 - [x] HOST-036 Hello first
@@ -813,7 +813,7 @@ Risks:
 - [x] HOST-040 Ignored messages
 - [x] HOST-041 Spawned reply
 - [x] HOST-042 Broadcasts
-- [ ] HOST-043 Socket errors
+- [x] HOST-043 Socket errors
 - [x] HOST-044 Disconnect
 - [x] HOST-045 Idle check on close
 - [x] HOST-046 Newest app
@@ -834,7 +834,7 @@ Risks:
 - [x] HOST-061 Resize
 - [x] HOST-062 Kill on POSIX
 - [x] HOST-063 Kill on Windows
-- [ ] HOST-064 Shutdown
+- [x] HOST-064 Shutdown
 - [x] HOST-065 Stopping host exits
 - [x] HOST-066 History cap
 - [x] HOST-067 Slim payloads
@@ -856,11 +856,11 @@ Risks:
 - [x] HOST-083 Requests
 - [x] HOST-084 Notifications only
 - [x] HOST-085 Relay
-- [ ] HOST-086 Relay settles
+- [x] HOST-086 Relay settles
 - [x] HOST-087 No app
 - [x] HOST-088 Unanswered
 - [x] HOST-089 Answer
-- [ ] HOST-090 Relay failure
+- [x] HOST-090 Relay failure
 - [x] HOST-091 Starting a host
 - [x] HOST-092 Waiting for it
 - [x] HOST-093 One attempt at a time
@@ -868,7 +868,7 @@ Risks:
 - [x] HOST-095 Launch adopts, never starts
 - [x] HOST-096 Hello
 - [x] HOST-097 Welcome timeout
-- [ ] HOST-098 Trust first
+- [x] HOST-098 Trust first
 - [x] HOST-099 Other protocol
 - [x] HOST-100 Adopted in order
 - [x] HOST-101 Later messages
@@ -990,9 +990,9 @@ Risks:
 - [x] HOST-217 Working and waiting counts
 - [x] HOST-218 Running total
 - [x] HOST-219 By project
-- [ ] HOST-220 Status side effects
-- [ ] HOST-221 Launch order
-- [ ] HOST-222 Open
-- [ ] HOST-223 Write path
-- [ ] HOST-224 Resize and kill
-- [ ] HOST-225 Quitting
+- [x] HOST-220 Status side effects
+- [x] HOST-221 Launch order
+- [x] HOST-222 Open
+- [x] HOST-223 Write path
+- [x] HOST-224 Resize and kill
+- [x] HOST-225 Quitting

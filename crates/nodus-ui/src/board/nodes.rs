@@ -403,6 +403,7 @@ fn placeholder(node: &NodeState, label: String, cx: &App) -> AnyElement {
         .border(fu(1.))
         .border_color(if node.selected { t.accent } else { t.border })
         .text_size(fu(13.))
+        .line_height(fu(18.2))
         .text_color(t.text_secondary)
         .overflow_hidden()
         .when(!label.is_empty(), |d| d.child(label))

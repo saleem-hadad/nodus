@@ -12,6 +12,7 @@ the test driver (crates/nodus-ui/src/automation.rs) and saves the shot as
 goldens. Compare with compare.mjs. Never touches the real userData: the
 world has its own HOME and NODUS_USER_DATA.
 """
+import hashlib
 import json
 import os
 import socket
@@ -34,8 +35,46 @@ AWAY = M("move", 720, 26)  # the title bar's empty middle
 STOREFRONT = (104, 220)
 OPEN_STOREFRONT = [M("click", *STOREFRONT), {"cmd": "key", "keystroke": "cmd-o"}, {"cmd": "wait", "ms": 300}]
 
+# storefront opens at x 60, y 96, zoom 0.8 under the 52px title bar: flow -> window.
+def AT(x, y):
+    return (60 + x * 0.8, 52 + 96 + y * 0.8)
+
+
+def OPEN(name):
+    return [{"cmd": "open", "project": name}, {"cmd": "wait", "ms": 600}]
+
+
+def sid(key):
+    """The seed's session id for a key (`sessionId` in seed/world.mjs)."""
+    h = hashlib.sha1(f"nodus-parity:session:{key}".encode()).hexdigest()
+    return f"{h[0:8]}-{h[8:12]}-4{h[13:16]}-a{h[17:20]}-{h[20:32]}"
+
+
+def STATUS(key, status, live=True):
+    return {"cmd": "emit", "event": "status", "payload": {"sessionId": sid(key), "status": status, "live": live}}
+
+
+# storefront's sessions as `storefront()` in scenes/helpers.mjs starts them.
+STOREFRONT_LIVE = OPEN("storefront") + [
+    STATUS("sf-skeleton", "working"), STATUS("sf-tax", "waiting"),
+    STATUS("sf-cart", "done"), STATUS("sf-terminal", "done")]
+
+
+EMPTY = AT(1150, 690)  # the empty board below the terminal card
+STACK = AT(172, 200)  # the archive stack's top card
+
 # scene: (seed mutations, steps)
 SCENES = {
+    "board-empty": ([], OPEN("mobile-app") + [AWAY]),
+    "board-populated": ([], STOREFRONT_LIVE + [AWAY]),
+    "board-zoomed-out": (["zoomOut"], STOREFRONT_LIVE + [AWAY]),
+    "board-zoomed-in": (["zoomIn"], STOREFRONT_LIVE + [AWAY]),
+    "board-marquee": ([], STOREFRONT_LIVE + [
+        M("down", *EMPTY), M("drag", EMPTY[0] - 150, EMPTY[1] - 100),
+        M("drag", EMPTY[0] - 330, EMPTY[1] - 260)]),
+    "board-menu-pane": ([], STOREFRONT_LIVE + [M("right", *EMPTY)]),
+    "board-menu-archived": ([], STOREFRONT_LIVE + [M("right", *STACK)]),
+    "board-menu-section": ([], STOREFRONT_LIVE + [M("right", *AT(1100, 166))]),
     "projects-empty": (["empty"], []),
     "projects-grid": ([], []),
     "projects-focus": (["focusOn"], []),

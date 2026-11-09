@@ -960,7 +960,7 @@ impl BoardCanvas {
         cx.spawn(async move |this, cx| {
             if let Err(err) = nodus.views().refresh(&project_id, &view_id).await {
                 let _ = this.update(cx, |c, cx| {
-                    c.show_toast(format!("Couldn't refresh it: {}", message(&err)), cx)
+                    c.show_toast(format!("Couldn't refresh it: {}", message(&err)), cx);
                 });
             }
         })

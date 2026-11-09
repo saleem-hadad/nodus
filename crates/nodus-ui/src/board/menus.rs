@@ -84,13 +84,13 @@ impl BoardCanvas {
             ),
             disabled(
                 item(&me, "New section here", Icon::SquareDashed, move |c, cx| {
-                    c.create_section_at(p, cx)
+                    c.create_section_at(p, cx);
                 }),
                 in_archive || in_section,
             ),
             disabled(
                 item(&me, "New note here", Icon::StickyNote, move |c, cx| {
-                    c.create_note_at(p, cx)
+                    c.create_note_at(p, cx);
                 }),
                 in_archive,
             ),
@@ -110,7 +110,7 @@ impl BoardCanvas {
             item(&me, "Zoom to fit", Icon::Maximize, |c, cx| c.fit_active(320.0, cx)),
             // BOARD-177: every drawn node, padding 0.12, up to zoom 2.
             item(&me, "Show everything", Icon::Maximize, |c, cx| {
-                c.fit_nodes(None, 0.12, 2.0, 320.0, cx)
+                c.fit_nodes(None, 0.12, 2.0, 320.0, cx);
             }),
         ];
         self.open_menu(at, items, cx);
@@ -159,7 +159,7 @@ impl BoardCanvas {
                     c.state.update(cx, |s, cx| s.open_terminal(&id, cx));
                 }),
                 item(me, "Collapse", Icon::Minimize2, move |c, cx| {
-                    c.expand_cards(std::slice::from_ref(&other), false, cx)
+                    c.expand_cards(std::slice::from_ref(&other), false, cx);
                 })
                 .hint("E"),
             ]
@@ -204,7 +204,7 @@ impl BoardCanvas {
         if card.node.section_id.is_some() {
             let id = card.node.session_id.clone();
             items.push(item(me, "Remove from section", Icon::Ungroup, move |c, cx| {
-                c.leave_section(&id, cx)
+                c.leave_section(&id, cx);
             }));
         }
         items
@@ -216,13 +216,13 @@ impl BoardCanvas {
         let rename = id.clone();
         let mut items = self.card_open_items(card, me);
         items.push(item(me, "Rename", Icon::PencilLine, move |c, cx| {
-            c.set_renaming(Some(rename.clone()), cx)
+            c.set_renaming(Some(rename.clone()), cx);
         }));
         items.extend(self.card_section_items(card, me));
         items.push(MenuItem::Separator);
         items.push(
             item(me, "Remove terminal", Icon::Trash2, move |c, cx| {
-                c.remove_terminal(&id, cx)
+                c.remove_terminal(&id, cx);
             })
             .danger(),
         );
@@ -279,7 +279,7 @@ impl BoardCanvas {
         }
         let rename = id.clone();
         items.push(item(me, "Rename", Icon::PencilLine, move |c, cx| {
-            c.set_renaming(Some(rename.clone()), cx)
+            c.set_renaming(Some(rename.clone()), cx);
         }));
         if card.node.archived {
             let restore = id.clone();
@@ -310,7 +310,7 @@ impl BoardCanvas {
         };
         let merge = group.clone();
         items.push(item(me, merge_label, Icon::Sparkles, move |c, cx| {
-            c.start_merge(&merge, cx)
+            c.start_merge(&merge, cx);
         }));
         items.extend(self.card_section_items(card, me));
         if !stickers.is_empty() {
@@ -320,13 +320,13 @@ impl BoardCanvas {
                 "Delete its note"
             };
             items.push(item(me, label, Icon::StickyNote, move |c, cx| {
-                c.remove_notes(stickers.clone(), cx)
+                c.remove_notes(stickers.clone(), cx);
             }));
         }
         items.push(MenuItem::Separator);
         items.push(
             item(me, "Remove from board", Icon::Trash2, move |c, cx| {
-                c.remove_from_board(&id, cx)
+                c.remove_from_board(&id, cx);
             })
             .danger(),
         );
@@ -362,10 +362,10 @@ impl BoardCanvas {
         let has_sessions = !sessions.is_empty();
         vec![
             item(me, "Rename", Icon::PencilLine, move |c, cx| {
-                c.set_renaming(Some(rename.clone()), cx)
+                c.set_renaming(Some(rename.clone()), cx);
             }),
             swatches(me, group.section.color, move |c, color, cx| {
-                c.recolor_section(&recolor, color, cx)
+                c.recolor_section(&recolor, color, cx);
             }),
             MenuItem::Separator,
             item(me, "New session in section", Icon::Plus, move |c, cx| {
@@ -376,13 +376,13 @@ impl BoardCanvas {
             }),
             disabled(
                 item(me, "Select cards", Icon::SquareDashed, move |c, cx| {
-                    c.select_cards(&members, cx)
+                    c.select_cards(&members, cx);
                 }),
                 !has_members,
             ),
             disabled(
                 item(me, archive_label, Icon::Archive, move |c, cx| {
-                    c.archive_cards(&sessions, cx)
+                    c.archive_cards(&sessions, cx);
                 }),
                 !has_sessions,
             ),
@@ -414,12 +414,12 @@ impl BoardCanvas {
         };
         vec![
             item(me, "Edit", Icon::PencilLine, move |c, cx| {
-                c.set_renaming(Some(edit.clone()), cx)
+                c.set_renaming(Some(edit.clone()), cx);
             })
             .hint(keys("↩")),
             disabled(
                 item(me, "Start session", Icon::Play, move |c, cx| {
-                    c.start_note(start.clone(), cx)
+                    c.start_note(start.clone(), cx);
                 }),
                 blank,
             ),
@@ -448,26 +448,26 @@ impl BoardCanvas {
         let mut items = vec![
             disabled(
                 item(me, "Refresh", Icon::RefreshCw, move |c, cx| {
-                    c.refresh_view(&refresh, cx)
+                    c.refresh_view(&refresh, cx);
                 }),
                 !can_refresh,
             ),
             item(me, "Open its session", Icon::SquareTerminal, move |c, cx| {
-                c.open_view_session(open.clone(), cx)
+                c.open_view_session(open.clone(), cx);
             }),
             item(me, "Rename", Icon::PencilLine, move |c, cx| {
-                c.set_renaming(Some(rename.clone()), cx)
+                c.set_renaming(Some(rename.clone()), cx);
             }),
         ];
         if view.starts_sessions == Some(true) {
             items.push(item(me, "Stop it starting sessions", Icon::Ban, move |c, cx| {
-                c.stop_view_starting(&stop, cx)
+                c.stop_view_starting(&stop, cx);
             }));
         }
         items.push(MenuItem::Separator);
         items.push(
             item(me, "Delete view", Icon::Trash2, move |c, cx| {
-                c.delete_views(std::slice::from_ref(&delete), cx)
+                c.delete_views(std::slice::from_ref(&delete), cx);
             })
             .hint(keys("⌫"))
             .danger(),

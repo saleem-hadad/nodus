@@ -4,6 +4,7 @@
 import path from 'node:path'
 const [harness, work, theme, ...mutations] = process.argv.slice(2)
 const { seed } = await import(path.join(path.resolve(harness), 'seed', 'index.mjs'))
+const storefront = (s) => s.projects.find((p) => p.name === 'storefront').id
 const MUTATIONS = {
   empty: (s) => {
     s.projects = []
@@ -24,6 +25,12 @@ const MUTATIONS = {
   },
   capture: (s) => {
     s.settings.capture = true
+  },
+  zoomOut: (s) => {
+    s.boards[storefront(s)].viewport = { x: 380, y: 230, zoom: 0.4 }
+  },
+  zoomIn: (s) => {
+    s.boards[storefront(s)].viewport = { x: -1120, y: 40, zoom: 1.6 }
   }
 }
 seed(work, {

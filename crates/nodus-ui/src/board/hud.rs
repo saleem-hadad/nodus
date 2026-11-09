@@ -216,10 +216,20 @@ impl BoardCanvas {
                 .into_any_element()
         };
         // The body as words that wrap, with the key caps among them.
+        // A fragment after a key cap starts with the space after it.
         let text = |s: &'static str| -> Vec<AnyElement> {
+            let lead = s.starts_with(' ');
             s.split(' ')
                 .filter(|w| !w.is_empty())
-                .map(|w| div().flex_none().child(format!("{w}\u{a0}")).into_any_element())
+                .enumerate()
+                .map(|(i, w)| {
+                    let w = if i == 0 && lead {
+                        format!("\u{a0}{w}")
+                    } else {
+                        w.to_owned()
+                    };
+                    div().flex_none().child(format!("{w}\u{a0}")).into_any_element()
+                })
                 .collect()
         };
         let mut body: Vec<AnyElement> = Vec::new();

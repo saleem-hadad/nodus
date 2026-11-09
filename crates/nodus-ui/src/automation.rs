@@ -310,6 +310,11 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
                     status: serde_json::from_value(payload["status"].clone()).map_err(|e| e.to_string())?,
                     live: payload["live"].as_bool().unwrap_or(true),
                 },
+                // A session's status line, as Claude reports it (board-expanded).
+                "usage" => Event::Usage {
+                    session_id: payload["sessionId"].as_str().unwrap_or_default().to_owned(),
+                    usage: serde_json::from_value(payload["usage"].clone()).map_err(|e| e.to_string())?,
+                },
                 "captureContext" => Event::CaptureContext(crate::capture::automation::context_patch(&payload)?),
                 other => return Err(format!("unknown event {other}")),
             };

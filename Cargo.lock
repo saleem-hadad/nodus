@@ -4245,6 +4245,8 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+ "unicode-linebreak",
+ "unicode-segmentation",
  "uuid",
 ]
 

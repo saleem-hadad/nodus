@@ -31,6 +31,8 @@ serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+unicode-linebreak.workspace = true
+unicode-segmentation.workspace = true
 # Spec 05's UI: the rail's and dialog's logic, the git labels and diff parser
 # (the mics' controller is nodus-voice, above).
 nodus-actions.workspace = true

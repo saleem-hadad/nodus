@@ -18,11 +18,13 @@ impl BoardApi<'_> {
     /// out in the archive), and its transcript folder watched: each change
     /// there arrives as `Event::BoardChanged`. `Unknown project <id>`.
     ///
-    /// Capture is told the board opened first (SESS-071 step 1) once the
-    /// capture track is wired.
+    /// Capture is told the board opened first (SESS-071 step 1, CAP-154).
     pub async fn load(&self, project_id: &str) -> CommandResult<BoardSnapshot> {
         self.nodus
-            .on_core(async { self.nodus.inner.board.load(project_id).on("board:load") })
+            .on_core(async {
+                self.nodus.inner.capture.board_opened(project_id);
+                self.nodus.inner.board.load(project_id).on("board:load")
+            })
             .await
     }
 

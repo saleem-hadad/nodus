@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     Bounds, DevicePixels, Hsla, Pixels, PlatformTextSystem, Point, Result, SharedString, Size,
-    StrikethroughStyle, TextRenderingMode, UnderlineStyle, px,
+    StrikethroughStyle, TextRenderingMode, UnderlineStyle, WrapStyle, px,
 };
 use anyhow::Context as _;
 use collections::{FxHashMap, FxHashSet};
@@ -721,6 +721,27 @@ impl WindowTextSystem {
         wrap_width: Option<Pixels>,
         line_clamp: Option<usize>,
     ) -> Result<SmallVec<[WrappedLine; 1]>> {
+        self.shape_text_wrapped(
+            text,
+            font_size,
+            runs,
+            wrap_width,
+            line_clamp,
+            WrapStyle::default(),
+        )
+    }
+
+    /// Nodus patch: [`Self::shape_text`], wrapping as `wrap_style` asks
+    /// (CSS `overflow-wrap` and `word-break`).
+    pub fn shape_text_wrapped(
+        &self,
+        text: SharedString,
+        font_size: Pixels,
+        runs: &[TextRun],
+        wrap_width: Option<Pixels>,
+        line_clamp: Option<usize>,
+        wrap_style: WrapStyle,
+    ) -> Result<SmallVec<[WrappedLine; 1]>> {
         let mut runs = runs.iter().filter(|run| run.len > 0).cloned().peekable();
         let mut font_runs = self.font_runs_buffer.take();
 
@@ -787,6 +808,7 @@ impl WindowTextSystem {
                 &font_runs,
                 wrap_width,
                 max_wrap_lines.map(|max| max.saturating_sub(wrapped_lines)),
+                wrap_style,
             );
             wrapped_lines += layout.wrap_boundaries.len();
 
@@ -794,6 +816,7 @@ impl WindowTextSystem {
                 layout,
                 decoration_runs,
                 text: line_text,
+                last_row_align_width: None,
             });
 
             // Skip `\n` character.

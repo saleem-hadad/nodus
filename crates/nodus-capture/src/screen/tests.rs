@@ -484,7 +484,16 @@ fn paths_read_as_node_reads_them() {
 
 fn age(path: &Path, days: f64) {
     let when = SystemTime::now() - Duration::from_secs_f64(days * 86_400.0);
-    fs::File::open(path).unwrap().set_modified(when).unwrap();
+    let mut options = fs::File::options();
+    options.read(true);
+    // Windows sets a time only through a handle with FILE_WRITE_ATTRIBUTES,
+    // and opens a folder only with FILE_FLAG_BACKUP_SEMANTICS.
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt as _;
+        options.access_mode(0x0100).custom_flags(0x0200_0000);
+    }
+    options.open(path).unwrap().set_modified(when).unwrap();
 }
 
 /// CAP-063, CAP-173: by mtime, in name order, stopping at an old folder.

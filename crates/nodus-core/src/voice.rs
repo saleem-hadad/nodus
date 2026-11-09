@@ -89,6 +89,13 @@ impl VoiceApi<'_> {
             .await
     }
 
+    /// Runs a mic's own work (`VoiceController::record`, `stop`, `retry`)
+    /// in the core's runtime, whose clock and tasks it uses, whichever
+    /// executor awaits it.
+    pub fn run<F: Future>(&self, work: F) -> impl Future<Output = F::Output> + use<F> {
+        self.nodus.on_core(work)
+    }
+
     /// What a window's mics run on (`nodus_voice::controller::VoiceBackend`):
     /// these commands for the board `project` names now, the real
     /// microphone, and `open_settings` for a missing key.

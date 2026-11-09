@@ -41,11 +41,15 @@ jobs:
       # backdrop blur, transforms, group opacity, hit testing through a
       # rotation and a window capture. On Windows the release build compiles
       # the HLSL with fxc, and the window draws through DirectX 11 on the
-      # runner's adapter (WARP when there is no GPU). Informational until it
-      # has been seen green on both runners.
+      # runner's adapter (WARP when there is no GPU). It runs whatever the
+      # tests did, so a failing test doesn't hide the shaders. Required on
+      # macOS, where it has passed; informational on Windows until it has been
+      # seen green there (every shader compiles with DXC, but fxc and WARP
+      # haven't run them yet).
       - name: Effects example
+        if: ${{ !cancelled() }}
         run: cargo run -p nodus-ui --example effects --release
-        continue-on-error: true
+        continue-on-error: ${{ matrix.os == 'windows-latest' }}
         env:
           EFFECTS_SECONDS: "4"
           EFFECTS_STRICT: "1"

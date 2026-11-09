@@ -2,9 +2,9 @@ use crate::{
     self as gpui, AbsoluteLength, AlignContent, AlignItems, AlignSelf, Background, BlendMode,
     BorderStyle, ColorMatrix, CursorStyle, DefiniteLength, Display, ElementTransform, Fill,
     FlexDirection, FlexWrap, Font, FontFeatures, FontStyle, FontWeight, GridPlacement,
-    GridTemplate, GridTemplateMinSize, Hsla, JustifyContent, Length, Pixels, Radians, SharedString,
-    StrikethroughStyle, StyleRefinement, TextAlign, TextOverflow, TextStyleRefinement,
-    UnderlineStyle, WhiteSpace, px, relative, rems,
+    GridTemplate, GridTemplateMinSize, Hsla, JustifyContent, Length, OverflowWrap, Pixels, Radians,
+    SharedString, StrikethroughStyle, StyleRefinement, TextAlign, TextOverflow,
+    TextStyleRefinement, UnderlineStyle, WhiteSpace, WordBreak, px, relative, rems,
 };
 pub use gpui_macros::{
     border_style_methods, box_shadow_style_methods, cursor_style_methods, margin_style_methods,
@@ -147,6 +147,20 @@ pub trait Styled: Sized {
         let text_style = self.text_style();
         text_style.line_clamp = Some(lines);
         self.overflow_hidden()
+    }
+
+    /// Nodus patch: whether a word too long for its line breaks inside, as
+    /// CSS `overflow-wrap` (`normal` by default, as in CSS).
+    fn overflow_wrap(mut self, overflow_wrap: OverflowWrap) -> Self {
+        self.text_style().overflow_wrap = Some(overflow_wrap);
+        self
+    }
+
+    /// Nodus patch: where lines may break inside words, as CSS `word-break`
+    /// (`normal` by default, as in CSS).
+    fn word_break(mut self, word_break: WordBreak) -> Self {
+        self.text_style().word_break = Some(word_break);
+        self
     }
 
     /// Sets the flex direction of the element to `column`.

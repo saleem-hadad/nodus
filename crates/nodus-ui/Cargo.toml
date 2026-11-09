@@ -21,6 +21,8 @@ nodus-platform.workspace = true
 nodus-sessions.workspace = true
 nodus-terminal.workspace = true
 nodus-transcripts.workspace = true
+# The capture panel's mic (07 CAP-103): 05's voice controller.
+nodus-voice.workspace = true
 resvg.workspace = true
 # Local time, as `Intl.DateTimeFormat` shows it (localtime_r / localtime_s).
 libc.workspace = true
@@ -39,13 +41,17 @@ libc.workspace = true
 block2.workspace = true
 dispatch2.workspace = true
 objc2.workspace = true
-objc2-core-graphics = { workspace = true, features = ["CGColorSpace"] }
 objc2-app-kit = { workspace = true, features = ["NSAlert", "NSAppearance", "NSApplication", "NSButton", "NSControl", "NSColor", "NSGraphics", "NSMenu", "NSOpenPanel", "NSPanel", "NSResponder", "NSSavePanel", "NSView", "NSWindow", "NSWorkspace", "objc2-core-foundation"] }
 objc2-foundation = { workspace = true, features = ["NSArray", "NSGeometry", "NSProcessInfo", "NSString", "NSURL"] }
 raw-window-handle.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+
+# Runs on the main thread, as the Mac platform's text system needs.
+[[test]]
+name = "text_parity"
+harness = false
 
 [lints]
 workspace = true

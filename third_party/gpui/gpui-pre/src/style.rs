@@ -473,6 +473,43 @@ pub enum WhiteSpace {
     Nowrap,
 }
 
+/// Nodus patch: whether a word too long for its line may break inside, as
+/// CSS `overflow-wrap`.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+pub enum OverflowWrap {
+    /// `normal`: lines break only where a break is allowed (between words),
+    /// so a word longer than its line overflows it.
+    #[default]
+    Normal,
+    /// `anywhere` (also `break-word`, and `word-break: break-word`): a word
+    /// that doesn't fit on a line by itself breaks between any two
+    /// characters.
+    Anywhere,
+}
+
+/// Nodus patch: where lines may break inside words, as CSS `word-break`.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+pub enum WordBreak {
+    /// `normal`: the usual line-break rules (Unicode's, between words).
+    #[default]
+    Normal,
+    /// `break-all`: a line may also break between any two characters of a
+    /// word.
+    BreakAll,
+}
+
+/// Nodus patch: how text wraps at its width (`overflow-wrap` and
+/// `word-break`). Spaces at the end of a line always hang past it, as
+/// CSS's `white-space: normal` lets them: they never cause a wrap and don't
+/// count when the line is aligned.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct WrapStyle {
+    /// CSS `overflow-wrap`.
+    pub overflow_wrap: OverflowWrap,
+    /// CSS `word-break`.
+    pub word_break: WordBreak,
+}
+
 /// How to truncate text that overflows the width of the element
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum TextOverflow {
@@ -543,6 +580,13 @@ pub struct TextStyle {
     /// How to handle whitespace in the text
     pub white_space: WhiteSpace,
 
+    /// Nodus patch: whether a word too long for its line breaks inside (CSS
+    /// `overflow-wrap`).
+    pub overflow_wrap: OverflowWrap,
+
+    /// Nodus patch: where lines may break inside words (CSS `word-break`).
+    pub word_break: WordBreak,
+
     /// The text should be truncated if it overflows the width of the element
     pub text_overflow: Option<TextOverflow>,
 
@@ -569,6 +613,8 @@ impl Default for TextStyle {
             underline: None,
             strikethrough: None,
             white_space: WhiteSpace::Normal,
+            overflow_wrap: OverflowWrap::default(),
+            word_break: WordBreak::default(),
             text_overflow: None,
             text_align: TextAlign::default(),
             line_clamp: None,
@@ -577,6 +623,14 @@ impl Default for TextStyle {
 }
 
 impl TextStyle {
+    /// Nodus patch: how this text wraps at its width.
+    pub fn wrap_style(&self) -> WrapStyle {
+        WrapStyle {
+            overflow_wrap: self.overflow_wrap,
+            word_break: self.word_break,
+        }
+    }
+
     /// Create a new text style with the given highlighting applied.
     pub fn highlight(mut self, style: impl Into<HighlightStyle>) -> Self {
         let style = style.into();

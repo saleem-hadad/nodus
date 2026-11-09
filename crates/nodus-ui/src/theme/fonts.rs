@@ -29,8 +29,10 @@ pub const MONO: &str = ".SF NS Mono";
 #[cfg(not(target_os = "macos"))]
 pub const MONO: &str = "Cascadia Mono";
 
-/// Loads the fonts the system has but doesn't list (SF Mono).
+/// Loads the fonts the system has but doesn't list (SF Mono), and draws all
+/// text as `global.css` has it: `-webkit-font-smoothing: antialiased`.
 pub fn register(cx: &mut App) {
+    cx.set_font_smoothing(gpui::FontSmoothing::Antialiased);
     #[cfg(target_os = "macos")]
     if let Ok(bytes) = std::fs::read("/System/Library/Fonts/SFNSMono.ttf")
         && let Err(err) = cx.text_system().add_fonts(vec![Cow::Owned(bytes)])

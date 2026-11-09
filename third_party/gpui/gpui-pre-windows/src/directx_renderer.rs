@@ -916,6 +916,7 @@ impl DirectXResources {
                 height,
             )?
         };
+        tag_swap_chain_srgb(&swap_chain);
 
         let (
             render_target,
@@ -1347,6 +1348,16 @@ fn create_swap_chain_for_composition(
         Flags: 0,
     };
     Ok(unsafe { dxgi_factory.CreateSwapChainForComposition(device, &desc, None)? })
+}
+
+/// Nodus patch: GPUI's colours are sRGB. A flip-model swap chain of
+/// `B8G8R8A8_UNORM` already defaults to sRGB (`RGB_FULL_G22_NONE_P709`);
+/// saying so keeps it that way, so Windows' colour management converts the
+/// colours for a wide-gamut display as it does a browser's.
+fn tag_swap_chain_srgb(swap_chain: &IDXGISwapChain1) {
+    if let Ok(swap_chain) = swap_chain.cast::<IDXGISwapChain3>() {
+        unsafe { swap_chain.SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709) }.log_err();
+    }
 }
 
 fn create_swap_chain(

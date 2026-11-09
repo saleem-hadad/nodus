@@ -1238,11 +1238,11 @@ Risks:
 - [x] UI-128 Appearance hint
 - [x] UI-129 Pin sidebar row
 - [x] UI-130 Focus row
-- [ ] UI-131 Capture switch
-- [ ] UI-132 Capture state polling
-- [ ] UI-133 Accessibility row
-- [ ] UI-134 Unavailable row
-- [ ] UI-135 Try row
+- [x] UI-131 Capture switch
+- [x] UI-132 Capture state polling
+- [x] UI-133 Accessibility row
+- [x] UI-134 Unavailable row
+- [x] UI-135 Try row
 - [x] UI-136 Notify row
 - [x] UI-137 Dock badge row
 - [x] UI-138 Whole row toggles

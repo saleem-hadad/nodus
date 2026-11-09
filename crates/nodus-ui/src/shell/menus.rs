@@ -255,8 +255,10 @@ pub fn register_actions(nodus: &Nodus, cx: &mut App) {
     cx.on_action(move |_: &QuitAndStopSessions, cx| {
         crate::shell::core_shell::quit_and_stop_sessions(n.clone(), cx);
     });
-    // Opens the floating capture panel, once the capture track is in (07).
-    cx.on_action(|_: &Capture, _| {});
+    // PLAT-048, CAP-042: opens the floating capture panel, with or without a
+    // main window, whatever the shortcut's state.
+    let capture = nodus.clone();
+    cx.on_action(move |_: &Capture, cx| crate::capture::show(&capture, cx));
     cx.on_action(|_: &StarOnGitHub, _| {
         nodus_platform::shell::open_external(REPO_URL);
     });

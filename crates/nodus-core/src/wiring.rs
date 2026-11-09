@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 
 use nodus_board::{BoardSessions, BoxFuture, Launcher, Resume, StartNew};
-use nodus_domain::{Event, EventSink, ProjectAction, SessionCard, SessionMeta, SessionStatus, SessionUsage};
+use nodus_domain::{Event, EventSink, SessionCard, SessionMeta, SessionStatus, SessionUsage};
 use nodus_sessions::launch::{self, ActionRun, SpawnOptions};
 use nodus_sessions::notify::SessionMetas;
 use nodus_tools::{ProjectAdder, ViewTools};
@@ -141,7 +141,7 @@ impl Launcher for CoreLauncher {
     fn start_new(&self, start: StartNew) -> BoxFuture<'_, Result<(), String>> {
         Box::pin(async move {
             let core = self.0.upgrade().ok_or_else(gone)?;
-            let args = start.action.as_ref().map(run_args);
+            let args = start.action.as_ref().map(nodus_actions::run_args);
             let action = start.action.as_ref().zip(args).map(|(action, args)| ActionRun {
                 prompt: &action.prompt,
                 args,
@@ -198,13 +198,23 @@ impl nodus_views::BrainLauncher for CoreBrains {
 
 /// What a view's page may ask of other domains: the repository's git status,
 /// and the browser.
-pub(crate) struct CoreViewHost;
+pub(crate) struct CoreViewHost(pub(crate) Weak<Inner>);
 
 impl nodus_views::ViewHost for CoreViewHost {
-    /// `nodus.git()`. nodus-git (track actions-voice-git) isn't in yet, so a
-    /// page reads every folder as not a repository until it is.
-    fn git_status(&self, _repo_path: &str) -> BoxFuture<'_, Value> {
-        Box::pin(async { Value::Null })
+    /// `nodus.git()` (VIEW-066): `gitStatus(repoPath)` as the window gets it,
+    /// `null` outside a repository or when git can't run.
+    fn git_status(&self, repo_path: &str) -> BoxFuture<'_, Value> {
+        let repo = PathBuf::from(repo_path);
+        Box::pin(async move {
+            let Some(core) = self.0.upgrade() else {
+                return Value::Null;
+            };
+            let env = core.env().await;
+            match nodus_git::Git::from_env(&env).status(&repo).await {
+                Ok(Some(status)) => serde_json::to_value(status).unwrap_or(Value::Null),
+                _ => Value::Null,
+            }
+        })
     }
 }
 
@@ -313,21 +323,4 @@ impl nodus_updater::App for CoreUpdaterApp {
 
 fn gone() -> String {
     "Nodus is quitting".into()
-}
-
-/// An action run's extra `claude` options (`runArgs`, 05): its system prompt,
-/// on the run's first start only (SESS-132).
-///
-/// nodus-actions (track actions-voice-git) owns this; it moves there when
-/// that track merges.
-pub(crate) fn run_args(action: &ProjectAction) -> Vec<String> {
-    vec!["--append-system-prompt".into(), run_system_prompt(action)]
-}
-
-/// `runSystemPrompt(action)` (actions.ts), verbatim.
-fn run_system_prompt(action: &ProjectAction) -> String {
-    format!(
-        "You are running \"{name}\", an action button the user pressed on the Nodus board for this project. Nobody is watching while you work, so do the job in the prompt without stopping to chat. If you need the user to decide something, ask with AskUserQuestion: that turns the action's button red to call them. When you are done, end with one line saying what you did. The user is shown that line, and this session then goes away. The mcp__nodus__* tools let you list and archive the board's sessions, and write sticky notes on the board.",
-        name = action.name
-    )
 }

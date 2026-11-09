@@ -4026,8 +4026,10 @@ name = "nodus-core"
 version = "0.9.4"
 dependencies = [
  "indexmap",
+ "nodus-actions",
  "nodus-board",
  "nodus-domain",
+ "nodus-git",
  "nodus-host",
  "nodus-host-proto",
  "nodus-platform",
@@ -4037,6 +4039,7 @@ dependencies = [
  "nodus-transcripts",
  "nodus-updater",
  "nodus-views",
+ "nodus-voice",
  "serde",
  "serde_json",
  "tempfile",

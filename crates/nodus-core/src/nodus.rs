@@ -7,9 +7,11 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
 
+use nodus_actions::Actions;
 use nodus_board::Board;
 use nodus_domain::{AppSettings, BoardNode, Event, EventSink, OpenCardRequest, SessionStatus};
 use nodus_platform::Env;
+use nodus_platform::secrets::SafeStorage;
 use nodus_sessions::agents::Agents;
 use nodus_sessions::client::{ClientError, HostClient, HostLauncher, ProcessLauncher, Wiring};
 use nodus_sessions::hooks::{self, HookEndpoint, StatusMachine, SystemClock};
@@ -20,6 +22,7 @@ use nodus_tools::{McpRelay, McpServer, StoreHandlers, StoreHandlersConfig};
 use nodus_transcripts::Transcripts;
 use nodus_updater::{RealSystem, Updater};
 use nodus_views::{Views, ViewsConfig};
+use nodus_voice::Voice;
 use tokio::runtime::Handle;
 use tokio::sync::{broadcast, mpsc, watch};
 
@@ -29,7 +32,10 @@ use crate::wiring::{
     Broadcast, CoreBrains, CoreMetas, CoreProjects, CoreSessions, CoreUpdaterApp, CoreViewHost, CoreViewTools,
     StatusChange, StatusFanout,
 };
-use crate::{AppApi, BoardApi, GroupsApi, MenuApi, ProjectsApi, SessionsApi, SettingsApi, UpdatesApi, ViewsApi};
+use crate::{
+    ActionsApi, AppApi, BoardApi, GitApi, GroupsApi, MenuApi, ProjectsApi, SessionsApi, SettingsApi, UpdatesApi,
+    ViewsApi, VoiceApi,
+};
 
 /// How many events a slow subscriber may fall behind before it misses some.
 const EVENT_BACKLOG: usize = 4096;
@@ -96,6 +102,9 @@ pub struct NodusConfig {
     pub host_launcher: Option<Arc<dyn HostLauncher>>,
     /// GitHub and the OS as the updater reaches them. None for the real ones.
     pub updates: Option<Arc<dyn nodus_updater::System>>,
+    /// Where the xAI key is sealed (0.9.4's safeStorage). None for the
+    /// system's: the Keychain on macOS, `Local State` and DPAPI on Windows.
+    pub secrets: Option<Arc<SafeStorage>>,
 }
 
 impl NodusConfig {
@@ -114,6 +123,7 @@ impl NodusConfig {
             notifications: Notifications::Off,
             host_launcher: None,
             updates: None,
+            secrets: None,
         }
     }
 }
@@ -156,6 +166,10 @@ pub(crate) struct Inner {
     pub(crate) views: Views,
     pub(crate) notify: Notify,
     pub(crate) updater: Arc<Updater>,
+    /// The actions rail's buttons (05).
+    pub(crate) actions: Actions,
+    /// The xAI key and transcribing recordings (05).
+    pub(crate) voice: Voice,
     /// `BOARD_TOOL_RULES`, as arguments.
     board_tool_rules: Vec<String>,
 }
@@ -209,7 +223,7 @@ impl Nodus {
                 board: Arc::clone(&board),
                 sessions: Arc::clone(&sessions) as _,
                 brains: Arc::new(CoreBrains(core.clone())),
-                host: Arc::new(CoreViewHost),
+                host: Arc::new(CoreViewHost(core.clone())),
                 events: Arc::clone(&sink),
                 env: env.clone(),
                 clock: nodus_board::real_clock(),
@@ -286,6 +300,13 @@ impl Nodus {
                 views,
                 notify,
                 updater,
+                actions: Actions::new(Arc::clone(&store)),
+                voice: Voice::new(
+                    Arc::clone(&store),
+                    config
+                        .secrets
+                        .unwrap_or_else(|| Arc::new(SafeStorage::system(&config.user_data))),
+                ),
                 board_tool_rules: nodus_tools::BOARD_TOOL_RULES.iter().map(|&r| r.to_owned()).collect(),
             }
         });
@@ -392,6 +413,21 @@ impl Nodus {
     /// and Quit and Stop Sessions.
     pub fn menu(&self) -> MenuApi<'_> {
         MenuApi { nodus: self }
+    }
+
+    /// `window.api.git`.
+    pub fn git(&self) -> GitApi<'_> {
+        GitApi { nodus: self }
+    }
+
+    /// `window.api.actions`.
+    pub fn actions(&self) -> ActionsApi<'_> {
+        ActionsApi { nodus: self }
+    }
+
+    /// `window.api.voice`.
+    pub fn voice(&self) -> VoiceApi<'_> {
+        VoiceApi { nodus: self }
     }
 
     /// Every event from now on (`window.api.on.*`). Each subscriber gets each

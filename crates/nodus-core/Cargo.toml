@@ -11,8 +11,10 @@ publish.workspace = true
 
 [dependencies]
 indexmap.workspace = true
+nodus-actions.workspace = true
 nodus-board.workspace = true
 nodus-domain.workspace = true
+nodus-git.workspace = true
 nodus-platform.workspace = true
 nodus-sessions.workspace = true
 nodus-store.workspace = true
@@ -20,6 +22,7 @@ nodus-tools.workspace = true
 nodus-transcripts.workspace = true
 nodus-updater.workspace = true
 nodus-views.workspace = true
+nodus-voice.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

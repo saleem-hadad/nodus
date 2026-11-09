@@ -42,11 +42,13 @@
 //! 3. [`Nodus::shutdown`] on every normal quit; [`MenuApi::quit_and_stop_sessions`]
 //!    stops the sessions first.
 
+mod actions;
 mod app;
 mod board;
 #[cfg(test)]
 mod core_tests;
 mod error;
+mod git;
 mod groups;
 mod menu;
 mod nodus;
@@ -58,14 +60,21 @@ mod settings;
 mod shell;
 mod updates;
 mod views;
+mod voice;
 mod wiring;
 
+pub use actions::ActionsApi;
 pub use app::AppApi;
 pub use board::BoardApi;
 pub use error::{CommandError, CommandResult};
+pub use git::GitApi;
 pub use groups::GroupsApi;
 pub use menu::MenuApi;
 pub use nodus::{Dialogs, EnvSource, Nodus, NodusConfig, PickFolder, QuitAtOnce, SettingsHook};
+/// Where the xAI key is sealed; tests give a synthetic one.
+pub use nodus_platform::secrets::SafeStorage;
+/// What a mic implements and runs, for the window's mics (`VoiceApi::backend`).
+pub use nodus_voice::controller::{VoiceBackend, VoiceController};
 pub use notifications::Notifications;
 pub use projects::ProjectsApi;
 pub use sessions::SessionsApi;
@@ -73,6 +82,7 @@ pub use settings::SettingsApi;
 pub use shell::{AppShell, BoxFuture, Headless, ReplaceChoice};
 pub use updates::{RestartOutcome, StopSessionsQuestion, UpdatesApi};
 pub use views::ViewsApi;
+pub use voice::VoiceApi;
 
 /// The board's stop rules, for the window's Stop (SESS-149…152).
 pub use nodus_board::{StopConfirmation, stop_confirmation, stoppable};

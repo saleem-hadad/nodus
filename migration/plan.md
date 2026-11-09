@@ -164,7 +164,7 @@ Tracks after P1 run in parallel where the dependency column allows.
 | P8 | Overlays: prompt bar, ⌘K search, merge dialog, ink, selection bar, agent deck | P6 | ☐ |
 | P9 | Views (wry), board tools, actions, voice, git UI | P6 | ☐ |
 | P10 | Capture panel, notifications, Dock badge, updater | P6 | ☐ |
-| P11 | Packaging: .app and DMGs (same bundle id, Info.plist keys, entitlements, signing, notarizing), Windows NSIS (same flags), release workflow; 0.9.4 → Rust update test | P10 | ☐ |
+| P11 | Packaging: .app and DMGs (same bundle id, Info.plist keys, entitlements, signing, notarizing), Windows NSIS (same flags), release workflow; 0.9.4 → Rust update test | P10 | 🟡 packaging running (started early: independent of the UI) |
 | P12 | Parity audit (every checklist item, screenshots light and dark), then cutover: delete Electron, update README and docs, release | P11 | ☐ |
 
 ## Tracks
@@ -188,6 +188,8 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | board-canvas | `rust/board-canvas` | P6, spec 09: the board route and canvas (pan/zoom/select/drag, sections, edges, menus, shortcuts), node plug-in interface | 🟡 running |
 | board-cards | `rust/board-cards` | P6, spec 10: session cards, expanded card chrome, agent deck, archive stack, notes, pad (`nodus-ui/src/board/cards/`) | 🟡 running |
 | capture-panel | `rust/capture-panel` | P10, spec 07 UI: the panel window and page, Settings' capture rows, File › Capture…, `nodus.capture()` | 🟡 running (restarted fresh) |
+| packaging | `rust/packaging` | P11: macOS bundle + DMGs, Windows NSIS (electron-builder templates), signing/notarizing, CI packaging + native smoke test, `release-rust.yml` with D12 handoff gates; publishes nothing | 🟡 running |
+| actions-git-voice-ui | `rust/actions-git-voice-ui` | P9, spec 05 UI: actions rail and dialog, branch chip + commits popover + diff modal, session mic and recording look | 🟡 running |
 | terminal-ui | `rust/terminal-ui` | P7, spec 12 UI: the GPUI terminal element, session window, transcript preview, agents viewer | 🟡 running |
 | terminal | `rust/terminal` | nodus-terminal (GPUI-free): alacritty model, xterm key encoder, query answers, widths, registry | ✅ merged: 83 TERM; 26 drawing/focus/timing TERM + MODAL/TRANS/AGV to the terminal UI track |
 

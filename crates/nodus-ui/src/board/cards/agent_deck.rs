@@ -38,14 +38,30 @@ pub struct DeckHandles {
     pub parts: Entity<NodeParts>,
     /// Where the node was on screen last frame (DECK-015).
     pub bounds: Entity<Option<Bounds<Pixels>>>,
+    /// Told when the fan opens or folds, after the event (DECK-014).
+    on_open: Rc<dyn Fn(bool, &mut App)>,
 }
 
 impl DeckHandles {
-    pub fn get(node: &str, window: &mut Window, cx: &mut App) -> Self {
+    pub fn get(node: &str, env: &Rc<BoardEnv>, window: &mut Window, cx: &mut App) -> Self {
+        let actions = env.actions.clone();
+        let id = node.to_owned();
         Self {
             deck: window.use_keyed_state(anim::key(node, "deck"), cx, |_, _| DeckState::default()),
             parts: window.use_keyed_state(anim::key(node, "parts"), cx, |_, _| NodeParts::default()),
             bounds: window.use_keyed_state(anim::key(node, "bounds"), cx, |_, _| None),
+            on_open: Rc::new(move |open, cx| actions.raise(&id, open, cx)),
+        }
+    }
+
+    /// Runs `f` on the deck, and says so if the fan opened or folded.
+    fn change(&self, cx: &mut App, f: impl FnOnce(&mut DeckState)) {
+        let was = self.deck.read(cx).open();
+        self.deck.update(cx, |d, _| f(d));
+        let now = self.deck.read(cx).open();
+        if was != now {
+            let on_open = self.on_open.clone();
+            cx.defer(move |cx| on_open(now, cx));
         }
     }
 
@@ -55,23 +71,28 @@ impl DeckHandles {
 
     /// DECK-008: pointing at a trigger opens the fan.
     pub fn point(&self, window: &mut Window, cx: &mut App) {
-        self.deck.update(cx, |d, _| d.point());
+        self.change(cx, DeckState::point);
         window.refresh();
     }
 
     /// DECK-009, DECK-012
     pub fn toggle(&self, window: &mut Window, cx: &mut App) {
-        self.deck.update(cx, |d, _| d.toggle());
+        self.change(cx, DeckState::toggle);
         window.refresh();
     }
 
     /// DECK-011, DECK-013, DECK-027
     pub fn close(&self, window: &mut Window, cx: &mut App) {
-        self.deck.update(cx, |d, _| {
+        self.fold(cx);
+        window.refresh();
+    }
+
+    /// Folds the fan without a window (DECK-013 while rendering).
+    pub fn fold(&self, cx: &mut App) {
+        self.change(cx, |d| {
             d.close();
             d.side = None;
         });
-        window.refresh();
     }
 
     /// A part of the node gained or lost the pointer (DECK-010).
@@ -88,19 +109,19 @@ impl DeckHandles {
         }
         if self.parts.read(cx).0.is_empty() {
             self.deck.update(cx, |d, _| d.leave(Instant::now()));
-            let deck = self.deck.clone();
+            let handles = self.clone();
             window
                 .spawn(cx, async move |cx| {
                     cx.background_executor()
                         .timer(super::present::DECK_CLOSE_DELAY + Duration::from_millis(5))
                         .await;
                     let _ = cx.update(|window, cx| {
-                        let closed = deck.update(cx, |d, _| {
-                            let changed = d.tick(Instant::now());
+                        let mut closed = false;
+                        handles.change(cx, |d| {
+                            closed = d.tick(Instant::now());
                             if !d.open() {
                                 d.side = None;
                             }
-                            changed
                         });
                         if closed {
                             window.refresh();

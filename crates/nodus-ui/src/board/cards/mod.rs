@@ -26,6 +26,7 @@ pub mod anim;
 pub mod archive_zone;
 pub mod expanded_card;
 pub mod icons;
+pub mod install;
 pub mod note;
 pub mod note_pad;
 pub mod paper;
@@ -45,6 +46,7 @@ use crate::components::tween::Mix;
 use crate::platform::Platform;
 use crate::theme::tokens::Layer;
 
+pub use install::install;
 pub use present::{Phase, StackLook};
 
 /// The scale the board's things are drawn at: every CSS length goes
@@ -279,9 +281,17 @@ pub struct StackView {
     pub scroll_max: f32,
 }
 
+/// What a resize is resizing.
+#[derive(Debug, Clone)]
+pub enum Resized {
+    Card(String),
+    Note(Box<BoardNote>),
+}
+
 /// The board actions cards, notes and the archive use (`BoardActions` in
-/// BoardContext.ts, plus the store actions they call).
-pub trait BoardActions {
+/// BoardContext.ts, plus the store actions they call). `install.rs` maps
+/// them onto the canvas's `board::nodes::BoardActions`.
+pub trait CardActions {
     /// Commits a card's title (empty clears the override).
     fn rename(&self, session_id: &str, title: &str, cx: &mut App);
     /// Starts or stops renaming a card or section, or writing in a note.
@@ -306,12 +316,16 @@ pub trait BoardActions {
     fn remove_notes(&self, note_ids: &[String], cx: &mut App);
     /// A node is being resized (`done` = false, the canvas shows the box
     /// under the pointer) or was (`done`, the rect rounded, to save).
-    fn resize(&self, node_id: &str, rect: (f32, f32, f32, f32), done: bool, cx: &mut App);
+    fn resize(&self, node: &Resized, rect: (f32, f32, f32, f32), done: bool, cx: &mut App);
+    /// A card's title text was pressed (`.card-title`, BOARD-043/047).
+    fn press_title(&self);
+    /// Raises a card while its agent fan is out (z 1400, DECK-014).
+    fn raise(&self, session_id: &str, raised: bool, cx: &mut App);
     // The archive stack (ArchiveStackContext).
     fn set_stack_query(&self, query: &str, cx: &mut App);
     fn open_stack(&self, cx: &mut App);
     fn close_stack(&self, cx: &mut App);
-    fn submit_stack(&self, cx: &mut App);
+    fn submit_stack(&self, window: &mut Window, cx: &mut App);
 }
 
 /// The terminal registry, as an expanded card needs it (spec 12).
@@ -355,7 +369,7 @@ pub struct BoardEnv {
     /// The session the terminal modal shows, if open.
     pub terminal_modal: Option<String>,
     pub platform: Platform,
-    pub actions: Rc<dyn BoardActions>,
+    pub actions: Rc<dyn CardActions>,
     pub terminals: Option<Rc<dyn TerminalHost>>,
 }
 

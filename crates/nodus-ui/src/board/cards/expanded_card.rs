@@ -264,6 +264,7 @@ pub fn chrome_extras(env: &Rc<BoardEnv>, node: &SessionNode, window: &mut Window
     resize_zones(
         env,
         &node.card.node.session_id,
+        super::Resized::Card(node.card.node.session_id.clone()),
         (x, y, w, h),
         (EXPANDED_MIN_W, EXPANDED_MIN_H),
         18.0,

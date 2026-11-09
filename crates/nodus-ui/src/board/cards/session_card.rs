@@ -55,15 +55,12 @@ impl RenderOnce for SessionNode {
         let z = env.z();
         let id = self.card.node.session_id.clone();
         let (w, h) = self.size;
-        let handles = DeckHandles::get(&id, window, cx);
+        let handles = DeckHandles::get(&id, &env, window, cx);
         let agents: Vec<AgentInfo> = deck_agents(&self.card).to_vec();
         let has_deck = !agents.is_empty();
         // DECK-013: dragging the card, or its run ending, folds the fan.
         if (self.dragging || !has_deck) && handles.open(cx) {
-            handles.deck.update(cx, |d, _| {
-                d.close();
-                d.side = None;
-            });
+            handles.fold(cx);
         }
         let open = handles.open(cx);
         let expanded = is_expanded(&self.card);
@@ -310,11 +307,14 @@ pub fn heading(
             .spacing(z.px(-0.01 * size))
             .marks(marks);
         let p = if expanded { p.ellipsis() } else { p.clamp(2) };
+        let actions = env.actions.clone();
         out.push(
             div()
                 .id(anim::key(id, "title"))
                 .flex_1()
                 .min_w_0()
+                // `.card-title`: the canvas waits 240ms before opening (BOARD-043).
+                .on_mouse_down(MouseButton::Left, move |_, _, _| actions.press_title())
                 .tooltip(native_tooltip(title.into()))
                 .child(p)
                 .into_any_element(),

@@ -12,7 +12,7 @@ use gpui::{
 };
 
 use super::present::{ResizeEdges, resize, rounded};
-use super::{BoardEnv, anim};
+use super::{BoardEnv, Resized, anim};
 
 #[derive(Debug, Clone, Copy)]
 struct Drag {
@@ -35,9 +35,11 @@ const EDGE: f32 = 10.0;
 
 /// The zones for the node `node` at `rect` (flow units), relative to the
 /// node's own corner, never smaller than `min`.
+#[allow(clippy::too_many_arguments)]
 pub fn resize_zones(
     env: &Rc<BoardEnv>,
     node: &str,
+    target: Resized,
     rect: (f32, f32, f32, f32),
     min: (f32, f32),
     corner: f32,
@@ -104,14 +106,14 @@ pub fn resize_zones(
     // While dragging, follow the pointer anywhere in the window.
     if drag.read(cx).is_some() {
         let env = env.clone();
-        let node = node.to_owned();
+        let target = Rc::new(target);
         out.push(
             canvas(
                 |_, _, _| {},
                 move |_, _, window, _| {
                     let zoom = env.zoom.max(0.01);
                     let moving = drag.clone();
-                    let (env_move, node_move) = (env.clone(), node.clone());
+                    let (env_move, node_move) = (env.clone(), target.clone());
                     window.on_mouse_event(move |e: &MouseMoveEvent, _, window, cx| {
                         let Some(d) = *moving.read(cx) else {
                             return;
@@ -132,7 +134,7 @@ pub fn resize_zones(
                         let dy = f32::from(e.position.y - d.start.y) / zoom;
                         let (x, y, w, h) = rounded(resize(d.rect, d.edges, dx, dy, min));
                         env.actions
-                            .resize(&node, (x as f32, y as f32, w as f32, h as f32), true, cx);
+                            .resize(&target, (x as f32, y as f32, w as f32, h as f32), true, cx);
                         window.refresh();
                     });
                 },

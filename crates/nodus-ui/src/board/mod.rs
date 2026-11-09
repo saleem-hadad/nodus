@@ -20,6 +20,7 @@ use gpui::App;
 /// Sets the board up once at start-up: installs the node renderers.
 pub fn init(cx: &mut App) {
     // board/cards/ installs its renderers here: `cards::install(cx)`.
+    cards::install(cx);
     if cx.try_global::<nodes::Renderers>().is_none() {
         nodes::install(nodes::Placeholders, cx);
     }

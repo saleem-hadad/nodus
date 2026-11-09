@@ -26,13 +26,11 @@ only.
 import hashlib
 import json
 import os
-import queue
 import shutil
 import socket
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 
 WINDOWS = sys.platform == "win32"
@@ -57,9 +55,15 @@ def until(what, fn, timeout=60.0):
 
 
 class Lines:
-    """A newline-delimited JSON connection: a Unix socket or a Windows pipe."""
+    """A newline-delimited JSON connection: a Unix socket or a Windows pipe.
+
+    Read only when asked, never from a thread: a synchronous pipe handle
+    makes a write wait for a read in progress on it.
+    """
 
     def __init__(self, path):
+        self.pending = b""
+        self.closed = False
         if WINDOWS:
             self.pipe = open(path, "r+b", buffering=0)
             self.sock = None
@@ -67,24 +71,6 @@ class Lines:
             self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             self.sock.connect(path)
             self.pipe = None
-        self.lines = queue.Queue()
-        threading.Thread(target=self._read, daemon=True).start()
-
-    def _read(self):
-        pending = b""
-        try:
-            while True:
-                chunk = self.pipe.read(65536) if self.pipe else self.sock.recv(65536)
-                if not chunk:
-                    break
-                pending += chunk
-                while b"\n" in pending:
-                    line, pending = pending.split(b"\n", 1)
-                    if line.strip():
-                        self.lines.put(json.loads(line))
-        except (OSError, ValueError):
-            pass
-        self.lines.put(None)
 
     def send(self, message):
         data = (json.dumps(message) + "\n").encode()
@@ -93,11 +79,45 @@ class Lines:
         else:
             self.sock.sendall(data)
 
+    def _chunk(self, timeout):
+        """What has arrived, waiting up to `timeout` for something; b"" once closed."""
+        if not WINDOWS:
+            self.sock.settimeout(max(timeout, 0.001))
+            try:
+                return self.sock.recv(65536)
+            except socket.timeout:
+                return None
+        import ctypes
+        import msvcrt
+        from ctypes import wintypes
+
+        handle = msvcrt.get_osfhandle(self.pipe.fileno())
+        available = wintypes.DWORD()
+        end = time.monotonic() + timeout
+        while True:
+            if not ctypes.windll.kernel32.PeekNamedPipe(
+                wintypes.HANDLE(handle), None, 0, None, ctypes.byref(available), None
+            ):
+                return b""  # the other end closed it
+            if available.value:
+                return self.pipe.read(available.value)
+            if time.monotonic() > end:
+                return None
+            time.sleep(0.05)
+
     def receive(self, timeout):
-        message = self.lines.get(timeout=timeout)
-        if message is None:
-            raise RuntimeError("the connection closed")
-        return message
+        end = time.monotonic() + timeout
+        while b"\n" not in self.pending:
+            if self.closed:
+                raise RuntimeError("the connection closed")
+            chunk = self._chunk(end - time.monotonic())
+            if chunk is None:
+                raise TimeoutError("no answer in time")
+            if not chunk:
+                self.closed = True
+            self.pending += chunk or b""
+        line, self.pending = self.pending.split(b"\n", 1)
+        return json.loads(line) if line.strip() else self.receive(max(0.001, end - time.monotonic()))
 
     def close(self):
         try:

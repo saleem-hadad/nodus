@@ -106,7 +106,10 @@ pub fn open_main_window(cx: &mut App) -> Option<WindowHandle<gpui::base::Root>> 
         })
         .detach();
     }
+    // PLAT-139: the page zoom the user left it at, here or in 0.9.4.
+    let zoom = nodus_core::zoom::factor(cx.global::<Core>().0.zoom().level()) as f32;
     let _ = handle.update(cx, |_, window, cx| {
+        window.set_ui_zoom(zoom, cx);
         crate::theme::sync_window(window, cx);
         #[cfg(target_os = "macos")]
         if quiet {
@@ -119,6 +122,20 @@ pub fn open_main_window(cx: &mut App) -> Option<WindowHandle<gpui::base::Root>> 
         shell,
     });
     Some(handle)
+}
+
+/// View › Actual Size, Zoom In and Zoom Out (PLAT-057): the level goes to
+/// 0, or half a step up or down, is kept, and the whole main window is
+/// drawn at 1.2^level. Nothing without a main window.
+pub fn zoom(step: Option<f64>, cx: &mut App) {
+    let Some(handle) = main_window(cx) else { return };
+    let zoom = cx.global::<Core>().0.zoom();
+    let level = zoom.set_level(step.map_or(0.0, |step| zoom.level() + step));
+    let factor = nodus_core::zoom::factor(level) as f32;
+    // A shortcut runs this while its window is being updated: after that.
+    cx.defer(move |cx| {
+        let _ = handle.update(cx, |_, window, cx| window.set_ui_zoom(factor, cx));
+    });
 }
 
 /// `showWindow` (PLAT-023): opens the main window when there's none, else

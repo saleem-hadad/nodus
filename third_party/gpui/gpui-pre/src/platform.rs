@@ -2149,7 +2149,13 @@ impl PlatformInputHandler {
 
     pub fn bounds_for_range(&mut self, range_utf16: Range<usize>) -> Option<Bounds<Pixels>> {
         self.cx
-            .update(|window, cx| self.handler.bounds_for_range(range_utf16, window, cx))
+            .update(|window, cx| {
+                // Nodus patch: in the platform's points, as the window is zoomed.
+                let zoom = window.ui_zoom();
+                self.handler
+                    .bounds_for_range(range_utf16, window, cx)
+                    .map(|b| b.map(|v| v * zoom))
+            })
             .ok()
             .flatten()
     }
@@ -2226,7 +2232,11 @@ impl PlatformInputHandler {
     #[allow(unused)]
     pub fn character_index_for_point(&mut self, point: Point<Pixels>) -> Option<usize> {
         self.cx
-            .update(|window, cx| self.handler.character_index_for_point(point, window, cx))
+            .update(|window, cx| {
+                // Nodus patch: from the platform's points, as the window is zoomed.
+                let point = point.map(|v| v / window.ui_zoom());
+                self.handler.character_index_for_point(point, window, cx)
+            })
             .ok()
             .flatten()
     }

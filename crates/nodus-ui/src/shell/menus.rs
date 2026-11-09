@@ -270,11 +270,10 @@ pub fn register_actions(nodus: &Nodus, cx: &mut App) {
     cx.on_action(|_: &Zoom, cx| with_main(cx, |w| w.zoom_window()));
     cx.on_action(|_: &BringAllToFront, cx| cx.activate(true));
     cx.on_action(|_: &Reload, cx| crate::shell::window::reload(cx));
-    // Page zoom (Actual Size / Zoom In / Zoom Out) is a whole-UI scale still
-    // to come (plan: Decisions for the user, page zoom).
-    cx.on_action(|_: &ActualSize, _| {});
-    cx.on_action(|_: &ZoomIn, _| {});
-    cx.on_action(|_: &ZoomOut, _| {});
+    // PLAT-057: page zoom scales the whole UI (plan: Decisions for the user).
+    cx.on_action(|_: &ActualSize, cx| crate::shell::window::zoom(None, cx));
+    cx.on_action(|_: &ZoomIn, cx| crate::shell::window::zoom(Some(nodus_core::zoom::STEP), cx));
+    cx.on_action(|_: &ZoomOut, cx| crate::shell::window::zoom(Some(-nodus_core::zoom::STEP), cx));
     cx.on_action(|_: &PasteAndMatchStyle, cx| {
         cx.dispatch_action(&gpui::component::input::Paste);
     });

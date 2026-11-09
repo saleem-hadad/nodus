@@ -64,6 +64,7 @@ mod updates;
 mod views;
 mod voice;
 mod wiring;
+pub mod zoom;
 
 pub use actions::ActionsApi;
 pub use app::AppApi;
@@ -89,6 +90,7 @@ pub use shell::{AppShell, BoxFuture, Headless, ReplaceChoice};
 pub use updates::{RestartOutcome, StopSessionsQuestion, UpdatesApi};
 pub use views::ViewsApi;
 pub use voice::VoiceApi;
+pub use zoom::ZoomApi;
 
 /// The board's stop rules, for the window's Stop (SESS-149…152).
 pub use nodus_board::{StopConfirmation, stop_confirmation, stoppable};

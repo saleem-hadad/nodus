@@ -131,6 +131,10 @@ GPUI wrapped text its own way: a space at the end of a line could push it to wra
 
 On the case page (`examples/text_parity.rs` against Electron 44.5.1), wrapped paragraphs at three widths, centred and right-aligned, a path with `normal`, `anywhere` and `break-all`, six two-line clamps of folder names, a four-line clamp, six one-line ellipses and two min-content flex rows: 69 of 71 cases pixel-identical. The other two are clamps whose first row breaks inside a word: GPUI measures that row inside the whole word's shaping (the kerning across the break included), Blink shapes it apart, and two or three glyphs land in the next quarter-pixel bin (1 and 13 anti-aliased pixels).
 
+### 11. Page zoom (Nodus, track audit-shell)
+
+0.9.4's View › Zoom In, Zoom Out and Actual Size are Chromium's page zoom: the whole page drawn 1.2^level times larger, laid out in a viewport that much smaller. `Window::set_ui_zoom(zoom, cx)` does the same for a GPUI window (`Window::ui_zoom` reads it). The window's `scale_factor` becomes the display's times the zoom, so everything is drawn larger at full resolution, and `viewport_size` and the pointer are divided by it (`Window::read_platform_metrics`, used by `bounds_changed`). Input arrives in the platform's points and is divided by the zoom before dispatch (`PlatformInput::unzoomed`: mouse, scroll positions and pixel deltas, pinch, touch, file drops); the IME's character rectangles go back multiplied by it (`PlatformInputHandler::bounds_for_range`, `character_index_for_point`). At 1.0, the default, nothing changes. Window-control hit testing follows, as it reads the last pointer position.
+
 ## Verification
 
 - `crates/nodus-ui/examples/effects.rs` (see `migration/tracks/gpui-fork.md`): frosted panels at blur 30/saturate 1.8 and 20/1.6 over moving cards, a note rotated 3–7° with CoreText-rendered text, a 3° sticker, the pad's sheet turning about its top edge, `group_opacity` beside `.opacity`, hit testing through the rotation (synthetic mouse moves; the window never takes focus), and a capture written to PNG. `EFFECTS_STRICT=1` exits 1 if a check fails; CI runs it on macOS and Windows.

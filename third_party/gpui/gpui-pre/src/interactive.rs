@@ -824,6 +824,63 @@ pub enum PlatformInput {
 }
 
 impl PlatformInput {
+    /// Nodus patch: the event in a window zoomed by `zoom` (`Window::set_ui_zoom`):
+    /// positions and pixel scroll distances divided by it.
+    pub(crate) fn unzoomed(self, zoom: f32) -> Self {
+        let at = |p: Point<Pixels>| p.map(|v| v / zoom);
+        match self {
+            PlatformInput::MouseDown(mut e) => {
+                e.position = at(e.position);
+                PlatformInput::MouseDown(e)
+            }
+            PlatformInput::MouseUp(mut e) => {
+                e.position = at(e.position);
+                PlatformInput::MouseUp(e)
+            }
+            PlatformInput::MouseMove(mut e) => {
+                e.position = at(e.position);
+                PlatformInput::MouseMove(e)
+            }
+            PlatformInput::MousePressure(mut e) => {
+                e.position = at(e.position);
+                PlatformInput::MousePressure(e)
+            }
+            PlatformInput::MouseExited(mut e) => {
+                e.position = at(e.position);
+                PlatformInput::MouseExited(e)
+            }
+            PlatformInput::Scroll(mut e) => {
+                e.position = at(e.position);
+                if let ScrollDelta::Pixels(delta) = e.delta {
+                    e.delta = ScrollDelta::Pixels(at(delta));
+                }
+                PlatformInput::Scroll(e)
+            }
+            PlatformInput::Pinch(mut e) => {
+                e.position = at(e.position);
+                PlatformInput::Pinch(e)
+            }
+            PlatformInput::Touch(mut e) => {
+                e.position = at(e.position);
+                PlatformInput::Touch(e)
+            }
+            PlatformInput::FileDrop(drop) => PlatformInput::FileDrop(match drop {
+                FileDropEvent::Entered { position, paths } => FileDropEvent::Entered {
+                    position: at(position),
+                    paths,
+                },
+                FileDropEvent::Pending { position } => FileDropEvent::Pending {
+                    position: at(position),
+                },
+                FileDropEvent::Submit { position } => FileDropEvent::Submit {
+                    position: at(position),
+                },
+                other => other,
+            }),
+            other => other,
+        }
+    }
+
     pub(crate) fn mouse_event(&self) -> Option<&dyn Any> {
         match self {
             PlatformInput::KeyDown { .. } => None,

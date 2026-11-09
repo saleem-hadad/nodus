@@ -446,6 +446,11 @@ impl Nodus {
         crate::LocalStorageApi { nodus: self }
     }
 
+    /// The UI's page zoom (PLAT-057, PLAT-139).
+    pub fn zoom(&self) -> crate::ZoomApi<'_> {
+        crate::ZoomApi { nodus: self }
+    }
+
     /// What the application menu's own items do (01): Check for Updates…
     /// and Quit and Stop Sessions.
     pub fn menu(&self) -> MenuApi<'_> {

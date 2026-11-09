@@ -134,6 +134,32 @@ pub async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
             });
             Ok(Value::Null)
         }
+        // Reloads the board until the session's card has this status (and is live).
+        "await-status" => {
+            let id = text(command, "session");
+            let want = text(command, "status");
+            let project = cx
+                .update(|cx| state.read(cx).route.project_id().map(str::to_owned))
+                .ok_or("no board open")?;
+            for _ in 0..50 {
+                let board = nodus.board().load(&project).await.map_err(|e| e.ipc_message())?;
+                let ok = board
+                    .cards
+                    .iter()
+                    .any(|c| c.node.session_id == id && c.live && c.status.as_str() == want);
+                cx.update(|cx| {
+                    state.update(cx, |s, cx| {
+                        s.board = Some(board);
+                        cx.notify();
+                    });
+                });
+                if ok {
+                    return Ok(Value::Null);
+                }
+                cx.background_executor().timer(std::time::Duration::from_millis(100)).await;
+            }
+            Err(format!("{id} never became {want}"))
+        }
         "route" => Ok(cx.update(|cx| {
             let s = state.read(cx);
             json!({

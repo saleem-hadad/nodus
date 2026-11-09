@@ -46,7 +46,8 @@ def storefront():
         ("node", "status", "sf-skeleton", "working", "sf-a2"),
         ("node", "status", "sf-tax", "waiting"),
         ("node", "usage", "sf-cart"),
-        {"cmd": "wait", "ms": 300},
+        T("await-status", session="@sf-skeleton", status="working"),
+        T("await-status", session="@sf-tax", status="waiting"),
         T("reload"),
     ]
 

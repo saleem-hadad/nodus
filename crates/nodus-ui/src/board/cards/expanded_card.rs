@@ -281,6 +281,7 @@ fn tool(
     part: &'static str,
     labelled: bool,
     expanded_flag: bool,
+    hook: Option<agent_deck::HoverHook>,
     window: &mut Window,
     cx: &mut App,
 ) -> (gpui::Stateful<gpui::Div>, Rgba) {
@@ -327,6 +328,9 @@ fn tool(
             if !*h {
                 p_up.update(cx, |s, _| *s = false);
             }
+            if let Some(hook) = &hook {
+                hook(*h, window, cx);
+            }
             window.refresh();
         })
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
@@ -372,7 +376,7 @@ fn tools(
     if !agents.is_empty() {
         // XCARD-009
         let open = handles.open(cx);
-        let (b, color) = tool(env, &id, "tool-agents", false, open, window, cx);
+        let (b, color) = tool(env, &id, "tool-agents", false, open, Some(agent_deck::trigger_hover(handles, "tool-agents")), window, cx);
         let run = running(agents);
         let mut b = b
             .px(z.px(7.))
@@ -393,10 +397,14 @@ fn tools(
                     .font_features(fonts::tabular())
                     .flex()
                     .justify_center()
-                    .child(run.to_string()),
+                    .child({
+                        let mut font = super::ui_font(FontWeight::SEMIBOLD);
+                        font.features = fonts::tabular();
+                        super::para::label(run.to_string(), font, 11.0, 16.0, t.status_working, z.0)
+                    }),
             );
         }
-        group = group.child(agent_deck::trigger(b, handles, "tool-agents"));
+        group = group.child(agent_deck::trigger(b, handles));
     }
     if !shell {
         // XCARD-010: the mic is voice's (05); without it, its idle look.
@@ -407,14 +415,14 @@ fn tools(
         group = group.child(match mic {
             Some(el) => el,
             None => {
-                let (b, color) = tool(env, &id, "tool-mic", false, false, window, cx);
+                let (b, color) = tool(env, &id, "tool-mic", false, false, None, window, cx);
                 b.child(card_icon(CardIcon::Mic, z.f(14.), 2.0, color)).into_any_element()
             }
         });
     }
     if resumable {
         // XCARD-011
-        let (b, color) = tool(env, &id, "tool-resume", true, false, window, cx);
+        let (b, color) = tool(env, &id, "tool-resume", true, false, None, window, cx);
         let sid = id.clone();
         group = group.child(
             b.tooltip(native_tooltip(
@@ -435,12 +443,12 @@ fn tools(
                 2.2,
                 color,
             ))
-            .child(if shell { "Restart" } else { "Resume" }),
+            .child(super::text(z, if shell { "Restart" } else { "Resume" }, 12.0, FontWeight::MEDIUM, color)),
         );
     }
     if !shell && card.live {
         // XCARD-012
-        let (b, color) = tool(env, &id, "tool-stop", false, false, window, cx);
+        let (b, color) = tool(env, &id, "tool-stop", false, false, None, window, cx);
         let env2 = env.clone();
         let sid = id.clone();
         group = group.child(
@@ -456,7 +464,7 @@ fn tools(
     }
     if !shell {
         // XCARD-013
-        let (b, color) = tool(env, &id, "tool-archive", false, false, window, cx);
+        let (b, color) = tool(env, &id, "tool-archive", false, false, None, window, cx);
         let env2 = env.clone();
         let sid = id.clone();
         group = group.child(
@@ -470,7 +478,7 @@ fn tools(
     }
     {
         // XCARD-014
-        let (b, color) = tool(env, &id, "tool-window", false, false, window, cx);
+        let (b, color) = tool(env, &id, "tool-window", false, false, None, window, cx);
         let env2 = env.clone();
         let sid = id.clone();
         group = group.child(
@@ -484,7 +492,7 @@ fn tools(
     }
     {
         // XCARD-015
-        let (b, color) = tool(env, &id, "tool-collapse", false, false, window, cx);
+        let (b, color) = tool(env, &id, "tool-collapse", false, false, None, window, cx);
         let env2 = env.clone();
         let sid = id.clone();
         group = group.child(
@@ -559,7 +567,7 @@ fn usage(
                     .text_color(t.text_secondary)
                     .font_weight(FontWeight::MEDIUM)
                     .tooltip(native_tooltip("Model".into()))
-                    .child(model),
+                    .child(super::text_tab(z, model, 11.0, FontWeight::MEDIUM, t.text_secondary)),
             )
         })
         .when_some(usage.context_percent, |d, p| {
@@ -586,21 +594,21 @@ fn usage(
                                     .bg(color),
                             ),
                     )
-                    .child(format!("Ctx {}%", nodus_domain::js::round(p))),
+                    .child(super::text_tab(z, format!("Ctx {}%", nodus_domain::js::round(p)), 11.0, FontWeight::NORMAL, color)),
             )
         })
         .when_some(running, |d, text| {
             d.child(
                 item("usage-time")
                     .tooltip(native_tooltip("Time the session has been running".into()))
-                    .child(text),
+                    .child(super::text_tab(z, text, 11.0, FontWeight::NORMAL, t.text_tertiary)),
             )
         })
         .when_some(usage.cost_usd, |d, cost| {
             d.child(
                 item("usage-cost")
                     .tooltip(native_tooltip("Cost so far".into()))
-                    .child(format_cost(cost)),
+                    .child(super::text_tab(z, format_cost(cost), 11.0, FontWeight::NORMAL, t.text_tertiary)),
             )
         })
         .into_any_element()
@@ -699,7 +707,7 @@ fn start_button(env: &Rc<BoardEnv>, node: &str, shell: bool, window: &mut Window
             2.0,
             t.text_primary,
         ))
-        .child(if shell { "Start shell" } else { "Resume session" })
+        .child(super::text(z, if shell { "Start shell" } else { "Resume session" }, 13.0, FontWeight::MEDIUM, t.text_primary))
         .into_any_element()
 }
 
@@ -742,7 +750,7 @@ fn loading_pill(env: &Rc<BoardEnv>, node: &str, label: &'static str, window: &mu
                         .rotate(radians(spin * std::f32::consts::TAU))
                         .child(card_icon(CardIcon::LoaderCircle, z.f(14.), 2.0, rgba(255, 255, 255, 0.72))),
                 )
-                .child(label),
+                .child(super::text(z, label, 12.0, FontWeight::NORMAL, rgba(255, 255, 255, 0.72))),
         )
         .into_any_element()
 }
@@ -766,7 +774,7 @@ fn error_column(
                 h.reattach(&sid, cx);
             }
         })
-        .child("Try again");
+        .child(super::text(z, "Try again", 13.0, FontWeight::MEDIUM, theme::tokens(cx).text_on_accent));
     div()
         .flex()
         .flex_col()

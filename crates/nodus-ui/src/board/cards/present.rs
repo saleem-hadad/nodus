@@ -645,6 +645,11 @@ pub fn archive_size(results: Option<usize>) -> (f32, f32) {
     )
 }
 
+/// How far the open panel's results scroll (`stackScrollMax`).
+pub fn stack_scroll_max(results: usize) -> f32 {
+    (results.div_ceil(2) as f32 - 2.0).max(0.0) * (CARD_H + GAP)
+}
+
 /// ARCH-036: the scrollbar's thumb height and offset.
 pub fn scrollbar(scroll: f32, max: f32) -> (f32, f32) {
     let thumb = 32f32.max(STACK_BAND_H * STACK_BAND_H / (STACK_BAND_H + max));

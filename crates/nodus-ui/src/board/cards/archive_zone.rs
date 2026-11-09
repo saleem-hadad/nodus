@@ -114,16 +114,11 @@ pub fn archive(
                 .child(card_icon(CardIcon::Archive, z.f(15.), 2.0, label_color))
                 .child(label_text("Archive", z, 13.0, FontWeight::SEMIBOLD, label_color))
                 .child(
-                    div()
-                        .px(z.px(7.))
-                        .rounded_full()
-                        .bg(t.bg_sunken)
-                        .text_size(z.px(11.))
-                        .line_height(z.px(18.))
-                        .font_features(fonts::tabular())
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(label_color)
-                        .child(count.to_string()),
+                    div().px(z.px(7.)).rounded_full().bg(t.bg_sunken).child({
+                        let mut font = ui_font(FontWeight::SEMIBOLD);
+                        font.features = fonts::tabular();
+                        super::para::label(count.to_string(), font, 11.0, 18.0, label_color, z.0).spacing(z.px(0.13))
+                    }),
                 )
                 .child(
                     div().ml(z.px(6.)).opacity(hint).child(label_text(
@@ -204,7 +199,7 @@ pub fn archive(
                 .justify_center()
                 .opacity(fade)
                 .child(
-                    para(no_match_text(&stack.query), ui_font(FontWeight::NORMAL), z.px(13.), z.px(18.2), t.text_tertiary)
+                    para(no_match_text(&stack.query), ui_font(FontWeight::NORMAL), z.px(13.), z.px(18.2), t.text_tertiary).zoom(z.0)
                         .center(),
                 ),
         );
@@ -260,21 +255,17 @@ fn placeholder(env: &Rc<BoardEnv>, dealt: Option<usize>, window: &mut Window, cx
         .text_size(z.px(12.))
         .line_height(z.px(16.8));
     match dealt {
-        None => outline.child("Drag a card here to archive it").into_any_element(),
+        None => outline
+            .child(super::text(z, "Drag a card here to archive it", 12.0, FontWeight::NORMAL, t.archive_label))
+            .into_any_element(),
         Some(count) => {
             let fade = anim::enter(window, cx, anim::key(ID, "dealt"), Duration::from_millis(200), Duration::from_millis(240), motion::ease)
                 .unwrap_or(0.0);
             outline
                 .gap(z.px(3.))
                 .opacity(fade)
-                .child(
-                    div()
-                        .text_size(z.px(13.))
-                        .line_height(z.px(18.2))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .child(dealt_title(count)),
-                )
-                .child(dealt_hint(env.stack.scroll_max))
+                .child(super::text(z, dealt_title(count), 13.0, FontWeight::SEMIBOLD, t.archive_label))
+                .child(super::text(z, dealt_hint(env.stack.scroll_max), 12.0, FontWeight::NORMAL, t.archive_label))
                 .into_any_element()
         }
     }

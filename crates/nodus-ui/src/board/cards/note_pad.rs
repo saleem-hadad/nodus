@@ -12,7 +12,6 @@ use super::paper::paper;
 use super::present::{NOTE_COLOR, NOTE_H, NOTE_W, label_scale};
 use super::{BoardEnv, Shadow, Z, brightness};
 use crate::board::nodes::PadNode;
-use crate::components::spaced_text::spaced_text;
 use crate::theme::tokens::rgba;
 use crate::theme::{self, fonts};
 
@@ -37,17 +36,9 @@ pub fn label_row(z: Z, zoom: f32) -> Div {
 
 /// Text in a frame label: 0.01em of its 13px apart (inherited by every part).
 pub fn label_text(text: &str, z: Z, size: f32, weight: FontWeight, color: gpui::Rgba) -> AnyElement {
-    let mut font = gpui::font(fonts::UI);
-    font.weight = weight;
-    spaced_text(
-        text.to_owned(),
-        font,
-        z.px(size),
-        z.px(0.13),
-        z.px(size * 1.4),
-        color,
-    )
-    .into_any_element()
+    super::text(z, text.to_owned(), size, weight, color)
+        .spacing(z.px(0.13))
+        .into_any_element()
 }
 
 /// The pad, `size` big.

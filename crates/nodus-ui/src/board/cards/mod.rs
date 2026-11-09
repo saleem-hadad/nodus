@@ -263,6 +263,19 @@ pub fn baseline(window: &Window, font: &gpui::Font, size: Pixels, line_height: P
     (line_height - ascent - descent) / 2. + ascent
 }
 
+/// One line in the UI font at the board's scale, `size` CSS px, its line
+/// 1.4 times that (the body's).
+pub fn text(z: Z, s: impl Into<gpui::SharedString>, size: f32, weight: gpui::FontWeight, color: Rgba) -> para::Para {
+    para::label(s, ui_font(weight), size, size * 1.4, color, z.0)
+}
+
+/// [`text`] with tabular figures.
+pub fn text_tab(z: Z, s: impl Into<gpui::SharedString>, size: f32, weight: gpui::FontWeight, color: Rgba) -> para::Para {
+    let mut font = ui_font(weight);
+    font.features = crate::theme::fonts::tabular();
+    para::label(s, font, size, size * 1.4, color, z.0)
+}
+
 /// A UI-font face at a weight.
 pub fn ui_font(weight: gpui::FontWeight) -> gpui::Font {
     para::font(crate::theme::fonts::UI, weight, false)

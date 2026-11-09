@@ -19,7 +19,7 @@ use super::present::{
     DeckState, FanSide, agent_meta, deck_layers, fan_all_text, fan_count, fan_pick, fan_side, running,
 };
 use super::status_dot::status_dot;
-use super::{BoardEnv, Shade, Shadow, Z, anim, baseline, brightness, ui_font};
+use super::{BoardEnv, Shade, Shadow, Z, anim, baseline, brightness, text, text_tab, ui_font};
 use crate::components::tooltip::native_tooltip;
 use crate::components::tween::transition;
 use crate::format::agent_step;
@@ -252,26 +252,30 @@ pub fn deck(
 
 /// A trigger that fans the deck: the footer's agent count, the title bar's
 /// Agents tool (CARD-037, XCARD-009).
-pub fn trigger<E: InteractiveElement + StatefulInteractiveElement + Styled + 'static>(
-    el: E,
-    handles: &DeckHandles,
-    part: &'static str,
-) -> E {
-    let pointing = handles.clone();
+pub fn trigger<E: InteractiveElement + StatefulInteractiveElement + Styled + 'static>(el: E, handles: &DeckHandles) -> E {
     let toggling = handles.clone();
-    el.on_hover(move |hovered, window, cx| {
-        if *hovered {
-            pointing.point(window, cx);
-        }
-        pointing.part_hover(part, *hovered, window, cx);
-    })
-    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+    el.on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
     .on_click(move |_, window, cx| {
         cx.stop_propagation();
         // Every click toggles, both of a double-click too, as in 0.9.4.
         toggling.toggle(window, cx);
     })
 }
+
+/// What pointing at a trigger does (DECK-008), for the trigger's own hover
+/// listener to call (an element takes one).
+pub fn trigger_hover(handles: &DeckHandles, part: &'static str) -> HoverHook {
+    let pointing = handles.clone();
+    Rc::new(move |hovered, window, cx| {
+        if hovered {
+            pointing.point(window, cx);
+        }
+        pointing.part_hover(part, hovered, window, cx);
+    })
+}
+
+/// Something told when an element gains or loses the pointer.
+pub type HoverHook = Rc<dyn Fn(bool, &mut Window, &mut App)>;
 
 /// DECK-015, DECK-016: where the fan goes, decided once per opening.
 fn side(env: &BoardEnv, handles: &DeckHandles, cx: &mut App) -> FanSide {
@@ -374,24 +378,14 @@ pub fn fan(
         .child(
             div()
                 .flex_none()
-                .font_family(fonts::UI)
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_size(z.px(12.))
-                .line_height(z.px(16.8))
-                .text_color(t.text_primary)
                 .mt(px(f32::from(b_count - b_title).max(0.)))
-                .child("Agents"),
+                .child(text(z, "Agents", 12.0, FontWeight::SEMIBOLD, t.text_primary)),
         )
         .child(
             div()
                 .flex_none()
-                .font_family(fonts::UI)
-                .text_size(z.px(11.))
-                .line_height(z.px(15.4))
-                .font_features(fonts::tabular())
-                .text_color(t.text_tertiary)
                 .mt(px(f32::from(b_title - b_count).max(0.)))
-                .child(fan_count(agents)),
+                .child(text_tab(z, fan_count(agents), 11.0, FontWeight::NORMAL, t.text_tertiary)),
         );
     let mut column = div()
         .id(anim::key(node, "fan"))
@@ -460,7 +454,7 @@ pub fn fan(
             opening.close(window, cx);
             env_all.actions.open_agents(&node_all, None, cx);
         })
-        .child(fan_all_text(shown.len(), agents.len(), total))
+        .child(text(z, fan_all_text(shown.len(), agents.len(), total), 11.0, FontWeight::MEDIUM, t.accent))
         .child(card_icon(CardIcon::ArrowRight, z.f(12.), 2.2, t.accent));
     column = column.child(dealt(pill, z, dx, p));
 
@@ -514,21 +508,17 @@ fn fan_row(
             line = line.child(
                 div()
                     .flex_none()
-                    .font_family(fonts::MONO)
-                    .text_size(z.px(11.))
-                    .line_height(z.px(15.4))
-                    .text_color(t.text_primary)
-                    .child(tool),
+                    .child(super::para::label(tool, mono.clone(), 11.0, 15.4, t.text_primary, z.0)),
             );
         }
         if let Some(text) = step.text.clone() {
             line = line.child(if step.tool.is_some() {
-                para(text, mono.clone(), z.px(11.), z.px(15.4), t.text_tertiary)
+                para(text, mono.clone(), z.px(11.), z.px(15.4), t.text_tertiary).zoom(z.0)
                     .ellipsis()
                     .grow()
                     .into_any_element()
             } else {
-                para(text, ui_font(FontWeight::NORMAL), z.px(11.), z.px(15.4), t.text_secondary)
+                para(text, ui_font(FontWeight::NORMAL), z.px(11.), z.px(15.4), t.text_secondary).zoom(z.0)
                     .clamp(2)
                     .grow()
                     .into_any_element()
@@ -587,7 +577,7 @@ fn fan_row(
                         z.px(13.),
                         z.px(18.2),
                         t.text_primary,
-                    )
+                    ).zoom(z.0)
                     .ellipsis()
                     .grow(),
                 ),
@@ -604,9 +594,7 @@ fn fan_row(
                 .text_color(t.text_tertiary)
                 .font_features(fonts::tabular())
                 .children(meta.into_iter().enumerate().map(|(k, s)| {
-                    div()
-                        .when(k == 0, |d| d.text_color(status_color))
-                        .child(s)
+                    text_tab(z, s, 11.0, FontWeight::NORMAL, if k == 0 { status_color } else { t.text_tertiary })
                 })),
         )
 }

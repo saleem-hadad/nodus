@@ -257,9 +257,20 @@ pub fn break_opportunities(prepared: &Prepared) -> Vec<(usize, bool)> {
         ci += 1;
     }
     byte_to_char[prepared.text.len()] = ci;
+    let chars = &prepared.chars;
     let mut out: Vec<(usize, bool)> = linebreaks(&prepared.text)
         .map(|(b, op)| (byte_to_char[b], op == BreakOpportunity::Mandatory))
+        // Chromium keeps `src/cart/store.ts` and `/v2/legacy` whole: no
+        // break after a slash that a word follows (UAX #14 allows one).
+        .filter(|&(k, forced)| forced || k == 0 || k >= chars.len() || !(chars[k - 1] == '/' && !is_css_space(chars[k])))
         .collect();
+    // Chromium breaks after any space, even before a `/` (UAX #14 says no).
+    for k in 1..chars.len() {
+        if chars[k - 1] == ' ' && !is_css_space(chars[k]) && !out.iter().any(|&(b, _)| b == k) {
+            out.push((k, false));
+        }
+    }
+    out.sort_by_key(|&(b, _)| b);
     if out.last().is_none_or(|&(b, _)| b != ci) {
         out.push((ci, true));
     }
@@ -298,6 +309,16 @@ struct Config {
     max_width: Option<Pixels>,
     underline: Option<Hsla>,
     max_lines_height: bool,
+    /// The board's zoom: the text is laid out at `size / zoom` (its CSS
+    /// size) and drawn scaled, as Chromium draws a scaled DOM.
+    zoom: f32,
+}
+
+/// One line of text at the board's scale: `size` and `line_height` in CSS
+/// px, laid out at that size and drawn `z` times as big (so it measures as
+/// Chromium measures it), as wide as its text.
+pub fn label(text: impl Into<SharedString>, font: Font, size: f32, line_height: f32, color: impl Into<Hsla>, z: f32) -> Para {
+    para(text, font, px(size * z), px(line_height * z), color).zoom(z).space(Space::NoWrap).hug()
 }
 
 /// A paragraph of `text` in `font` at `size`, lines `line_height` apart.
@@ -319,6 +340,7 @@ pub fn para(text: impl Into<SharedString>, font: Font, size: Pixels, line_height
             max_width: None,
             underline: None,
             max_lines_height: false,
+            zoom: 1.0,
         }),
     }
 }
@@ -386,11 +408,21 @@ impl Para {
         self.cfg().underline = color;
         self
     }
+    /// The sizes given are scaled by `zoom`: lay out at the CSS size.
+    pub fn zoom(mut self, zoom: f32) -> Self {
+        self.cfg().zoom = zoom.max(0.01);
+        self
+    }
 }
 
 impl Config {
     fn prepared(&self) -> Prepared {
         prepare(&self.text, self.space)
+    }
+
+    /// The CSS font size.
+    fn css_size(&self) -> Pixels {
+        self.size / self.zoom
     }
 
     fn shape(&self, text: &str, window: &mut Window) -> ShapedLine {
@@ -406,11 +438,12 @@ impl Config {
         };
         window
             .text_system()
-            .shape_line(SharedString::from(shown), self.size, &[run], None)
+            .shape_line(SharedString::from(shown), self.css_size(), &[run], None)
     }
 
-    /// Each character's x in the shaped line, without spacing, and the end.
-    fn xs(prepared: &Prepared, line: &ShapedLine) -> Vec<f32> {
+    /// Each character's x in the shaped line (CSS px), less `tracking` per
+    /// character, without letter spacing, and the end.
+    fn xs(prepared: &Prepared, line: &ShapedLine, tracking: f32) -> Vec<f32> {
         let mut glyphs: Vec<(usize, f32)> = line
             .runs
             .iter()
@@ -428,6 +461,9 @@ impl Config {
             byte += c.len_utf8();
         }
         xs.push(f32::from(line.width));
+        for (k, x) in xs.iter_mut().enumerate() {
+            *x -= tracking * k as f32;
+        }
         // A character with no glyph of its own (inside a cluster) sits where
         // the next one starts.
         for k in (0..xs.len().saturating_sub(1)).rev() {
@@ -441,8 +477,10 @@ impl Config {
     fn lay_out(&self, width: f32, window: &mut Window) -> Layout {
         let prepared = self.prepared();
         let shaped = self.shape(&prepared.text, window);
-        let xs = Self::xs(&prepared, &shaped);
-        let spacing = f32::from(self.spacing);
+        // Shaped at the CSS size, CoreText's advances are Chromium's.
+        let tracking = 0.0;
+        let xs = Self::xs(&prepared, &shaped, tracking);
+        let spacing = f32::from(self.spacing) / self.zoom;
         let advances: Vec<f32> = (0..prepared.chars.len())
             .map(|k| {
                 if prepared.chars[k] == '\n' {
@@ -455,7 +493,7 @@ impl Config {
         let breaks = break_opportunities(&prepared);
         let graphemes = grapheme_bounds(&prepared);
         let ellipsis_line = self.shape("…", window);
-        let ellipsis_w = f32::from(ellipsis_line.width) + spacing;
+        let ellipsis_w = f32::from(ellipsis_line.width) - tracking + spacing;
         let chars = prepared.chars.clone();
         let space = self.space;
         let hang = move |k: usize| match chars[k] {
@@ -481,6 +519,7 @@ impl Config {
             lines,
             ellipsis: ellipsis_line,
             ellipsis_w,
+            tracking,
         }
     }
 
@@ -498,6 +537,7 @@ pub struct Layout {
     lines: Vec<LineSpan>,
     ellipsis: ShapedLine,
     ellipsis_w: f32,
+    tracking: f32,
 }
 
 impl Layout {
@@ -556,20 +596,21 @@ impl Element for Para {
         let cfg = self.cfg.clone();
         let _ = cfg.max_lines_height;
         let id = window.request_measured_layout(style, move |known, available, window, _cx| {
+            let z = cfg.zoom;
             let width = known.width.map(f32::from).or(match available.width {
                 AvailableSpace::Definite(w) => Some(f32::from(w)),
                 AvailableSpace::MinContent => Some(0.0),
                 AvailableSpace::MaxContent => None,
             });
             let max = cfg.max_width.map(f32::from).unwrap_or(f32::INFINITY);
-            let natural = cfg.natural_width(window).min(max);
+            let natural = (cfg.natural_width(window) * z).min(max);
             let width = width.map_or(natural, |w| w.min(max));
-            let layout = cfg.lay_out(width, window);
+            let layout = cfg.lay_out(width / z, window);
             let lines = layout.lines.len().max(1) as f32;
             let w = if cfg.fill || cfg.grow {
                 width
             } else {
-                layout.widest().min(width).ceil()
+                (layout.widest() * z).min(width).ceil()
             };
             Size {
                 width: px(w),
@@ -589,7 +630,7 @@ impl Element for Para {
         window: &mut Window,
         _: &mut App,
     ) -> Option<Layout> {
-        Some(self.cfg.lay_out(f32::from(bounds.size.width), window))
+        Some(self.cfg.lay_out(f32::from(bounds.size.width) / self.cfg.zoom, window))
     }
 
     fn paint(
@@ -606,10 +647,13 @@ impl Element for Para {
             return;
         };
         let cfg = &self.cfg;
-        let spacing = f32::from(cfg.spacing);
+        let z = cfg.zoom;
+        // Laid out in CSS px; drawn `z` times as big.
+        let spacing = f32::from(cfg.spacing) / z;
         let shaped = &layout.shaped;
         let lh = cfg.line_height;
-        let half_leading = (lh - shaped.ascent - shaped.descent) / 2.;
+        let ascent = shaped.ascent * z;
+        let half_leading = (lh - ascent - shaped.descent * z) / 2.;
         // The colour of each character, from the marks on its source bytes.
         let colors: Vec<Hsla> = layout
             .prepared
@@ -632,10 +676,10 @@ impl Element for Para {
         char_of_byte.push(layout.prepared.chars.len());
         for (li, line) in layout.lines.iter().enumerate() {
             let top = bounds.origin.y + lh * li as f32;
-            let baseline = top + half_leading + shaped.ascent;
+            let baseline = top + half_leading + ascent;
             let mut x0 = f32::from(bounds.origin.x);
             if cfg.center {
-                x0 += (f32::from(bounds.size.width) - layout.line_width(line)) / 2.0;
+                x0 += (f32::from(bounds.size.width) - layout.line_width(line) * z) / 2.0;
             }
             let base_x = layout.xs[line.start];
             for run in &shaped.runs {
@@ -644,16 +688,17 @@ impl Element for Para {
                     if k < line.start || k >= line.end || layout.prepared.chars[k] == '\n' {
                         continue;
                     }
-                    let x = x0 + f32::from(glyph.position.x) - base_x + spacing * (k - line.start) as f32;
-                    let origin = point(px(x), baseline + glyph.position.y);
+                    let gx = f32::from(glyph.position.x) - layout.tracking * k as f32;
+                    let x = x0 + (gx - base_x + spacing * (k - line.start) as f32) * z;
+                    let origin = point(px(x), baseline + glyph.position.y * z);
                     if glyph.is_emoji {
-                        let _ = window.paint_emoji(origin, run.font_id, glyph.id, shaped.font_size);
+                        let _ = window.paint_emoji(origin, run.font_id, glyph.id, cfg.size);
                     } else {
-                        let _ = window.paint_glyph(origin, run.font_id, glyph.id, shaped.font_size, colors[k]);
+                        let _ = window.paint_glyph(origin, run.font_id, glyph.id, cfg.size, colors[k]);
                     }
                 }
             }
-            let text_w: f32 = layout.advances[line.start..line.end].iter().sum();
+            let text_w: f32 = layout.advances[line.start..line.end].iter().sum::<f32>() * z;
             if line.ellipsis {
                 let color = if line.end > line.start {
                     colors[line.end - 1]
@@ -662,13 +707,16 @@ impl Element for Para {
                 };
                 for run in &layout.ellipsis.runs {
                     for glyph in &run.glyphs {
-                        let origin = point(px(x0 + text_w + f32::from(glyph.position.x)), baseline + glyph.position.y);
-                        let _ = window.paint_glyph(origin, run.font_id, glyph.id, layout.ellipsis.font_size, color);
+                        let origin = point(
+                            px(x0 + text_w + f32::from(glyph.position.x) * z),
+                            baseline + glyph.position.y * z,
+                        );
+                        let _ = window.paint_glyph(origin, run.font_id, glyph.id, cfg.size, color);
                     }
                 }
             }
             if let Some(color) = cfg.underline {
-                let width = text_w + if line.ellipsis { layout.ellipsis_w } else { 0.0 };
+                let width = text_w + if line.ellipsis { layout.ellipsis_w * z } else { 0.0 };
                 window.paint_underline(
                     point(px(x0), baseline + px(2.)),
                     px(width),
@@ -751,6 +799,14 @@ mod tests {
     #[test]
     fn breaks_a_word_too_long_anywhere() {
         assert_eq!(lay("abcdefgh ij", 3.0, Space::Normal, None), ["abc", "def", "gh", "ij"]);
+    }
+
+    #[test]
+    fn breaks_paths_as_chromium_does() {
+        // Before a slash after a space, never after a slash inside a path.
+        assert_eq!(lay("calls /v2/x", 6.0, Space::Normal, None), ["calls", "/v2/x"]);
+        // A path too long for a line breaks anywhere, not at its slashes.
+        assert_eq!(lay("in src/cart/store", 9.0, Space::Normal, None), ["in", "src/cart/", "store"]);
     }
 
     #[test]

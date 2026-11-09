@@ -118,7 +118,7 @@ pub fn note(
                     z.px(15.),
                     z.px(21.),
                     if empty { t.note_ink_faint } else { t.note_ink },
-                )
+                ).zoom(z.0)
                 .space(Space::PreWrap),
             )
             .into_any_element()
@@ -195,7 +195,8 @@ pub fn note(
             Resized::Note(Box::new(note.clone())),
             (note.x as f32, note.y as f32, w, h),
             (NOTE_MIN, NOTE_MIN),
-            9.0,
+            // A 9px handle with its 1.5px border outside it (content-box).
+            12.0,
             Some(Handles {
                 size: 9.0,
                 border: 1.5,
@@ -255,7 +256,7 @@ fn signature_el(env: &Rc<BoardEnv>, id: &str, sig: Signature, window: &mut Windo
             }
         })
         .child(
-            para(sig.text, ui_font(FontWeight::NORMAL), z.px(12.), z.px(16.), color)
+            para(sig.text, ui_font(FontWeight::NORMAL), z.px(12.), z.px(16.), color).zoom(z.0)
                 .ellipsis()
                 .underline(on.then_some(color.into())),
         )

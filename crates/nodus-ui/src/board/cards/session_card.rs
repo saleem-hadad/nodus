@@ -25,7 +25,7 @@ use super::present::{
 };
 use super::status_dot::status_dot;
 use super::sticker::sticker;
-use super::{BoardEnv, Shade, Shadow, Z, anim, brightness, expanded_card, fade, mix, ui_font};
+use super::{BoardEnv, Shade, Shadow, Z, anim, brightness, expanded_card, fade, mix};
 use crate::components::text_field::{focus_all, input, new_input};
 use crate::components::tooltip::native_tooltip;
 use crate::components::tween::transition;
@@ -303,7 +303,7 @@ pub fn heading(
             .collect();
         let size = if expanded { 13.0 } else { 15.0 };
         let face = font(fonts::DISPLAY, FontWeight::SEMIBOLD, false);
-        let p = para(title.clone(), face, z.px(size), z.px(size * 1.3), t.text_primary)
+        let p = para(title.clone(), face, z.px(size), z.px(size * 1.3), t.text_primary).zoom(z.0)
             .spacing(z.px(-0.01 * size))
             .marks(marks);
         let p = if expanded { p.ellipsis() } else { p.clamp(2) };
@@ -433,7 +433,7 @@ fn compact(
             .opacity(content)
             .tooltip(native_tooltip("Started from the context of earlier sessions".into()))
             .child(card_icon(CardIcon::GitMerge, z.f(11.), 2.2, t.accent))
-            .child(format!("merged from {}", parents.len()))
+            .child(super::text(z, format!("merged from {}", parents.len()), 11.0, FontWeight::MEDIUM, t.accent))
     });
     let has_chip = chip.is_some();
     body = body.when_some(chip, ParentElement::child);
@@ -441,7 +441,7 @@ fn compact(
     // CARD-026…CARD-032
     let pv = preview(card, env.repo_path.as_deref());
     let preview_el = match pv.kind {
-        PreviewKind::Path => para(pv.text, font(fonts::MONO, FontWeight::NORMAL, false), z.px(11.), z.px(15.95), t.text_secondary)
+        PreviewKind::Path => para(pv.text, font(fonts::MONO, FontWeight::NORMAL, false), z.px(11.), z.px(15.95), t.text_secondary).zoom(z.0)
             .clamp(2),
         kind => {
             let italic = kind == PreviewKind::Prompt;
@@ -450,7 +450,7 @@ fn compact(
             } else {
                 t.text_secondary
             };
-            para(pv.text, font(fonts::UI, FontWeight::NORMAL, italic), z.px(12.), z.px(17.4), color)
+            para(pv.text, font(fonts::UI, FontWeight::NORMAL, italic), z.px(12.), z.px(17.4), color).zoom(z.0)
                 .clamp(if has_chip { 3 } else { 4 })
         }
     };
@@ -559,6 +559,8 @@ fn footer(
     let id = card.node.session_id.clone();
     let meta = card.meta.as_ref();
     let item = || div().flex().flex_none().items_center().gap(z.px(4.));
+    // 11px, tabular, `--text-tertiary` unless said otherwise.
+    let words = |s: String, color: Rgba| super::text_tab(z, s, 11.0, FontWeight::NORMAL, color);
     let mut foot = div()
         .flex()
         .items_center()
@@ -567,11 +569,7 @@ fn footer(
         .pt(z.px(9.))
         .border_t(z.px(0.5))
         .border_color(t.separator)
-        .text_color(t.text_tertiary)
-        .text_size(z.px(11.))
-        .line_height(z.px(15.4))
-        .font_features(fonts::tabular())
-        .whitespace_nowrap()
+        .h(z.px(9.0 + 0.5 + 15.4))
         .opacity(content);
     if let Some(branch) = meta.and_then(|m| m.git_branch.clone()) {
         // CARD-034
@@ -583,7 +581,7 @@ fn footer(
                 .tooltip(native_tooltip(branch.clone().into()))
                 .child(card_icon(CardIcon::GitBranch, z.f(11.), 2.2, t.text_tertiary))
                 .child(
-                    para(branch, ui_font(FontWeight::NORMAL), z.px(11.), z.px(15.4), t.text_tertiary)
+                    super::text_tab(z, branch, 11.0, FontWeight::NORMAL, t.text_tertiary)
                         .ellipsis()
                         .hug()
                         .max_width(z.px(130.)),
@@ -597,13 +595,17 @@ fn footer(
                 .id(anim::key(&id, "messages"))
                 .tooltip(native_tooltip(format!("{n} messages").into()))
                 .child(card_icon(CardIcon::MessageSquare, z.f(11.), 2.2, t.text_tertiary))
-                .child(n.to_string()),
+                .child(words(n.to_string(), t.text_tertiary)),
         );
     }
-    let agents_button = |part: &'static str, window: &mut Window, cx: &mut App| {
-        let hover = window.use_keyed_state(anim::key(&id, part), cx, |_, _| false);
+    // CARD-039: the agents button.
+    let agents_button = |count: String,
+                         running: Option<(gpui::Div, usize)>,
+                         hook: Option<agent_deck::HoverHook>,
+                         window: &mut Window,
+                         cx: &mut App| {
+        let hover = window.use_keyed_state(anim::key(&id, "foot-agents"), cx, |_, _| false);
         let on = *hover.read(cx);
-        // CARD-039: 120ms ease.
         let bg = transition(
             window,
             cx,
@@ -612,9 +614,10 @@ fn footer(
             Duration::from_millis(120),
             motion::ease,
         );
+        let fg = if on { t.text_primary } else { t.text_tertiary };
         let h2 = hover.clone();
         div()
-            .id(anim::key(&id, part))
+            .id(anim::key(&id, "foot-agents"))
             .flex()
             .flex_none()
             .items_center()
@@ -625,39 +628,40 @@ fn footer(
             .px(z.px(5.))
             .rounded(z.px(5.))
             .bg(bg)
-            .when(on, |d| d.text_color(t.text_primary))
             .on_hover(move |h, window, cx| {
                 h2.update(cx, |s, _| *s = *h);
+                if let Some(hook) = &hook {
+                    hook(*h, window, cx);
+                }
                 window.refresh();
             })
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .child(card_icon(
-                CardIcon::Bot,
-                z.f(11.),
-                2.2,
-                if on { t.text_primary } else { t.text_tertiary },
-            ))
+            .child(card_icon(CardIcon::Bot, z.f(11.), 2.2, fg))
+            .child(words(count, fg))
+            .when_some(running, |d, (dot, run)| {
+                // The running badge, `--text-secondary`.
+                d.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(z.px(4.))
+                        .ml(z.px(3.))
+                        .child(dot)
+                        .child(words(run.to_string(), t.text_secondary)),
+                )
+            })
     };
     if !agents.is_empty() {
         // CARD-036, CARD-037
         let run = running(agents);
-        let mut b = agents_button("foot-agents", window, cx)
-            .tooltip(native_tooltip(deck_tooltip(agents).into()))
-            .child(agents.len().to_string());
-        if run > 0 {
+        let hook = agent_deck::trigger_hover(handles, "foot-agents");
+        let badge = (run > 0).then(|| {
             let dot = status_dot(anim::key(&id, "foot-dot"), running_status(agents), true, z, window, cx);
-            b = b.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(z.px(4.))
-                    .ml(z.px(3.))
-                    .text_color(t.text_secondary)
-                    .child(dot)
-                    .child(run.to_string()),
-            );
-        }
-        foot = foot.child(agent_deck::trigger(b, handles, "foot-agents"));
+            (dot, run)
+        });
+        let b = agents_button(agents.len().to_string(), badge, Some(hook), window, cx)
+            .tooltip(native_tooltip(deck_tooltip(agents).into()));
+        foot = foot.child(agent_deck::trigger(b, handles));
     } else if !card.node.archived
         && let Some(count) = card.agent_count.filter(|&c| c > 0)
     {
@@ -665,21 +669,24 @@ fn footer(
         let env = env.clone();
         let sid = id.clone();
         foot = foot.child(
-            agents_button("foot-agents", window, cx)
+            agents_button(count.to_string(), None, None, window, cx)
                 .tooltip(native_tooltip(agents_viewer_tooltip(count).into()))
                 .on_click(move |_, _, cx| {
                     cx.stop_propagation();
                     env.actions.open_agents(&sid, None, cx);
-                })
-                .child(count.to_string()),
+                }),
         );
     }
     if is_terminal(card) {
         // CARD-040
-        foot = foot.child(item().child(status_label(card)));
+        foot = foot.child(item().child(words(status_label(card).into(), t.text_tertiary)));
     }
     // CARD-041, CARD-042
-    foot = foot.child(item().ml_auto().child(time_ago(updated_at(card), env.now_ms)));
+    foot = foot.child(
+        item()
+            .ml_auto()
+            .child(words(time_ago(updated_at(card), env.now_ms), t.text_tertiary)),
+    );
     foot.into_any_element()
 }
 

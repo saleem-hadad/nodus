@@ -6,7 +6,7 @@ use std::time::Duration;
 use gpui::{App, Div, ElementId, IntoElement, ParentElement, Styled, Window, div};
 use nodus_domain::SessionStatus;
 
-use super::{Shade, Shadow, Z, anim, fade};
+use super::{Z, anim, fade};
 use crate::components::status_dot::{breathe_at, pulse_at};
 use crate::theme;
 
@@ -29,9 +29,20 @@ pub fn status_dot(
         // CARD-014: 1.1s ease-out, 0 → 8px.
         SessionStatus::Waiting => pulse_at(anim::cycle(window, cx, key, Duration::from_millis(1100))),
     };
-    let dot = div().flex_none().size(z.px(size)).rounded_full().bg(color);
-    if share > 0.0 {
-        dot.shadow(Shadow::of(&[Shade::ring(spread, fade(color, share))]).gpui(z))
+    let dot = div().flex_none().relative().size(z.px(size)).rounded_full().bg(color);
+    if share > 0.0 && spread > 0.0 {
+        // The ring is a circle `spread` bigger all round (a box-shadow's
+        // spread keeps a circle round; GPUI's keeps the radius).
+        dot.child(
+            div()
+                .absolute()
+                .left(z.px(-spread))
+                .top(z.px(-spread))
+                .size(z.px(size + 2.0 * spread))
+                .rounded_full()
+                .bg(fade(color, share)),
+        )
+        .child(div().absolute().inset_0().rounded_full().bg(color))
     } else {
         dot
     }

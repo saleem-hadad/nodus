@@ -114,7 +114,7 @@ pub fn sticker(
         )
         // NOTEUI-036
         .child(
-            para(note.text.clone(), ui_font(gpui::FontWeight::NORMAL), z.px(11.), z.px(13.75), t.note_ink)
+            para(note.text.clone(), ui_font(gpui::FontWeight::NORMAL), z.px(11.), z.px(13.75), t.note_ink).zoom(z.0)
                 .space(Space::PreWrap)
                 .clamp(3),
         )

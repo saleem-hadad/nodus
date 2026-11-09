@@ -282,6 +282,9 @@ impl AssetSource for Assets {
         if let Some(svg) = crate::capture::icons::load(path) {
             return Ok(Some(Cow::Owned(svg)));
         }
+        if let Some(svg) = crate::actions::icons::load(path) {
+            return Ok(Some(Cow::Owned(svg)));
+        }
         gpui::assets::Assets.load(path)
     }
 

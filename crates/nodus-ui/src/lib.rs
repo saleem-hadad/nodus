@@ -8,12 +8,14 @@
 
 extern crate gpui_kit as gpui;
 
+pub mod actions;
 pub mod app;
 pub mod automation;
 pub mod board;
 pub mod capture;
 pub mod components;
 pub mod format;
+pub mod git;
 #[cfg(target_os = "macos")]
 pub mod mac;
 pub mod parity;
@@ -24,5 +26,6 @@ pub mod shell;
 pub mod state;
 pub mod terminal;
 pub mod theme;
+pub mod voice;
 
 pub use app::run;

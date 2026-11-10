@@ -180,6 +180,10 @@ Views' pages are native webviews above GPUI's layer (decision D3): when GPUI mus
 - `Window::tooltip_bounds()`: where the tooltip shown in the frame being drawn is, once tooltips are prepainted (else the last frame's).
 - `Window::present_with_native_views()`: the frame being drawn presents in the main thread's Core Animation transaction (`PlatformWindow::set_presents_with_transaction`, the Metal renderer's `presentsWithTransaction` path GPUI already uses while a window resizes), so changes made to native views while drawing it appear in the same frame instead of one ahead of it. Only frames that change native views ask for it; it costs a wait until the GPU has scheduled the frame. Other platforms present as usual.
 
+### 17. Next-frame callbacks on demand (Nodus, track final-sweep)
+
+The test driver (decision D11) draws its window by hand (`Window::draw`), since macOS asks a covered window for no frames, and with the display asleep asks no window. But what `on_next_frame` queued only runs when the platform asks for a frame, so a field that takes the focus a frame or two after it appears (the projects grid's rename, the New action box) never got it under the driver, and typing into it went nowhere. `Window::run_next_frame_callbacks(cx)` runs the queue now, as the next frame would before it draws; the driver calls it before each hand-drawn frame. Nothing else calls it.
+
 ## Verification
 
 - `crates/nodus-ui/examples/effects.rs` (see `migration/tracks/gpui-fork.md`): frosted panels at blur 30/saturate 1.8 and 20/1.6 over moving cards, a note rotated 3–7° with CoreText-rendered text, a 3° sticker, the pad's sheet turning about its top edge, `group_opacity` beside `.opacity`, hit testing through the rotation (synthetic mouse moves; the window never takes focus), and a capture written to PNG. `EFFECTS_STRICT=1` exits 1 if a check fails; CI runs it on macOS and Windows.

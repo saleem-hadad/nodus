@@ -2986,6 +2986,16 @@ impl Window {
         self.invalidator.wake_platform();
     }
 
+    /// Nodus patch: runs what [`Self::on_next_frame`] has queued now, as the
+    /// next frame would before it draws. For a test driver whose window isn't
+    /// asked for frames (covered, or the display asleep) and draws by hand.
+    pub fn run_next_frame_callbacks(&mut self, cx: &mut App) {
+        let callbacks = self.next_frame_callbacks.take();
+        for callback in callbacks {
+            callback(self, cx);
+        }
+    }
+
     /// Schedule a frame to be drawn on the next animation frame.
     ///
     /// This is useful for elements that need to animate continuously, such as a video player or an animated GIF.

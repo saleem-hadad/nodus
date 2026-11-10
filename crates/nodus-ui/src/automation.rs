@@ -593,8 +593,13 @@ fn with_window<R>(cx: &mut AsyncApp, f: impl FnOnce(&mut gpui::Window, &mut App)
         gpui::AppContext::update_window(cx, handle.into(), |_, window, cx| {
             // A driven window is often covered by others, and GPUI stops
             // drawing a covered window: draw the current state first, so
-            // input hits what's there now and a shot shows it.
-            window.draw(cx).clear(cx);
+            // input hits what's there now and a shot shows it, running what
+            // the last frames left for the next one (a field taking the
+            // focus two frames on), as those frames would.
+            for _ in 0..2 {
+                window.run_next_frame_callbacks(cx);
+                window.draw(cx).clear(cx);
+            }
             f(window, cx)
         })
         .map_err(|e| e.to_string())

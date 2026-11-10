@@ -188,6 +188,7 @@ pub async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
             cx.update(|cx| {
                 if let Some(handle) = window::main_window(cx) {
                     let _ = gpui::AppContext::update_window(cx, handle.into(), |_, window, cx| {
+                        window.run_next_frame_callbacks(cx);
                         window.refresh();
                         window.draw(cx).clear(cx);
                     });

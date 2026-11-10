@@ -50,6 +50,7 @@ pub async fn run(name: &str, command: &Value, nodus: &Nodus, cx: &mut AsyncApp) 
                 cx.update(|cx| {
                     for w in cx.windows() {
                         let _ = w.update(cx, |_, window, cx| {
+                            window.run_next_frame_callbacks(cx);
                             window.refresh();
                             window.draw(cx).clear(cx);
                         });
@@ -152,6 +153,7 @@ async fn type_text(text: &str, panel: bool, cx: &mut AsyncApp) -> Result<Value, 
         for _ in 0..2 {
             cx.update(|cx| {
                 let _ = gpui::AppContext::update_window(cx, handle.into(), |_, window, cx| {
+                    window.run_next_frame_callbacks(cx);
                     window.draw(cx).clear(cx);
                 });
             });

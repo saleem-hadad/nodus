@@ -649,7 +649,7 @@ The menu's options are buttons: Tab from a focused button would move focus norma
 | Open System Settings (screen) | Privacy_ScreenCapture pane | no-op (the notice never shows) |
 | Key caps | `⇧↩`, `↩` | `Shift+Enter`, `Enter` (`keys()` in platform.ts: ⌘/⌃→Ctrl, ⌥→Alt, ⇧→Shift, ↩→Enter, ⌫→Del; modifiers ordered Ctrl, Alt, Shift, joined by `+`) |
 | Literal key caps | `Tab`, `Esc` (menu footer, header) unchanged on both | same |
-| Fonts | SF Pro Text / SF Mono | Segoe UI Variable Text / Cascadia Mono |
+| Fonts | SF Pro Text / Menlo (`--font-mono`) | Segoe UI Variable Text / Cascadia Mono |
 | Hook key codes | libuiohook 42/54 on both (map native Shift codes to these) | same |
 | Guess process | `claude` | `claude.exe`, `windowsHide` (no console flash) |
 | Screen Recording / Accessibility copy in banner/notice | shown | `needs-permission` never occurs, so the Accessibility banner never shows; `unavailable` banner can |

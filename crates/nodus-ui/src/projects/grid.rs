@@ -825,7 +825,7 @@ impl ProjectsView {
                                 // UI-008: the path is selectable.
                                 div()
                                     .mb(px(8.))
-                                    .font_family(fonts::MONO)
+                                    .font_family(fonts::mono())
                                     .text_size(TEXT_XS)
                                     .line_height(px(15.4))
                                     .text_color(t.text_tertiary)

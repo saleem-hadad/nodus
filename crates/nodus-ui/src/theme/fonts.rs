@@ -2,12 +2,14 @@
 //!
 //! `--font-ui` and `--font-display` both start with `-apple-system`, so on a
 //! Mac they are the system font (SF Pro; CoreText picks the optical size).
-//! Windows takes Segoe UI Variable Text / Display. `--font-mono` is SF Mono
-//! on a Mac, which isn't a family CoreText lists: it's loaded from the system
-//! at startup ([`register`]) and goes by `.SF NS Mono`. It's never bundled
-//! (Apple's licence).
-
-use std::borrow::Cow;
+//! Windows takes Segoe UI Variable Text / Display.
+//!
+//! `--font-mono` is `'SF Mono', ui-monospace, Menlo, Monaco, 'Cascadia Mono',
+//! Consolas, monospace`, and 0.9.4 drew every use of it in Menlo on a Mac:
+//! SF Mono is a hidden system font Chromium can't find by name, and Chromium
+//! has no `ui-monospace`, so the first family it found was Menlo (the goldens
+//! show Menlo's glyphs and its 0.6 em advance). On Windows it found Cascadia
+//! Mono, or Consolas where that isn't installed ([`mono`]).
 
 use gpui::{App, FontFeatures};
 
@@ -23,24 +25,34 @@ pub const DISPLAY: &str = ".SystemUIFont";
 #[cfg(not(target_os = "macos"))]
 pub const DISPLAY: &str = "Segoe UI Variable Display";
 
-/// `--font-mono`.
-#[cfg(target_os = "macos")]
-pub const MONO: &str = ".SF NS Mono";
+/// `--font-mono` off a Mac, once [`register`] has looked for Cascadia Mono.
 #[cfg(not(target_os = "macos"))]
-pub const MONO: &str = "Cascadia Mono";
+static MONO: std::sync::OnceLock<&'static str> = std::sync::OnceLock::new();
 
-/// Loads the fonts the system has but doesn't list (SF Mono), and draws all
-/// text as `global.css` has it: `-webkit-font-smoothing: antialiased`.
-pub fn register(cx: &mut App) {
-    cx.set_font_smoothing(gpui::FontSmoothing::Antialiased);
+/// `--font-mono`: the first of its families Chromium finds. Menlo on a Mac;
+/// on Windows Cascadia Mono, or Consolas where it isn't installed (Windows
+/// 10). GPUI doesn't go down a list of families: one the system lacks falls
+/// to GPUI's own fallbacks (Segoe UI), so [`register`] picks the family.
+pub fn mono() -> &'static str {
     #[cfg(target_os = "macos")]
-    if let Ok(bytes) = std::fs::read("/System/Library/Fonts/SFNSMono.ttf")
-        && let Err(err) = cx.text_system().add_fonts(vec![Cow::Owned(bytes)])
     {
-        tracing::warn!(%err, "couldn't load SF Mono");
+        "Menlo"
     }
     #[cfg(not(target_os = "macos"))]
-    let _ = (cx, Cow::<[u8]>::Borrowed(&[]));
+    {
+        MONO.get().copied().unwrap_or("Cascadia Mono")
+    }
+}
+
+/// Draws all text as `global.css` has it (`-webkit-font-smoothing:
+/// antialiased`) and, off a Mac, picks `--font-mono`'s family.
+pub fn register(cx: &mut App) {
+    cx.set_font_smoothing(gpui::FontSmoothing::Antialiased);
+    #[cfg(not(target_os = "macos"))]
+    {
+        let cascadia = cx.text_system().all_font_names().iter().any(|f| f == "Cascadia Mono");
+        let _ = MONO.set(if cascadia { "Cascadia Mono" } else { "Consolas" });
+    }
 }
 
 /// `font-variant-numeric: tabular-nums`.

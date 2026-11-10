@@ -490,7 +490,7 @@ fn snippet_line(t: &Tokens, s: &SearchSnippet) -> AnyElement {
                     .min_w_0()
                     .overflow_hidden()
                     .text_ellipsis()
-                    .font_family(fonts::MONO)
+                    .font_family(fonts::mono())
                     .font_weight(FontWeight::MEDIUM)
                     .child(file),
             )
@@ -502,7 +502,7 @@ fn snippet_line(t: &Tokens, s: &SearchSnippet) -> AnyElement {
         .overflow_hidden()
         .inline_background_radius(MARK_RADIUS)
         .when(code, |d| {
-            d.font_family(fonts::MONO).text_size(TEXT_XS).line_height(px(17.))
+            d.font_family(fonts::mono()).text_size(TEXT_XS).line_height(px(17.))
         })
         .child(highlighted(&s.text, &s.ranges, Mark::Background(t.mark.into())));
     div()

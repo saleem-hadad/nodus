@@ -376,7 +376,7 @@ impl Render for DiffModal {
                         .child("There are no uncommitted changes on ")
                         .child(
                             div()
-                                .font_family(crate::terminal::MONO)
+                                .font_family(fonts::mono())
                                 .text_size(TEXT_SM)
                                 .child(labels::branch_label(git)),
                         )
@@ -547,7 +547,7 @@ impl DiffModal {
         self.drawn = Some((key.to_owned(), parsed.clone()));
 
         let mono = gpui::Font {
-            family: crate::terminal::MONO.into(),
+            family: fonts::mono().into(),
             ..gpui::Font::default()
         };
         let font_id = window.text_system().resolve_font(&mono);
@@ -632,7 +632,7 @@ fn notice(title: &str, detail: Option<String>, t: &Tokens, window: &mut Window, 
             d.child(
                 div()
                     .max_w(px(520.))
-                    .font_family(crate::terminal::MONO)
+                    .font_family(fonts::mono())
                     .text_size(TEXT_SM)
                     .text_color(t.text_tertiary)
                     .child(detail),
@@ -782,7 +782,7 @@ fn diff_line(
         .gap(px(10.))
         .min_h(px(20.))
         .pl(px(12.))
-        .font_family(crate::terminal::MONO)
+        .font_family(fonts::mono())
         .text_size(TEXT_SM)
         .line_height(px(20.))
         .font_features(fonts::tabular())

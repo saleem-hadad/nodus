@@ -218,7 +218,7 @@ impl TranscriptPreview {
                             .when_some(meta.as_ref().and_then(|m| m.git_branch.clone()), |d, branch| {
                                 d.child(
                                     div()
-                                        .font_family(super::MONO)
+                                        .font_family(fonts::mono())
                                         .text_size(TEXT_XS)
                                         .line_height(px(18.))
                                         .text_color(t.text_tertiary)

@@ -33,7 +33,7 @@ All values are the resolved values per effective appearance. "Light" applies whe
 | --- | --- | --- |
 | `--font-ui` | `-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI Variable Text', 'Segoe UI', 'Helvetica Neue', sans-serif` | macOS: the system UI font (SF Pro; CoreText picks the optical size automatically). Windows: Segoe UI Variable Text, else Segoe UI. |
 | `--font-display` | `-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', 'Helvetica Neue', sans-serif` | macOS: the same system font as `--font-ui` (the first family wins; no visible difference on a Mac). Windows: Segoe UI Variable Display, else Segoe UI. |
-| `--font-mono` | `'SF Mono', ui-monospace, Menlo, Monaco, 'Cascadia Mono', Consolas, monospace` | macOS: SF Mono. Windows: Cascadia Mono, else Consolas. |
+| `--font-mono` | `'SF Mono', ui-monospace, Menlo, Monaco, 'Cascadia Mono', Consolas, monospace` | macOS: Menlo (SF Mono is a hidden system font Chromium can't find by name, and Chromium has no `ui-monospace`; the goldens show Menlo). Windows: Cascadia Mono, else Consolas. |
 | FolderIcon letter glyph | `'SF Pro Rounded', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif` | unclear: `FolderIcon.tsx:154`. The family name `SF Pro Rounded` exists only where Apple's SF fonts were installed by hand; on a stock Mac Chromium falls back to `-apple-system` (SF Pro). Port as the system font, Semibold, and check against a screenshot of 0.9.4 on a stock Mac. Windows: Segoe UI Semibold. |
 
 Base text: `--font-ui`, 13px (`--text-md`), line-height 1.4 (18.2px), colour `--text-primary`, grayscale antialiasing (`-webkit-font-smoothing: antialiased`).
@@ -996,7 +996,7 @@ Remove confirmation:
 | Settings › Updates | `They install when you quit Nodus. Sessions keep running.` | `They install when you choose Restart to Update, which stops the sessions.` |
 | Update button tooltip | `Nodus <v> is ready. Sessions keep running while Nodus restarts.` | `Nodus <v> is ready. Restarting stops the sessions; you can resume them after.` |
 | Key-save error | `The Keychain isn’t available, so the key can’t be saved. Set XAI_API_KEY in your shell instead.` | `Encrypted storage isn’t available, so the key can’t be saved. Set XAI_API_KEY in your shell instead.` |
-| Fonts | SF Pro / SF Mono | Segoe UI Variable Text/Display (else Segoe UI) / Cascadia Mono (else Consolas) |
+| Fonts | SF Pro / Menlo (`--font-mono`) | Segoe UI Variable Text/Display (else Segoe UI) / Cascadia Mono (else Consolas) |
 | Accessibility row | shows when the double tap needs the permission | the state is never `needs-permission` in practice (07) |
 
 ## Edge cases & errors

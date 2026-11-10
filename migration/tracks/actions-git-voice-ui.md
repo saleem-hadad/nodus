@@ -115,7 +115,7 @@ Whole-shot numbers are higher because the board's cards and notes behind are sti
 - Text that 0.9.4 let you select (the dialog's error, the Changes window's paths and lines) isn't selectable: GPUI
   text has no selection outside text fields.
 - `maxLength={40}` on the name: a paste over 40 UTF-16 units is refused whole, where Chromium keeps its first 40.
-- Mono text is Menlo, as Chromium resolved `--font-mono` (see `terminal::MONO`).
+- Mono text is Menlo, as Chromium resolved `--font-mono` (see `theme::fonts::mono`).
 
 ## Edits in shared files (additive)
 

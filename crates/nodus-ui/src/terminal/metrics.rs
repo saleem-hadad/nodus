@@ -21,18 +21,18 @@
 use gpui::{Font, FontStyle, FontWeight, Pixels, Window, px};
 use nodus_terminal::fit::{self, CellMetrics, FONT_SIZE};
 
-#[cfg(not(target_os = "macos"))]
 use crate::theme::fonts;
 
-/// `fontFamily: 'SF Mono', ui-monospace, Menlo, Monaco, 'Cascadia Mono', Consolas, monospace`.
+/// `fontFamily: 'SF Mono', ui-monospace, Menlo, Monaco, 'Cascadia Mono', Consolas, monospace`:
+/// `--font-mono`'s family ([`fonts::mono`]).
 pub fn term_font() -> Font {
     #[cfg(target_os = "macos")]
     {
-        gpui::font("Menlo")
+        gpui::font(fonts::mono())
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let mut font = gpui::font(fonts::MONO);
+        let mut font = gpui::font(fonts::mono());
         font.fallbacks = Some(gpui::FontFallbacks::from_fonts(vec!["Consolas".into()]));
         font
     }

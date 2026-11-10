@@ -909,7 +909,7 @@ fn error_column(
         .when_some(error.filter(|e| !e.is_empty()), |d, e| {
             d.child(
                 div()
-                    .font_family(fonts::MONO)
+                    .font_family(fonts::mono())
                     .text_size(z.px(12.))
                     .line_height(z.px(16.8))
                     .text_color(rgba(255, 255, 255, 0.55))

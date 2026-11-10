@@ -555,7 +555,7 @@ pub fn approvals(
                                 .py(fu(6.))
                                 .rounded(fu(6.))
                                 .bg(t.bg_sunken)
-                                .font_family(fonts::MONO)
+                                .font_family(fonts::mono())
                                 .text_size(fu(11.))
                                 .line_height(fu(16.5))
                                 .text_color(t.text_primary)

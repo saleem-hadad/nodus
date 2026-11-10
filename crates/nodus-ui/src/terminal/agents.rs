@@ -500,7 +500,7 @@ impl AgentViewer {
                 .py(px(8.))
                 .rounded(RADIUS_MD)
                 .bg(t.bg_sunken)
-                .font_family(super::MONO)
+                .font_family(fonts::mono())
                 .text_size(TEXT_XS)
                 .text_color(if agent.status == SessionStatus::Waiting {
                     t.status_waiting

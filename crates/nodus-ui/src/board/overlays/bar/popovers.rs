@@ -129,7 +129,7 @@ impl BoardCanvas {
                     div()
                         .flex_none()
                         .w(px(52.))
-                        .font_family(fonts::MONO)
+                        .font_family(fonts::mono())
                         .text_size(TEXT_SM)
                         .line_height(px(16.8))
                         .font_weight(gpui::FontWeight::MEDIUM)

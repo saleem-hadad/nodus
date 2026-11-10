@@ -109,7 +109,7 @@ pub fn error_overlay(id: impl Into<ElementId>, title: &str, detail: Option<&str>
                 .when_some(detail.filter(|d| !d.is_empty()), |d, detail| {
                     d.child(
                         div()
-                            .font_family(super::MONO)
+                            .font_family(crate::theme::fonts::mono())
                             .text_size(TEXT_SM)
                             .text_color(white(0.55))
                             .cursor_text()

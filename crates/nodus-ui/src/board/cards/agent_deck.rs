@@ -538,7 +538,7 @@ fn fan_row(
     // DECK-022
     let step = agent_step(agent);
     let dot = status_dot(anim::key_n(node, "fan-dot", i), agent.status, true, z, window, cx);
-    let mono = font(fonts::MONO, FontWeight::NORMAL, false);
+    let mono = font(fonts::mono(), FontWeight::NORMAL, false);
     let step_line = (step.tool.is_some() || step.text.is_some()).then(|| {
         let mut line = div().flex().items_start().gap(z.px(6.)).pl(z.px(14.)).min_w_0();
         if let Some(tool) = step.tool.clone() {

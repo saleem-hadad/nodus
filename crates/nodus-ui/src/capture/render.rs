@@ -1210,9 +1210,9 @@ fn two_lines(text: &str) -> Div {
         .child(SharedString::from(text.to_owned()))
 }
 
-/// `.cap-mono`: SF Mono 11.
+/// `.cap-mono`: `--font-mono` at 11px.
 fn mono(d: Div) -> Div {
-    d.font_family(fonts::MONO).text_size(px(11.))
+    d.font_family(fonts::mono()).text_size(px(11.))
 }
 
 /// An image filling `w × h`, cut from its top left (`object-fit: cover;

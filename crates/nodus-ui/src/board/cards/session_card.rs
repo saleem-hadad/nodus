@@ -516,7 +516,7 @@ fn compact(
     let preview_el = match pv.kind {
         PreviewKind::Path => para(
             pv.text,
-            font(fonts::MONO, FontWeight::NORMAL, false),
+            font(fonts::mono(), FontWeight::NORMAL, false),
             z.px(11.),
             z.px(15.95),
             t.text_secondary,

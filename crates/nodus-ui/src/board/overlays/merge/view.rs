@@ -20,8 +20,8 @@ use crate::components::button::button;
 use crate::components::icon::Icon;
 use crate::components::modal::Modal;
 use crate::platform::keys;
-use crate::theme;
 use crate::theme::tokens::{TEXT_LG, TEXT_MD, TEXT_SM, TEXT_XS, Tokens, hard, hex, ring};
+use crate::theme::{self, fonts};
 
 /// A phase's icon, 15px (`PhaseIcon`).
 fn phase_icon(t: &Tokens, phase: SummarizePhase, id: &'static str, cx: &gpui::App) -> AnyElement {
@@ -303,11 +303,7 @@ impl BoardCanvas {
                                 .appearance(false)
                                 .xsmall()
                                 .h(gpui::relative(1.))
-                                // `--font-mono` as 0.9.4 drew it: Menlo on a
-                                // Mac (Chromium can't find SF Mono by name),
-                                // whose narrower advance fits "summary" on
-                                // the first line as 0.9.4's did.
-                                .font_family(crate::terminal::MONO)
+                                .font_family(fonts::mono())
                                 .text_size(TEXT_SM)
                                 .line_height(px(18.6)),
                         ),

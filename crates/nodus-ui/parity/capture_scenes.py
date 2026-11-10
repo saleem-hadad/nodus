@@ -59,6 +59,9 @@ def mouse(kind, x, y):
     return {"cmd": "mouse", "kind": kind, "x": x, "y": y, **P}
 
 
+DOWNLOADING = {"cmd": "emit", "event": "updateStatus",
+               "payload": {"state": "downloading", "version": "0.9.5", "percent": 42, "current": "0.9.4"}}
+
 # scene: (seed spec, steps given the ids)
 SCENES = {
     "capture-empty": ({"noCaptures": True}, lambda ids: show()),
@@ -121,12 +124,15 @@ SCENES = {
             stub("trusted", True),
             # Capture looks again every 3 s while it isn't allowed (CAP-037).
             wait(3500),
-            {"cmd": "emit", "event": "updateStatus",
-             "payload": {"state": "downloading", "version": "0.9.5", "percent": 42, "current": "0.9.4"}},
+            # 0.9.4's scene replaced the status handler; here the status comes
+            # after Settings has asked for its own (a debug build's is "off").
             {"cmd": "menu", "command": "settings"},
-            wait(400),
+            wait(1000),
+            DOWNLOADING,
+            wait(300),
             {"cmd": "scroll", "x": 720, "y": 500, "dx": 0, "dy": -3000},
             wait(300),
+            DOWNLOADING,
         ],
     ),
     "capture-screen-permission": (

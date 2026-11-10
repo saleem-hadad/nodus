@@ -140,10 +140,14 @@ SCENES = {
     "titlebar-update": ([], [{"cmd": "emit", "event": "updateStatus",
                               "payload": {"state": "ready", "version": "0.9.5", "current": "0.9.4"}}]),
     "settings": (["capture"], [{"cmd": "menu", "command": "settings"}]),
+    # 0.9.4's scene replaced the status handler; here the status comes after
+    # Settings has asked for it (a debug build's own is "off").
     "settings-bottom": (["capture"], [
+        {"cmd": "menu", "command": "settings"}, {"cmd": "wait", "ms": 1000},
         {"cmd": "emit", "event": "updateStatus", "payload": {"state": "latest", "current": "0.9.4"}},
-        {"cmd": "menu", "command": "settings"}, {"cmd": "wait", "ms": 300},
-        {"cmd": "scroll", "x": 720, "y": 500, "dx": 0, "dy": -3000}]),
+        {"cmd": "wait", "ms": 300},
+        {"cmd": "scroll", "x": 720, "y": 500, "dx": 0, "dy": -3000}, {"cmd": "wait", "ms": 300},
+        {"cmd": "emit", "event": "updateStatus", "payload": {"state": "latest", "current": "0.9.4"}}]),
     "rail-open": ([], OPEN_STOREFRONT + [M("move", 2, 450), {"cmd": "wait", "ms": 200}, M("move", 3, 450),
                                           {"cmd": "wait", "ms": 400}, M("move", 34, 308)]),
     "rail-pinned": (["pinRail"], OPEN_STOREFRONT + [AWAY]),

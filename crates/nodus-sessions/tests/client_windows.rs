@@ -90,7 +90,7 @@ fn welcome(key: Option<&str>) -> Value {
 /// A data folder whose host wrote `the-real-key`. Each case gets its own, so
 /// each fake host gets a pipe name no earlier case still holds open: Windows
 /// refuses a first instance of a name that's still in use.
-fn host_folder() -> (tempfile::TempDir, std::path::PathBuf, nodus_host_proto::HostPaths) {
+fn host_folder() -> (tempfile::TempDir, std::path::PathBuf, HostPaths) {
     let dir = tempfile::tempdir().unwrap();
     let user_data = dir.path().join("ud");
     let paths = host_paths(&user_data, Platform::Windows);

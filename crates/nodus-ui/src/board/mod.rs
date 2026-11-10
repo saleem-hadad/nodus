@@ -12,6 +12,7 @@
 pub mod bar;
 pub mod canvas;
 pub mod cards;
+mod clipboard;
 mod commands;
 pub mod edges;
 pub mod fuzzy;

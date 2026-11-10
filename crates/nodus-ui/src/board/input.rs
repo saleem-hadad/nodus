@@ -1244,6 +1244,9 @@ impl BoardCanvas {
                 self.group_cards(&sel, cx);
                 true
             }
+            // BOARD-178: copy and paste notes.
+            "c" if modk && !m.shift && !m.alt && !other => self.copy_notes(cx),
+            "v" if modk && !m.shift && !m.alt && !other => self.paste_notes(cx),
             // BOARD-163.
             "backspace" | "delete" if !modk && !m.alt => {
                 // INKUI-022: the selected stroke goes first.

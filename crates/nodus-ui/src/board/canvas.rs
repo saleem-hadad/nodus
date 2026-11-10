@@ -357,7 +357,7 @@ impl BoardCanvas {
     /// Takes in a new snapshot from the store (BOARD-005, BOARD-003), and what
     /// follows the store: the terminal modal closing on a card (BOARD-103)
     /// and runs taken over (BOARD-105).
-    fn sync(&mut self, cx: &mut Context<'_, Self>) {
+    pub(crate) fn sync(&mut self, cx: &mut Context<'_, Self>) {
         let (snapshot, in_modal) = {
             let s = self.state.read(cx);
             let snapshot = s.board.clone().filter(|b| b.project.id == self.project_id);

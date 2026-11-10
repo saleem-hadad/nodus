@@ -819,6 +819,17 @@ impl Render for BoardCanvas {
             )
             .on_scroll(cx.listener(|this, e, _, cx| this.wheel(e, cx)))
             .on_pinch(cx.listener(|this, e, _, cx| this.pinch(e, cx)))
+            // BOARD-178: Edit › Copy and Paste, with the board's keys.
+            .on_action(cx.listener(|this, _: &gpui::component::input::Copy, _, cx| {
+                if this.cover(false, cx).shortcuts() {
+                    this.copy_notes(cx);
+                }
+            }))
+            .on_action(cx.listener(|this, _: &gpui::component::input::Paste, _, cx| {
+                if this.cover(false, cx).shortcuts() {
+                    this.paste_notes(cx);
+                }
+            }))
             .child(ink_input)
             .child(background)
             .children(below)

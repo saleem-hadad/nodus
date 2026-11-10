@@ -316,7 +316,6 @@ def main():
             # The grid reads the projects again, as scripts/smoke.mjs's reload made it.
             driver("emit", event="projectsChanged")
             driver("idle")
-            driver("screenshot", path=os.path.join(out, "2-projects-light.png"))
 
             step("Starting a terminal card")
             card = driver.core("sessions.create", project["id"], {"x": 80, "y": 80, "kind": "terminal", "expanded": True})
@@ -365,10 +364,16 @@ def main():
             finally:
                 shell.close()
 
+            # REL-032: the project's board with its terminal card, then dark.
+            step("The board")
+            driver("open", project=project["name"])
+            driver("idle")
+            driver("screenshot", path=os.path.join(out, "2-board-light.png"))
+
             step("Dark mode")
             driver.core("settings.update", {"theme": "dark"})
             driver("idle")
-            driver("screenshot", path=os.path.join(out, "3-projects-dark.png"))
+            driver("screenshot", path=os.path.join(out, "3-board-dark.png"))
             driver.core("settings.update", {"theme": "light"})
 
         step("Quitting")

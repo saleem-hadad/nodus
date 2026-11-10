@@ -1,0 +1,4 @@
+# Keep LF in every checkout, Windows' included: the app embeds some of these
+# files (view pages, prompts, hook settings and scripts it hands to other
+# programs), and what it sends must be byte for byte what 0.9.4 sent.
+* text=auto eol=lf

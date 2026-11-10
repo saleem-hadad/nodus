@@ -135,6 +135,7 @@ struct Background {
     // 1u is LinearGradient
     // 2u is PatternSlash
     // 3u is Checkerboard
+    // 4u is Dots (Nodus patch)
     tag: u32,
     // 0u is sRGB linear color
     // 1u is Oklab color
@@ -405,7 +406,7 @@ fn prepare_gradient_color(tag: u32, color_space: u32,
     solid: Hsla, colors: array<LinearColorStop, 2>) -> GradientColor {
     var result = GradientColor();
 
-    if (tag == 0u || tag == 2u || tag == 3u) {
+    if (tag == 0u || tag == 2u || tag == 3u || tag == 4u) {
         result.solid = hsla_to_rgba(solid);
     } else if (tag == 1u) {
         // The hsla_to_rgba is returns a linear sRGB color
@@ -426,6 +427,28 @@ fn prepare_gradient_color(tag: u32, color_space: u32,
     }
 
     return result;
+}
+
+// Nodus patch: the coverage of the dot grid's dot nearest `position` (a
+// pixel's centre), in the middle of its `gap`-sized cell from `origin`. Its
+// box and corners are the ones `Window::paint_quad` gives a dot of its own:
+// edges rounded to device pixels (half a pixel toward zero, as
+// `round_half_toward_zero` does), corners of `radius`.
+fn dot_grid_round(value: vec2<f32>) -> vec2<f32> {
+    return sign(value) * ceil(abs(value) - 0.5);
+}
+
+fn dot_grid_alpha(position: vec2<f32>, origin: vec2<f32>, gap: f32, radius: f32) -> f32 {
+    let center = origin + (floor((position - origin) / gap) + 0.5) * gap;
+    let lo = dot_grid_round(center - radius);
+    let hi = max(dot_grid_round(center + radius), lo);
+    if (position.x < lo.x || position.y < lo.y ||
+        position.x > hi.x || position.y > hi.y) {
+        return 0.0;
+    }
+    let half_size = (hi - lo) / 2.0;
+    let corner_center_to_point = abs(position - (lo + half_size)) - half_size + radius;
+    return saturate(0.5 - quad_sdf_impl(corner_center_to_point, radius));
 }
 
 fn gradient_color(background: Background, position: vec2<f32>, bounds: Bounds,
@@ -508,6 +531,13 @@ fn gradient_color(background: Background, position: vec2<f32>, bounds: Bounds,
 
             background_color = solid_color;
             background_color.a *= saturate(should_be_colored);
+        }
+        case 4u: {
+            // Nodus patch: dots (`Window::paint_dot_grid`).
+            background_color = solid_color;
+            background_color.a *= dot_grid_alpha(position, bounds.origin,
+                background.gradient_angle_or_pattern_height,
+                background.colors[0].percentage);
         }
     }
 

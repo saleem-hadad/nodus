@@ -5300,6 +5300,55 @@ impl Window {
         }
     }
 
+    /// Nodus patch: paints dots of `radius`, `gap` apart, across `bounds`,
+    /// one of them centred on `center`. It is one quad whose fill draws the
+    /// dots, however many there are; each looks as [`Window::paint_quad`]
+    /// draws a box of side `2 * radius` with corners of `radius` on its own
+    /// (edges on device pixels).
+    ///
+    /// This method should only be called as part of the paint phase of element drawing.
+    pub fn paint_dot_grid(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        center: Point<Pixels>,
+        gap: Pixels,
+        radius: Pixels,
+        color: impl Into<Hsla>,
+    ) {
+        self.invalidator.debug_assert_paint();
+
+        let color = color.into().opacity(self.element_opacity());
+        if gap <= px(0.) || color.is_transparent() {
+            return;
+        }
+        // The quad starts on a cell's corner at or before the bounds' own, so
+        // the fill finds each pixel's dot in the middle of its cell.
+        let start = |center: Pixels, edge: Pixels| {
+            let corner = center - gap / 2.;
+            corner - gap * ((corner - edge) / gap).ceil()
+        };
+        let origin = point(
+            start(center.x, bounds.left()),
+            start(center.y, bounds.top()),
+        );
+        let scale_factor = self.scale_factor();
+        let background =
+            crate::color::dot_grid(color, gap.0 * scale_factor, radius.0 * scale_factor);
+        self.with_content_mask(Some(ContentMask { bounds }), |window| {
+            let quad = Quad {
+                order: 0,
+                bounds: Bounds::from_corners(origin, bounds.bottom_right()).scale(scale_factor),
+                content_mask: window.snapped_content_mask(),
+                background,
+                border_color: Hsla::transparent_black(),
+                corner_radii: Corners::default(),
+                border_widths: Edges::default(),
+                border_style: BorderStyle::default(),
+            };
+            window.next_frame.scene.insert_primitive(quad);
+        });
+    }
+
     /// Paint the given `Path` into the scene for the next frame at the current z-index.
     ///
     /// This method should only be called as part of the paint phase of element drawing.

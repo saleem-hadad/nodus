@@ -627,27 +627,15 @@ fn paint_dots(bounds: Bounds<Pixels>, vp: nodus_domain::Viewport, color: gpui::R
     // Pattern origin `x % gap`, shifted back half a gap; circles at (r, r).
     let first = |t: f64| (t - gap / 2.0 + r).rem_euclid(gap) - gap;
     let (x0, y0) = (first(vp.x), first(vp.y));
-    let d = px((2.0 * r) as f32);
-    // One layer: the dots never overlap, so they share a draw order instead
-    // of each finding its own (tens of thousands of them zoomed out).
-    window.paint_layer(bounds, |window| {
-        let mut y = y0;
-        while y <= h + gap {
-            let mut x = x0;
-            while x <= w + gap {
-                let b = Bounds::new(
-                    point(
-                        bounds.origin.x + px((x - r) as f32),
-                        bounds.origin.y + px((y - r) as f32),
-                    ),
-                    size(d, d),
-                );
-                window.paint_quad(fill(b, color).corner_radii(px(r as f32)));
-                x += gap;
-            }
-            y += gap;
-        }
-    });
+    // One quad whose shader draws every dot, so a frame costs the same at
+    // any zoom instead of a quad per dot (tens of thousands zoomed out).
+    window.paint_dot_grid(
+        bounds,
+        point(bounds.origin.x + px(x0 as f32), bounds.origin.y + px(y0 as f32)),
+        px(gap as f32),
+        px(r as f32),
+        color,
+    );
 }
 
 impl Render for BoardCanvas {

@@ -316,7 +316,7 @@ float quad_sdf(float2 pt, Bounds bounds, Corners corner_radii) {
 
 GradientColor prepare_gradient_color(uint tag, uint color_space, Hsla solid, LinearColorStop colors[2]) {
     GradientColor output;
-    if (tag == 0 || tag == 2 || tag == 3) {
+    if (tag == 0 || tag == 2 || tag == 3 || tag == 4) {
         output.solid = hsla_to_rgba(solid);
     } else if (tag == 1) {
         output.color0 = hsla_to_rgba(colors[0].color);
@@ -338,6 +338,29 @@ float2x2 rotate2d(float angle) {
     float s = sin(angle);
     float c = cos(angle);
     return float2x2(c, -s, s, c);
+}
+
+// Nodus patch: the coverage of the dot grid's dot nearest `position` (a
+// pixel's centre), in the middle of its `gap`-sized cell from `origin`. Its
+// box and corners are the ones `Window::paint_quad` gives a dot of its own:
+// edges rounded to device pixels (half a pixel toward zero, as
+// `round_half_toward_zero` does), corners of `radius`.
+float2 dot_grid_round(float2 value) {
+    return float2(sign(value)) * ceil(abs(value) - 0.5);
+}
+
+float dot_grid_alpha(float2 position, float2 origin, float gap, float radius) {
+    float2 center = origin + (floor((position - origin) / gap) + 0.5) * gap;
+    float2 lo = dot_grid_round(center - radius);
+    float2 hi = max(dot_grid_round(center + radius), lo);
+    if (position.x < lo.x || position.y < lo.y ||
+        position.x > hi.x || position.y > hi.y) {
+        return 0.0;
+    }
+    float2 half_size = (hi - lo) / 2.0;
+    float2 corner_center_to_point =
+        abs(position - (lo + half_size)) - half_size + radius;
+    return saturate(0.5 - quad_sdf_impl(corner_center_to_point, radius));
 }
 
 float4 gradient_color(Background background,
@@ -434,6 +457,14 @@ float4 gradient_color(Background background,
 
             color = solid_color;
             color.a *= saturate(should_be_colored);
+            break;
+        }
+        case 4: {
+            // Nodus patch: dots (`Window::paint_dot_grid`).
+            color = solid_color;
+            color.a *= dot_grid_alpha(position, bounds.origin,
+                                      background.gradient_angle_or_pattern_height,
+                                      background.colors[0].percentage);
             break;
         }
     }

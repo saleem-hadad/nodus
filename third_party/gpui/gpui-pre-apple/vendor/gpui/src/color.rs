@@ -747,6 +747,8 @@ pub(crate) enum BackgroundTag {
     LinearGradient = 1,
     PatternSlash = 2,
     Checkerboard = 3,
+    /// Nodus patch: a grid of dots ([`crate::Window::paint_dot_grid`]).
+    Dots = 4,
 }
 
 /// A color space for color interpolation.
@@ -805,6 +807,11 @@ impl std::fmt::Debug for Background {
                 "Checkerboard({:?}, {})",
                 self.solid, self.gradient_angle_or_pattern_height
             ),
+            BackgroundTag::Dots => write!(
+                f,
+                "Dots({:?}, {}, {})",
+                self.solid, self.gradient_angle_or_pattern_height, self.colors[0].percentage
+            ),
         }
     }
 }
@@ -843,6 +850,21 @@ pub fn checkerboard(color: impl Into<Hsla>, size: f32) -> Background {
         tag: BackgroundTag::Checkerboard,
         solid: color.into(),
         gradient_angle_or_pattern_height: size,
+        ..Default::default()
+    }
+}
+
+/// Nodus patch: dots of `radius` in the middle of each `gap`-sized cell,
+/// counted from the quad's origin, both in device pixels. The radius rides
+/// in the first stop's percentage, which `opacity` leaves alone.
+pub(crate) fn dot_grid(color: Hsla, gap: f32, radius: f32) -> Background {
+    let mut colors = [LinearColorStop::default(); 2];
+    colors[0].percentage = radius;
+    Background {
+        tag: BackgroundTag::Dots,
+        solid: color,
+        gradient_angle_or_pattern_height: gap,
+        colors,
         ..Default::default()
     }
 }
@@ -943,6 +965,7 @@ impl Background {
             BackgroundTag::LinearGradient => self.colors.iter().all(|c| c.color.is_transparent()),
             BackgroundTag::PatternSlash => self.solid.is_transparent(),
             BackgroundTag::Checkerboard => self.solid.is_transparent(),
+            BackgroundTag::Dots => self.solid.is_transparent(),
         }
     }
 }

@@ -80,7 +80,10 @@ sha512() { if command -v sha512sum >/dev/null; then sha512sum "$1"; else shasum 
 # fetch <name> <sha256>: electron-builder-binaries' <name>/<name>.7z, extracted once.
 fetch() {
   local name="$1" sha="$2" dir="$tools/$1"
-  if [ ! -d "$dir" ]; then
+  # A complete copy leaves a marker; a folder without one (a cache that kept
+  # part of target/, an interrupted extract) is fetched again.
+  if [ ! -f "$dir/.complete" ]; then
+    rm -rf "$dir" "$dir.tmp"
     [ -n "$seven" ] || {
       echo "No 7z to extract $name with: set SEVEN_ZIP, or ${3} to an extracted copy" >&2
       exit 1
@@ -96,6 +99,7 @@ fetch() {
     "$seven" x -bd -y "-o$(native "$dir.tmp")" "$(native "$dir.7z")" >/dev/null
     mv "$dir.tmp" "$dir"
     rm -f "$dir.7z"
+    : >"$dir/.complete"
   fi
   printf '%s' "$dir"
 }

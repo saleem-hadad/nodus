@@ -60,6 +60,9 @@ struct Adder(Arc<Store>);
 
 impl ProjectAdder for Adder {
     fn add_project(&self, folder: &Path, name: Option<&str>) -> Result<(Project, bool), String> {
+        // As the core's real path does: rebuilt from its parts, so Windows
+        // gets its own separators, as Node's realpath gave 0.9.4.
+        let folder: std::path::PathBuf = folder.components().collect();
         let folder = folder.to_string_lossy().into_owned();
         if let Some(existing) = self
             .0
@@ -68,7 +71,7 @@ impl ProjectAdder for Adder {
             return Ok((existing, false));
         }
         let name = name.map(str::trim).filter(|n| !n.is_empty()).map_or_else(
-            || folder.rsplit('/').next().unwrap_or_default().to_owned(),
+            || folder.rsplit(['/', '\\']).next().unwrap_or_default().to_owned(),
             str::to_owned,
         );
         let project = project("new", &name, &folder);

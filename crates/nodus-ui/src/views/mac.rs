@@ -419,6 +419,50 @@ pub fn native_click(window_number: isize, x: f64, y: f64) {
     });
 }
 
+/// Test driver: types `text` (lowercase letters and spaces) as AppKit
+/// delivers a keyboard's keys, a key down and up each through the window's
+/// `sendEvent:`, so they take the platform's path (key handlers first, then
+/// the text input client), as real typing does.
+pub fn native_keys(window_number: isize, text: String) {
+    fn key_code(c: char) -> u16 {
+        const CODES: &str = "asdfhgzxcv_bqweryt123465=97-80]ou[ip_lj'k;\\,/nm.";
+        if c == ' ' {
+            return 49;
+        }
+        CODES.find(c).map_or(0, |i| i as u16)
+    }
+    dispatch2::DispatchQueue::main().exec_async(move || {
+        // SAFETY: NSApplication, NSWindow and NSEvent on the main thread;
+        // every object is checked for nil before use.
+        unsafe {
+            let app: *mut AnyObject = msg_send![objc2::class!(NSApplication), sharedApplication];
+            let w: *mut AnyObject = msg_send![app, windowWithWindowNumber: window_number];
+            if w.is_null() {
+                return;
+            }
+            for c in text.chars() {
+                let chars = objc2_foundation::NSString::from_str(&c.to_string());
+                for ty in [10usize, 11usize] {
+                    let ev: *mut AnyObject = msg_send![objc2::class!(NSEvent),
+                        keyEventWithType: ty,
+                        location: NSPoint::new(0.0, 0.0),
+                        modifierFlags: 0usize,
+                        timestamp: 0.0f64,
+                        windowNumber: window_number,
+                        context: std::ptr::null_mut::<AnyObject>(),
+                        characters: &*chars,
+                        charactersIgnoringModifiers: &*chars,
+                        isARepeat: false,
+                        keyCode: key_code(c)];
+                    if !ev.is_null() {
+                        let _: () = msg_send![w, sendEvent: ev];
+                    }
+                }
+            }
+        }
+    });
+}
+
 /// Test driver: the class of the view AppKit would hand a click at a point
 /// in the window (a page's `WryWebView`, or GPUI's view).
 pub fn hit_class(window: &Window, x: f64, y: f64) -> String {

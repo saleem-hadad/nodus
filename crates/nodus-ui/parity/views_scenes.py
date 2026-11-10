@@ -161,6 +161,15 @@ def ink_setup(world):
 SETUP = {"try-relay": relay_setup, "try-wheel": page_setup(WHEEL_PAGE), "try-ink": ink_setup,
          "try-ink-select": ink_setup,
          "try-zoom-in": zoom_setup(1.6, -1100, 40), "try-zoom-out": zoom_setup(0.35, 120, 160)}
+# PLAT-009: the page's scheme is standard (a host, a path) and secure (a
+# secure context, crypto.subtle), as Electron registered it. The page keeps
+# what it sees with setState: <userData>/views/<id>/runtime.json.
+SCHEME_PAGE = """<!doctype html><html><body><script>
+nodus.setState({secure: isSecureContext, subtle: typeof (crypto && crypto.subtle), protocol: location.protocol,
+  host: location.host, path: location.pathname, origin: self.origin, href: location.href});
+</script></body></html>"""
+SETUP["try-scheme"] = page_setup(SCHEME_PAGE)
+SCENES["try-scheme"] = [{"cmd": "open", "project": "docs-site"}, {"cmd": "wait", "ms": 3000}]
 SIZE_PAGE = """<!doctype html><html><body style="margin:0;font:20px -apple-system"><div id="o"></div><script>
 function show(){document.getElementById('o').textContent=innerWidth+'x'+innerHeight+' dpr '+devicePixelRatio+' '+document.documentElement.clientWidth;}
 show();addEventListener('resize',show);

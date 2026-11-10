@@ -173,8 +173,18 @@ pub fn run(user_data: PathBuf) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// What the folder picker answers instead of showing, set by the test
+/// driver (`{"cmd":"stub","name":"pickFolder"}`).
+pub struct PickFolderStub(pub Option<PathBuf>);
+
+impl gpui::Global for PickFolderStub {}
+
 /// Shows the folder picker and answers `reply` with the folder.
 fn pick_folder(reply: tokio::sync::oneshot::Sender<Option<PathBuf>>, cx: &mut App) {
+    if let Some(stub) = cx.try_global::<PickFolderStub>() {
+        let _ = reply.send(stub.0.clone());
+        return;
+    }
     #[cfg(target_os = "macos")]
     {
         let parent = window::main_window(cx)

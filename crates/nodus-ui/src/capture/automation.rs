@@ -33,7 +33,7 @@ pub async fn run(name: &str, command: &Value, nodus: &Nodus, cx: &mut AsyncApp) 
                 .unwrap_or_default()
                 .to_owned();
             let panel = command.get("window").and_then(Value::as_str) == Some("capture");
-            Some(type_text(&text, panel, cx))
+            Some(type_text(&text, panel, cx).await)
         }
         "screenshot" => {
             // No caret in a shot (parity README, "How a shot is made").
@@ -122,22 +122,57 @@ async fn capture(command: &Value, nodus: &Nodus, cx: &mut AsyncApp) -> Result<Va
 
 /// Types `text` one key at a time, as a keyboard would (letters, capitals
 /// with ⇧, spaces, punctuation), into the focused field.
-fn type_text(text: &str, panel: bool, cx: &mut AsyncApp) -> Result<Value, String> {
-    cx.update(|cx| {
-        let handle = if panel {
-            PanelSlot::live(cx).ok_or("no capture panel")?
+async fn type_text(text: &str, panel: bool, cx: &mut AsyncApp) -> Result<Value, String> {
+    let handle = cx.update(|cx| {
+        if panel {
+            PanelSlot::live(cx).ok_or("no capture panel")
         } else {
-            window::main_window(cx).ok_or("no main window")?
-        };
-        for c in text.chars() {
-            let keystroke = keystroke_for(c);
+            window::main_window(cx).ok_or("no main window")
+        }
+    })?;
+    // A covered window (or any, with the display asleep) isn't asked for
+    // frames: draw what's there now, in an update of its own so what that
+    // frame defers (a field taking the focus as it appears) is done, then
+    // again, so the field that has the focus now takes the text.
+    let draw = |cx: &mut AsyncApp| {
+        for _ in 0..2 {
+            cx.update(|cx| {
+                let _ = gpui::AppContext::update_window(cx, handle.into(), |_, window, cx| {
+                    window.draw(cx).clear(cx);
+                });
+            });
+        }
+    };
+    draw(cx);
+    if panel {
+        return cx.update(|cx| {
+            for c in text.chars() {
+                let keystroke = keystroke_for(c);
+                gpui::AppContext::update_window(cx, handle.into(), |_, window, cx| {
+                    window.dispatch_keystroke(keystroke, cx);
+                })
+                .map_err(|e| e.to_string())?;
+            }
+            Ok(Value::Null)
+        });
+    }
+    // In the main window, a key at a time with a frame between, as a
+    // keyboard's arrive: a field whose text the board keeps (the archive's
+    // search) takes each change before the next key.
+    for c in text.chars() {
+        let keystroke = keystroke_for(c);
+        cx.update(|cx| {
             gpui::AppContext::update_window(cx, handle.into(), |_, window, cx| {
                 window.dispatch_keystroke(keystroke, cx);
             })
-            .map_err(|e| e.to_string())?;
-        }
-        Ok(Value::Null)
-    })
+            .map_err(|e| e.to_string())
+        })?;
+        cx.background_executor()
+            .timer(std::time::Duration::from_millis(16))
+            .await;
+        draw(cx);
+    }
+    Ok(Value::Null)
 }
 
 /// `Partial<CaptureContext>` from the JSON main would send on

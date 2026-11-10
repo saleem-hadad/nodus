@@ -20,6 +20,7 @@
 //! {"cmd":"screenshot","path":"/…/scene.light.rust.png"}
 //! {"cmd":"window"}                                  the window's number and size
 //! {"cmd":"stub","name":"summarize","phases":["done",null],"results":[{…}]}   what summarize answers (spec 11)
+//! {"cmd":"stub","name":"pickFolder","path":"/…"}   the folder picker answers this at once
 //! {"cmd":"terminal","action":"open",…}                the terminal's windows (terminal::driver)
 //! {"cmd":"views"}                                   views' frames: live or snapshot, and why
 //! {"cmd":"native-click","x":500,"y":300}            a click AppKit routes (into a page, or GPUI)
@@ -51,6 +52,17 @@ pub fn start(cx: &mut App) {
     let Some(path) = std::env::var_os("NODUS_AUTOMATION").filter(|p| !p.is_empty()) else {
         return;
     };
+    // A driven app is mostly covered or off screen: a user-initiated
+    // activity keeps App Nap from holding its timers back, and the Mac from
+    // idling to sleep under a long run. (A Mac already asleep, with only
+    // dark wakes, still needs `caffeinate -s`.)
+    let awake = cx.prevent_idle_sleep("Nodus is driven by its test driver");
+    cx.spawn(async move |_| {
+        if let Ok(guard) = awake.await {
+            std::mem::forget(guard);
+        }
+    })
+    .detach();
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<(Value, Reply)>();
     std::thread::Builder::new()
         .name("nodus-automation".into())
@@ -165,6 +177,16 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
             let now = command.get("now").and_then(Value::as_f64);
             cx.update(|cx| cx.set_global(Parity { frozen, now_ms: now }));
             with_window(cx, |window, _| window.refresh())?;
+            Ok(Value::Null)
+        }
+        // As 0.9.4's scenes replaced `projects:add`: the folder picker
+        // answers this path at once instead of showing (projects-toast).
+        "stub" if command.get("name").and_then(Value::as_str) == Some("pickFolder") => {
+            let path = command
+                .get("path")
+                .and_then(Value::as_str)
+                .map(std::path::PathBuf::from);
+            cx.update(|cx| cx.set_global(crate::app::PickFolderStub(path)));
             Ok(Value::Null)
         }
         // As 0.9.4's scenes replaced an IPC handler: what the merge dialog's
@@ -445,6 +467,19 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
             let (x, y) = (f64::from(num(command, "x")), f64::from(num(command, "y")));
             let number = with_window(cx, |window, _| crate::mac::window_number(window))?.ok_or("no window")?;
             crate::views::native_click(number, x, y);
+            Ok(Value::Null)
+        }
+        // Keys typed as AppKit delivers them (the platform's path, not GPUI's
+        // dispatch): lowercase letters and spaces.
+        #[cfg(target_os = "macos")]
+        "native-keys" => {
+            let text = command
+                .get("text")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            let number = with_window(cx, |window, _| crate::mac::window_number(window))?.ok_or("no window")?;
+            crate::views::native_keys(number, text);
             Ok(Value::Null)
         }
         #[cfg(target_os = "macos")]

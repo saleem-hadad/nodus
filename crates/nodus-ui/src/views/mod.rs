@@ -39,7 +39,7 @@ use gpui::{AnyElement, App, Context, Window};
 use crate::board::canvas::BoardCanvas;
 use crate::board::nodes::ViewRenderer;
 #[cfg(target_os = "macos")]
-pub use mac::{hit_class, native_click};
+pub use mac::{hit_class, native_click, native_keys};
 
 /// Sets views up once at start-up: the view renderer the canvas draws view
 /// nodes with.

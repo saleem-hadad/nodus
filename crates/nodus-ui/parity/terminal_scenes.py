@@ -36,10 +36,10 @@ def T(action, **kw):
     return {"cmd": "terminal", "action": action, **kw}
 
 
-def storefront():
-    """The harness's storefront(): sessions live in every status, then the board."""
-    return [
-        T("board", project="@storefront"),
+def storefront(open=True):
+    """The harness's storefront(): sessions live in every status, then the
+    board (or, with open=False, the projects grid stays)."""
+    return ([T("board", project="@storefront")] if open else []) + [
         T("liven", project="@storefront", sessions=["@sf-skeleton", "@sf-tax", "@sf-cart", "@sf-terminal"]),
         ("node", "status", "sf-skeleton", "working"),
         ("node", "status", "sf-skeleton", "working", "sf-a1"),
@@ -48,12 +48,15 @@ def storefront():
         ("node", "usage", "sf-cart"),
         T("await-status", session="@sf-skeleton", status="working"),
         T("await-status", session="@sf-tax", status="waiting"),
-        T("reload"),
-    ]
+    ] + ([T("reload")] if open else [{"cmd": "wait", "ms": 1500}])
 
 
 SCENES = {
-    "terminal-claude": storefront() + [T("open", session="@sf-cart"), {"cmd": "wait", "ms": 1200}],
+    # The grid with storefront's sessions live, and the running count pointed at.
+    "projects-grid": storefront(open=False),
+    "titlebar-running": storefront(open=False)
+    + [{"cmd": "mouse", "kind": "move", "x": 1253, "y": 26}, {"cmd": "wait", "ms": 400}],
+    "terminal-claude":storefront() + [T("open", session="@sf-cart"), {"cmd": "wait", "ms": 1200}],
     "terminal-shell": storefront() + [T("open", session="@sf-terminal"), {"cmd": "wait", "ms": 1200}],
     "terminal-stop-confirm": storefront()
     + [T("open", session="@sf-skeleton"), {"cmd": "wait", "ms": 1200}, "click-stop"],
@@ -161,7 +164,8 @@ def run(scene, theme, opts, again=True):
                 print("  ", step if isinstance(step, dict) and step.get("cmd") != "terminal" else step.get("action"), drive(f, T("route")).get("result"))
             drive(f, {"cmd": "wait", "ms": 120})
         drive(f, {"cmd": "idle"})
-        if not (drive(f, T("route")).get("result") or {}).get("route"):
+        on_grid = scene.startswith(("projects-", "titlebar-"))
+        if not on_grid and not (drive(f, T("route")).get("result") or {}).get("route"):
             print("  ! the board closed under the scene; again")
             ok = False
         drive(f, T("draw"))

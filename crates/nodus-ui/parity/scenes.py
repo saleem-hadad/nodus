@@ -104,6 +104,8 @@ SCENES = {
     "board-card-hover": ([], STOREFRONT_LIVE + [M("move", *SF_CART), {"cmd": "wait", "ms": 300}]),
     "board-archive-hover": ([], STOREFRONT_LIVE + [M("move", *STACK), {"cmd": "wait", "ms": 300}]),
     "board-archive-open": ([], STOREFRONT_LIVE + [M("click", *STACK), {"cmd": "wait", "ms": 900}, AWAY]),
+    "board-archive-search": ([], STOREFRONT_LIVE + [M("move", *STACK), {"cmd": "wait", "ms": 300},
+                                                    {"cmd": "type", "text": "fix"}, {"cmd": "wait", "ms": 800}]),
     "board-pad-hover": ([], STOREFRONT_LIVE + [M("move", PAD[0] + 40, PAD[1] + 40), M("move", *PAD),
                                                {"cmd": "wait", "ms": 300}]),
     "board-deck-fanned": ([], STOREFRONT_LIVE + [M("move", *AT(544, 263)), {"cmd": "wait", "ms": 400}]),
@@ -131,6 +133,9 @@ SCENES = {
     "projects-remove-confirm": ([], [M("right", *STOREFRONT), {"cmd": "wait", "ms": 200}, M("click", 160, 421)]),
     "projects-drop": ([], [{"cmd": "files", "kind": "entered", "x": 720, "y": 450, "paths": ["/tmp"]},
                            {"cmd": "files", "kind": "pending", "x": 722, "y": 452}]),
+    # 0.9.4's scene made `projects:add` fail; here the picker answers a file.
+    "projects-toast": ([], [{"cmd": "stub", "name": "pickFolder", "path": "/etc/hosts"},
+                            M("click", 1366, 26), {"cmd": "wait", "ms": 400}]),
     "titlebar-update": ([], [{"cmd": "emit", "event": "updateStatus",
                               "payload": {"state": "ready", "version": "0.9.5", "current": "0.9.4"}}]),
     "settings": (["capture"], [{"cmd": "menu", "command": "settings"}]),

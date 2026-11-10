@@ -15,16 +15,16 @@
 
 | Piece | State |
 | --- | --- |
-| Debts: claude -p through `nodus_platform::process`; agents on nodus-transcripts' helpers; one `SpawnOptions` | ✅ merged (49fc575) |
-| Tests for HOST-033, 043, 064 (4 s exit), 086 (20 s relay), 090, 098 | ✅ merged (e3c4fef) |
-| Composition: host client, status, notify, boards, views, board tools, updater; launch, shutdown | ✅ merged (7cf6661) |
-| API areas: board, sessions, views, updates, menu; projects.stats with real counts; take_open_request | ✅ merged (7cf6661) |
-| Unit tests for the fan-out order and the glue | ✅ merged (4266dca) |
-| Headless end-to-end tests (`crates/nodus-core/tests/headless.rs`) | ✅ merged (3cd11cf) |
-| Phase 2a: `git.*`, `actions.*`, `voice.*` in the core; views' `nodus.git()`; nodus-actions' `run_args` | ✅ 0fc208b |
-| Every async command runs in the core's runtime context, so GPUI's executor can await it (`Nodus::on_core`) | ✅ 8adbe00 |
-| Phase 2b: app wiring in nodus-ui (AppShell, launch, host launcher, notifications, updater, quit paths) | ✅ 9e68a21 |
-| Phase 2c: Settings voice-key and update rows, title bar Restart to Update; live counts and badges | ✅ 8aa1b43 |
+| Debts: claude -p through `nodus_platform::process`; agents on nodus-transcripts' helpers; one `SpawnOptions` | ✅ merged (3077ae8) |
+| Tests for HOST-033, 043, 064 (4 s exit), 086 (20 s relay), 090, 098 | ✅ merged (c3bdf5f) |
+| Composition: host client, status, notify, boards, views, board tools, updater; launch, shutdown | ✅ merged (8348e3a) |
+| API areas: board, sessions, views, updates, menu; projects.stats with real counts; take_open_request | ✅ merged (8348e3a) |
+| Unit tests for the fan-out order and the glue | ✅ merged (493462d) |
+| Headless end-to-end tests (`crates/nodus-core/tests/headless.rs`) | ✅ merged (ed1bbe3) |
+| Phase 2a: `git.*`, `actions.*`, `voice.*` in the core; views' `nodus.git()`; nodus-actions' `run_args` | ✅ 6c3781b |
+| Every async command runs in the core's runtime context, so GPUI's executor can await it (`Nodus::on_core`) | ✅ 3a067d6 |
+| Phase 2b: app wiring in nodus-ui (AppShell, launch, host launcher, notifications, updater, quit paths) | ✅ 7acaf79 |
+| Phase 2c: Settings voice-key and update rows, title bar Restart to Update; live counts and badges | ✅ 30e631c |
 
 Phase 2 was checked by driving the built app through its test driver (`NODUS_AUTOMATION`) on a scratch userData with
 a stand-in `claude` and a stand-in login shell: a project, a Claude card through a host the app started, `1 running`

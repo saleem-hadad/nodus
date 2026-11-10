@@ -20,7 +20,7 @@
 
 ## Scene diffs
 
-ui-shell's shell scenes (`crates/nodus-ui/parity/scenes.py`, 18 scenes × 2 themes), rendered by main at b63c4d9 (before) and by this branch (after) from the harness's world, against the goldens of 0.9.4, `compare.mjs` (pixelmatch, threshold 0.1, share of the 2880×1800 frame that differs). No board scenes render on main yet.
+ui-shell's shell scenes (`crates/nodus-ui/parity/scenes.py`, 18 scenes × 2 themes), rendered by main at b8a9f98 (before) and by this branch (after) from the harness's world, against the goldens of 0.9.4, `compare.mjs` (pixelmatch, threshold 0.1, share of the 2880×1800 frame that differs). No board scenes render on main yet.
 
 | Scene | Light | Dark |
 | --- | --- | --- |
@@ -87,9 +87,9 @@ docker cp <linux_dxc> dxc:/dxc && docker cp third_party/gpui/gpui-pre-windows/sr
 
 ## Log
 
-- Started: worktree on `main` (83c9c0d); debug build of `nodus`; Electron measuring page set up in the scratch folder.
+- Started: worktree on `main` (5145260); debug build of `nodus`; Electron measuring page set up in the scratch folder.
 - `examples/text_metrics.rs`: weight 400 already matched Chromium within 0.02px at every size; 500 was 1–5px narrower per label (Medium resolved to Regular), 600 slightly narrow, 700 fine. The "tracking" gap was the weight.
 - Colour space, weights, smoothing and rounding fixed in GPUI. Single-line text cases are pixel-identical to Chromium; in Settings, text lines land where 0.9.4's do except where the boxes around them sit a fraction of a pixel off (ui-shell's layout).
-- 2026-11-09, resumed after a stall: rebased on main (b63c4d9) for the parity harness. Wrapping finished: a clamped row is aligned by its wrapped width (Blink aligns, then truncates; a long word cut mid-word sat 5px off), centring in layout units (three paragraph and clamp cases went to 0 px), min-content probes answer with the widest unbreakable piece (two new flex cases, identical). Left on the case page: two clamps whose first row breaks inside a word, 1 and 13 anti-aliased px (GPUI measures that row inside the whole word's shaping, Blink shapes it apart).
+- 2026-11-09, resumed after a stall: rebased on main (b8a9f98) for the parity harness. Wrapping finished: a clamped row is aligned by its wrapped width (Blink aligns, then truncates; a long word cut mid-word sat 5px off), centring in layout units (three paragraph and clamp cases went to 0 px), min-content probes answer with the widest unbreakable piece (two new flex cases, identical). Left on the case page: two clamps whose first row breaks inside a word, 1 and 13 anti-aliased px (GPUI measures that row inside the whole word's shaping, Blink shapes it apart).
 - `spaced_text` sat a device pixel low (GPUI's old baseline); now Chromium's.
 - Windows CI: the effects step had been skipped on every run since it was added, because `cargo test` failed first on `nodus-capture`'s prune test (`File::open` can't set a time or open a folder on Windows). Test fixed (checked with clippy for `x86_64-pc-windows-msvc`), the step runs unless cancelled. DXC 1.9.2609 compiles all 26 entry points (`-HV 2016 -WX`, SM 6.0). Whether fxc and WARP take them shows on the next run on main.

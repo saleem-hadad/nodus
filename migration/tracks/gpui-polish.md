@@ -47,7 +47,7 @@ The highlights match the golden row for row (mark 375–402, underline 364–365
 
 ## Log
 
-- Started from main (f4467cd); rebased onto the cutover (db61c8f). audit-shell had meanwhile added page zoom as PATCHES 11 (this track's are 12–15) and a first spellcheck (`nodus_platform::spell`, kept; its component replaced by this track's).
+- Started from main (21f7377); rebased onto the cutover (c10b83b). audit-shell had meanwhile added page zoom as PATCHES 11 (this track's are 12–15) and a first spellcheck (`nodus_platform::spell`, kept; its component replaced by this track's).
 - Item 2: Chromium's spelling behaviour probed with `webContents.insertText` in a hidden Electron 44.5.1 window; NSSpellChecker gives the same words (`Teh` isn't flagged by either).
 - Item 4: AppKit's tooltip timing read from `NSToolTipManager` (ivars and `_getDisplayDelay:inQuickMode:forView:` in a probe with no window shown).
 - Item 1: CoreCursor's move arrow checked on this macOS (24×24, hotspot 12,12, the same picture Chromium shows); `_moveCursor` exists but throws, so it's not used.

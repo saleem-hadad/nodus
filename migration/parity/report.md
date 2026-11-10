@@ -79,7 +79,7 @@ The final sweep (`migration/tracks/final-sweep.md`) rendered every golden scene,
 | `ink-text` | 0.42 | 0.41 | 28,21 1397×864; 360,338:11%, 1260,788:6%, 180,450:6% |  |
 | `merge-failed` | 2.74 | 0.06 | 19,16 1391×855; 1260,788:14%, 1260,450:13%, 1080,450:12% | As merge-ready (dark 0.06 %). |
 | `merge-progress` | 0.04 | 0.04 | 391,27 871×561; 360,338:66%, 900,563:20%, 720,563:13% |  |
-| `merge-ready` | 2.72 | 0.04 | 19,16 1391×855; 1260,788:14%, 1260,450:12%, 1080,450:12% | Light only: the light golden's board behind the dialog is scrolled left as in bar-several-selected (dark 0.04 %). The early wrap is fixed: 0.9.4 drew --font-mono in Menlo, and multi-line fields now stack at the exact line height (8158f17, 8de154c). |
+| `merge-ready` | 2.72 | 0.04 | 19,16 1391×855; 1260,788:14%, 1260,450:12%, 1080,450:12% | Light only: the light golden's board behind the dialog is scrolled left as in bar-several-selected (dark 0.04 %). The early wrap is fixed: 0.9.4 drew --font-mono in Menlo, and multi-line fields now stack at the exact line height (8158f17, 5b61204). |
 | `projects-context-menu` | 0.10 | 0.13 | 57,22 1356×839; 0,113:26%, 360,450:11%, 180,450:10% |  |
 | `projects-context-menu-focus` | 0.10 | 0.14 | 51,22 1362×839; 360,113:19%, 0,338:10%, 360,450:10% |  |
 | `projects-drop` | 0.25 | 0.24 | 12,22 1416×866; 1260,788:8%, 0,788:7%, 360,788:6% |  |

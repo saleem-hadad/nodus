@@ -8,7 +8,7 @@
 
 | Module | Commit | State |
 | --- | --- | --- |
-| `nodus_platform::process` | *Start every child process through nodus-platform* | ✅ on main (cherry-picked as 31013c8) |
+| `nodus_platform::process` | *Start every child process through nodus-platform* | ✅ on main (cherry-picked as bb351d3) |
 | `nodus_platform::secrets` | *Read and write the xAI key as 0.9.4's safeStorage does* | ✅ |
 | `nodus_platform::{notify, shell, permissions, app}` | *Show notifications, the Dock badge, links and permissions natively* | ✅ (real delivery left for the packaged test) |
 | `nodus-updater` | *Update the app from GitHub releases as 0.9.4 does* | ✅ |

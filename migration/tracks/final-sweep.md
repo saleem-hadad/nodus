@@ -43,18 +43,18 @@ key, which the driver can't). The scene runs before the fixes had board-archive-
 
 ## Fixed
 
-- **The board's fields took no typed text** (8b3afa5). The archive's search, a note being written, a card's and a
+- **The board's fields took no typed text** (577a050). The archive's search, a note being written, a card's and a
   section's name each stopped every key from reaching the board (`.on_key_down(|_, _, cx| cx.stop_propagation())`).
   In GPUI a stopped key counts as handled, and macOS's `handle_key_event` then never calls `insertText:` (GPUI's
   `dispatch_keystroke` the same), so none of the four took a character. They now mark the key
   (`window.prevent_default()`), and the shell's board keys return early for a marked key. Found by the
   board-archive-search scene (typing “fix” changed nothing); checked with the driver's `native-keys`, which sends keys
   through AppKit's own path, and by the end-to-end pass writing a note. board-archive-search 1.76 % → 0.40 %.
-- **Edit › Delete with only a caret** (34f3e05): now does nothing, as Chromium's `delete` role (Blink's menu Delete
+- **Edit › Delete with only a caret** (7735803): now does nothing, as Chromium's `delete` role (Blink's menu Delete
   needs a range). `shell/menus.rs` keeps every text field's state (`observe_new`) and asks the focused one for a
   selection before sending gpui-component's `Delete`. Checked with the driver's `action` command on a project's name
   field: a caret at the start leaves “storefront”; “st” selected leaves “orefront”.
-- **⌘+ / ⌘- / ⌘0 and the capture panel** (c176844). 0.9.4: the zoom roles act on the focused page
+- **⌘+ / ⌘- / ⌘0 and the capture panel** (2f4e5dc). 0.9.4: the zoom roles act on the focused page
   (`webContents.getFocusedWebContents()`), and Chromium keys a `file://` page's zoom by its whole URL
   (`net::GetHostOrSpecFromURL` → the spec, `#…` included). The main window loaded `…/out/renderer/index.html`
   (`loadFile`), the panel `…/index.html#capture` (`loadURL` in `src/main/capture.ts`): same origin, different keys,
@@ -65,21 +65,21 @@ key, which the driver can't). The scene runs before the fixes had board-archive-
   level. Test `zoom::tests::keeps_the_capture_panels_level_apart`; driver: `capture zoom` twice → panel 1.0, window 0,
   the panel drawn 1.2× in the same 652×439 window; a relaunch draws it byte-identical; View › Zoom In with the main
   window in front moved only `zoomLevel`.
-- **Test driver** (5b0caec, 34f3e05, a651055, ab08a83): `stub pickFolder` (projects-toast), `action` (a GPUI action
+- **Test driver** (c5ccfb6, 7735803, 55eb06f, 591a1c0): `stub pickFolder` (projects-toast), `action` (a GPUI action
   by name), `native-keys`, `board` (a board as the core has it, and its live viewport), `pick` (an open context
   menu's row by label), `capture zoom`; App Nap kept away while driven; typing draws first and, in the main window,
   goes a key at a time with a frame between; and every frame the driver draws by hand first runs what
   `on_next_frame` queued (GPUI patch 17, `Window::run_next_frame_callbacks`), so a field that takes the focus a frame
   or two after it shows (the New action box, the grid's and a group's rename) gets it with the display asleep:
   actions-review 11.15 % → 0.19 %.
-- **Scene runners** (5b0caec, b5473d9, 3f565e7): the three goldens no runner rendered (board-archive-search,
+- **Scene runners** (c5ccfb6, 030fc1b, e638be5): the three goldens no runner rendered (board-archive-search,
   projects-toast, titlebar-running; projects-grid now with storefront's sessions live, as 0.9.4's), `try-scheme`
   for PLAT-009; board-confirm-archive presses the card's Archive button while pointed at, as 0.9.4's scene did
   (⇧-click and ⌫ left the selection bar and ring behind the dialog: 1.24 % → 0.34 %); git-diff points at Changes
   before pressing it, as Playwright's click does (34 % → 0.31 %); settings-bottom and settings-ready set the update
   status after Settings has asked for its own, and again once scrolled (0.9.4's scenes replaced the handler; a debug
   build's own status is "off": 1.6 % → 0.21 %).
-- **Smoke test** (25b2e0e): `packaging/smoke.py` shoots the new project's board with its terminal card in light and
+- **Smoke test** (0d24bc7): `packaging/smoke.py` shoots the new project's board with its terminal card in light and
   dark (`2-board-light.png`, `3-board-dark.png`), as REL-032 asks, where it shot the grid three times. Passed on the
   debug build with stand-in HOME and PATH (never the real claude) and `/bin/sh`: `nodus-42` on the card in both.
 
@@ -109,7 +109,7 @@ key, which the driver can't). The scene runs before the fixes had board-archive-
 - **REL-037** — no `postinstall.cjs` (or any postinstall) in the tree since the cutover.
 - **REL-038** — README.md and docs/index.html link `releases/latest/download/` + `Nodus-arm64.dmg`, `Nodus-x64.dmg`,
   `Nodus-Setup-x64.exe`, `Nodus-Setup-arm64.exe`, exactly the four names `release.yml` uploads.
-- **REL-032** — implemented in 25b2e0e (above); the same script runs in CI on both OSes (`package.yml`,
+- **REL-032** — implemented in 0d24bc7 (above); the same script runs in CI on both OSes (`package.yml`,
   `release.yml`), on Windows through the driver's named pipe.
 
 Left open: PLAT-007, PLAT-008, PLAT-018, PLAT-035 (decision), UI-099, CAP-056, REL-034 (Windows); REL-008, REL-009,

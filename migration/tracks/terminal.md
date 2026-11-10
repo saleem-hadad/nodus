@@ -7,7 +7,7 @@
 
 ## Status
 
-Done for the GPUI-free half: 83 TERM behaviors implemented and tested, 26 deferred to the UI track (all drawing, focus, timing or event routing; the model side of each is in place and named below). The first worktree was lost to an interruption before anything was committed; the work restarted from `main` at cb199b8.
+Done for the GPUI-free half: 83 TERM behaviors implemented and tested, 26 deferred to the UI track (all drawing, focus, timing or event routing; the model side of each is in place and named below). The first worktree was lost to an interruption before anything was committed; the work restarted from `main` at 132d245.
 
 ## How it's checked
 

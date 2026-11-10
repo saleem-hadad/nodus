@@ -3,7 +3,7 @@
 - **Branch:** `rust/board-canvas`
 - **Scope:** the board route and canvas in `crates/nodus-ui/src/board/` (everything but `board/cards/`, which is the board-cards track's): pan/zoom, selection, drag, sections, edges, menus, shortcuts, HUD (zoom pill, minimap, hint, toast, confirm), the store's board actions, and the node plug-in interface the cards, notes, archive, pad and views are drawn through.
 - **Spec:** `migration/features/09-board-canvas.md` (BOARD-001…BOARD-177).
-- **Status:** ✅ ready to merge: 164 of 177 behaviors done and checked at canvas level against the goldens; 13 deferred to the tracks that draw what they need (cards 10, overlays 11, terminals 12, views 04, actions 05). Main merged in (409274f).
+- **Status:** ✅ ready to merge: 164 of 177 behaviors done and checked at canvas level against the goldens; 13 deferred to the tracks that draw what they need (cards 10, overlays 11, terminals 12, views 04, actions 05). Main merged in (ccb44bc).
 
 ## Files
 
@@ -54,7 +54,7 @@ board::nodes::install(MyRenderers, cx);      // once, from board::init (add `pub
 - **Input.** GPUI bubbles from the innermost element out, so contents get each event first: a control that must not start a drag/click/menu stops its mouse-down's propagation (`nodrag`); an element that scrolls itself stops the scroll's propagation (`nowheel`); a card's title text calls `board.actions.press_title()` in its own mouse-down without stopping it (`.card-title`, BOARD-043/047). Drag handles are the canvas's: the section header (44), the archive header (52), the view head (38).
 - **State.** Keep per-node state with `window.use_keyed_state((node.id.clone(), "…"), cx, …)`.
 - **Core calls** from node code: run them on the core's runtime with `board::on_core(&board::core_rt(cx), async move { … })` (tokio processes and the host client panic on GPUI's executor).
-- **Changes since board-cards merged a2f48b8** (all additive; nothing it uses changed): `BoardCx.flash`, `NodeRenderers::{wake, focus_terminal}` with no-op defaults.
+- **Changes since board-cards merged 97bde84** (all additive; nothing it uses changed): `BoardCx.flash`, `NodeRenderers::{wake, focus_terminal}` with no-op defaults.
 
 ## For the overlays (11) and views (04)
 

@@ -85,9 +85,10 @@ SCENES = {
         {"cmd": "key", "keystroke": "cmd-g"}, {"cmd": "wait", "ms": 700}, AWAY]),
     "board-section-rename": ([], STOREFRONT_LIVE + [M("double", 700, 163), {"cmd": "wait", "ms": 300}, AWAY]),
     "board-toast": (["run"], OPEN("storefront") + [{"cmd": "wait", "ms": 400}, AWAY]),
-    # 0.9.4 clicks the card's Archive button; selecting it and pressing ⌫ asks the same.
+    # As 0.9.4's: sf-skeleton's Archive button, shown while the card is pointed at.
     "board-confirm-archive": ([], STOREFRONT_LIVE + [
-        M("click", 497, 300, shift=True), {"cmd": "key", "keystroke": "backspace"}, AWAY]),
+        M("move", 497, 300), {"cmd": "wait", "ms": 300}, M("move", 570, 198), {"cmd": "wait", "ms": 200},
+        M("click", 570, 198), AWAY]),
     # Not 0.9.4 goldens: interactions to look at.
     "try-drag-out": ([], STOREFRONT_LIVE + [
         M("down", 1030, 300), M("drag", 1031, 301), M("drag", 1080, 500), M("drag", 1130, 640),

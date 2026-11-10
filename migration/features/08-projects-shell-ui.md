@@ -1173,7 +1173,7 @@ Risks:
 - [x] UI-063 Remove section
 - [x] UI-064 Save note
 - [x] UI-065 Remove notes
-- [ ] UI-066 Save ink
+- [x] UI-066 Save ink
 - [x] UI-067 Upsert view
 - [x] UI-068 Patch view
 - [x] UI-069 Remove view

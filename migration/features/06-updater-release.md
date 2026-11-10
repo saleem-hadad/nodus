@@ -810,13 +810,13 @@ No macOS test exists in TypeScript. Recommended Rust additions, marked as such s
 - [x] REL-029 CI triggers, `contents: read`, concurrency `ci-${{ github.ref }}` cancel-in-progress
 - [x] REL-030 CI macOS job: install, typecheck, test, build
 - [x] REL-031 CI Windows job: subset tests, x64 installer, silent `/S` install, smoke, `windows` artifact
-- [ ] REL-032 Smoke: isolated userData, projects/board/terminal `nodus-42`, light and dark screenshots
+- [x] REL-032 Smoke: isolated userData, projects/board/terminal `nodus-42`, light and dark screenshots
 - [x] REL-033 Smoke: host welcome lists the terminal; Windows key matches `host.key`
 - [ ] REL-034 Smoke (Windows): Ctrl+W board/terminal and Ctrl+Shift+W behaviors
 - [x] REL-035 Smoke cleanup: host shutdown, kill app, copy `host.log`, exit code
 - [x] REL-036 Actions pinned by SHA, `persist-credentials: false`
-- [ ] REL-037 `postinstall.cjs` is Electron-only and is removed at cutover
-- [ ] REL-038 README/site links `releases/latest/download/<asset>` keep working
+- [x] REL-037 `postinstall.cjs` is Electron-only and is removed at cutover
+- [x] REL-038 README/site links `releases/latest/download/<asset>` keep working
 - [ ] REL-039 First Rust release > 0.9.4, tag `vX.Y.Z` with no suffix
 - [ ] REL-040 Contract holds for every Mac 0.6.0–0.9.4 and Windows 0.9.0–0.9.4 updater
 - [ ] REL-041 Rust .app passes deep-strict verify, id, version and same TeamIdentifier

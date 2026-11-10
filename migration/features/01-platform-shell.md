@@ -920,7 +920,7 @@ Risks and unknowns:
 - [x] PLAT-006 No single-instance lock on macOS
 - [ ] PLAT-007 Windows lock; second launch exits 0
 - [ ] PLAT-008 Second launch shows the first's window when ready
-- [ ] PLAT-009 `nodus-view` registered standard+secure
+- [x] PLAT-009 `nodus-view` registered standard+secure
 - [x] PLAT-010 Startup order (13 steps)
 - [x] PLAT-011 Window waits for host connect to settle
 - [x] PLAT-012 Env capture non-blocking; ⏳env commands wait
@@ -937,8 +937,8 @@ Risks and unknowns:
 - [x] PLAT-023 showWindow: create / restore / show+focus
 - [x] PLAT-024 New-window requests: http(s) → browser, else ignored
 - [x] PLAT-025 Main window never navigates away; http(s) → browser
-- [ ] PLAT-026 View frames only load their own `nodus-view://<id>`
-- [ ] PLAT-027 Bridge never exposed to view frames
+- [x] PLAT-026 View frames only load their own `nodus-view://<id>`
+- [x] PLAT-027 Bridge never exposed to view frames
 - [x] PLAT-028 Theme source system/light/dark everywhere
 - [x] PLAT-029 macOS: closing window keeps app running
 - [x] PLAT-030 macOS activate recreates window only with zero windows (panel quirk)
@@ -956,7 +956,7 @@ Risks and unknowns:
 - [x] PLAT-042 View menu
 - [x] PLAT-043 Window menu
 - [x] PLAT-044 Help menu
-- [ ] PLAT-045 AppKit-added menu items match 0.9.4
+- [x] PLAT-045 AppKit-added menu items match 0.9.4
 - [x] PLAT-046 Check for Updates… → settings + check(true)
 - [x] PLAT-047 Settings… → settings
 - [x] PLAT-048 Capture… → openPanel
@@ -1047,7 +1047,7 @@ Risks and unknowns:
 - [x] PLAT-133 keys() label conversion
 - [x] PLAT-134 data-platform root attribute
 - [x] PLAT-135 `#capture` page routing
-- [ ] PLAT-136 CSP: frames only nodus-view
+- [x] PLAT-136 CSP: frames only nodus-view
 - [x] PLAT-137 Spellcheck underlines in opted-in fields
 - [x] PLAT-138 No native right-click menu in fields
 - [x] PLAT-139 Persisted page zoom (migrate from Preferences)

@@ -305,6 +305,7 @@ pub fn render(canvas: &BoardCanvas, window: &mut Window, cx: &mut Context<'_, Bo
                                 .disabled(creating)
                                 .text_size(TEXT_MD)
                                 .line_height(px(LINE))
+                                .fractional_line_height()
                                 .h(px(field_h))
                                 .mr(px(-WRAP_MARGIN)),
                         )

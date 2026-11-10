@@ -39,6 +39,7 @@ All of these are on `Styled`, so every `div()` has them, and map 1:1 to CSS:
 | `overflow: hidden` + `border-radius` clipping children to the arcs | `.overflow_hidden().rounded(…).clip_rounded()` |
 | `overflow-wrap: anywhere` (also `break-word`; default `normal`) | `.overflow_wrap(OverflowWrap::Anywhere)` |
 | `word-break: break-all` (default `normal`) | `.word_break(WordBreak::BreakAll)` |
+| a `<textarea>`'s `line-height: 1.55` at 12px (rows 18.6px apart) | `.line_height(px(18.6)).fractional_line_height()` on the field |
 
 `ColorMatrix` has the CSS filter functions: `saturate`, `grayscale`, `sepia`, `brightness`, `contrast`, `invert`, `opacity`, `hue_rotate`; `a.then(&b)` is `a b` in a filter list.
 
@@ -183,6 +184,12 @@ Views' pages are native webviews above GPUI's layer (decision D3): when GPUI mus
 ### 17. Next-frame callbacks on demand (Nodus, track final-sweep)
 
 The test driver (decision D11) draws its window by hand (`Window::draw`), since macOS asks a covered window for no frames, and with the display asleep asks no window. But what `on_next_frame` queued only runs when the platform asks for a frame, so a field that takes the focus a frame or two after it appears (the projects grid's rename, the New action box) never got it under the driver, and typing into it went nowhere. `Window::run_next_frame_callbacks(cx)` runs the queue now, as the next frame would before it draws; the driver calls it before each hand-drawn frame. Nothing else calls it.
+
+### 18. Text fields' line height in layout units, on request (Nodus, track merge-wrap)
+
+GPUI rounds a text style's line height to a whole pixel (`TextStyle::line_height_in_pixels`), and gpui-component's text fields lay their rows out by `Window::line_height()`, so a field at 0.9.4's `line-height: 1.55` (18.6px) stacked its rows 19px apart, 0.4px a row further than the textarea's: Chromium keeps a line box's height in its layout units, as patch 9 does for text. `Styled::fractional_line_height()` (`TextStyle::fractional_line_height`) asks for that: under it, `Window::line_height()` is the line height floored to Chromium's layout unit (1/64 of a device pixel, `layout_unit_floor`), not rounded. Each row's baseline still lands on a device pixel (patch 9's `chromium_baseline_offset`, which the fields' rows already go through). Opt-in, since a single-line field centres its one row and GPUI's other users of `line_height()` (scrolling by lines) count in whole pixels. nodus-ui sets it on its multi-line fields whose line height isn't a whole pixel: the merge dialog's Context (18.6px) and instruction (18.85px), the New action's description and prompt, the new view's description, and a note being written (21px times the board's zoom).
+
+Checked against the goldens (dark): merge-ready 0.55% → 0.04%, merge-failed 0.48% → 0.06% (the Context's eight rows within a device pixel of the golden's, where they had drifted up to 9 device pixels lower); actions-new, -drafting and -review, views-new and board-note-editing 0.01–0.03 points closer each, none further.
 
 ## Verification
 

@@ -3511,7 +3511,16 @@ impl Window {
 
     /// The line height associated with the current text style.
     pub fn line_height(&self) -> Pixels {
-        self.text_style().line_height_in_pixels(self.rem_size())
+        let style = self.text_style();
+        // Nodus patch: in Chromium's layout units when the style asks.
+        if style.fractional_line_height {
+            crate::layout_unit_floor(
+                style.line_height.to_pixels(style.font_size, self.rem_size()),
+                self.scale_factor(),
+            )
+        } else {
+            style.line_height_in_pixels(self.rem_size())
+        }
     }
 
     /// Rounds a logical value to the nearest device pixel.

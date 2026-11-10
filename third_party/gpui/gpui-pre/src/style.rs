@@ -612,6 +612,11 @@ pub struct TextStyle {
     /// underline (CSS `text-underline-offset`); `None` places it GPUI's way.
     pub underline_offset: Option<Pixels>,
 
+    /// Nodus patch: [`crate::Window::line_height`] keeps the line height in
+    /// Chromium's layout units, as wrapped text does, instead of rounding it
+    /// to a whole pixel, so a text field's lines stack as a textarea's do.
+    pub fractional_line_height: bool,
+
     /// The text should be truncated if it overflows the width of the element
     pub text_overflow: Option<TextOverflow>,
 
@@ -642,6 +647,7 @@ impl Default for TextStyle {
             word_break: WordBreak::default(),
             inline_background: None,
             underline_offset: None,
+            fractional_line_height: false,
             text_overflow: None,
             text_align: TextAlign::default(),
             line_clamp: None,

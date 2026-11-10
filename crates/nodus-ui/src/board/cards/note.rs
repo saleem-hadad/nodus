@@ -554,6 +554,8 @@ fn editor(env: &Rc<BoardEnv>, note: &BoardNote, window: &mut Window, cx: &mut Ap
                         .h(gpui::relative(1.))
                         .text_size(z.px(15.))
                         .line_height(z.px(21.))
+                        // At any zoom, lines as far apart as the note's text.
+                        .fractional_line_height()
                         .font_family(fonts::UI)
                         .text_color(t.note_ink)
                         .into_any_element(),

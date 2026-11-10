@@ -187,6 +187,14 @@ pub trait Styled: Sized {
         self
     }
 
+    /// Nodus patch: [`crate::Window::line_height`] in Chromium's layout
+    /// units, not rounded to a whole pixel, for the text fields inside, so
+    /// their lines stack as a textarea's do.
+    fn fractional_line_height(mut self) -> Self {
+        self.text_style().fractional_line_height = Some(true);
+        self
+    }
+
     /// Sets the flex direction of the element to `column`.
     /// [Docs](https://tailwindcss.com/docs/flex-direction#column)
     fn flex_col(mut self) -> Self {

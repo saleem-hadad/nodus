@@ -305,7 +305,10 @@ impl BoardCanvas {
                                 .h(gpui::relative(1.))
                                 .font_family(fonts::mono())
                                 .text_size(TEXT_SM)
-                                .line_height(px(18.6)),
+                                // Lines 18.6px apart, as the textarea's
+                                // (GPUI patch 18), not rounded to 19.
+                                .line_height(px(18.6))
+                                .fractional_line_height(),
                         ),
                     ),
             )
@@ -327,7 +330,8 @@ impl BoardCanvas {
                                     .xsmall()
                                     .when_some(instruction_h, |d, h| d.h(px((h - 21.).max(0.))))
                                     .text_size(TEXT_MD)
-                                    .line_height(px(18.85)),
+                                    .line_height(px(18.85))
+                                    .fractional_line_height(),
                             )
                             .child(crate::components::spellcheck::underlines(
                                 &instruction_spell,

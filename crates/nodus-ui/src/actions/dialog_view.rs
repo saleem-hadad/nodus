@@ -112,6 +112,7 @@ impl ActionDialogView {
             .disabled(drafting)
             .text_size(TEXT_MD)
             .line_height(px(DESCRIPTION_LH))
+            .fractional_line_height()
             .h(px(5. * DESCRIPTION_LH + 20.))
             // The field wraps 10px short of its width (gpui-component's
             // RIGHT_MARGIN); Chromium wraps at the padding.
@@ -292,6 +293,7 @@ impl ActionDialogView {
                             .font_family(theme::fonts::mono())
                             .text_size(TEXT_SM)
                             .line_height(px(PROMPT_LH))
+                            .fractional_line_height()
                             .h(px(160. - 1. - 4.))
                             .mr(px(-WRAP_MARGIN)),
                     )

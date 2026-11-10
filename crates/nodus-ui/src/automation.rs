@@ -13,6 +13,7 @@
 //! {"cmd":"modifiers","meta":true}                   modifiers held (⌘ for the rail's numbers)
 //! {"cmd":"mouse","kind":"click","x":100,"y":200}    move | down | up | click | double | right
 //! {"cmd":"scroll","x":720,"y":400,"dy":-600}       a wheel scroll at a point
+//! {"cmd":"pinch","x":720,"y":400,"delta":0.02}     a trackpad pinch step (+ zooms in)
 //! {"cmd":"files","kind":"entered","x":700,"y":400,"paths":["/…"]}   entered | pending | submit | exited
 //! {"cmd":"emit","event":"updateStatus","payload":{"state":"ready","version":"0.9.5","current":"0.9.4"}}
 //! {"cmd":"open","project":"storefront"}          a project's board, by name
@@ -361,6 +362,22 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
                         modifiers: Modifiers::default(),
                         touch_phase: TouchPhase::Moved,
                         source: Default::default(),
+                    }),
+                    cx,
+                );
+            })?;
+            Ok(Value::Null)
+        }
+        "pinch" => {
+            let position = point(px(num(command, "x")), px(num(command, "y")));
+            let delta = num(command, "delta");
+            with_window(cx, move |window, cx| {
+                window.dispatch_event(
+                    PlatformInput::Pinch(gpui::PinchEvent {
+                        position,
+                        delta,
+                        modifiers: Modifiers::default(),
+                        phase: TouchPhase::Moved,
                     }),
                     cx,
                 );

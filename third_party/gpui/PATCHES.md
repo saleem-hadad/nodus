@@ -191,6 +191,17 @@ GPUI rounds a text style's line height to a whole pixel (`TextStyle::line_height
 
 Checked against the goldens (dark): merge-ready 0.55% → 0.04%, merge-failed 0.48% → 0.06% (the Context's eight rows within a device pixel of the golden's, where they had drifted up to 9 device pixels lower); actions-new, -drafting and -review, views-new and board-note-editing 0.01–0.03 points closer each, none further.
 
+### 19. Glyphs while the board's zoom changes (Nodus)
+
+The board lays each node out at its zoom (`nodus-ui`'s `board::units`), so during a pinch the text's size changes every frame. Every glyph then missed the atlas, and the rasterizer made a new `CTFont` for each one (`clone_with_font_size`, which re-reads the font's feature and name tables): a zoom frame on the parity world's storefront board took 66–72 ms (p90 ~80), against 5 ms for a pan, and the atlas kept every size it had ever drawn. Two changes:
+
+- **The rasterizer keeps its sized fonts** (`AppleTextSystemState::sized_font`): one per font and size, up to 256 before the map is cleared, so a frame makes one per size it draws instead of one per glyph.
+- **Stepped glyph sizes, on request.** `Window::with_stepped_glyph_sizes(Some(n), f)` makes `paint_glyph` inside `f` take its bitmap from the nearest of `n` sizes per doubling (in device pixels) and scale the sprite to the size asked for (the sprite shaders sample linearly on Metal, DirectX and wgpu). The glyph's position and the layout are unchanged; only its bitmap is up to half a step larger or smaller. nodus-ui's `Zoomed` asks for 12 steps (±3%) while the board's zoom is moving and draws the text at its exact size again when the move ends, as Chromium redraws a pinch-zoomed page sharp once the gesture is over. Emoji are left at their size.
+
+The dotted background's quads (up to 40,000 zoomed out) now go in one `Window::paint_layer`, so they share a draw order instead of each going through `BoundsTree::insert`; that was a third of a zoomed-out frame once glyphs were cheap.
+
+Measured with the test driver's `pinch` command (30 steps of 2% out, in, out, in; a fresh copy of the parity world each run, release build, M4): zoom frames 66–72 ms median → 7.2–10.7 ms (p90 ≤ 14 ms; the first pass through a size range rasterizes its steps once), pans 5.3–5.7 → 4.1–4.3 ms. At 68% a card's text drawn stepped is indistinguishable from exact at 1:1.
+
 ## Verification
 
 - `crates/nodus-ui/examples/effects.rs` (see `git show 85fc86a:migration/tracks/gpui-fork.md`): frosted panels at blur 30/saturate 1.8 and 20/1.6 over moving cards, a note rotated 3–7° with CoreText-rendered text, a 3° sticker, the pad's sheet turning about its top edge, `group_opacity` beside `.opacity`, hit testing through the rotation (synthetic mouse moves; the window never takes focus), and a capture written to PNG. `EFFECTS_STRICT=1` exits 1 if a check fails; CI runs it on macOS and Windows.

@@ -254,7 +254,7 @@ impl BoardCanvas {
                 self.render_section(&props, window, cx)
             }
         };
-        let content = zoomed(z, content);
+        let content = zoomed(z, content).stepped_glyphs(self.zooming);
 
         // Sections take the pointer by their header only.
         if let NodeKind::Section { .. } = node.kind {
@@ -628,22 +628,26 @@ fn paint_dots(bounds: Bounds<Pixels>, vp: nodus_domain::Viewport, color: gpui::R
     let first = |t: f64| (t - gap / 2.0 + r).rem_euclid(gap) - gap;
     let (x0, y0) = (first(vp.x), first(vp.y));
     let d = px((2.0 * r) as f32);
-    let mut y = y0;
-    while y <= h + gap {
-        let mut x = x0;
-        while x <= w + gap {
-            let b = Bounds::new(
-                point(
-                    bounds.origin.x + px((x - r) as f32),
-                    bounds.origin.y + px((y - r) as f32),
-                ),
-                size(d, d),
-            );
-            window.paint_quad(fill(b, color).corner_radii(px(r as f32)));
-            x += gap;
+    // One layer: the dots never overlap, so they share a draw order instead
+    // of each finding its own (tens of thousands of them zoomed out).
+    window.paint_layer(bounds, |window| {
+        let mut y = y0;
+        while y <= h + gap {
+            let mut x = x0;
+            while x <= w + gap {
+                let b = Bounds::new(
+                    point(
+                        bounds.origin.x + px((x - r) as f32),
+                        bounds.origin.y + px((y - r) as f32),
+                    ),
+                    size(d, d),
+                );
+                window.paint_quad(fill(b, color).corner_radii(px(r as f32)));
+                x += gap;
+            }
+            y += gap;
         }
-        y += gap;
-    }
+    });
 }
 
 impl Render for BoardCanvas {

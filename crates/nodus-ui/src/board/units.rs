@@ -28,10 +28,15 @@ pub fn scale(window: &Window) -> f32 {
     f32::from(window.rem_size()) / BASE_REM
 }
 
+/// Glyph sizes per doubling while the zoom changes: a bitmap is at most
+/// about 3% larger or smaller than the glyph it draws.
+const ZOOMING_GLYPH_STEPS: u32 = 12;
+
 /// Draws `child` with rems `16px × zoom`, so its [`fu`] lengths scale with
 /// the board.
 pub struct Zoomed {
     rem: Pixels,
+    stepped: bool,
     child: AnyElement,
 }
 
@@ -39,7 +44,19 @@ pub struct Zoomed {
 pub fn zoomed(zoom: f32, child: impl IntoElement) -> Zoomed {
     Zoomed {
         rem: px(BASE_REM * zoom),
+        stepped: false,
         child: child.into_any_element(),
+    }
+}
+
+impl Zoomed {
+    /// While the board's zoom changes, the text's size changes every frame,
+    /// and rasterizing every glyph again at each size made a zoom gesture
+    /// drop to a few frames a second. Its glyphs then come from a few sizes
+    /// per doubling, scaled, and are drawn crisp once the zoom settles.
+    pub fn stepped_glyphs(mut self, stepped: bool) -> Self {
+        self.stepped = stepped;
+        self
     }
 }
 
@@ -98,7 +115,10 @@ impl Element for Zoomed {
         cx: &mut App,
     ) {
         let child = &mut self.child;
-        window.with_rem_size(Some(self.rem), |window| child.paint(window, cx));
+        let steps = self.stepped.then_some(ZOOMING_GLYPH_STEPS);
+        window.with_rem_size(Some(self.rem), |window| {
+            window.with_stepped_glyph_sizes(steps, |window| child.paint(window, cx));
+        });
     }
 }
 

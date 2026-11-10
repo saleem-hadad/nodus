@@ -1270,6 +1270,9 @@ pub struct Window {
     text_system: Rc<WindowTextSystem>,
     text_rendering_mode: Rc<Cell<TextRenderingMode>>,
     font_smoothing: Rc<Cell<FontSmoothing>>,
+    /// Nodus patch: glyphs painted now come from bitmaps at this many sizes
+    /// per doubling, scaled to their size (`with_stepped_glyph_sizes`).
+    glyph_size_steps: Option<u32>,
     rem_size: Pixels,
     /// The stack of override values for the window's rem size.
     ///
@@ -2414,6 +2417,7 @@ impl Window {
             text_system,
             text_rendering_mode: cx.text_rendering_mode.clone(),
             font_smoothing: cx.font_smoothing.clone(),
+            glyph_size_steps: None,
             rem_size: px(16.),
             rem_size_override_stack: SmallVec::new(),
             viewport_size: content_size,
@@ -3484,6 +3488,27 @@ impl Window {
         self.element_id_stack.push(element_id.into());
         let result = f(self);
         self.element_id_stack.pop();
+        result
+    }
+
+    /// Nodus patch: paints the glyphs drawn inside `f` from bitmaps
+    /// rasterized at the nearest of `steps_per_octave` sizes per doubling
+    /// (in device pixels), scaled to the size each glyph is drawn at. Text
+    /// whose size changes every frame (a zoom gesture) then reuses the
+    /// atlas's bitmaps instead of rasterizing every glyph again each frame;
+    /// the price is slightly soft text until it's painted without. `None`
+    /// paints glyphs at their exact size, as usual.
+    pub fn with_stepped_glyph_sizes<R>(
+        &mut self,
+        steps_per_octave: Option<u32>,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let previous = mem::replace(
+            &mut self.glyph_size_steps,
+            steps_per_octave.filter(|steps| *steps > 0),
+        );
+        let result = f(self);
+        self.glyph_size_steps = previous;
         result
     }
 
@@ -5379,10 +5404,22 @@ impl Window {
             FontSmoothing::Antialiased => 0,
             FontSmoothing::PlatformDefault => self.text_system().glyph_dilation_for_color(color),
         };
+        // Nodus patch: under `with_stepped_glyph_sizes`, the bitmap comes
+        // from the nearest stepped size and is scaled by `stretch`.
+        let (raster_size, stretch) = match self.glyph_size_steps {
+            Some(steps) if font_size.0 > 0. => {
+                let steps = steps as f32;
+                let device = font_size.0 * scale_factor;
+                let stepped = (device.log2() * steps).round() / steps;
+                let raster = px(stepped.exp2() / scale_factor);
+                (raster, font_size.0 / raster.0)
+            }
+            _ => (font_size, 1.),
+        };
         let params = RenderGlyphParams {
             font_id,
             glyph_id,
-            font_size,
+            font_size: raster_size,
             subpixel_variant,
             scale_factor,
             is_emoji: false,
@@ -5399,9 +5436,18 @@ impl Window {
                     Ok(Some((size, Cow::Owned(bytes))))
                 })?
                 .expect("Callback above only errors or returns Some");
-            let bounds = Bounds {
-                origin: integer_origin + raster_bounds.origin.map(Into::into),
-                size: tile.bounds.size.map(Into::into),
+            let bounds = if stretch == 1. {
+                Bounds {
+                    origin: integer_origin + raster_bounds.origin.map(Into::into),
+                    size: tile.bounds.size.map(Into::into),
+                }
+            } else {
+                let offset: Point<ScaledPixels> = raster_bounds.origin.map(Into::into);
+                let size: Size<ScaledPixels> = tile.bounds.size.map(Into::into);
+                Bounds {
+                    origin: integer_origin + offset.map(|c| c * stretch),
+                    size: size.map(|c| c * stretch),
+                }
             };
             let content_mask = self.snapped_content_mask();
 

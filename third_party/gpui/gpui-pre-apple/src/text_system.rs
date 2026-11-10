@@ -39,7 +39,7 @@ use gpui::{
     Result, SUBPIXEL_VARIANTS_X, ShapedGlyph, ShapedRun, SharedString, Size, TextRenderingMode,
     point, px, size, swap_rgba_pa_to_bgra,
 };
-use parking_lot::{RwLock, RwLockUpgradableReadGuard};
+use parking_lot::{Mutex, RwLock, RwLockUpgradableReadGuard};
 use pathfinder_geometry::{
     rect::{RectF, RectI},
     transform2d::Transform2F,
@@ -77,7 +77,13 @@ struct AppleTextSystemState {
     font_ids_by_postscript_name: HashMap<String, FontId>,
     font_ids_by_font_key: HashMap<FontKey, SmallVec<[FontId; 4]>>,
     postscript_names_by_font_id: HashMap<FontId, String>,
+    /// Nodus patch: the fonts glyphs were last rasterized with, by font and
+    /// size (`sized_font`).
+    sized_fonts: Mutex<HashMap<(FontId, u32), CTFont>>,
 }
+
+/// Nodus patch: at most this many sized fonts are kept for rasterizing.
+const SIZED_FONTS_KEPT: usize = 256;
 
 impl AppleTextSystem {
     /// Create a new AppleTextSystem.
@@ -90,6 +96,7 @@ impl AppleTextSystem {
             font_ids_by_postscript_name: HashMap::default(),
             font_ids_by_font_key: HashMap::default(),
             postscript_names_by_font_id: HashMap::default(),
+            sized_fonts: Mutex::new(HashMap::default()),
         }))
     }
 }
@@ -587,6 +594,26 @@ impl AppleTextSystemState {
             })
     }
 
+    /// Nodus patch: the font at `font_size`, for rasterizing. Making one
+    /// is slow (CoreText reads the font's feature and name tables again for
+    /// every copy), and upstream made one for every glyph: a frame whose text
+    /// changed size (a zoom) spent most of its time there.
+    fn sized_font(&self, font_id: FontId, font_size: Pixels) -> CTFont {
+        let mut fonts = self.sized_fonts.lock();
+        let key = (font_id, f32::from(font_size).to_bits());
+        if let Some(font) = fonts.get(&key) {
+            return font.clone();
+        }
+        if fonts.len() >= SIZED_FONTS_KEPT {
+            fonts.clear();
+        }
+        let font = self.fonts[font_id.0]
+            .native_font()
+            .clone_with_font_size(f32::from(font_size) as CGFloat);
+        fonts.insert(key, font.clone());
+        font
+    }
+
     fn raster_bounds(&self, params: &RenderGlyphParams) -> Result<Bounds<DevicePixels>> {
         let font = &self.fonts[params.font_id.0];
         let scale = Transform2F::from_scale(params.scale_factor);
@@ -678,9 +705,7 @@ impl AppleTextSystemState {
                 cx.set_should_smooth_fonts(false);
                 cx.set_gray_fill_color(0.0, 1.0);
             }
-            self.fonts[params.font_id.0]
-                .native_font()
-                .clone_with_font_size(f32::from(params.font_size) as CGFloat)
+            self.sized_font(params.font_id, params.font_size)
                 .draw_glyphs(
                     &[params.glyph_id.0 as CGGlyph],
                     &[CGPoint::new(

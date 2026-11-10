@@ -177,6 +177,9 @@ pub struct BoardCanvas {
     pub(crate) bounds: Bounds<Pixels>,
     pub(crate) initialized: bool,
     pub(crate) moving: bool,
+    /// The zoom changed during this move: node text paints from stepped
+    /// glyph sizes until it ends (`units::Zoomed`).
+    pub(crate) zooming: bool,
     pub(crate) move_end: Option<Task<()>>,
     pub(crate) save_timer: Option<Task<()>>,
 
@@ -280,6 +283,7 @@ impl BoardCanvas {
             bounds: Bounds::default(),
             initialized: false,
             moving: false,
+            zooming: false,
             move_end: None,
             save_timer: None,
             gesture: Gesture::Idle,
@@ -611,6 +615,7 @@ impl BoardCanvas {
     /// `onMoveEnd` after `end_delay`).
     pub(crate) fn set_viewport(&mut self, vp: Viewport, end_delay: Option<u64>, cx: &mut Context<'_, Self>) {
         self.anim = None;
+        self.zooming |= vp.zoom != self.viewport.zoom;
         self.viewport = vp;
         self.move_started(cx);
         if let Some(delay) = end_delay {
@@ -640,7 +645,9 @@ impl BoardCanvas {
     pub(crate) fn step_animation(&mut self, cx: &mut Context<'_, Self>) -> bool {
         let Some(anim) = &self.anim else { return false };
         let t = anim.start.elapsed().as_secs_f64() / anim.duration.as_secs_f64().max(1e-9);
-        self.viewport = anim.flight.at(t);
+        let vp = anim.flight.at(t);
+        self.zooming |= vp.zoom != self.viewport.zoom;
+        self.viewport = vp;
         if t >= 1.0 {
             self.anim = None;
             self.move_ends_in(0, cx);
@@ -667,6 +674,10 @@ impl BoardCanvas {
             }
             let _ = this.update(cx, |c, cx| {
                 c.moving = false;
+                // The text drawn crisp again at the zoom it stopped at.
+                if std::mem::take(&mut c.zooming) {
+                    cx.notify();
+                }
                 c.schedule_viewport_save(cx);
             });
         }));

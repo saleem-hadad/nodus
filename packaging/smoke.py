@@ -35,6 +35,10 @@ import time
 
 WINDOWS = sys.platform == "win32"
 
+# The step labels are UTF-8 (▸); Windows' console code page would refuse them.
+for stream in (sys.stdout, sys.stderr):
+    stream.reconfigure(encoding="utf-8")
+
 
 def step(text):
     print(f"\n▸ {text}", flush=True)

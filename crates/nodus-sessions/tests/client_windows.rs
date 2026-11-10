@@ -87,15 +87,22 @@ fn welcome(key: Option<&str>) -> Value {
     welcome
 }
 
-#[tokio::test]
-async fn host_098_a_pipe_that_cant_show_the_hosts_key_isnt_trusted() {
+/// A data folder whose host wrote `the-real-key`. Each case gets its own, so
+/// each fake host gets a pipe name no earlier case still holds open: Windows
+/// refuses a first instance of a name that's still in use.
+fn host_folder() -> (tempfile::TempDir, std::path::PathBuf, nodus_host_proto::HostPaths) {
     let dir = tempfile::tempdir().unwrap();
     let user_data = dir.path().join("ud");
     let paths = host_paths(&user_data, Platform::Windows);
     nodus_host_proto::ensure_private_dir(&paths.dir).unwrap();
     nodus_host_proto::write_private_file(&paths.key, "the-real-key").unwrap();
+    (dir, user_data, paths)
+}
 
+#[tokio::test]
+async fn host_098_a_pipe_that_cant_show_the_hosts_key_isnt_trusted() {
     for key in [None, Some(""), Some("a-guess")] {
+        let (_dir, user_data, paths) = host_folder();
         let pipe = ServerOptions::new()
             .first_pipe_instance(true)
             .create(&paths.socket)
@@ -109,6 +116,7 @@ async fn host_098_a_pipe_that_cant_show_the_hosts_key_isnt_trusted() {
     }
 
     // The key the host wrote is trusted.
+    let (_dir, user_data, paths) = host_folder();
     let pipe = ServerOptions::new()
         .first_pipe_instance(true)
         .create(&paths.socket)

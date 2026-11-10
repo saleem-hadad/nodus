@@ -28,10 +28,14 @@ pub fn title_bar(state: &Entity<AppState>, actions: Vec<AnyElement>, window: &mu
     let focus_feature = s.focus_feature();
     let focus_mode = s.settings.as_ref().is_some_and(|s| s.focus_mode);
     let total = running_total(s.stats.values());
-    let breakdown: Vec<String> = running_by_project(&s.projects, &s.stats)
+    let breakdown: Vec<_> = running_by_project(&s.projects, &s.stats)
         .into_iter()
-        .map(|row| format!("{} ({})", row.name, row.count))
+        .map(|row| {
+            let color = s.projects.iter().find(|p| p.id == row.id).map(|p| p.color);
+            (row, color)
+        })
         .collect();
+    let open_project = s.route.project_id().map(str::to_owned);
     let ready_version = match &s.update_status {
         Some(status) => match &status.state {
             UpdateState::Ready { version } => Some(version.clone()),
@@ -97,20 +101,7 @@ pub fn title_bar(state: &Entity<AppState>, actions: Vec<AnyElement>, window: &mu
                         }
                     }
                 };
-                d.child(
-                    no_drag(
-                        button("titlebar-back")
-                            .ghost()
-                            .square()
-                            .icon(Icon::ChevronLeft, 18., 2.)
-                            .colors(t.text_secondary, t.text_primary)
-                            .tooltip("Back to Projects")
-                            .on_click(go_to_projects.clone()),
-                    )
-                    // `.titlebar-back { margin-right: 2px }`, beside the crumbs' 4px gap.
-                    .mr(px(2.)),
-                )
-                .child(no_drag(
+                d.child(no_drag(
                     div()
                         .id("titlebar-crumb-link")
                         .flex()
@@ -150,8 +141,48 @@ pub fn title_bar(state: &Entity<AppState>, actions: Vec<AnyElement>, window: &mu
         });
 
     let running = (total > 0).then(|| {
-        let hover = window.use_keyed_state("titlebar-running", cx, |_, _| false);
-        let pointing = *hover.read(cx);
+        // Over the count, and over its list: the list stays while the
+        // pointer is on either, so its projects can be clicked.
+        let hover = window.use_keyed_state("titlebar-running", cx, |_, _| (false, false));
+        let (on_count, on_list) = *hover.read(cx);
+        let list_hover = hover.clone();
+        let rows = breakdown
+            .into_iter()
+            .enumerate()
+            .map(|(i, (row, color))| {
+                let state = state.clone();
+                let hover = hover.clone();
+                let open = open_project.as_deref() != Some(row.id.as_str());
+                div()
+                    .id(("titlebar-running-row", i))
+                    .flex()
+                    .items_center()
+                    .gap(px(7.))
+                    .h(px(24.))
+                    .px(px(6.))
+                    .rounded(px(4.))
+                    .hover(|s| s.bg(t.bg_hover))
+                    .active(|s| s.bg(t.bg_pressed))
+                    .on_click(move |_, _, cx| {
+                        hover.update(cx, |s, cx| {
+                            *s = (false, false);
+                            cx.notify();
+                        });
+                        if open {
+                            let id = row.id.clone();
+                            state.update(cx, |s, cx| s.navigate(Route::Board(id), cx));
+                        }
+                    })
+                    .child(folder_icon(14., color))
+                    .child(div().flex_1().min_w_0().truncate().child(row.name))
+                    .child(
+                        div()
+                            .flex_none()
+                            .text_color(t.text_tertiary)
+                            .child(row.count.to_string()),
+                    )
+            })
+            .collect::<Vec<_>>();
         div()
             .id("titlebar-running")
             .relative()
@@ -166,33 +197,47 @@ pub fn title_bar(state: &Entity<AppState>, actions: Vec<AnyElement>, window: &mu
             .whitespace_nowrap()
             .on_hover(move |h, _, cx| {
                 hover.update(cx, |s, cx| {
-                    *s = *h;
+                    s.0 = *h;
                     cx.notify();
                 });
             })
             .child(icon(Icon::SquareTerminal, 13., 2., t.text_secondary))
             .child(format!("{total} running"))
-            .when(pointing, |d| {
-                // UI-105: hangs 6px below, right edges lined up, over the main area.
+            .when(on_count || on_list, |d| {
+                // UI-105: hangs 6px below, right edges lined up, over the main
+                // area. The 6px gap is part of the list, so the pointer keeps
+                // it open on the way down; occluding keeps its clicks from
+                // moving the window.
                 d.child(
                     deferred(
                         div()
+                            .id("titlebar-running-list")
+                            .occlude()
                             .absolute()
-                            .top(px(30.))
+                            .top(px(24.))
                             .right(px(0.))
-                            .flex()
-                            .flex_col()
-                            .gap(px(2.))
-                            .max_w(px(280.))
-                            .px(px(9.))
-                            .py(px(5.))
-                            .rounded(RADIUS_SM)
-                            .bg(t.bg_elevated)
-                            .shadow(t.md())
-                            .text_size(TEXT_SM)
-                            .line_height(px(16.8))
-                            .text_color(t.text_primary)
-                            .children(breakdown.into_iter().map(|row| div().truncate().child(row))),
+                            .pt(px(6.))
+                            .on_hover(move |h, _, cx| {
+                                list_hover.update(cx, |s, cx| {
+                                    s.1 = *h;
+                                    cx.notify();
+                                });
+                            })
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(1.))
+                                    .min_w(px(160.))
+                                    .max_w(px(280.))
+                                    .p(px(4.))
+                                    .rounded(RADIUS_SM)
+                                    .bg(t.bg_elevated)
+                                    .shadow(t.md())
+                                    .text_size(TEXT_SM)
+                                    .text_color(t.text_primary)
+                                    .children(rows),
+                            ),
                     )
                     .with_priority(50),
                 )

@@ -346,7 +346,7 @@ CSS keyword easings used in this domain: `ease` = `cubic-bezier(0.25, 0.1, 0.25,
 - **UI-102 Hidden at zero.** The running count is absent when no Claude session runs in any project.
 - **UI-103 What counts.** The count is the sum over all projects of Claude sessions drawn as cards plus background Claude sessions (view brains, action runs); terminal shells are never counted; hidden and focus-filtered projects are included.
 - **UI-104 Label.** The readout is a terminal icon and `N running`.
-- **UI-105 Breakdown on hover.** While the pointer is over the readout a card hangs below it, right-aligned to it, listing one row per project with Claude sessions running: `<project name> (<count>)`, in project list order; it disappears when the pointer leaves.
+- **UI-105 Breakdown on hover.** While the pointer is over the readout a card hangs below it, right-aligned to it, listing one row per project with Claude sessions running: folder icon (project colour), project name, count, in project list order. The 6px gap above the card belongs to it, so the card stays while the pointer is over the readout or the card, and disappears when it leaves both. Rows highlight on hover (`--bg-hover`, pressed `--bg-pressed`); clicking one hides the card and opens that project's board (nothing else when it's already open). Added after 1.0.0: in 0.9.4 the rows read `<project name> (<count>)` and couldn't be clicked.
 
 ### Update button (placement; logic in 06)
 
@@ -621,10 +621,9 @@ Conventions: sizes in logical px; "L / D" = light / dark resolved value; padding
 | Part | Value |
 | --- | --- |
 | Bar | height 52px; row, items vertically centred, content spread to both ends (`space-between`), gap 16px between its children; padding macOS `0 14 0 84` (84px leaves room for the traffic lights at x=18, y=18); off a Mac `0 (14 + caption-area width) 0 8` where the caption area is the Windows minimise/maximise/close overlay (fallback width 138px); background `--bg-toolbar` over the window = L `#f6f6f5` / D `#252527`; bottom hairline 0.5px `--border` (L `rgba(0,0,0,0.1)` / D `rgba(255,255,255,0.1)`); z 50 |
-| Drag | the whole bar is a window-drag region except: ☰ button, back button, `Projects` link, the board's project crumb, the right cluster (everything in it), git controls (05) |
+| Drag | the whole bar is a window-drag region except: ☰ button, `Projects` link, the board's project crumb, the right cluster (everything in it), git controls (05) |
 | ☰ button (off Mac) | `.btn .btn-ghost .btn-icon`: 28×28, radius 6; icon `menu` 16px stroke 2; colour `--text-secondary`, hover `--text-primary` + `--bg-hover`; right margin −8px; native tooltip `Menu`; accessible name `Menu`. Click: pop up the application menu at (button left, button bottom + 4) in window coordinates |
 | Crumbs | row, centred, gap 4px, may shrink (min width 0). Off a Mac: pushed left against the ☰ button (takes the free space on its right) |
-| Back button (board) | `.btn .btn-ghost .btn-icon` 28×28; icon `chevron-left` 18px stroke 2; colour `--text-secondary`, hover `--text-primary`; right margin 2px; native tooltip and name `Back to Projects` |
 | `Projects` link (board) | height 24px, padding `0 6`, no border, radius 6; transparent; text `Projects` 13px weight 500 `--text-secondary`; hover background `--bg-hover`, text `--text-primary`; pressed `--bg-pressed`; no transition |
 | Separator (board) | icon `chevron-right` 13px stroke 2.2, colour `--text-tertiary`, not shrinkable |
 | Current crumb | row, centred, gap 7px, padding-left 4px, may shrink. Board: folder icon 18px (project colour, no shadow, no glyph) + name. Grid: name `Projects` only (no icon; part of the drag region) |

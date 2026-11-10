@@ -186,8 +186,9 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | capture | `rust/capture` | nodus-capture backend: double tap, key hook, screen context, guess, submit | ✅ merged: 98 CAP; panel UI and page wiring to the capture-panel track |
 | core | `rust/core` | P4: wire every merged domain into nodus-core (sessions, board, views, updates, events, startup/quit), deferred core IDs, debts, headless end-to-end tests | ✅ merged (6243e7c): every domain composed; git/actions/voice wired; the windowed app launches, runs sessions through `Nodus host` and quits through the core |
 | audit-shell | `rust/audit-shell` | P12 slice: resolve every unticked ID in specs 01–03, 05–08 | ✅ merged (67aa3fe): every ID resolved with evidence in `migration/tracks/audit-shell.md`; selectable static text, 40-char paste, driver named pipe, Windows chrome (☰, caption buttons, single instance), page zoom, spellcheck; Windows-only and certificate items stay open for CI and cutover |
+| final-sweep | `rust/final-sweep` | P12: every scene vs the goldens (migration/parity/report.md), last non-Windows IDs, Edit › Delete, capture-panel zoom, a live end-to-end pass | 🟡 running |
 | cutover | `rust/cutover` | PROTOCOL → 2 (U1), Rust-only CI and release workflow, README and how-it-works for the Rust app, Electron sources removed, version 1.0.0 | ✅ merged (db61c8f) with the user's approval: `main` is Rust-only |
-| views-polish | `rust/views-polish` | ink over live view pages, tooltips as coverage, overlay timing, New view dialog wrap + grip, one git status source, `render_to_image` blank-menu bug | 🟡 running |
+| views-polish | `rust/views-polish` | ink over live view pages, tooltips as coverage, overlay timing, New view dialog, one git status source, snapshot retries | ✅ merged: ink over pages in a click-through native overlay; menus in the same frame as the swap (PATCHES 16) |
 | cross-wiring | `rust/cross-wiring` | BOARD-037 (transcript preview at the search match), MODAL-028…031 (session windows closing with their card, run or view; shortcuts and ⌘K while one is open) | ✅ merged (875ce8c): all five, with app checks in `parity/cross_wiring.py` |
 | gpui-polish | `rust/gpui-polish` | GPUI/UI gaps: cursors, spellcheck, search highlights, tooltips, outside-only shadows | ✅ merged (1896e0d): PATCHES 12–15; BAR-005, INKUI-016/017; tooltips on AppKit's timing; pad-hover 1.11% → 0.64% |
 | overlays | `rust/overlays` | P8, spec 11: prompt bar, ⌘K search, merge dialog, ink layer, selection bar, on the board's `board/bar.rs` hooks | ✅ merged (f4467cd): 107 of 111 + 19 board hooks; BAR-005 (spellcheck underline), INKUI-016/017 (cursors) to gpui-polish, INKUI-018 to views-ui; overlay regions 0–1.6% off the goldens |
@@ -290,6 +291,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-10: Windows CI now builds and installs both installers; fixed the HOST-098 test reusing a pipe name and the smoke test's console encoding. views-polish merged; final-sweep started.
 - 2026-11-10: First CI on the Rust-only main: macOS green (CI and Packages, incl. the DMG handoff gates and smoke); Windows failed on an example's unused variable and on NSIS's mixed-separator include path — both fixed (72e48e1). gpui-polish merged (1896e0d).
 - 2026-11-10: **Cutover merged (db61c8f): `main` is Rust-only.** PROTOCOL 2, `ci.yml`/`package.yml`/`release.yml` for Rust, docs for the Rust workspace, `src/` and the Electron toolchain removed, version 1.0.0; fixture generators and the parity harness read tag v0.9.4.
 - 2026-11-10: The user approved the cutover, version 1.0.0 for the first Rust release, and running the release workflow.

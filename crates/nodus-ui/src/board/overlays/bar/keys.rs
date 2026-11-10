@@ -1,7 +1,10 @@
 //! The field's keys (BAR-009, BAR-015, BAR-016, BAR-021, BAR-023), seen
 //! before the field's own editing; nothing while an input method composes.
+//! ↑, ↓ and Tab are the field's own bindings, so the menu takes them as
+//! actions ([`BoardCanvas::bar_menu_move`], [`BoardCanvas::bar_menu_tab`]).
 
 use gpui::{Context, EntityInputHandler as _, KeyDownEvent, Window};
+use nodus_board::compose::SlashCommand;
 
 use crate::board::canvas::BoardCanvas;
 
@@ -25,14 +28,7 @@ impl BoardCanvas {
         let commands = self.bar_commands();
         let menu_open = !commands.is_empty();
         let highlighted = self.overlays.bar.active.min(commands.len().saturating_sub(1));
-        if menu_open && (key == "down" || key == "up") {
-            // BAR-015: both wrap.
-            let step = if key == "down" { 1 } else { commands.len() - 1 };
-            self.overlays.bar.active = (highlighted + step) % commands.len();
-            cx.notify();
-            return true;
-        }
-        if menu_open && (key == "enter" || key == "tab") {
+        if menu_open && key == "enter" {
             self.bar_pick(commands[highlighted].target, window, cx);
             return true;
         }
@@ -69,5 +65,45 @@ impl BoardCanvas {
             return true;
         }
         false
+    }
+
+    /// BAR-015: ↓ or ↑ while the slash menu is open moves the highlight,
+    /// both wrapping. They come as the field's `MoveDown` and `MoveUp`,
+    /// whose bindings run before any key handler, so the pill takes them in
+    /// the capture phase. True when the menu took the key.
+    pub(crate) fn bar_menu_move(&mut self, down: bool, window: &mut Window, cx: &mut Context<'_, Self>) -> bool {
+        let count = self.bar_menu_keyed(window, cx).len();
+        if count == 0 {
+            return false;
+        }
+        let highlighted = self.overlays.bar.active.min(count - 1);
+        let step = if down { 1 } else { count - 1 };
+        self.overlays.bar.active = (highlighted + step) % count;
+        cx.notify();
+        true
+    }
+
+    /// BAR-015: Tab while the slash menu is open picks the highlighted
+    /// command. It comes as the field's `IndentInline` (the field indents),
+    /// taken as ↓ and ↑ are. True when the menu took the key.
+    pub(crate) fn bar_menu_tab(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> bool {
+        let commands = self.bar_menu_keyed(window, cx);
+        let Some(command) = commands.get(self.overlays.bar.active.min(commands.len().saturating_sub(1))) else {
+            return false;
+        };
+        self.bar_pick(command.target, window, cx);
+        true
+    }
+
+    /// The menu's commands while its keys are the menu's: none while an
+    /// input method composes.
+    fn bar_menu_keyed(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> Vec<SlashCommand> {
+        let Some(field) = self.overlays.bar.field.clone() else {
+            return Vec::new();
+        };
+        if field.update(cx, |s, cx| s.marked_text_range(window, cx)).is_some() {
+            return Vec::new();
+        }
+        self.bar_commands()
     }
 }

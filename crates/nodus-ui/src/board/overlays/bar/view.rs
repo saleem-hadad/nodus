@@ -4,7 +4,7 @@
 //! BAR-035).
 
 use gpui::component::Sizable as _;
-use gpui::component::input::Textarea;
+use gpui::component::input::{IndentInline, MoveDown, MoveUp, Textarea};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Context, CursorStyle, Focusable as _, InteractiveElement, IntoElement, MouseButton, ParentElement,
@@ -196,6 +196,21 @@ impl BoardCanvas {
             })
             .capture_key_down(cx.listener(|this, e: &gpui::KeyDownEvent, window, cx| {
                 if this.bar_key_down(e, window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
+            .capture_action(cx.listener(|this, _: &MoveDown, window, cx| {
+                if this.bar_menu_move(true, window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
+            .capture_action(cx.listener(|this, _: &MoveUp, window, cx| {
+                if this.bar_menu_move(false, window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
+            .capture_action(cx.listener(|this, _: &IndentInline, window, cx| {
+                if this.bar_menu_tab(window, cx) {
                     cx.stop_propagation();
                 }
             }))

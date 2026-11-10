@@ -102,7 +102,15 @@ impl BoardCanvas {
         if let Some(field) = &self.overlays.bar.field {
             return field.clone();
         }
-        let field = cx.new(|cx| TextareaState::new(window, cx).auto_grow(1, 5).context_menu(false));
+        // BAR-009: the field's own Return binding runs before `bar_key_down`
+        // sees the key; submit_on_enter makes it pass plain Return on (to
+        // send, or pick the menu's row) and keep ⇧Return as the newline.
+        let field = cx.new(|cx| {
+            TextareaState::new(window, cx)
+                .auto_grow(1, 5)
+                .context_menu(false)
+                .submit_on_enter(true)
+        });
         let sub = cx.subscribe_in(&field, window, |this, field, e: &InputEvent, window, cx| match e {
             InputEvent::Change => {
                 let value = field.read(cx).value().to_string();

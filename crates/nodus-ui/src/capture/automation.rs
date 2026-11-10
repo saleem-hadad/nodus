@@ -4,6 +4,7 @@
 //! ```text
 //! {"cmd":"capture","action":"show"}                       File › Capture…
 //! {"cmd":"capture","action":"hide"}
+//! {"cmd":"capture","action":"zoom","step":0.5}           View › Zoom In with the panel in front
 //! {"cmd":"capture","stub":"screenshot","value":"needs-permission"}   files | clipboard | submit | pickFiles
 //! {"cmd":"capture","stub":"trusted","value":true}         Accessibility granted (ready within 3 s)
 //! {"cmd":"type","text":"Fix the coupon field","window":"capture"}    typed key by key
@@ -83,6 +84,14 @@ async fn capture(command: &Value, nodus: &Nodus, cx: &mut AsyncApp) -> Result<Va
             nodus.capture().hide();
             Ok(Value::Null)
         }
+        // View › Zoom In (0.5), Zoom Out (-0.5) or Actual Size (null) as
+        // they reach the panel while it has the keyboard, which a driven
+        // panel never takes.
+        "zoom" => {
+            let step = command.get("step").and_then(Value::as_f64);
+            cx.update(|cx| super::zoom(step, cx));
+            Ok(json_level(nodus))
+        }
         // A control's click, wherever it is on the card now.
         "press" => {
             let control = command
@@ -118,6 +127,11 @@ async fn capture(command: &Value, nodus: &Nodus, cx: &mut AsyncApp) -> Result<Va
         })),
         other => Err(format!("unknown capture action {other}")),
     }
+}
+
+/// The panel's zoom level and the window's, for the driver.
+fn json_level(nodus: &Nodus) -> Value {
+    serde_json::json!({ "panel": nodus.zoom().capture_level(), "window": nodus.zoom().level() })
 }
 
 /// Types `text` one key at a time, as a keyboard would (letters, capitals

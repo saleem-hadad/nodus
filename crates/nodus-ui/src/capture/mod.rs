@@ -59,6 +59,22 @@ pub fn register(nodus: &Nodus, cx: &mut App) {
     nodus.capture().register(system);
 }
 
+/// View › Actual Size, Zoom In and Zoom Out while the panel has the
+/// keyboard: its own level (`nodus_core::zoom`), the panel's page drawn at
+/// 1.2^level in the same window. The window stays `PANEL_W` wide and as tall
+/// as the page measures itself in its own (zoomed) units, as 0.9.4's
+/// `capture:resize` set CSS pixels as window points.
+pub fn zoom(step: Option<f64>, cx: &mut App) {
+    let Some(handle) = PanelSlot::live(cx) else { return };
+    let zoom = cx.global::<window::Core>().0.zoom();
+    let level = zoom.set_capture_level(step.map_or(0.0, |step| zoom.capture_level() + step));
+    let factor = nodus_core::zoom::factor(level) as f32;
+    // A shortcut runs this while its window is being updated: after that.
+    cx.defer(move |cx| {
+        let _ = handle.update(cx, |_, window, cx| window.set_ui_zoom(factor, cx));
+    });
+}
+
 /// File › Capture… (CAP-042, PLAT-048) and Settings' Try It (CAP-043,
 /// UI-135): opens the panel, never toggles.
 pub fn show(nodus: &Nodus, cx: &mut App) {

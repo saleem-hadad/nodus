@@ -4,6 +4,12 @@
 //! level in `Preferences`; it's read from there once, the first time it's
 //! asked for, and kept in state.json under `zoomLevel` from then on (plan.md,
 //! "Decisions for the user", page zoom). 0.9.4 ignores the key.
+//!
+//! The zoom roles act on the page that has the keyboard. The capture panel's
+//! page is the app's own with `#capture` after it, and Chromium keys a
+//! `file://` page's zoom by its whole URL, so the panel has a level of its
+//! own: zoomed while it has the keyboard, apart from the window's, brought
+//! over and kept the same way, under `captureZoomLevel`.
 
 use std::path::Path;
 
@@ -13,6 +19,13 @@ use crate::Nodus;
 
 /// The top-level state.json key the level lives under.
 pub const STATE_KEY: &str = "zoomLevel";
+/// The key the capture panel's level lives under.
+pub const CAPTURE_STATE_KEY: &str = "captureZoomLevel";
+
+/// How the main window's page URL ends, as Chromium keyed its zoom.
+const PAGE: &str = "/out/renderer/index.html";
+/// How the capture panel's ends.
+const CAPTURE_PAGE: &str = "/out/renderer/index.html#capture";
 
 /// How far one Zoom In or Zoom Out moves the level (Electron's roles).
 pub const STEP: f64 = 0.5;
@@ -30,39 +43,58 @@ pub struct ZoomApi<'a> {
 impl ZoomApi<'_> {
     /// The zoom level: 0 unless the user zoomed, here or in 0.9.4.
     pub fn level(&self) -> f64 {
-        self.bring_over();
+        self.level_of(STATE_KEY, PAGE)
+    }
+
+    /// Sets the zoom level, saved a moment later. Returns it.
+    pub fn set_level(&self, level: f64) -> f64 {
+        self.set_level_of(STATE_KEY, PAGE, level)
+    }
+
+    /// The capture panel's zoom level: 0 unless the user zoomed the panel.
+    pub fn capture_level(&self) -> f64 {
+        self.level_of(CAPTURE_STATE_KEY, CAPTURE_PAGE)
+    }
+
+    /// Sets the capture panel's zoom level. Returns it.
+    pub fn set_capture_level(&self, level: f64) -> f64 {
+        self.set_level_of(CAPTURE_STATE_KEY, CAPTURE_PAGE, level)
+    }
+
+    fn level_of(&self, key: &str, page: &str) -> f64 {
+        self.bring_over(key, page);
         self.nodus.inner.store.read(|state| {
             state
                 .extra
-                .get(STATE_KEY)
+                .get(key)
                 .and_then(Value::as_f64)
                 .filter(|l| l.is_finite())
                 .unwrap_or(0.0)
         })
     }
 
-    /// Sets the zoom level, saved a moment later. Returns it.
-    pub fn set_level(&self, level: f64) -> f64 {
+    fn set_level_of(&self, key: &str, page: &str, level: f64) -> f64 {
         let level = if level.is_finite() { level } else { 0.0 };
-        if self.level() != level {
+        if self.level_of(key, page) != level {
             self.nodus.inner.store.update(|state| {
-                state.extra.insert(STATE_KEY.to_owned(), Value::from(level));
+                state.extra.insert(key.to_owned(), Value::from(level));
             });
         }
         level
     }
 
-    /// 0.9.4's level, from Chromium's `Preferences`, while state.json has
-    /// none of its own yet. A level of 0 is kept too, so it's read once.
-    fn bring_over(&self) {
+    /// 0.9.4's level for the page whose URL ends with `page`, from
+    /// Chromium's `Preferences`, while state.json has none of its own yet.
+    /// A level of 0 is kept too, so it's read once.
+    fn bring_over(&self, key: &str, page: &str) {
         let store = &self.nodus.inner.store;
-        if store.read(|state| state.extra.contains_key(STATE_KEY)) {
+        if store.read(|state| state.extra.contains_key(key)) {
             return;
         }
         let Some(user_data) = store.file().parent() else { return };
-        let level = chromium_level(user_data).unwrap_or(0.0);
+        let level = chromium_level_of(user_data, page).unwrap_or(0.0);
         store.update(|state| {
-            state.extra.entry(STATE_KEY).or_insert_with(|| Value::from(level));
+            state.extra.entry(key).or_insert_with(|| Value::from(level));
         });
     }
 }
@@ -78,6 +110,12 @@ pub fn factor(level: f64) -> f64 {
 /// page's `file://…/out/renderer/index.html` and its level (a number, or an
 /// object with `zoom_level` in newer Chromium). None when it never zoomed.
 pub fn chromium_level(user_data: &Path) -> Option<f64> {
+    chromium_level_of(user_data, PAGE)
+}
+
+/// The level Chromium kept for the app page whose `file://` URL ends with
+/// `page` (a `file://` page's zoom is keyed by its whole URL, `#…` and all).
+fn chromium_level_of(user_data: &Path, page: &str) -> Option<f64> {
     let text = std::fs::read(user_data.join("Preferences")).ok()?;
     let prefs: Value = serde_json::from_slice(&text).ok()?;
     let partitions = prefs.get("partition")?.get("per_host_zoom_levels")?.as_object()?;
@@ -85,7 +123,7 @@ pub fn chromium_level(user_data: &Path) -> Option<f64> {
         .values()
         .filter_map(Value::as_object)
         .flat_map(|hosts| hosts.iter())
-        .find(|(url, _)| url.starts_with("file://") && url.ends_with("/out/renderer/index.html"))
+        .find(|(url, _)| url.starts_with("file://") && url.ends_with(page))
         .and_then(|(_, level)| match level {
             Value::Number(n) => n.as_f64(),
             Value::Object(o) => o.get("zoom_level").and_then(Value::as_f64),
@@ -155,6 +193,28 @@ mod tests {
         nodus.inner.store.flush();
         let saved: Value = serde_json::from_slice(&std::fs::read(user_data.join("state.json")).unwrap()).unwrap();
         assert_eq!(saved[STATE_KEY], 1.0);
+    }
+
+    #[tokio::test]
+    async fn keeps_the_capture_panels_level_apart() {
+        let (dir, nodus) = nodus();
+        let user_data = dir.path().join("userData");
+        // Chromium kept a file:// page's zoom under its whole URL: the panel's
+        // `#capture` page has a key of its own beside the window's.
+        preferences(
+            &user_data,
+            r#"{"partition":{"per_host_zoom_levels":{"h":{"file:///a/out/renderer/index.html":-0.5,"file:///a/out/renderer/index.html#capture":1.0}}}}"#,
+        );
+        assert_eq!(nodus.zoom().level(), -0.5);
+        assert_eq!(nodus.zoom().capture_level(), 1.0);
+        assert_eq!(nodus.zoom().set_capture_level(1.5), 1.5);
+        assert_eq!(nodus.zoom().level(), -0.5);
+        assert_eq!(nodus.zoom().set_level(0.0), 0.0);
+        assert_eq!(nodus.zoom().capture_level(), 1.5);
+        nodus.inner.store.flush();
+        let saved: Value = serde_json::from_slice(&std::fs::read(user_data.join("state.json")).unwrap()).unwrap();
+        assert_eq!(saved[CAPTURE_STATE_KEY], 1.5);
+        assert_eq!(saved[STATE_KEY], 0.0);
     }
 
     #[tokio::test]

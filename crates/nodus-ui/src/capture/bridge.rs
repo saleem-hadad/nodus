@@ -263,6 +263,8 @@ impl PanelSlot {
         let nodus = slot.nodus.clone();
         let at = slot.bounds;
         let quiet = window::quiet();
+        // The page's own zoom, as Chromium put it back on every load.
+        let zoom = nodus_core::zoom::factor(nodus.zoom().capture_level()) as f32;
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(Bounds::new(
                 point(px(at.x as f32), px(at.y as f32)),
@@ -289,6 +291,9 @@ impl PanelSlot {
         }) else {
             return;
         };
+        if zoom != 1.0 {
+            let _ = handle.update(cx, |_, window, cx| window.set_ui_zoom(zoom, cx));
+        }
         #[cfg(target_os = "macos")]
         let native = handle
             .update(cx, |_, window, _| {
@@ -313,7 +318,8 @@ impl PanelSlot {
         }
     }
 
-    fn is_focused(cx: &mut App) -> bool {
+    /// Whether the panel has the keyboard.
+    pub(crate) fn is_focused(cx: &mut App) -> bool {
         let Some(handle) = Self::live(cx) else { return false };
         #[cfg(target_os = "macos")]
         {

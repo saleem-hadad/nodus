@@ -126,8 +126,14 @@ pub fn open_main_window(cx: &mut App) -> Option<WindowHandle<gpui::base::Root>> 
 
 /// View › Actual Size, Zoom In and Zoom Out (PLAT-057): the level goes to
 /// 0, or half a step up or down, is kept, and the whole main window is
-/// drawn at 1.2^level. Nothing without a main window.
+/// drawn at 1.2^level. Nothing without a main window. While the capture
+/// panel has the keyboard, it's the panel that zooms, by a level of its own
+/// (Electron's roles zoom the focused page; `nodus_core::zoom`).
 pub fn zoom(step: Option<f64>, cx: &mut App) {
+    if crate::capture::PanelSlot::is_focused(cx) {
+        crate::capture::zoom(step, cx);
+        return;
+    }
     let Some(handle) = main_window(cx) else { return };
     let zoom = cx.global::<Core>().0.zoom();
     let level = zoom.set_level(step.map_or(0.0, |step| zoom.level() + step));

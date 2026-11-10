@@ -794,19 +794,19 @@ No macOS test exists in TypeScript. Recommended Rust additions, marked as such s
 - [ ] REL-013 Race-tolerant `gh release view || create || view`, upload `--clobber`, generated notes
 - [ ] REL-014 Release published immediately (not draft/prerelease)
 - [x] REL-015 No blockmaps or latest*.yml
-- [ ] REL-016 NSIS one-click per-user into `%LOCALAPPDATA%\Programs\nodus` (or registry InstallLocation, or `/D=`)
-- [ ] REL-017 Installer flags `/S`, `--updated`, `--force-run`, `--keep-shortcuts`, `--no-desktop-shortcut`, `--delete-app-data`, `--allusers`, `--currentuser`
-- [ ] REL-018 Single-instance mutex `99c2a492-c8ad-53bf-923b-1df868e91b51`
-- [ ] REL-019 Installer closes or kills processes running from the install folder
-- [ ] REL-020 Old version removed via its uninstaller `/S /KEEP_APP_DATA /currentuser [--keep-shortcuts] --updated _?=<dir>`, 5 retries
-- [ ] REL-021 HKCU `Software\<GUID>` and `…\Uninstall\<GUID>` values as listed
-- [ ] REL-022 Install folder has `Nodus.exe` and `Uninstall Nodus.exe`
-- [ ] REL-023 Start menu + Desktop `Nodus.lnk` with AUMI `dev.saleem.nodus`; kept as they are on update
-- [ ] REL-024 `--force-run` launches via the Start menu shortcut with `--updated`
-- [ ] REL-025 Installer copies itself to `%LOCALAPPDATA%\nodus-updater\installer.exe`
-- [ ] REL-026 Uninstall keeps `%APPDATA%\Nodus` unless `--delete-app-data`
+- [x] REL-016 NSIS one-click per-user into `%LOCALAPPDATA%\Programs\nodus` (or registry InstallLocation, or `/D=`)
+- [x] REL-017 Installer flags `/S`, `--updated`, `--force-run`, `--keep-shortcuts`, `--no-desktop-shortcut`, `--delete-app-data`, `--allusers`, `--currentuser`
+- [x] REL-018 Single-instance mutex `99c2a492-c8ad-53bf-923b-1df868e91b51`
+- [x] REL-019 Installer closes or kills processes running from the install folder
+- [x] REL-020 Old version removed via its uninstaller `/S /KEEP_APP_DATA /currentuser [--keep-shortcuts] --updated _?=<dir>`, 5 retries
+- [x] REL-021 HKCU `Software\<GUID>` and `…\Uninstall\<GUID>` values as listed
+- [x] REL-022 Install folder has `Nodus.exe` and `Uninstall Nodus.exe`
+- [x] REL-023 Start menu + Desktop `Nodus.lnk` with AUMI `dev.saleem.nodus`; kept as they are on update
+- [x] REL-024 `--force-run` launches via the Start menu shortcut with `--updated`
+- [x] REL-025 Installer copies itself to `%LOCALAPPDATA%\nodus-updater\installer.exe`
+- [x] REL-026 Uninstall keeps `%APPDATA%\Nodus` unless `--delete-app-data`
 - [x] REL-027 Installer and exe unsigned (SmartScreen: More info › Run anyway)
-- [ ] REL-028 `Nodus.exe` icon (index 0) and version strings
+- [x] REL-028 `Nodus.exe` icon (index 0) and version strings
 - [x] REL-029 CI triggers, `contents: read`, concurrency `ci-${{ github.ref }}` cancel-in-progress
 - [x] REL-030 CI macOS job: install, typecheck, test, build
 - [x] REL-031 CI Windows job: subset tests, x64 installer, silent `/S` install, smoke, `windows` artifact
@@ -822,7 +822,7 @@ No macOS test exists in TypeScript. Recommended Rust additions, marked as such s
 - [ ] REL-041 Rust .app passes deep-strict verify, id, version and same TeamIdentifier
 - [x] REL-042 Rust app starts via `open -n` and honors `open --env NODUS_USER_DATA`
 - [x] REL-043 Rust first launch cleans up the 0.9.4 `updates/` leftovers
-- [ ] REL-044 Rust installer run as `--updated /S --force-run` replaces the Electron install in place and starts the app
+- [x] REL-044 Rust installer run as `--updated /S --force-run` replaces the Electron install in place and starts the app
 - [x] REL-045 Rust app ignores the `--updated` argument
 - [ ] REL-046 Same designated requirement as 0.9.4 (TCC grants and Keychain item survive)
 - [x] REL-047 Rust releases keep the same contract; the Rust updater implements UPD-001…UPD-085

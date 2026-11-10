@@ -3,12 +3,12 @@
 with the Rust app, beside the goldens.
 
 usage: scenes11.py [scene-prefix ...] [--theme light|dark]
-                   [--harness <migration/parity>] [--golden <dir>]
+                   [--harness <dir, default harness/>] [--golden <dir>]
                    [--world <dir>] [--bin <nodus binary>]
 
 As scenes.py does for the shell and the board: seeds the parity harness's
 synthetic world, starts `nodus` on it with NODUS_AUTOMATION, drives it into
-the scene (the steps of migration/parity/scenes/overlays.mjs) and saves
+the scene (the steps of harness/scenes/overlays.mjs) and saves
 <golden>/<scene>.<theme>.rust.png. Never touches the real userData and never
 runs the real claude (the world's stand-in answers its -p calls).
 """
@@ -212,8 +212,8 @@ def run(scene, theme, opts):
 def main():
     args = sys.argv[1:]
     opts = {
-        "harness": os.path.join(REPO, "migration", "parity"),
-        "golden": os.path.join(REPO, "migration", "parity", "golden"),
+        "harness": os.path.join(HERE, "harness"),
+        "golden": os.path.join(HERE, "harness", "golden"),
         "world": os.path.join(tempfile.gettempdir(), "nodus-ui-parity11"),
         "bin": os.path.join(REPO, "target", "debug", "nodus"),
     }

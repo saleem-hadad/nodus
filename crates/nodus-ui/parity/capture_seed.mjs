@@ -1,6 +1,6 @@
 // usage: node capture_seed.mjs <harness dir> <world dir> <theme> '<spec json>'
 // Writes the parity harness's synthetic world for one capture scene, as
-// migration/parity/scenes/capture.mjs seeds it: `{"noCaptures": true}` empties
+// harness/scenes/capture.mjs seeds it: `{"noCaptures": true}` empties
 // the recent captures, `{"capture": true}` turns the double tap on (as the
 // shell's settings scenes seed it), `{"responses": {…}}` changes what the claude stand-in
 // answers. Prints the ids and the synthetic screenshot thumbnail the scenes use.

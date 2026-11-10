@@ -1,5 +1,5 @@
 //! The traits domains declare for what they need from each other, as the
-//! core implements them (plan.md, Layers). Each holds the core weakly, so the
+//! core implements them (docs/specs/README.md, Layers). Each holds the core weakly, so the
 //! domains it's handed to never keep it alive, and does nothing once it's gone.
 //!
 //! The board and the views call [`CoreSessions`]' queries while they hold the

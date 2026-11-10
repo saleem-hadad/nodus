@@ -1,6 +1,6 @@
 # Visual parity harness
 
-The Rust UI has to look exactly like Nodus 0.9.4 (decision D8 in `migration/plan.md`). This folder holds what proves it: a script that drives the real Electron app through every screen and state in light and dark, from a synthetic seeded world, and saves a golden screenshot of each. Rust UI work renders the same scenes from the same seed and is compared with them before it merges.
+Nodus 1.0, the native app, was built to look exactly like 0.9.4, the Electron app it replaced. This folder is what checked it: a script that drives the real Electron app through every screen and state in light and dark, from a synthetic seeded world, and saves a golden screenshot of each. The scripts one folder up (`scenes.py` and the others beside it, and `e2e.py`) start the Rust app on the same world from `seed/`, render the same scenes and compare them with the goldens (`compare.mjs`).
 
 - `capture-electron.mjs`: captures the goldens.
 - `scenes/`: the scenes, one definition each (what it shows, the specs it covers, the steps, and the code that drives the app there). `scenes.md` lists them; it's generated from these files.
@@ -17,7 +17,7 @@ macOS, Node 22 or newer, and a checkout of tag `v0.9.4` with its dependencies in
 ```sh
 git worktree add ../nodus-0.9.4 v0.9.4          # once, from this repository
 (cd ../nodus-0.9.4 && corepack pnpm install --frozen-lockfile)
-cd migration/parity && npm ci                   # playwright-core, pngjs, pixelmatch
+cd crates/nodus-ui/parity/harness && npm ci    # playwright-core, pngjs, pixelmatch
 node capture-electron.mjs                       # every scene, light and dark (~15 min)
 node capture-electron.mjs --scene board-populated --theme dark
 node capture-electron.mjs --scene 'capture-*'   # a prefix
@@ -80,13 +80,11 @@ The app never runs the real `claude` or the user's shell. `<work>/bin` is first 
 
 The Rust side produces the same shots and compares them:
 
-1. **Same world.** Write it with the same generator, with the scene's own changes: `import { seed, DEFAULT_WORK } from './migration/parity/seed/index.mjs'`, then `seed(DEFAULT_WORK, { theme, mutate: scene.seed, responses: scene.responses })` with the scene from `scenes/index.mjs`. Start the Rust app with `HOME=<work>/home`, `NODUS_USER_DATA=<work>/userData`, `PATH=<work>/bin:/usr/bin:/bin`, `SHELL=<work>/bin/fakeshell`, `PARITY_RESPONSES=<work>/responses.json`, `TZ=UTC`, `LANG=en_US.UTF-8`; `state.json`'s theme already matches the shot.
+1. **Same world.** Write it with the same generator, with the scene's own changes: `import { seed, DEFAULT_WORK } from './crates/nodus-ui/parity/harness/seed/index.mjs'`, then `seed(DEFAULT_WORK, { theme, mutate: scene.seed, responses: scene.responses })` with the scene from `scenes/index.mjs`. Start the Rust app with `HOME=<work>/home`, `NODUS_USER_DATA=<work>/userData`, `PATH=<work>/bin:/usr/bin:/bin`, `SHELL=<work>/bin/fakeshell`, `PARITY_RESPONSES=<work>/responses.json`, `TZ=UTC`, `LANG=en_US.UTF-8`; `state.json`'s theme already matches the shot.
 2. **Same conditions.** The table above: a 1440×900 content area at scale 2, a parity mode that freezes the UI clock at `NOW` and holds infinite animations at time 0, no caret, content only. The Rust app needs that parity mode (an environment variable such as `NODUS_PARITY_NOW=<ms>`, read only in debug or test builds), since nothing outside the app can freeze its clock or its animations.
 3. **Same steps.** Drive the app through the scene's steps (`scenes.md`), with the same statuses posted to the host: `lib/app.mjs`'s `hook()`, `status()` and `usage()` work against any host that speaks the 0.9.4 protocol, and the stubs a scene installs (`stub()` in `scenes/helpers.mjs`) say what the core must answer.
 4. **Save** each shot as `<out>/<scene>.<theme>.png`: 2880×1800, or for the capture panel its window at scale 2 with a transparent background.
-5. **Diff:** `node migration/parity/diff.mjs migration/parity/golden <out> --out <out>/diffs`. Every scene must come out `same`. Where a few pixels differ only from text rasterisation, look at the `.diff.png` and the two shots side by side before accepting a tolerance; never accept a difference in layout, colour, size or copy.
-
-Before a slice merges, run the diff for every scene it touches, in both themes, and put the summary in the PR.
+5. **Diff:** `node diff.mjs golden <out> --out <out>/diffs`, from this folder. Every scene must come out `same`. Where a few pixels differ only from text rasterisation, look at the `.diff.png` and the two shots side by side before accepting a tolerance; never accept a difference in layout, colour, size or copy.
 
 ## Stability
 

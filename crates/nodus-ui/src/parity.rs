@@ -1,4 +1,4 @@
-//! Parity mode, for the golden screenshots (migration/parity/README.md, "How
+//! Parity mode, for the golden screenshots (parity/harness/README.md, "How
 //! a shot is made"): infinite animations are held at their first keyframe,
 //! and "now" is frozen, so a shot comes out the same every time. Off unless
 //! the automation driver turns it on.

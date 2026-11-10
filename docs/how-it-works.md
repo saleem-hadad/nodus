@@ -304,7 +304,9 @@ third_party/gpui/     our patched copy of GPUI: backdrop blur, transforms, group
 packaging/            the macOS bundle and DMGs, the Windows installer, the checks a release
                       passes, and the smoke test
 build/                the app icons
-migration/            how Nodus moved from Electron (0.9.4) to Rust: specs, parity harness, notes
+docs/specs/           every behavior, one file per domain, with the IDs the code and tests cite;
+                      the decisions the Rust app was built on
+scripts/prepush.sh    checks new commits for secrets and personal paths before a push
 ```
 
 Built with Rust, [GPUI](https://www.gpui.rs) and [gpui-component](https://github.com/longbridge/gpui-component), [alacritty_terminal](https://github.com/alacritty/alacritty), [wry](https://github.com/tauri-apps/wry) (views' pages in WKWebView or WebView2), [tokio](https://tokio.rs) and [hyper](https://hyper.rs).
@@ -319,6 +321,8 @@ cargo test --workspace  # every crate's tests
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all
 ```
+
+Before pushing, `sh scripts/prepush.sh` runs gitleaks on the new commits and refuses added lines with personal paths.
 
 `NODUS_USER_DATA=/some/dir cargo run -p nodus` keeps app state separate from your real board, which is useful for testing. It gets its own session host too.
 

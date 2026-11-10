@@ -2,8 +2,8 @@
 //! draft, its attachments, sent-text history and the clipboard already
 //! offered, CAP-157): per machine, across restarts. They live in state.json
 //! under `localStorage`, each key holding the JSON text `localStorage.setItem`
-//! held, so a page reads and writes them as 0.9.4's did (plan.md, "Decisions
-//! for the user", the `localStorage` row). 0.9.4 ignores the key.
+//! held, so a page reads and writes them as 0.9.4's did (docs/specs/README.md,
+//! "What replaced Chromium"). 0.9.4 ignores the key.
 //!
 //! The first time a page reads one, what 0.9.4 left in Chromium's
 //! `localStorage` for its pages (`file://`) is brought over ([`leveldb`]).

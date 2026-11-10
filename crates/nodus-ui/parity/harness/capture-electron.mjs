@@ -1,14 +1,14 @@
 #!/usr/bin/env node
-// Captures the golden screenshots of Nodus 0.9.4 (migration/plan.md, D8):
+// Captures the golden screenshots of Nodus 0.9.4, which the Rust app matches:
 // every scene in scenes/*.mjs, in light and dark, each from a fresh seeded
 // world and a fresh launch of the Electron app.
 //
-//   node migration/parity/capture-electron.mjs [--scene id[,id…]] [--theme light|dark] [options]
+//   node capture-electron.mjs [--scene id[,id…]] [--theme light|dark] [options]
 //
 // Options:
 //   --scene a,b        only these scenes (a trailing * matches a prefix: board-*)
 //   --theme t          light, dark or both (default both)
-//   --out dir          where the PNGs go (default migration/parity/golden next to this file)
+//   --out dir          where the PNGs go (default golden/ next to this file)
 //   --app dir          the checkout of tag v0.9.4 to run (default: ../nodus-0.9.4 beside this repository;
 //                      the Electron app left this repository at the cutover)
 //   --build-dir dir    where it's built (default <app>/node_modules/.cache/parity)
@@ -35,7 +35,7 @@ function parseArgs(argv) {
   const opts = {
     themes: ['light', 'dark'],
     out: path.join(here, 'golden'),
-    app: path.resolve(here, '..', '..', '..', 'nodus-0.9.4'),
+    app: path.resolve(here, '..', '..', '..', '..', '..', 'nodus-0.9.4'),
     build: true,
     work: DEFAULT_WORK,
     chromiumSandbox: true

@@ -2,7 +2,7 @@
 """Renders spec 05's parity scenes (actions, git, voice) with the Rust app.
 
 usage: scenes05.py [scene-prefix ...] [--theme light|dark]
-                   [--harness <migration/parity>] [--out <dir>]
+                   [--harness <dir, default harness/>] [--out <dir>]
                    [--world <dir>] [--bin <nodus binary>]
 
 As scenes.py does for the shell: for each scene and theme it seeds the parity
@@ -137,8 +137,8 @@ def run(scene, theme, opts):
 def main():
     args = sys.argv[1:]
     opts = {
-        "harness": os.path.join(REPO, "migration", "parity"),
-        "out": os.path.join(REPO, "migration", "parity", "golden"),
+        "harness": os.path.join(HERE, "harness"),
+        "out": os.path.join(HERE, "harness", "golden"),
         "world": os.path.join(tempfile.gettempdir(), "nodus-ui-parity05"),
         "bin": os.path.join(REPO, "target", "debug", "nodus"),
     }

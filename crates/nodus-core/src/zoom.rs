@@ -2,8 +2,8 @@
 //! and Zoom Out set a zoom level, 0, +0.5 or −0.5 from the current one, and
 //! the whole UI is drawn 1.2^level times larger. 0.9.4's Chromium kept the
 //! level in `Preferences`; it's read from there once, the first time it's
-//! asked for, and kept in state.json under `zoomLevel` from then on (plan.md,
-//! "Decisions for the user", page zoom). 0.9.4 ignores the key.
+//! asked for, and kept in state.json under `zoomLevel` from then on (docs/specs/README.md,
+//! "What replaced Chromium"). 0.9.4 ignores the key.
 //!
 //! The zoom roles act on the page that has the keyboard. The capture panel's
 //! page is the app's own with `#capture` after it, and Chromium keys a

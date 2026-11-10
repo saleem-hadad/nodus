@@ -1,6 +1,6 @@
 //! JavaScript's own rules for strings and numbers, which the TypeScript relies
 //! on without saying so. Ports use these instead of Rust's defaults wherever
-//! the TypeScript measures, cuts or rounds (migration/plan.md, "JavaScript
+//! the TypeScript measures, cuts or rounds (docs/specs/README.md, "JavaScript
 //! semantics to keep").
 
 /// `s.length`: the number of UTF-16 code units.

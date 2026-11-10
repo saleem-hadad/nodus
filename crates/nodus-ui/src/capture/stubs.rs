@@ -1,5 +1,5 @@
 //! What the test driver stands in for, as the parity harness stubs the
-//! 0.9.4 panel's IPC handlers (`stub()` in `migration/parity/scenes/`):
+//! 0.9.4 panel's IPC handlers (`stub()` in `parity/harness/scenes/`):
 //! the screenshot, the file dialog, the clipboard and making the capture,
 //! and Accessibility. Only the driver sets these; the app never does.
 

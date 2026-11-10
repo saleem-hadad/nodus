@@ -3,7 +3,7 @@
 day on the parity harness's seeded world, with the world's stand-in claude
 (never the real one).
 
-usage: e2e.py [--harness <migration/parity>] [--world <dir>] [--bin <nodus binary>]
+usage: e2e.py [--harness <dir, default harness/>] [--world <dir>] [--bin <nodus binary>]
 
 It seeds the world (its own HOME and NODUS_USER_DATA), starts `nodus` with
 NODUS_AUTOMATION and, through the test driver: adds a project, starts a
@@ -521,7 +521,7 @@ def prepare(world):
 def main():
     args = sys.argv[1:]
     opts = {
-        "harness": os.path.join(REPO, "migration", "parity"),
+        "harness": os.path.join(HERE, "harness"),
         "world": os.path.join(tempfile.gettempdir(), "nodus-e2e"),
         "bin": os.path.join(REPO, "target", "debug", "nodus"),
     }

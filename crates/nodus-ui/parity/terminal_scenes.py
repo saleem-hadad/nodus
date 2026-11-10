@@ -2,7 +2,7 @@
 """Renders the terminal's parity scenes (spec 12) with the Rust app, beside the goldens.
 
 usage: terminal_scenes.py [scene-prefix ...] [--theme light|dark]
-                          [--harness <migration/parity>] [--golden <dir>] [--world <dir>] [--bin <nodus>]
+                          [--harness <dir, default harness/>] [--golden <dir>] [--world <dir>] [--bin <nodus>]
 
 As scenes.py, plus the steps the harness's `storefront()` takes: the seeded
 sessions started through the core (their stand-ins, never the real claude),
@@ -192,8 +192,8 @@ def run(scene, theme, opts, again=True):
 def main():
     args = sys.argv[1:]
     opts = {
-        "harness": os.path.join(REPO, "migration", "parity"),
-        "golden": os.path.join(REPO, "migration", "parity", "golden"),
+        "harness": os.path.join(HERE, "harness"),
+        "golden": os.path.join(HERE, "harness", "golden"),
         "world": os.path.join(tempfile.gettempdir(), "nodus-term-parity"),
         "bin": os.path.join(REPO, "target", "debug", "nodus"),
     }

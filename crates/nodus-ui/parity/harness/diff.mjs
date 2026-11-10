@@ -2,7 +2,7 @@
 // Compares screenshots with the goldens: two PNG files, or two folders of
 // <scene>.<theme>.png (each candidate against the golden of the same name).
 //
-//   node migration/parity/diff.mjs <golden> <candidate> [--threshold 0.1] [--max-ratio 0] [--out <dir>]
+//   node diff.mjs <golden> <candidate> [--threshold 0.1] [--max-ratio 0] [--out <dir>]
 //
 // For each pair it prints how many pixels differ (pixelmatch: a perceptual
 // YIQ colour distance above --threshold, anti-aliasing ignored), the share of

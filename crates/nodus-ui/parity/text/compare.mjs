@@ -3,7 +3,7 @@
 // page.json): differing pixels (pixelmatch), the ink ratio and the shift of
 // the ink's centre in device pixels. With a rectangle (logical px), writes
 // <dir>/side.png: Chromium | GPUI | diff. Needs pngjs and pixelmatch, as
-// ../compare.mjs does (NODE_PATH=<migration/parity>/node_modules).
+// ../compare.mjs does (NODE_PATH=<parity>/harness/node_modules, absolute).
 import fs from 'node:fs'
 import path from 'node:path'
 import { createRequire } from 'node:module'

@@ -1,7 +1,10 @@
 #!/bin/sh
 # Checks the commits about to go to origin/main for secrets and personal data,
-# and fails if it finds any (migration/plan.md, ground rule 8). Run it before
-# every push: `sh migration/prepush.sh && git push origin main`.
+# and fails if it finds any: gitleaks for keys and tokens, and added lines
+# with personal paths or the app's pre-rename name. (Fixtures stay synthetic,
+# never from a real state.json, board or transcript; no script can tell.)
+# Run it before every push:
+# `sh scripts/prepush.sh && git push origin main`.
 set -u
 range="${1:-origin/main..HEAD}"
 status=0

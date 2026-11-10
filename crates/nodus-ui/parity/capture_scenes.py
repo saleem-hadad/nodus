@@ -2,10 +2,10 @@
 """Renders the floating capture panel's parity scenes with the Rust app.
 
 usage: capture_scenes.py [scene-prefix ...] [--theme light|dark]
-                         [--harness <migration/parity>] [--golden <dir>]
+                         [--harness <dir, default harness/>] [--golden <dir>]
                          [--world <dir>] [--bin <nodus binary>] [--node <node 22+>]
 
-The same scenes as migration/parity/scenes/capture.mjs, driven through the
+The same scenes as harness/scenes/capture.mjs, driven through the
 test driver (crates/nodus-ui/src/automation.rs, capture/automation.rs): the
 panel opens through File › Capture…'s path, reads nothing from the screen or
 the clipboard (the driver's stand-ins answer instead, as the harness's stubs
@@ -206,8 +206,8 @@ def run(scene, theme, opts):
 def main():
     args = sys.argv[1:]
     opts = {
-        "harness": os.path.join(REPO, "migration", "parity"),
-        "golden": os.path.join(REPO, "migration", "parity", "golden"),
+        "harness": os.path.join(HERE, "harness"),
+        "golden": os.path.join(HERE, "harness", "golden"),
         "world": os.path.join(tempfile.gettempdir(), "nodus-capture-parity"),
         "bin": os.path.join(REPO, "target", "debug", "nodus"),
         "node": "node",

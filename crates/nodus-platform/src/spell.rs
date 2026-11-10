@@ -1,8 +1,8 @@
 //! The OS spellchecker (spec 01 PLAT-137): Chromium underlined misspelled
 //! words in the text fields that didn't opt out, with the macOS system
 //! spellchecker (Hunspell on Windows). The port asks the OS's own: AppKit's
-//! `NSSpellChecker` on a Mac, `ISpellChecker` on Windows (plan.md,
-//! "Decisions for the user", spellcheck).
+//! `NSSpellChecker` on a Mac, `ISpellChecker` on Windows
+//! (docs/specs/README.md, "What replaced Chromium").
 
 use std::ops::Range;
 

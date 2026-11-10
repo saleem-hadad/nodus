@@ -6,7 +6,7 @@
 # Started by hand (Actions › Release › Run workflow), never by a tag. Without
 # `publish` it's a rehearsal: everything but the release, with the packages
 # left as the run's artifacts. How to cut a release: docs/how-it-works.md
-# (Releasing) and migration/tracks/packaging.md.
+# (Releasing) and packaging/README.md.
 #
 # Secrets, by name only: CSC_LINK and CSC_KEY_PASSWORD (the Developer ID
 # certificate 0.9.4 is signed with, decision D10) reach only the keychain

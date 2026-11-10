@@ -2,7 +2,7 @@
 """Renders the shell's parity scenes with the Rust app, beside the goldens.
 
 usage: scenes.py [scene-prefix ...] [--theme light|dark]
-                 [--harness <migration/parity of the parity-harness track>]
+                 [--harness <dir, default harness/>]
                  [--golden <dir>] [--world <dir>] [--bin <nodus binary>]
 
 For each scene and theme it seeds the parity harness's synthetic world,
@@ -220,8 +220,8 @@ def run(scene, theme, opts):
 def main():
     args = sys.argv[1:]
     opts = {
-        "harness": os.path.join(REPO, "migration", "parity"),
-        "golden": os.path.join(REPO, "migration", "parity", "golden"),
+        "harness": os.path.join(HERE, "harness"),
+        "golden": os.path.join(HERE, "harness", "golden"),
         "world": os.path.join(tempfile.gettempdir(), "nodus-ui-parity"),
         "bin": os.path.join(REPO, "target", "debug", "nodus"),
     }

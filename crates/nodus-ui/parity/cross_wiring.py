@@ -2,7 +2,7 @@
 """Checks the behaviors that wire the board, search and the terminal's windows
 together (BOARD-037, MODAL-028…MODAL-031) end to end, with the Rust app.
 
-usage: cross_wiring.py [check-prefix ...] [--harness <migration/parity>]
+usage: cross_wiring.py [check-prefix ...] [--harness <dir, default harness/>]
                        [--world <dir>] [--bin <nodus binary>]
 
 For each check it seeds the parity harness's synthetic world (its own HOME and
@@ -269,7 +269,7 @@ def run(name, opts):
 def main():
     args = sys.argv[1:]
     opts = {
-        "harness": os.path.join(REPO, "migration", "parity"),
+        "harness": os.path.join(HERE, "harness"),
         "world": os.path.join(tempfile.gettempdir(), "nodus-cross-wiring"),
         "bin": os.path.join(REPO, "target", "debug", "nodus"),
     }

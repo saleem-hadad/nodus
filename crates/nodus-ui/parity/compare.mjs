@@ -3,7 +3,7 @@
 // pixelmatch diff, side by side, cropped to the logical rectangle) and prints
 // how much differs and where. Without: one line per *.rust.png in the folder.
 // Needs the parity harness's node_modules (pngjs, pixelmatch): run it with
-// NODE_PATH=<migration/parity>/node_modules, or from there.
+// NODE_PATH=<this folder>/harness/node_modules (absolute), or from there.
 import fs from 'node:fs'
 import path from 'node:path'
 import { createRequire } from 'node:module'

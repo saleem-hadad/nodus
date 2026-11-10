@@ -1,6 +1,6 @@
 # Packages the native app on every pull request and push to main that touches
-# it, unsigned, and checks the packages as a release would (packaging/,
-# migration/tracks/packaging.md): macOS bundles and DMGs for arm64 and x64,
+# it, unsigned, and checks the packages as a release would
+# (packaging/README.md): macOS bundles and DMGs for arm64 and x64,
 # replayed through 0.9.4's updater checks and driven through the test driver;
 # Windows installers for x64 and arm64, installed fresh, uninstalled, and
 # taken over from a real 0.9.4 install the way its updater does it.

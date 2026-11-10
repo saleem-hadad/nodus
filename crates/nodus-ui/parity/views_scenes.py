@@ -2,7 +2,7 @@
 """Renders the views' parity scenes (spec 04) with the Rust app, beside the goldens.
 
 usage: views_scenes.py [scene-prefix ...] [--theme light|dark]
-                       [--harness <migration/parity>] [--golden <dir>] [--world <dir>] [--bin <nodus>]
+                       [--harness <dir, default harness/>] [--golden <dir>] [--world <dir>] [--bin <nodus>]
 
 As scenes.py: seeds the harness's synthetic world, starts `nodus` on it with
 NODUS_AUTOMATION, opens docs-site (three views: a live page, one being built,
@@ -295,8 +295,8 @@ def run(scene, theme, opts):
 def main():
     args = sys.argv[1:]
     opts = {
-        "harness": os.path.join(REPO, "migration", "parity"),
-        "golden": os.path.join(REPO, "migration", "parity", "golden"),
+        "harness": os.path.join(HERE, "harness"),
+        "golden": os.path.join(HERE, "harness", "golden"),
         "world": os.path.join(tempfile.gettempdir(), "nodus-views-parity"),
         "bin": os.path.join(REPO, "target", "debug", "nodus"),
     }

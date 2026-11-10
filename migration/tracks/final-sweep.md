@@ -119,7 +119,7 @@ packaging and the handoff gates in CI).
 
 ## Findings left
 
-- **The merge dialog's Context wraps a word early.** With 0.9.4's handoff text, its first line ends at “handoff”
+- ~~**The merge dialog's Context wraps a word early.**~~ Fixed after the sweep (rust/merge-wrap): 0.9.4 drew all of `--font-mono` in Menlo (Chromium can't find the hidden SF Mono by name), so `fonts::mono()` is Menlo on macOS app-wide, and multi-line fields stack at their exact line height (GPUI PATCHES 18). merge-ready dark 0.62 → 0.04 %. With 0.9.4's handoff text, its first line ends at “handoff”
   where 0.9.4's ended at “summary”: the text starts at the same x, so the field's wrap width is a few px narrower than
   0.9.4's `padding: 12px 14px` textarea (gpui-component's `RIGHT_MARGIN` and padding against CSS's soft wrap, which
   lets a trailing space hang). Small; in merge-ready and merge-failed. File: `board/overlays/merge/view.rs` (the

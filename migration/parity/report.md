@@ -59,7 +59,7 @@ The final sweep (`migration/tracks/final-sweep.md`) rendered every golden scene,
 | `board-toast` | 0.38 | 0.36 | 28,21 1397×864; 1260,788:7%, 180,450:6%, 360,450:6% |  |
 | `board-zoomed-in` | 0.55 | 0.66 | 13,21 1428×871; 1260,788:13%, 180,788:7%, 360,788:7% |  |
 | `board-zoomed-out` | 0.43 | 0.42 | 28,21 1397×864; 540,338:17%, 540,450:10%, 720,225:9% |  |
-| `capture-attachments` | 0.16 | 0.18 | 83,179 486×195; 82,284:57%, 163,284:29%, 326,170:3% |  |
+| `capture-attachments` | 0.01 | 0.03 | 83,179 486×195; 82,284:57%, 163,284:29%, 326,170:3% |  |
 | `capture-empty` | 0.01 | 0.01 | 150,195 419×18; 326,183:89%, 82,183:10%, 489,183:2% |  |
 | `capture-guess` | 0.14 | 0.01 | 138,54 445×159; 489,37:45%, 571,37:21%, 408,37:19% |  |
 | `capture-guessing` | 0.01 | 0.01 | 150,195 419×18; 326,183:89%, 82,183:10%, 489,183:2% |  |
@@ -77,9 +77,9 @@ The final sweep (`migration/tracks/final-sweep.md`) rendered every golden scene,
 | `ink-pen` | 0.39 | 0.39 | 28,21 1397×864; 360,338:12%, 1260,788:6%, 180,450:6% |  |
 | `ink-selected` | 0.40 | 0.40 | 28,21 1397×864; 360,338:11%, 1260,788:6%, 180,450:6% |  |
 | `ink-text` | 0.42 | 0.41 | 28,21 1397×864; 360,338:11%, 1260,788:6%, 180,450:6% |  |
-| `merge-failed` | 3.24 | 0.56 | 19,16 1391×855; 1260,788:14%, 1260,450:13%, 1080,450:12% | As merge-ready (dark 0.56 %). |
+| `merge-failed` | 2.74 | 0.06 | 19,16 1391×855; 1260,788:14%, 1260,450:13%, 1080,450:12% | As merge-ready (dark 0.06 %). |
 | `merge-progress` | 0.04 | 0.04 | 391,27 871×561; 360,338:66%, 900,563:20%, 720,563:13% |  |
-| `merge-ready` | 3.30 | 0.62 | 19,16 1391×855; 1260,788:14%, 1260,450:12%, 1080,450:12% | Light only: the light golden's board behind the dialog is scrolled left as in bar-several-selected (dark 0.62 %). In both themes, a real one: Context's first line wraps a word early (track file, Findings left). |
+| `merge-ready` | 2.72 | 0.04 | 19,16 1391×855; 1260,788:14%, 1260,450:12%, 1080,450:12% | Light only: the light golden's board behind the dialog is scrolled left as in bar-several-selected (dark 0.04 %). The early wrap is fixed: 0.9.4 drew --font-mono in Menlo, and multi-line fields now stack at the exact line height (8158f17, 8de154c). |
 | `projects-context-menu` | 0.10 | 0.13 | 57,22 1356×839; 0,113:26%, 360,450:11%, 180,450:10% |  |
 | `projects-context-menu-focus` | 0.10 | 0.14 | 51,22 1362×839; 360,113:19%, 0,338:10%, 360,450:10% |  |
 | `projects-drop` | 0.25 | 0.24 | 12,22 1416×866; 1260,788:8%, 0,788:7%, 360,788:6% |  |
@@ -98,7 +98,7 @@ The final sweep (`migration/tracks/final-sweep.md`) rendered every golden scene,
 | `rail-pinned` | 0.39 | 0.39 | 3,21 1422×864; 180,450:8%, 180,225:7%, 1260,788:6% |  |
 | `search-empty` | 0.20 | 0.19 | 407,27 855×814; 900,225:25%, 900,338:23%, 900,113:14% |  |
 | `search-none` | 0.12 | 0.05 | 391,27 871×337; 360,338:52%, 540,338:20%, 540,225:9% |  |
-| `search-results` | 0.15 | 0.14 | 407,27 855×352; 540,225:34%, 720,225:25%, 360,225:18% |  |
+| `search-results` | 0.02 | 0.02 | 407,27 855×352; 540,225:34%, 720,225:25%, 360,225:18% |  |
 | `settings` | 0.14 | 0.14 | 523,52 415×818; 540,563:18%, 540,675:10%, 540,450:10% |  |
 | `settings-bottom` | 0.21 | 0.20 | 523,52 415×821; 540,563:25%, 540,225:15%, 720,563:13% |  |
 | `settings-ready` | 1.04 | 1.21 | 522,81 415×792; 720,450:12%, 540,450:9%, 540,338:9% | Harness: 0.9.4's scene stubbed the xAI key as saved (“Replace the saved xAI API key”, “Saved in your Keychain. Remove”); the driver has no stub for the key's source, so that row's copy differs and the body scrolls 18 px less. The update rows and the rest match. |

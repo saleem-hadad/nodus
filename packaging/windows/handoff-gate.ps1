@@ -44,6 +44,12 @@ if ($p.ExitCode -ne 0) { Fail "The old installer exited with $($p.ExitCode)" }
 if (-not (Test-Path (Join-Path $dir 'resources\app.asar'))) { Fail "No Electron install in $dir" }
 $oldVersion = (Get-ItemProperty $uninstallKey).DisplayVersion
 Pass "Electron Nodus $oldVersion in $dir"
+# 0.9.4's arm64 installer leaves out every executable on Windows on Arm (its
+# Nsis7z can't decode 7-Zip's ARM64 filter), so there was never a working
+# arm64 0.9.4 there: its shortcuts point at a Nodus.exe that isn't there, and
+# the update may make them again. Everything else is checked as usual.
+$oldHadExe = Test-Path (Join-Path $dir 'Nodus.exe')
+if (-not $oldHadExe) { Write-Host "  · the old install has no Nodus.exe (0.9.4's arm64 installer on Arm), so its shortcuts may be made again" }
 foreach ($link in $startLink, $desktopLink) {
   if (-not (Test-Path $link)) { Fail "The old installer made no $link" }
 }
@@ -120,7 +126,8 @@ foreach ($link in $startLink, $desktopLink) {
   if ($shell.CreateShortcut($link).TargetPath -ne $exe) { Fail "$link doesn't open $exe" }
 }
 if ((Get-Item $startLink).LastWriteTimeUtc -ne $linkTimes.start -or (Get-Item $desktopLink).LastWriteTimeUtc -ne $linkTimes.desktop) {
-  Fail "The shortcuts were made again instead of kept"
+  if ($oldHadExe) { Fail "The shortcuts were made again instead of kept" }
+  Write-Host "  · the shortcuts were made again (the old ones pointed at a missing Nodus.exe)"
 }
 $folder = (New-Object -ComObject Shell.Application).NameSpace((Split-Path $startLink))
 $aumid = $folder.ParseName('Nodus.lnk').ExtendedProperty('System.AppUserModel.ID')

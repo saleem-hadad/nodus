@@ -786,8 +786,8 @@ No macOS test exists in TypeScript. Recommended Rust additions, marked as such s
 - [x] REL-005 Certificate from `CSC_LINK`/`CSC_KEY_PASSWORD` into a throwaway keychain (script verbatim)
 - [x] REL-006 Only the packaging step sees `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`
 - [x] REL-007 `Nodus-arm64.dmg` and `Nodus-x64.dmg`, thin per arch, minimum macOS 13.0
-- [ ] REL-008 Developer ID signature, hardened runtime, entitlements on all code, timestamp
-- [ ] REL-009 App notarized and stapled; DMG unsigned and unstapled
+- [x] REL-008 Developer ID signature, hardened runtime, entitlements on all code, timestamp
+- [x] REL-009 App notarized and stapled; DMG unsigned and unstapled
 - [x] REL-010 DMG UDZO zlib level 9, HFS+, volume `Nodus <v>-<arch>`, no SLA, unencrypted
 - [x] REL-011 DMG contents and Finder layout (540×380 window at 400,530; icons 80/12; app 130,220; Applications 410,220)
 - [x] REL-012 Windows release job on windows-latest builds both installers, no tests
@@ -817,9 +817,9 @@ No macOS test exists in TypeScript. Recommended Rust additions, marked as such s
 - [x] REL-036 Actions pinned by SHA, `persist-credentials: false`
 - [x] REL-037 `postinstall.cjs` is Electron-only and is removed at cutover
 - [x] REL-038 README/site links `releases/latest/download/<asset>` keep working
-- [ ] REL-039 First Rust release > 0.9.4, tag `vX.Y.Z` with no suffix
+- [x] REL-039 First Rust release > 0.9.4, tag `vX.Y.Z` with no suffix
 - [ ] REL-040 Contract holds for every Mac 0.6.0–0.9.4 and Windows 0.9.0–0.9.4 updater
-- [ ] REL-041 Rust .app passes deep-strict verify, id, version and same TeamIdentifier
+- [x] REL-041 Rust .app passes deep-strict verify, id, version and same TeamIdentifier
 - [x] REL-042 Rust app starts via `open -n` and honors `open --env NODUS_USER_DATA`
 - [x] REL-043 Rust first launch cleans up the 0.9.4 `updates/` leftovers
 - [x] REL-044 Rust installer run as `--updated /S --force-run` replaces the Electron install in place and starts the app

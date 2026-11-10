@@ -134,12 +134,12 @@ One file per domain in `migration/features/`. Each lists every behavior with an 
 
 | File | Covers (Electron sources) | Spec | Ported |
 | --- | --- | --- | --- |
-| 01-platform-shell.md | app lifecycle, menu, env, store, settings, preload/IPC plumbing | ✅ 141 | 137/141 |
+| 01-platform-shell.md | app lifecycle, menu, env, store, settings, preload/IPC plumbing | ✅ 141 | 138/141 |
 | 02-session-host-status.md | host, host protocol, pty client, hooks status machine, agents, usage, notifications | ✅ 225 | 225/225 |
 | 03-sessions-transcripts.md | session create/open/send/kill, claude args, discovery, board merge, search, summarize, naming, geometry | ✅ 205 | 205/205 |
 | 04-board-tools-views.md | board tools MCP, notes placement, views (main + renderer), view page, ink storage | ✅ 222 | 222/222 |
 | 05-actions-voice-git.md | actions rail, voice prompts, git status/diff/log and their UI | ✅ 183 | 183/183 |
-| 06-updater-release.md | updater, packaging, signing, CI, release, smoke test, 0.9.4 → Rust handoff | ✅ 132 | 109/132 |
+| 06-updater-release.md | updater, packaging, signing, CI, release, smoke test, 0.9.4 → Rust handoff | ✅ 132 | 126/132 |
 | 07-capture.md | floating capture: panel window, double tap, screen context, guess, submit | ✅ 177 | 176/177 |
 | 08-projects-shell-ui.md | App, title bar, settings, projects grid, project rail, tokens and global styles, menus, modals | ✅ 305 | 304/305 |
 | 09-board-canvas.md | BoardView: pan/zoom, selection, drag, shortcuts, context menus, sections, archive, layout, edges | ✅ 177 | 177/177 |
@@ -164,8 +164,8 @@ Tracks after P1 run in parallel where the dependency column allows.
 | P8 | Overlays: prompt bar, ⌘K search, merge dialog, ink, selection bar, agent deck | P6 | ✅ merged |
 | P9 | Views (wry), board tools, actions, voice, git UI | P6 | ✅ merged (Windows WebView2 unverified) |
 | P10 | Capture panel, notifications, Dock badge, updater | P6 | ✅ merged (notifications and the Dock badge need the packaged app to see) |
-| P11 | Packaging: .app and DMGs (same bundle id, Info.plist keys, entitlements, signing, notarizing), Windows NSIS (same flags), release workflow; 0.9.4 → Rust update test | P10 | 🟡 merged; waits on Windows CI, the real certificate, and the UI tracks |
-| P12 | Parity audit (every checklist item, screenshots light and dark), then cutover: delete Electron, update README and docs, release | P11 | 🟡 audits merged; cutover merged; polish tracks, final sweep, CI on Windows and the 1.0.0 release left |
+| P11 | Packaging: .app and DMGs (same bundle id, Info.plist keys, entitlements, signing, notarizing), Windows NSIS (same flags), release workflow; 0.9.4 → Rust update test | P10 | ✅ released: v1.0.0 signed, notarized, every handoff gate green |
+| P12 | Parity audit (every checklist item, screenshots light and dark), then cutover: delete Electron, update README and docs, release | P11 | ✅ audits, cutover and **v1.0.0 released (2026-11-10)**; open items below |
 
 ## Tracks
 
@@ -288,9 +288,21 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 **U1 · Sessions running in a 0.9.4 host at the update (specs 02, 06).** Default (a) needs `PROTOCOL` in `nodus-host-proto` bumped to 2 in the first Rust release (it's 1, like 0.9.4, today); that's on the cutover checklist (P12). A running Node host starts every new session through node-pty's `spawn-helper` inside the installed bundle, and may load other files from `app.asar`. Once the Rust app replaces the bundle, new sessions on that host fail with `posix_spawnp failed.` (On Windows, 0.9.4 already stops sessions before an update.) Options: (a) the first Rust release counts as a protocol change, so the existing, documented flow asks to stop those sessions and they resume from their cards; (b) ship a compatible `spawn-helper` at the old path so the Rust app adopts the Node host until it exits. **Default: (a)**, since it's behavior users already know and it ships no Node leftovers.
 
+## Where it stands (2026-11-10)
+
+**Nodus 1.0.0, the native Rust app, is released** (https://github.com/saleem-hadad/nodus/releases/tag/v1.0.0), from e5b9bdd: signed and notarized on macOS, and through every handoff gate (0.9.4 → 1.0.0 on macOS, Windows x64 and Windows on Arm). `main` is Rust-only. 2,255 of 2,266 behaviors are ticked; the 11 left:
+
+- Need an interactive Windows desktop to see: PLAT-007/008 (single instance), UI-099 (the ☰ popup menu), CAP-056 (capture's whole-screen shot), REL-034 (Ctrl+W in the Windows smoke test). Implemented; CI only runs the window, installers and smoke.
+- Need a real update on a Mac that has granted permissions: REL-046 (TCC grants and the Keychain item survive under the same designated requirement). REL-040 (every 0.6.0–0.9.4 updater accepts it) is shown for 0.9.4 by the gates and for older versions by reading their updater code.
+- Deliberate differences the user approved: REL-002/013/014 (a hand-started release that publishes from a draft once its gates pass, instead of on `v*` tags) and PLAT-035 (Windows logoff saves the last changes).
+- The **Quirks** table above lists 0.9.4 behaviors kept as they were; the user may rule any of them bugs and fix them now that the migration is done.
+
 ## Status log
 
 Newest first. One line per event: date, what, branch or commit.
+
+- 2026-11-10: **v1.0.0 published** (release run 42852630119) with Nodus-arm64.dmg, Nodus-x64.dmg, Nodus-Setup-x64.exe and Nodus-Setup-arm64.exe; highlights above GitHub's generated notes; `releases/latest` is v1.0.0. Third rehearsal (42846488171) fully green before it.
+- 2026-11-10: The arm64→arm64 handoff gate accepts recreated shortcuts only when 0.9.4's own install had no Nodus.exe (e5b9bdd).
 
 - 2026-11-10: Windows-on-Arm installer cause found on a `windows-11-arm` probe (not Defender): Nsis7z can't decode 7-Zip's ARM64 filter, so Arm64 installs skipped every executable, 0.9.4's too. Fixed in d3afc83; second rehearsal 42842054716 started.
 - 2026-11-10: Release rehearsal (42774518413, publish off): macOS signed, notarized and passed 0.9.4's updater checks on both DMGs; Windows x64 gates passed; the Windows-on-Arm gates failed (arm64 installer exits 0 with nothing installed). Nothing published; win-arm64-installer started.

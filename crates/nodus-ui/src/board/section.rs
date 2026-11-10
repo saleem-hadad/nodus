@@ -158,7 +158,9 @@ impl BoardCanvas {
                 .w(fu((chars as f32 * 10.3 + 12.) * s))
                 // BOARD-093: the field keeps its keys and presses; Escape cancels.
                 .on_key_down(cx.listener(|this, e: &gpui::KeyDownEvent, window, cx| {
-                    cx.stop_propagation();
+                    // Marked, not stopped, so the field still types the key
+                    // (cards/note.rs).
+                    window.prevent_default();
                     if e.keystroke.key == "escape" {
                         this.cancel_section_rename(window, cx);
                     }

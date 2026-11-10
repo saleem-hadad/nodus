@@ -527,8 +527,10 @@ fn editor(env: &Rc<BoardEnv>, note: &BoardNote, window: &mut Window, cx: &mut Ap
                 }
             }
         })
-        // NOTEUI-016: every key, press and wheel stays in the field.
-        .on_key_down(|_, _, cx| cx.stop_propagation())
+        // NOTEUI-016: every key, press and wheel stays in the field. A key
+        // is marked, not stopped: a stopped key counts as handled, and the
+        // platform then never types its character into the field.
+        .on_key_down(|_, window, _| window.prevent_default())
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .on_click(|_, _, cx| cx.stop_propagation())
         .on_scroll(|_, _, cx| cx.stop_propagation())

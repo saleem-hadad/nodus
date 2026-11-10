@@ -519,7 +519,9 @@ fn search(env: &Rc<BoardEnv>, count: usize, visible: bool, window: &mut Window, 
                     SearchKey::Nothing => {}
                 }
             })
-            .on_key_down(|_, _, cx| cx.stop_propagation());
+            // Every key stays here: marked, not stopped, so the field still
+            // types it (note.rs).
+            .on_key_down(|_, window, _| window.prevent_default());
         if !stack.query.is_empty() {
             // ARCH-027
             let env_clear = env.clone();

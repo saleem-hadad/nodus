@@ -140,6 +140,11 @@ impl Shell {
     }
 
     fn on_key_down(&mut self, e: &KeyDownEvent, window: &mut Window, cx: &mut Context<'_, Self>) {
+        // A field that keeps its keys from the board marks them (a stopped
+        // key would never be typed).
+        if window.default_prevented() {
+            return;
+        }
         let platform = Platform::CURRENT;
         let m = &e.keystroke.modifiers;
         // UI-042: off a Mac, the window takes Ctrl+N, Ctrl+T and Ctrl+W

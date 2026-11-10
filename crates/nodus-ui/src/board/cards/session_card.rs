@@ -877,7 +877,8 @@ fn title_editor(env: &Rc<BoardEnv>, card: &SessionCard, window: &mut Window, cx:
                 window.blur(cx);
             }
         })
-        .on_key_down(|_, _, cx| cx.stop_propagation())
+        // Marked, not stopped, so the field still types the key (note.rs).
+        .on_key_down(|_, window, _| window.prevent_default())
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .on_click(|_, _, cx| cx.stop_propagation())
         .child(super::field_line(

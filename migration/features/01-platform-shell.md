@@ -929,7 +929,7 @@ Risks and unknowns:
 - [x] PLAT-015 No window bounds persistence
 - [x] PLAT-016 Hidden until first frame
 - [x] PLAT-017 macOS hiddenInset, traffic lights (18,18)
-- [ ] PLAT-018 Windows caption overlay h52 + colors
+- [x] PLAT-018 Windows caption overlay h52 + colors
 - [x] PLAT-019 Window background `#1e1e20` / `#f5f5f4`
 - [x] PLAT-020 No vibrancy/transparency
 - [x] PLAT-021 Live theme change updates background/overlay

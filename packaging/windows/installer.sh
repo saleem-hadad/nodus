@@ -149,10 +149,17 @@ fi
 package_name="nodus-$version-$arch.nsis.7z"
 package="$root/dist/$package_name"
 rm -f "$package"
+# 7-Zip packs an Arm64 program with its ARM64 branch filter, which the
+# installer's Nsis7z (nsis-resources 3.4.1, an older 7-Zip) can't decode: it
+# skips such files and still succeeds, so an Arm64 install had no Nodus.exe.
+# 0.9.4's arm64 installer lost its executables the same way. x86-64 programs
+# keep 7-Zip's x86 filter, which Nsis7z reads, as 0.9.4's x64 installer did.
+filters=()
+if [ "$arch" = arm64 ]; then filters=(-mf=off); fi
 if [ "$compile_only" = 1 ] && [ -z "$seven" ]; then
   printf 'stand-in archive' >"$package"
 else
-  (cd "$app" && "$seven" a -bd -mx=9 -mtc=off -mtm=off -mta=off "$(native "$package")" . \
+  (cd "$app" && "$seven" a -bd -mx=9 -mtc=off -mtm=off -mta=off ${filters[@]+"${filters[@]}"} "$(native "$package")" . \
     '-xr!*.avi' '-xr!*.mov' '-xr!*.m4v' '-xr!*.mp4' '-xr!*.m4p' '-xr!*.qt' '-xr!*.mkv' '-xr!*.webm' '-xr!*.vmdk' >/dev/null)
 fi
 unpacked="$(find "$app" -type f -print0 | xargs -0 cat | wc -c | tr -d ' ')"

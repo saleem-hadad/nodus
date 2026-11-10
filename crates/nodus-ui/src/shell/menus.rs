@@ -277,9 +277,69 @@ pub fn register_actions(nodus: &Nodus, cx: &mut App) {
     cx.on_action(|_: &PasteAndMatchStyle, cx| {
         cx.dispatch_action(&gpui::component::input::Paste);
     });
+    // Edit › Delete is Chromium's `delete` role: it removes the selection, and
+    // with only a caret it does nothing (Blink's menu Delete needs a range).
+    track_text_fields(cx);
     cx.on_action(|_: &DeleteSelection, cx| {
-        cx.dispatch_action(&gpui::component::input::Delete);
+        // The window in front; the main one when none is (the test driver's).
+        let Some(window) = cx
+            .active_window()
+            .or_else(|| crate::shell::window::main_window(cx).map(Into::into))
+        else {
+            return;
+        };
+        // Outside the update that dispatched this (the window is in use).
+        cx.defer(move |cx| {
+            let _ = window.update(cx, |_, window, cx| {
+                if focused_field_has_selection(window, cx) {
+                    window.dispatch_action(Box::new(gpui::component::input::Delete), cx);
+                }
+            });
+        });
     });
+}
+
+/// Every text field there is, so Edit › Delete can ask the focused one
+/// whether anything is selected.
+#[derive(Default)]
+struct TextFields {
+    inputs: Vec<gpui::WeakEntity<gpui::component::input::InputState>>,
+    textareas: Vec<gpui::WeakEntity<gpui::component::input::TextareaState>>,
+}
+
+impl gpui::Global for TextFields {}
+
+fn track_text_fields(cx: &mut App) {
+    cx.observe_new::<gpui::component::input::InputState>(|_, _, cx| {
+        let field = cx.entity().downgrade();
+        let fields = cx.default_global::<TextFields>();
+        fields.inputs.retain(|f| f.upgrade().is_some());
+        fields.inputs.push(field);
+    })
+    .detach();
+    cx.observe_new::<gpui::component::input::TextareaState>(|_, _, cx| {
+        let field = cx.entity().downgrade();
+        let fields = cx.default_global::<TextFields>();
+        fields.textareas.retain(|f| f.upgrade().is_some());
+        fields.textareas.push(field);
+    })
+    .detach();
+}
+
+/// Whether the field that has the keyboard in `window` has a selection that
+/// isn't empty.
+fn focused_field_has_selection(window: &gpui::Window, cx: &App) -> bool {
+    use gpui::Focusable as _;
+    let Some(fields) = cx.try_global::<TextFields>() else {
+        return false;
+    };
+    fields.inputs.iter().filter_map(gpui::WeakEntity::upgrade).any(|f| {
+        let f = f.read(cx);
+        f.focus_handle(cx).is_focused(window) && !f.selected_range().is_empty()
+    }) || fields.textareas.iter().filter_map(gpui::WeakEntity::upgrade).any(|f| {
+        let f = f.read(cx);
+        f.focus_handle(cx).is_focused(window) && !f.selected_range().is_empty()
+    })
 }
 
 fn with_main(cx: &mut App, f: impl FnOnce(&mut gpui::Window)) {

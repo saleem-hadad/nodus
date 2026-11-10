@@ -7,6 +7,7 @@
 //! {"cmd":"parity","frozen":true,"now":1792508400000} hold infinite animations, freeze "now"
 //! {"cmd":"core","method":"settings.update","args":[{"theme":"dark"}]}
 //! {"cmd":"menu","command":"settings"}               a menu command, as the menu sends it
+//! {"cmd":"action","name":"nodus::ZoomIn"}            a GPUI action by name (a menu item's)
 //! {"cmd":"key","keystroke":"cmd-o"}                 a keystroke through GPUI
 //! {"cmd":"type","text":"Hello"}                    text typed into what has the keyboard
 //! {"cmd":"modifiers","meta":true}                   modifiers held (⌘ for the rail's numbers)
@@ -211,6 +212,20 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
             Ok(Value::Null)
         }
         "core" => core(&nodus, command).await,
+        // A GPUI action by name, as its menu item sends it
+        // (`{"cmd":"action","name":"nodus::DeleteSelection"}`).
+        "action" => {
+            let name = command
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            let action = cx
+                .update(|cx| cx.build_action(&name, None))
+                .map_err(|e| e.to_string())?;
+            with_window(cx, move |window, cx| window.dispatch_action(action, cx))?;
+            Ok(Value::Null)
+        }
         "menu" => {
             let command = command.get("command").and_then(Value::as_str).unwrap_or_default();
             let command = MenuCommand::parse(command).ok_or("unknown menu command")?;

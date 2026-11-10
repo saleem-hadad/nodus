@@ -16,6 +16,8 @@
 //! {"cmd":"files","kind":"entered","x":700,"y":400,"paths":["/…"]}   entered | pending | submit | exited
 //! {"cmd":"emit","event":"updateStatus","payload":{"state":"ready","version":"0.9.5","current":"0.9.4"}}
 //! {"cmd":"open","project":"storefront"}          a project's board, by name
+//! {"cmd":"board","project":"storefront"}         that board as the core has it (cards, notes, ink, views)
+//! {"cmd":"pick","label":"Restore to board"}       the open context menu's row, chosen
 //! {"cmd":"wait","ms":300}
 //! {"cmd":"idle"}                                    until the window stops drawing
 //! {"cmd":"screenshot","path":"/…/scene.light.rust.png"}
@@ -464,6 +466,64 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
             Ok(Value::Null)
         }
         "terminal" => crate::terminal::driver::run(command, cx).await,
+        // The open context menu's row with this label, chosen as a click
+        // chooses it (closes, then runs); the labels when there's none.
+        "pick" => {
+            let want = command
+                .get("label")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            with_window(cx, move |window, cx| {
+                let shell = window::main_shell(cx).ok_or("no main window")?;
+                let layer = shell.read(cx).menus.clone();
+                let items = layer
+                    .read(cx)
+                    .menu
+                    .as_ref()
+                    .map(|m| m.items.clone())
+                    .unwrap_or_default();
+                let mut labels = Vec::new();
+                for item in items {
+                    if let crate::components::context_menu::MenuItem::Item {
+                        label,
+                        disabled,
+                        on_select,
+                        ..
+                    } = item
+                    {
+                        if label.as_ref() == want && !disabled {
+                            layer.update(cx, |l, cx| l.close(window, cx));
+                            on_select(window, cx);
+                            return Ok(Value::Null);
+                        }
+                        labels.push(label.to_string());
+                    }
+                }
+                Err(format!("no item {want:?} in {labels:?}"))
+            })?
+        }
+        // A project's board as the core has it now (by name or id).
+        "board" => {
+            let key = command.get("project").and_then(Value::as_str).unwrap_or_default();
+            let projects = nodus.projects().list().await;
+            let id = projects
+                .iter()
+                .find(|p| p.name == key || p.id == key)
+                .map(|p| p.id.clone())
+                .ok_or("no such project")?;
+            let board = nodus.board().load(&id).await.map_err(|e| e.ipc_message())?;
+            let mut out = serde_json::to_value(board).map_err(|e| e.to_string())?;
+            // Where the board is on screen now (its saved viewport lags).
+            let live = cx.update(|cx| {
+                let shell = window::main_shell(cx)?;
+                let open = shell.read(cx).state.read(cx).route.project_id() == Some(id.as_str());
+                let canvas = shell.read(cx).board()?.read(cx);
+                open.then(|| serde_json::to_value(canvas.viewport).ok()).flatten()
+            });
+            out["liveViewport"] = live.unwrap_or(Value::Null);
+            Ok(out)
+        }
         // The menu bar as AppKit shows it, its own additions included.
         "menus" => {
             #[cfg(target_os = "macos")]

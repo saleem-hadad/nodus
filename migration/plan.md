@@ -134,14 +134,14 @@ One file per domain in `migration/features/`. Each lists every behavior with an 
 
 | File | Covers (Electron sources) | Spec | Ported |
 | --- | --- | --- | --- |
-| 01-platform-shell.md | app lifecycle, menu, env, store, settings, preload/IPC plumbing | ✅ 141 | 132/141 |
+| 01-platform-shell.md | app lifecycle, menu, env, store, settings, preload/IPC plumbing | ✅ 141 | 137/141 |
 | 02-session-host-status.md | host, host protocol, pty client, hooks status machine, agents, usage, notifications | ✅ 225 | 225/225 |
 | 03-sessions-transcripts.md | session create/open/send/kill, claude args, discovery, board merge, search, summarize, naming, geometry | ✅ 205 | 205/205 |
 | 04-board-tools-views.md | board tools MCP, notes placement, views (main + renderer), view page, ink storage | ✅ 222 | 222/222 |
 | 05-actions-voice-git.md | actions rail, voice prompts, git status/diff/log and their UI | ✅ 183 | 183/183 |
-| 06-updater-release.md | updater, packaging, signing, CI, release, smoke test, 0.9.4 → Rust handoff | ✅ 132 | 106/132 |
+| 06-updater-release.md | updater, packaging, signing, CI, release, smoke test, 0.9.4 → Rust handoff | ✅ 132 | 109/132 |
 | 07-capture.md | floating capture: panel window, double tap, screen context, guess, submit | ✅ 177 | 176/177 |
-| 08-projects-shell-ui.md | App, title bar, settings, projects grid, project rail, tokens and global styles, menus, modals | ✅ 305 | 303/305 |
+| 08-projects-shell-ui.md | App, title bar, settings, projects grid, project rail, tokens and global styles, menus, modals | ✅ 305 | 304/305 |
 | 09-board-canvas.md | BoardView: pan/zoom, selection, drag, shortcuts, context menus, sections, archive, layout, edges | ✅ 177 | 177/177 |
 | 10-board-cards-notes.md | session cards, expanded cards, agent deck, archive stack, notes and the pad | ✅ 203 | 203/203 |
 | 11-board-overlays.md | prompt bar (sidekick), ⌘K search, merge dialog, ink layer, selection bar | ✅ 111 | 111/111 |
@@ -186,7 +186,7 @@ Parallel implementation tracks. Each keeps `migration/tracks/<track>.md` on its 
 | capture | `rust/capture` | nodus-capture backend: double tap, key hook, screen context, guess, submit | ✅ merged: 98 CAP; panel UI and page wiring to the capture-panel track |
 | core | `rust/core` | P4: wire every merged domain into nodus-core (sessions, board, views, updates, events, startup/quit), deferred core IDs, debts, headless end-to-end tests | ✅ merged (6243e7c): every domain composed; git/actions/voice wired; the windowed app launches, runs sessions through `Nodus host` and quits through the core |
 | audit-shell | `rust/audit-shell` | P12 slice: resolve every unticked ID in specs 01–03, 05–08 | ✅ merged (67aa3fe): every ID resolved with evidence in `migration/tracks/audit-shell.md`; selectable static text, 40-char paste, driver named pipe, Windows chrome (☰, caption buttons, single instance), page zoom, spellcheck; Windows-only and certificate items stay open for CI and cutover |
-| final-sweep | `rust/final-sweep` | P12: every scene vs the goldens (migration/parity/report.md), last non-Windows IDs, Edit › Delete, capture-panel zoom, a live end-to-end pass | 🟡 running |
+| final-sweep | `rust/final-sweep` | P12: every scene vs the goldens, last non-Windows IDs, Edit › Delete, capture-panel zoom, a live end-to-end pass | ✅ merged (94decf1): 93 scenes, median 0.39%, 87 under 1% (the rest are golden artefacts, one harness limit, and the merge dialog's wrap — being fixed); 42/42 end-to-end checks; fixed typing into four board fields |
 | cutover | `rust/cutover` | PROTOCOL → 2 (U1), Rust-only CI and release workflow, README and how-it-works for the Rust app, Electron sources removed, version 1.0.0 | ✅ merged (db61c8f) with the user's approval: `main` is Rust-only |
 | views-polish | `rust/views-polish` | ink over live view pages, tooltips as coverage, overlay timing, New view dialog, one git status source, snapshot retries | ✅ merged: ink over pages in a click-through native overlay; menus in the same frame as the swap (PATCHES 16) |
 | cross-wiring | `rust/cross-wiring` | BOARD-037 (transcript preview at the search match), MODAL-028…031 (session windows closing with their card, run or view; shortcuts and ⌘K while one is open) | ✅ merged (875ce8c): all five, with app checks in `parity/cross_wiring.py` |
@@ -228,8 +228,7 @@ Follow-ups a merge left for when the tracks meet in `nodus-core` (P4). Strike th
 - Tooltips are drawn inside the window (0.9.4's were AppKit's own panel); padding, corners and the 320 px wrap width are estimates. The transcript preview's and diff's search marks stay square because that text is selectable. The view dialog isn't spellchecked yet. Windows spelling uses the system checker where Electron used Hunspell.
 - **Views (from views-ui):** ink strokes over a view hide under its live page while no ink tool is out (0.9.4 always drew ink on top); another element's tooltip over a live page is hidden; the New view box's placeholder doesn't wrap and it has no resize grip; a menu or overlay over a live page appears a frame or two late; `render_to_image` sometimes leaves a menu's contents blank when view snapshots are in the frame (GPUI fork, test-only); views poll `git status` every 4 s themselves until they use the git UI's model. Windows: WebView2 never run; no snapshots, rounded clipping, clip to board or pass-through there yet.
 - ~~Text selection~~ (audit-shell: `components/selectable.rs`, used where 0.9.4's CSS allowed selection; the expanded card, view dialog and merge dialog are checked in the final sweep). ~~Action-name paste~~ (cut to 40 UTF-16 units).
-- **Edit › Delete** with nothing selected deletes the next character; Chromium did nothing. Match it.
-- **Zoom and the capture panel:** ⌘+/⌘- doesn't zoom the capture panel; check whether 0.9.4's did (Chromium keeps zoom per origin, so it may have).
+- ~~Edit › Delete~~ and ~~capture-panel zoom~~ (final-sweep: the panel keeps its own zoom, as 0.9.4's `#capture` URL did, stored as `captureZoomLevel`).
 - **Windows chrome** (☰ popup, caption buttons) follows Chromium's look but hasn't been compared with a Windows 0.9.4; Zoom In's shortcut text reads `Ctrl+Shift+=`.
 - The scene runner needs Node 22+ (`migration/parity` seed); under Node 20 the stand-in claude exits at once.
 - ~~Test driver on Windows~~ (audit-shell: named pipe; `smoke.py` runs fully there).
@@ -291,6 +290,7 @@ Chromium gives 0.9.4 things a native app has no direct equivalent for. Each need
 
 Newest first. One line per event: date, what, branch or commit.
 
+- 2026-11-10: final-sweep merged (94decf1): `migration/parity/report.md`; a real bug fixed (typing into the archive search, notes, card and section renames inserted nothing); GPUI PATCHES 17 (driver work while the display sleeps); `crates/nodus-ui/parity/e2e.py` (42/42). Windows Packages green (installers, install, 0.9.4 → 1.0.0 handoff gate, smoke); CI fixes for Windows: pipe names, NSIS paths and cache, test adder paths, LF checkouts.
 - 2026-11-10: Windows CI now builds and installs both installers; fixed the HOST-098 test reusing a pipe name and the smoke test's console encoding. views-polish merged; final-sweep started.
 - 2026-11-10: First CI on the Rust-only main: macOS green (CI and Packages, incl. the DMG handoff gates and smoke); Windows failed on an example's unused variable and on NSIS's mixed-separator include path — both fixed (72e48e1). gpui-polish merged (1896e0d).
 - 2026-11-10: **Cutover merged (db61c8f): `main` is Rust-only.** PROTOCOL 2, `ci.yml`/`package.yml`/`release.yml` for Rust, docs for the Rust workspace, `src/` and the Electron toolchain removed, version 1.0.0; fixture generators and the parity harness read tag v0.9.4.

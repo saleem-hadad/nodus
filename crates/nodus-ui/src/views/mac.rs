@@ -84,6 +84,8 @@ pub struct Container {
     /// The body's top left in the container (from its top), and the
     /// container's height: what places the ink in it.
     body: Cell<(f64, f64, f64)>,
+    /// Points per GPUI px: the window's UI zoom.
+    ui: Cell<f64>,
 }
 
 impl Container {
@@ -113,6 +115,7 @@ impl Container {
             ink,
             ink_rect: Cell::new(None),
             body: Cell::new((0.0, 0.0, 0.0)),
+            ui: Cell::new(1.0),
         })
     }
 
@@ -130,7 +133,8 @@ impl Container {
         let image = ink.and_then(super::mac_ink::render);
         let rect = ink.filter(|_| image.is_some()).map(|i| i.rect);
         self.ink_rect.set(rect);
-        let scale = ink.map_or(2.0, |i| i.scale);
+        // The picture's device pixels per point.
+        let scale = ink.map_or(2.0, |i| i.scale) / self.ui.get();
         self.ink.show(image.as_deref(), self.ink_frame(), scale);
     }
 
@@ -139,6 +143,8 @@ impl Container {
         let Some((l, t, w, h)) = self.ink_rect.get() else {
             return NSRect::new(NSPoint::new(0., 0.), NSSize::new(0., 0.));
         };
+        let u = self.ui.get();
+        let (l, t, w, h) = (l * u, t * u, w * u, h * u);
         let (dx, dy, vh) = self.body.get();
         let top = dy + t;
         let y = if self.view.isFlipped() { top } else { vh - top - h };
@@ -149,8 +155,9 @@ impl Container {
         self.view.ivars().passthrough.set(on);
     }
 
+    /// `edge` in GPUI's px.
     pub fn set_edge(&self, edge: f64) {
-        self.view.ivars().edge.set(edge);
+        self.view.ivars().edge.set(edge * self.ui.get());
     }
 
     /// Fully transparent while GPUI draws a snapshot in its place; the page
@@ -161,10 +168,19 @@ impl Container {
         }
     }
 
-    /// `visible` and `document` in GPUI window coordinates (logical px, from
-    /// the top left). `radius` rounds the document's bottom corners where
+    /// `visible` and `document` in the window's points (from the top left),
+    /// `ui` the points per GPUI px (the UI zoom) that the ink and the edge
+    /// are given in. `radius` rounds the document's bottom corners where
     /// they're on screen.
-    pub fn set_geometry(&self, child: &NSView, visible: Bounds<Pixels>, document: Bounds<Pixels>, radius: f32) {
+    pub fn set_geometry(
+        &self,
+        child: &NSView,
+        visible: Bounds<Pixels>,
+        document: Bounds<Pixels>,
+        radius: f32,
+        ui: f64,
+    ) {
+        self.ui.set(ui);
         // SAFETY: the container was added to GPUI's view and stays there.
         let Some(parent) = (unsafe { self.view.superview() }) else {
             return;

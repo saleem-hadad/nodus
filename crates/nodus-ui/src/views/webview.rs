@@ -142,13 +142,18 @@ impl PageWebview {
     /// may show (the board's edges), `zoom` the board's zoom: the shell lays
     /// the page out at the body's size in flow units and scales it with a
     /// CSS transform, as 0.9.4's board scaled its iframe. `radius` rounds the
-    /// bottom corners.
-    pub fn place(&self, document: Bounds<Pixels>, clip: Bounds<Pixels>, zoom: f32, radius: f32) {
-        let mut visible = document.intersect(&clip);
+    /// bottom corners. `ui` is the window's UI zoom (View › Zoom In/Out).
+    pub fn place(&self, document: Bounds<Pixels>, clip: Bounds<Pixels>, zoom: f32, radius: f32, ui: f32) {
+        let visible = document.intersect(&clip);
         let offscreen = visible.size.width < gpui::px(1.) || visible.size.height < gpui::px(1.);
         self.offscreen.set(offscreen);
+        // The webview sits in the window's points, which are GPUI's px times
+        // the UI zoom; the page is drawn at that zoom too, as Chromium's page
+        // zoom drew 0.9.4's frames.
+        let ui = if ui.is_finite() && ui > 0.0 { ui } else { 1.0 };
+        let (document, mut visible) = (points(document, ui), points(visible, ui));
         self.set_scale(
-            f64::from(zoom),
+            f64::from(zoom * ui),
             f64::from(f32::from(document.size.width)),
             f64::from(f32::from(document.size.height)),
         );
@@ -162,7 +167,7 @@ impl PageWebview {
                 visible = Bounds::new(document.origin, gpui::size(Pixels::ZERO, Pixels::ZERO));
             }
             self.container
-                .set_geometry(&self.webview.webview(), visible, document, radius);
+                .set_geometry(&self.webview.webview(), visible, document, radius * ui, f64::from(ui));
         }
         #[cfg(not(target_os = "macos"))]
         {
@@ -184,7 +189,7 @@ impl PageWebview {
     }
 
     /// Scales the page in the shell: laid out at the body's size in flow
-    /// units (`w`×`h` screen px over the zoom), drawn at the zoom. A CSS
+    /// units (`w`×`h` points over the zoom), drawn at the zoom. A CSS
     /// transform keeps WebKit's minimum font size out of it, as it stayed out
     /// of 0.9.4's (page zoom bumped zoomed-out text up to 9px).
     fn set_scale(&self, zoom: f64, w: f64, h: f64) {
@@ -350,6 +355,14 @@ fn dump(dir: &std::ffi::OsStr, w: u32, h: u32, bgra: &[u8]) {
             .map_or(0, |d| d.as_millis());
         let _ = img.save(std::path::Path::new(dir).join(format!("snap-{n}-{w}x{h}.png")));
     }
+}
+
+/// Bounds in GPUI's px, in the window's points at UI zoom `ui`.
+fn points(b: Bounds<Pixels>, ui: f32) -> Bounds<Pixels> {
+    Bounds::new(
+        gpui::point(b.origin.x * ui, b.origin.y * ui),
+        gpui::size(b.size.width * ui, b.size.height * ui),
+    )
 }
 
 fn rgba8(c: Rgba) -> (u8, u8, u8, u8) {

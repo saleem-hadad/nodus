@@ -74,7 +74,7 @@ pub fn placed(
         // While the zoom moves, the page waits behind its snapshot; it lays
         // out once, at the zoom the board settles on.
         if !zoom_moving || fr.live {
-            fr.web.place(g.document, g.clip, g.zoom, g.radius);
+            fr.web.place(g.document, g.clip, g.zoom, g.radius, window.ui_zoom());
         }
         fr.web.set_edge(g.edge);
         let visible = g.document.intersect(&g.clip);
@@ -148,6 +148,7 @@ fn after_frame(window: &mut Window, cx: &mut App) {
     let rc = frames(cx);
     let now = Instant::now();
     let parity = crate::parity::frozen(cx);
+    let ui = window.ui_zoom();
     let mut refresh = false;
     let mut settle = false;
     let mut shoot: Vec<u64> = Vec::new();
@@ -159,7 +160,7 @@ fn after_frame(window: &mut Window, cx: &mut App) {
             let Some(g) = fr.geometry else { continue };
             if !fr.drawn {
                 // Culled or not drawn: off screen, but the page keeps running.
-                fr.web.place(g.document, Bounds::default(), g.zoom, g.radius);
+                fr.web.place(g.document, Bounds::default(), g.zoom, g.radius, ui);
                 if fr.ink.take().is_some() {
                     fr.web.set_ink(None);
                 }
@@ -190,7 +191,7 @@ fn after_frame(window: &mut Window, cx: &mut App) {
                 }
             }
             if !fr.want && !fr.live {
-                fr.web.place(g.document, g.clip, g.zoom, g.radius);
+                fr.web.place(g.document, g.clip, g.zoom, g.radius, ui);
                 update_ink(fr, ink.as_ref(), window);
                 fr.live = true;
                 fr.web.set_live(true);

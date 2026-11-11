@@ -18,6 +18,7 @@ When you change a behavior, change its entry in the same commit, and say what 0.
 | `10-board-cards-notes.md` | session cards, expanded cards, the agent deck, the archive stack, notes and the pad |
 | `11-board-overlays.md` | the prompt bar, ⌘K search, the merge dialog, ink, the selection bar |
 | `12-terminal-ui.md` | terminals, the terminal modal, transcript preview, the agent viewer |
+| `13-feedback.md` | Help › Report a Problem…: the dialog, screenshots, the issue it becomes, the feedback server |
 
 ## Compatibility with 0.9.4
 
@@ -49,7 +50,7 @@ A crate depends only on crates in lower layers. When a crate needs something fro
 | L1 | `nodus-store`, `nodus-platform`, `nodus-host-proto`, `nodus-terminal` |
 | L2 | `nodus-transcripts`, `nodus-git`, `nodus-host` |
 | L3 | `nodus-sessions`, `nodus-board` |
-| L4 | `nodus-views`, `nodus-tools`, `nodus-actions`, `nodus-voice`, `nodus-capture`, `nodus-updater` |
+| L4 | `nodus-views`, `nodus-tools`, `nodus-actions`, `nodus-voice`, `nodus-capture`, `nodus-updater`, `nodus-feedback` |
 | L5 | `nodus-core` |
 | L6 | `nodus-ui` |
 | L7 | `nodus` (the binary) |

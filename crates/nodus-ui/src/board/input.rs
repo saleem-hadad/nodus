@@ -1358,7 +1358,8 @@ impl BoardCanvas {
 
     /// BOARD-171: the app menu's board commands.
     pub fn on_menu(&mut self, command: MenuCommand, cx: &mut Context<'_, Self>) {
-        if !self.cover(false, cx).menu() {
+        // RPT-002: nothing starts behind the report dialog.
+        if !self.cover(false, cx).menu() || self.state.read(cx).report_open {
             return;
         }
         match command {

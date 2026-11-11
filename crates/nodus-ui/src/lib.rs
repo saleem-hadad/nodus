@@ -14,6 +14,7 @@ pub mod automation;
 pub mod board;
 pub mod capture;
 pub mod components;
+pub mod feedback;
 pub mod format;
 pub mod git;
 #[cfg(target_os = "macos")]

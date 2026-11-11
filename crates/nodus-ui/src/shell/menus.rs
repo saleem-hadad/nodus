@@ -40,7 +40,7 @@ actions!(
         Zoom,
         BringAllToFront,
         StarOnGitHub,
-        ReportBug,
+        ReportProblem,
         PasteAndMatchStyle,
         DeleteSelection,
     ]
@@ -146,7 +146,7 @@ pub fn app_menus(settings: &AppSettings, platform: Platform) -> Vec<Menu> {
 
     let mut help = vec![
         MenuItem::action("Star on GitHub", StarOnGitHub),
-        MenuItem::action("Report a Bug…", ReportBug),
+        MenuItem::action("Report a Problem…", ReportProblem),
     ];
     if !mac {
         help.extend([MenuItem::separator(), MenuItem::action("About Nodus", About)]);
@@ -262,9 +262,9 @@ pub fn register_actions(nodus: &Nodus, cx: &mut App) {
     cx.on_action(|_: &StarOnGitHub, _| {
         nodus_platform::shell::open_external(REPO_URL);
     });
-    cx.on_action(|_: &ReportBug, _| {
-        nodus_platform::shell::open_external(&bug_report_url(env!("CARGO_PKG_VERSION"), &system_version()));
-    });
+    // RPT-001: the report dialog, over the main window.
+    let s = send(MenuCommand::ReportProblem);
+    cx.on_action(move |_: &ReportProblem, cx| s(cx));
     cx.on_action(|_: &ToggleFullScreen, cx| with_main(cx, |w| w.toggle_fullscreen()));
     cx.on_action(|_: &Minimize, cx| with_main(cx, |w| w.minimize_window()));
     cx.on_action(|_: &Zoom, cx| with_main(cx, |w| w.zoom_window()));
@@ -349,7 +349,7 @@ fn with_main(cx: &mut App, f: impl FnOnce(&mut gpui::Window)) {
 }
 
 /// `process.getSystemVersion()`: `major.minor.patch` on a Mac.
-fn system_version() -> String {
+pub(crate) fn system_version() -> String {
     #[cfg(target_os = "macos")]
     {
         crate::mac::os_version()
@@ -361,7 +361,7 @@ fn system_version() -> String {
 }
 
 /// Node's name for the CPU: `arm64` or `x64`.
-fn node_arch() -> &'static str {
+pub(crate) fn node_arch() -> &'static str {
     match std::env::consts::ARCH {
         "aarch64" => "arm64",
         "x86_64" => "x64",
@@ -370,59 +370,9 @@ fn node_arch() -> &'static str {
     }
 }
 
-/// `bugReportUrl` (PLAT-051): a new GitHub issue with the versions filled in.
-pub fn bug_report_url(version: &str, system_version: &str) -> String {
-    let system = match Platform::CURRENT {
-        Platform::Mac => "macOS",
-        Platform::Windows => "Windows",
-        Platform::Linux => "Linux",
-    };
-    bug_report_url_for(version, system, system_version, node_arch())
-}
-
-fn bug_report_url_for(version: &str, system: &str, system_version: &str, arch: &str) -> String {
-    let body = [
-        "**What happened?**",
-        "",
-        "",
-        "**What did you expect to happen?**",
-        "",
-        "",
-        "**Steps to reproduce**",
-        "",
-        "",
-        "---",
-        &format!("Nodus {version} · {system} {system_version} · {arch}"),
-    ]
-    .join("\n");
-    format!("{REPO_URL}/issues/new?body={}", form_encode(&body))
-}
-
-/// `URLSearchParams` form encoding: space is `+`, letters, digits and `*-._`
-/// stay, the rest is UTF-8 percent-encoded in upper case.
-fn form_encode(value: &str) -> String {
-    let mut out = String::new();
-    for byte in value.bytes() {
-        match byte {
-            b' ' => out.push('+'),
-            b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'*' | b'-' | b'.' | b'_' => out.push(byte as char),
-            _ => out.push_str(&format!("%{byte:02X}")),
-        }
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn fills_in_the_bug_report() {
-        assert_eq!(
-            bug_report_url_for("0.9.4", "macOS", "26.2.0", "arm64"),
-            "https://github.com/saleem-hadad/nodus/issues/new?body=**What+happened%3F**%0A%0A%0A**What+did+you+expect+to+happen%3F**%0A%0A%0A**Steps+to+reproduce**%0A%0A%0A---%0ANodus+0.9.4+%C2%B7+macOS+26.2.0+%C2%B7+arm64"
-        );
-    }
 
     #[test]
     fn shows_focus_mode_only_while_offered() {

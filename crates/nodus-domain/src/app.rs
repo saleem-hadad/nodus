@@ -38,5 +38,7 @@ string_enum! {
         Search = "search",
         /// Cmd+Shift+F: flip the title bar's Focus switch (only while focus is offered in Settings).
         ToggleFocus = "toggle-focus",
+        /// Help › Report a Problem…: the report dialog (RPT-001).
+        ReportProblem = "report-problem",
     }
 }

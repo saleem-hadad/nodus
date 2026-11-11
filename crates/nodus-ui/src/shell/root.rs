@@ -11,6 +11,7 @@ use nodus_core::Nodus;
 
 use crate::board::canvas::{BoardCanvas, new_canvas};
 use crate::components::context_menu::MenuLayer;
+use crate::feedback::ReportDialog;
 use crate::platform::Platform;
 use crate::projects::grid::ProjectsView;
 use crate::projects::rail::ProjectRail;
@@ -28,6 +29,7 @@ pub struct Shell {
     grid: Option<Entity<ProjectsView>>,
     rail: Option<Entity<ProjectRail>>,
     settings: Option<Entity<SettingsDialog>>,
+    report: Option<Entity<ReportDialog>>,
     /// The session window, transcript preview and agents viewer (spec 12).
     pub terminal_layers: Entity<crate::terminal::layers::TerminalLayers>,
     /// The board the main area shows; a fresh one per project (UI-028,
@@ -79,6 +81,7 @@ impl Shell {
             grid: None,
             rail: None,
             settings: None,
+            report: None,
             terminal_layers,
             board_key: None,
             board: None,
@@ -88,9 +91,9 @@ impl Shell {
 
     /// Keeps the views that belong to the route alive, and only those.
     fn sync_views(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
-        let (route, settings_open) = {
+        let (route, settings_open, report_open) = {
             let s = self.state.read(cx);
-            (s.route.clone(), s.settings_open)
+            (s.route.clone(), s.settings_open, s.report_open)
         };
         match &route {
             Route::Projects => {
@@ -130,6 +133,23 @@ impl Shell {
             (false, Some(dialog)) => {
                 let previous = dialog.read(cx).previous_focus.clone();
                 self.settings = None;
+                match previous {
+                    Some(previous) => window.focus(&previous, cx),
+                    None => window.focus(&self.focus, cx),
+                }
+            }
+            _ => {}
+        }
+        // RPT-001: the report dialog, the same way; focus goes back on close.
+        match (report_open, &self.report) {
+            (true, None) => {
+                let state = self.state.clone();
+                let previous = window.focused(cx);
+                self.report = Some(cx.new(|cx| ReportDialog::new(state, previous, window, cx)));
+            }
+            (false, Some(dialog)) => {
+                let previous = dialog.read(cx).previous_focus.clone();
+                self.report = None;
                 match previous {
                     Some(previous) => window.focus(&previous, cx),
                     None => window.focus(&self.focus, cx),
@@ -301,6 +321,7 @@ impl Render for Shell {
             .child(main)
             .child(self.terminal_layers.clone())
             .children(self.settings.clone())
+            .children(self.report.clone())
             .child(self.menus.clone())
             // UI-099: the ☰ button's application menu, off a Mac.
             .when(!Platform::CURRENT.is_mac(), |d| {

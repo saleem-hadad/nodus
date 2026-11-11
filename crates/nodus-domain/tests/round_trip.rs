@@ -150,7 +150,7 @@ fn colours_and_kinds_are_the_typescript_lists() {
     );
     assert_eq!(
         strings(&MenuCommand::ALL.iter().map(|c| c.as_str()).collect::<Vec<_>>()),
-        "close,new-session,new-terminal,new-project,settings,search,toggle-focus"
+        "close,new-session,new-terminal,new-project,settings,search,toggle-focus,report-problem"
     );
     assert_eq!(CaptureKind::parse("into"), Some(CaptureKind::Into));
     assert_eq!(CaptureKind::parse("Into"), None);

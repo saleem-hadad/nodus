@@ -1,0 +1,27 @@
+[package]
+name = "nodus-feedback"
+description = "Report a Problem: the issue a report becomes, and posting it to the feedback server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+image = { workspace = true, features = ["bmp", "jpeg", "png", "tiff"] }
+serde_json.workspace = true
+tracing.workspace = true
+
+[target.'cfg(not(windows))'.dependencies]
+reqwest = { workspace = true, features = ["multipart", "rustls-tls"] }
+
+[target.'cfg(windows)'.dependencies]
+reqwest = { workspace = true, features = ["multipart", "native-tls"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt"] }
+
+[lints]
+workspace = true

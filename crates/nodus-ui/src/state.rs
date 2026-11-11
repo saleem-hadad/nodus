@@ -70,6 +70,8 @@ pub struct AppState {
     pub selection: Vec<String>,
 
     pub settings_open: bool,
+    /// Help › Report a Problem…'s dialog is up (RPT-001).
+    pub report_open: bool,
     /// None until loaded.
     pub settings: Option<AppSettings>,
     pub open_request: Option<OpenCardRequest>,
@@ -121,6 +123,7 @@ impl AppState {
             agent_view: None,
             selection: Vec::new(),
             settings_open: false,
+            report_open: false,
             settings: None,
             open_request: None,
             update_status: None,
@@ -184,6 +187,7 @@ impl AppState {
     pub fn on_menu(&mut self, command: MenuCommand, cx: &mut Context<'_, Self>) {
         match command {
             MenuCommand::Settings => self.open_settings(cx),
+            MenuCommand::ReportProblem => self.open_report(cx),
             MenuCommand::Close => self.close_top_layer(cx),
             MenuCommand::NewProject => self.add_project(None, false, cx),
             MenuCommand::ToggleFocus => self.toggle_focus_mode(cx),
@@ -197,7 +201,9 @@ impl AppState {
     /// UI-040, UI-041: ⌘W closes the first open layer, else leaves the board;
     /// never the window.
     pub fn close_top_layer(&mut self, cx: &mut Context<'_, Self>) {
-        if self.settings_open {
+        if self.report_open {
+            self.close_report(cx);
+        } else if self.settings_open {
             self.close_settings(cx);
         } else if self.agent_view.is_some() {
             self.agent_view = None;
@@ -310,6 +316,18 @@ impl AppState {
 
     pub fn close_settings(&mut self, cx: &mut Context<'_, Self>) {
         self.settings_open = false;
+        cx.notify();
+    }
+
+    /// RPT-001: the report dialog opens over everything, Settings closing.
+    pub fn open_report(&mut self, cx: &mut Context<'_, Self>) {
+        self.settings_open = false;
+        self.report_open = true;
+        cx.notify();
+    }
+
+    pub fn close_report(&mut self, cx: &mut Context<'_, Self>) {
+        self.report_open = false;
         cx.notify();
     }
 

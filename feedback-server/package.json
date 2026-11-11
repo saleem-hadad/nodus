@@ -1,0 +1,20 @@
+{
+  "name": "nodus-feedback-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Turns in-app problem reports from the Nodus desktop app into GitHub issues.",
+  "license": "MIT",
+  "type": "module",
+  "main": "server.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "multer": "^2.0.2"
+  }
+}

@@ -112,6 +112,8 @@ fn render_parts(
                 .flex_1()
                 .min_h_0()
                 .bg(t.bg_elevated)
+                // The panel's bottom corners: GPUI's overflow clip is square.
+                .rounded_b(RADIUS_XL)
                 .when(view.version > 0, |d| {
                     d.child(frames::probe(id.clone(), Slot::Large, geometry))
                 }),

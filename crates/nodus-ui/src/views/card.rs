@@ -408,8 +408,10 @@ fn body(
             }
         }
     };
-    // The probe paints the page's snapshot while it's behind one.
+    // The probe paints the page's snapshot while it's behind one. The fill
+    // takes the card's bottom corners: GPUI's overflow clip is square.
     base.bg(t.bg_elevated)
+        .when(bottom_round, |d| d.rounded_b(fu(14.)))
         .child(frames::probe(id, Slot::Card, geometry))
         .into_any_element()
 }

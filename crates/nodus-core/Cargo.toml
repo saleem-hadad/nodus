@@ -15,6 +15,7 @@ nodus-actions.workspace = true
 nodus-board.workspace = true
 nodus-capture.workspace = true
 nodus-domain.workspace = true
+nodus-feedback.workspace = true
 nodus-git.workspace = true
 nodus-platform.workspace = true
 nodus-sessions.workspace = true
@@ -27,7 +28,7 @@ nodus-voice.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["sync"] }
+tokio = { workspace = true, features = ["fs", "sync"] }
 tracing.workspace = true
 uuid.workspace = true
 

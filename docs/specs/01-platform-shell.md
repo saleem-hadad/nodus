@@ -95,7 +95,7 @@ It owns the native application menu on macOS, and the same menu as a popup from 
 - **PLAT-033** Quitting never stops sessions. They keep running in the session host, and the next launch adopts them (PLAT-010 step 8).
 - **PLAT-034** `Quit and Stop Sessions` calls `ptys.stopAll()`. If there is no host connection it resolves at once. Otherwise it sends `{ type: 'shutdown' }` to the host and waits until the connection closes or 5000 ms pass (`KILL_WAIT_MS` 4000 + 1000), whichever is first. Then `app.quit()` runs, even if stopping failed (`finally`).
 - **PLAT-035** Windows logoff or shutdown: Electron does not emit `before-quit`, so `shutdown()` does not run, and a state change saved within the last 300 ms may be lost (Electron documented behavior; verify).
-- **PLAT-036** With no main window, menu items that send menu commands do nothing; for example ⌘N, ⌘, and ⌘W are dropped. `Capture…` still opens the panel, `Check for Updates…` still runs its check (its `settings` command is dropped), and Quit, `Quit and Stop Sessions`, `Star on GitHub`, `Report a Bug…`, Hide, Services and the other native items still work.
+- **PLAT-036** With no main window, menu items that send menu commands do nothing; for example ⌘N, ⌘, and ⌘W are dropped. `Capture…` still opens the panel, `Check for Updates…` still runs its check (its `settings` command is dropped), and Quit, `Quit and Stop Sessions`, `Star on GitHub`, Hide, Services and the other native items still work. `Report a Problem…` sends a command too, so it does nothing without a main window (in 0.9.4, `Report a Bug…` opened the browser either way).
 
 ### Application menu: structure
 
@@ -163,7 +163,7 @@ It owns the native application menu on macOS, and the same menu as a popup from 
   10. separator
   11. `Toggle Full Screen` (⌃⌘F / F11, registered on both)
 - **PLAT-043** **Window**. On macOS it is the standard window menu: `Minimize` (⌘M), `Zoom`, separator, `Bring All to Front`, plus whatever AppKit appends (the window list and, on recent macOS, tiling items; verify). On Windows it holds only `Minimize` (Ctrl+M, shown, not registered). There is no `Close` item off a Mac, since its Ctrl+W would close the window.
-- **PLAT-044** **Help**. On macOS: `Star on GitHub`, `Report a Bug…`. It is registered as the app's Help menu, so macOS adds its search field. On Windows: `Star on GitHub`, `Report a Bug…`, separator, `About Nodus`.
+- **PLAT-044** **Help**. On macOS: `Star on GitHub`, `Report a Problem…`. It is registered as the app's Help menu, so macOS adds its search field. On Windows: `Star on GitHub`, `Report a Problem…`, separator, `About Nodus`. (0.9.4's item was `Report a Bug…`.)
 - **PLAT-045** macOS adds its own items to menus titled Edit and View (for example `AutoFill`, `Start Dictation…`, `Emoji & Symbols`, maybe `Show Tab Bar`). The Rust menu must end up with the same visible set as 0.9.4 (verify by listing 0.9.4's menus on macOS 26).
 
 ### Application menu: actions
@@ -173,7 +173,7 @@ It owns the native application menu on macOS, and the same menu as a popup from 
 - **PLAT-048** `Capture…` opens the floating capture panel (`openPanel()`, 07). It works with no main window.
 - **PLAT-049** `New Session` sends `new-session`, `New Terminal` sends `new-terminal`, `New Project…` sends `new-project`, `Close` sends `close`, and `Search Sessions…` sends `search`. `Close` never closes the window. What each command does is the UI's business (08, 09).
 - **PLAT-050** `Star on GitHub` opens `https://github.com/saleem-hadad/nodus` in the default browser.
-- **PLAT-051** `Report a Bug…` opens `https://github.com/saleem-hadad/nodus/issues/new?body=<form-encoded body>` in the default browser. The body format is in Data & formats › Bug-report URL.
+- **PLAT-051** `Report a Problem…` sends `report-problem`, which opens the report dialog (13, RPT-001). Added after 1.0.2: 0.9.4's `Report a Bug…` opened `https://github.com/saleem-hadad/nodus/issues/new?body=<form-encoded body>` in the default browser, with the body in Data & formats › Bug-report URL.
 - **PLAT-052** `Focus Mode` is visible **and** enabled iff `settings.focusFeature`, so its shortcut can't fire while it is hidden. The separator below it is visible iff `settings.focusFeature`. The item is checked iff `settings.focusMode`. On click, the tick is first reset to the current `settings.focusMode` (undoing the toggle the click made), then `toggle-focus` is sent. The tick changes only when the UI saves the new setting (PLAT-053).
 - **PLAT-053** The Focus Mode visibility, enabled state and tick are re-synced from settings every time settings are applied (PLAT-066). The initial state comes from the loaded settings when the menu is built.
 - **PLAT-054** `Quit Nodus` (macOS) and `Exit` (Windows) quit normally (PLAT-032). `Quit and Stop Sessions` follows PLAT-034.
@@ -561,7 +561,7 @@ stdout = `[noise]__NODUS_ENV_START__KEY=VALUE\0KEY=VALUE\0…__NODUS_ENV_END__[n
 
 ### Bug-report URL
 
-The body is these lines joined with `\n`:
+0.9.4's `Report a Bug…` (PLAT-051), replaced by the report dialog (13). The body is these lines joined with `\n`:
 
 ```
 **What happened?**
@@ -735,7 +735,7 @@ Window (PLAT-014 to PLAT-021):
 
 - Menus are native: macOS NSMenu, Windows the Electron/Chromium views popup, themed by the effective theme. The ☰ popup opens with its top-left at (button left, button bottom + 4) in window coordinates (08 computes them).
 - Folder picker (PLAT-068): title `Add Project`, button `Add Project`, message `Choose the local repository for this project`, a New Folder button on macOS.
-- Verbatim menu labels (the ellipsis is U+2026): `Check for Updates…`, `Settings…`, `Quit and Stop Sessions`, `Capture…`, `New Session`, `New Terminal`, `New Project…`, `Close`, `File`, `Exit`, `Edit`, `Search Sessions…`, `View`, `Focus Mode`, `Window`, `Star on GitHub`, `Report a Bug…`.
+- Verbatim menu labels (the ellipsis is U+2026): `Check for Updates…`, `Settings…`, `Quit and Stop Sessions`, `Capture…`, `New Session`, `New Terminal`, `New Project…`, `Close`, `File`, `Exit`, `Edit`, `Search Sessions…`, `View`, `Focus Mode`, `Window`, `Star on GitHub`, `Report a Problem…`.
 - Role labels from Electron 44: `About Nodus`, `Services`, `Hide Nodus`, `Hide Others`, `Show All`, `Quit Nodus` (macOS) / `Exit` (Windows), `Undo`, `Redo`, `Cut`, `Copy`, `Paste`, `Paste and Match Style`, `Delete`, `Select All`, `Reload`, `Force Reload`, `Toggle Developer Tools`, `Actual Size`, `Zoom In`, `Zoom Out`, `Toggle Full Screen`, `Minimize`, `Zoom`, `Bring All to Front`, `Help`.
 
 ## Keyboard & mouse
@@ -962,7 +962,7 @@ Risks and unknowns:
 - [x] PLAT-048 Capture… → openPanel
 - [x] PLAT-049 File/Edit commands → menu commands
 - [x] PLAT-050 Star on GitHub URL
-- [x] PLAT-051 Report a Bug… URL
+- [x] PLAT-051 Report a Problem… opens the report dialog
 - [x] PLAT-052 Focus Mode item visibility/enabled/tick/click
 - [x] PLAT-053 Focus menu re-sync on applySettings
 - [x] PLAT-054 Quit/Exit behavior

@@ -17,6 +17,7 @@ indexmap.workspace = true
 nodus-board.workspace = true
 nodus-core.workspace = true
 nodus-domain.workspace = true
+nodus-feedback.workspace = true
 nodus-platform.workspace = true
 nodus-sessions.workspace = true
 nodus-terminal.workspace = true

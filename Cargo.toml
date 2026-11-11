@@ -24,6 +24,7 @@ nodus-board = { path = "crates/nodus-board" }
 nodus-capture = { path = "crates/nodus-capture" }
 nodus-core = { path = "crates/nodus-core" }
 nodus-domain = { path = "crates/nodus-domain" }
+nodus-feedback = { path = "crates/nodus-feedback" }
 nodus-git = { path = "crates/nodus-git" }
 nodus-host = { path = "crates/nodus-host" }
 nodus-host-proto = { path = "crates/nodus-host-proto" }

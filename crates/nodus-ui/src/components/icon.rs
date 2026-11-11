@@ -49,10 +49,16 @@ pub enum Icon {
     SquareDashed,
     StickyNote,
     Ungroup,
+    MessageSquareWarning,
+    ExternalLink,
+    CircleAlert,
+    Shield,
+    Bell,
+    Globe,
 }
 
 impl Icon {
-    const ALL: [Self; 39] = [
+    const ALL: [Self; 45] = [
         Self::ChevronLeft,
         Self::ChevronRight,
         Self::ChevronDown,
@@ -92,6 +98,12 @@ impl Icon {
         Self::SquareDashed,
         Self::StickyNote,
         Self::Ungroup,
+        Self::MessageSquareWarning,
+        Self::ExternalLink,
+        Self::CircleAlert,
+        Self::Shield,
+        Self::Bell,
+        Self::Globe,
     ];
 
     pub fn name(self) -> &'static str {
@@ -134,6 +146,12 @@ impl Icon {
             Self::Square => "square",
             Self::SquareDashed => "square-dashed",
             Self::StickyNote => "sticky-note",
+            Self::MessageSquareWarning => "message-square-warning",
+            Self::ExternalLink => "external-link",
+            Self::CircleAlert => "circle-alert",
+            Self::Shield => "shield",
+            Self::Bell => "bell",
+            Self::Globe => "globe",
             Self::Ungroup => "ungroup",
         }
     }
@@ -231,6 +249,22 @@ impl Icon {
             }
             Self::Ungroup => {
                 r#"<rect x="11" y="14" width="10" height="7" rx="2"/><rect x="3" y="3" width="10" height="7" rx="2"/>"#
+            }
+            Self::MessageSquareWarning => {
+                r#"<path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"/><path d="M12 15h.01"/><path d="M12 7v4"/>"#
+            }
+            Self::ExternalLink => {
+                r#"<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>"#
+            }
+            Self::CircleAlert => r#"<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>"#,
+            Self::Shield => {
+                r#"<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>"#
+            }
+            Self::Globe => {
+                r#"<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>"#
+            }
+            Self::Bell => {
+                r#"<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>"#
             }
         }
     }

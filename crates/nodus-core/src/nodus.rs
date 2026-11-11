@@ -467,6 +467,11 @@ impl Nodus {
         ActionsApi { nodus: self }
     }
 
+    /// Report a Problem (13).
+    pub fn feedback(&self) -> crate::FeedbackApi<'_> {
+        crate::FeedbackApi { nodus: self }
+    }
+
     /// `window.api.voice`.
     pub fn voice(&self) -> VoiceApi<'_> {
         VoiceApi { nodus: self }

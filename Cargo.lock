@@ -4201,6 +4201,7 @@ dependencies = [
  "nodus-board",
  "nodus-capture",
  "nodus-domain",
+ "nodus-feedback",
  "nodus-git",
  "nodus-host",
  "nodus-host-proto",
@@ -4228,6 +4229,17 @@ dependencies = [
  "ryu",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "nodus-feedback"
+version = "1.0.3"
+dependencies = [
+ "image",
+ "reqwest",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -4401,6 +4413,7 @@ dependencies = [
  "nodus-board",
  "nodus-core",
  "nodus-domain",
+ "nodus-feedback",
  "nodus-git",
  "nodus-platform",
  "nodus-sessions",

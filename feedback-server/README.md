@@ -10,7 +10,7 @@ It has no database. Rate limits live in memory, so a restart (or scaling to zero
 | --- | --- | --- | --- |
 | `GITHUB_TOKEN` | yes | | A fine-grained personal access token for the repository (see below). |
 | `NODUS_APP_KEY` | yes | | Shared key the app sends as `X-Nodus-Key`. It ships inside every app build, so it isn't a secret; it only turns away generic bots. |
-| `GITHUB_REPO` | no | `saleem-hadad/nodus` | Where issues are opened, as `owner/name`. |
+| `GITHUB_REPO` | no | `saleem-hadad/nodus-feedback` | Where issues are opened, as `owner/name`. Keep it a repository of its own (see [The GitHub token](#the-github-token)). |
 | `ISSUE_LABEL` | no | `feedback` | Label put on every issue. If it doesn't exist, the issue is created without it and a warning is logged. |
 | `PORT` | no | `3000` | Set by the host. |
 
@@ -36,7 +36,7 @@ Send the header `X-Nodus-Key: <NODUS_APP_KEY>` and a `multipart/form-data` body:
 
 Send the text fields before the screenshots (the app does). A report whose text is missing or invalid is turned away as its first screenshot starts to arrive, so the server never keeps screenshots it would throw away.
 
-On success: `201 {"number": 42, "url": "https://github.com/saleem-hadad/nodus/issues/42"}`.
+On success: `201 {"number": 42, "url": "https://github.com/saleem-hadad/nodus-feedback/issues/42"}`.
 
 On failure the body is `{"error": "<one sentence for the user>"}` with:
 
@@ -91,7 +91,7 @@ Issues are opened under the account that owns the token.
 5. Use the token as `GITHUB_TOKEN`.
 6. Create the `feedback` label in the repository, or whichever label you set in `ISSUE_LABEL`.
 
-The token can push to the repository, so keep `main` behind a branch protection rule.
+Screenshot uploads need Contents: Read and write, so the token can push to the repository it's for. That's why reports go to a repository that holds nothing else: if the token ever leaked, it couldn't touch the app's code or its release downloads. Don't point it at the app's own repository.
 
 GitHub doesn't notify you about your own activity, so reports opened under your account arrive without a notification. Check the `feedback` label: `https://github.com/<owner>/<repo>/issues?q=label%3Afeedback`.
 

@@ -44,7 +44,7 @@ const badRequest = (message) => new HttpError(400, message);
 export function createApp({ fetch, env, now, log = console, uploadDir = tmpdir() }) {
   const token = env.GITHUB_TOKEN;
   const appKey = env.NODUS_APP_KEY;
-  const repo = env.GITHUB_REPO || 'saleem-hadad/nodus';
+  const repo = env.GITHUB_REPO || 'saleem-hadad/nodus-feedback';
   const label = env.ISSUE_LABEL || 'feedback';
 
   const missing = [!token && 'GITHUB_TOKEN', !appKey && 'NODUS_APP_KEY'].filter(Boolean);

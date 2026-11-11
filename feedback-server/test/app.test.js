@@ -38,13 +38,13 @@ function fakeGitHub(overrides = {}) {
     if (custom) return custom;
 
     switch (route) {
-      case 'GET api.github.com/repos/saleem-hadad/nodus':
-        return json(200, { id: 123, full_name: 'saleem-hadad/nodus' });
+      case 'GET api.github.com/repos/saleem-hadad/nodus-feedback':
+        return json(200, { id: 123, full_name: 'saleem-hadad/nodus-feedback' });
       case 'POST uploads.github.com/user-attachments/assets':
         assets += 1;
         return json(201, { id: assets, url: `https://github.com/user-attachments/assets/asset-${assets}` });
-      case 'POST api.github.com/repos/saleem-hadad/nodus/issues':
-        return json(201, { number: 42, html_url: 'https://github.com/saleem-hadad/nodus/issues/42' });
+      case 'POST api.github.com/repos/saleem-hadad/nodus-feedback/issues':
+        return json(201, { number: 42, html_url: 'https://github.com/saleem-hadad/nodus-feedback/issues/42' });
       default:
         return json(404, { message: 'Not Found' });
     }
@@ -56,9 +56,9 @@ function fakeGitHub(overrides = {}) {
   return {
     fetch,
     calls,
-    repoLookups: () => to('GET', 'api.github.com', '/repos/saleem-hadad/nodus'),
+    repoLookups: () => to('GET', 'api.github.com', '/repos/saleem-hadad/nodus-feedback'),
     uploads: () => to('POST', 'uploads.github.com'),
-    issueCreates: () => to('POST', 'api.github.com', '/repos/saleem-hadad/nodus/issues'),
+    issueCreates: () => to('POST', 'api.github.com', '/repos/saleem-hadad/nodus-feedback/issues'),
   };
 }
 
@@ -279,7 +279,7 @@ describe('happy path', () => {
 
     const res = await send(base, form);
     assert.equal(res.status, 201);
-    assert.deepEqual(res.json, { number: 42, url: 'https://github.com/saleem-hadad/nodus/issues/42' });
+    assert.deepEqual(res.json, { number: 42, url: 'https://github.com/saleem-hadad/nodus-feedback/issues/42' });
 
     // Every call carries the same auth and API headers.
     for (const call of github.calls) {
@@ -293,10 +293,10 @@ describe('happy path', () => {
     assert.deepEqual(
       github.calls.map((c) => `${c.method} ${c.url.host}${c.url.pathname}`),
       [
-        'GET api.github.com/repos/saleem-hadad/nodus',
+        'GET api.github.com/repos/saleem-hadad/nodus-feedback',
         'POST uploads.github.com/user-attachments/assets',
         'POST uploads.github.com/user-attachments/assets',
-        'POST api.github.com/repos/saleem-hadad/nodus/issues',
+        'POST api.github.com/repos/saleem-hadad/nodus-feedback/issues',
       ],
     );
 
@@ -384,7 +384,7 @@ describe('GitHub failures', () => {
 
   test('a missing label (422) is retried once without labels', async (t) => {
     const github = fakeGitHub({
-      'POST api.github.com/repos/saleem-hadad/nodus/issues': (call) => {
+      'POST api.github.com/repos/saleem-hadad/nodus-feedback/issues': (call) => {
         if (JSON.parse(call.body).labels) {
           return json(422, { message: 'Validation Failed', errors: [{ resource: 'Label', code: 'invalid' }] });
         }
@@ -393,7 +393,7 @@ describe('GitHub failures', () => {
     const { base, log } = await start(t, { github });
     const res = await send(base, report());
     assert.equal(res.status, 201);
-    assert.deepEqual(res.json, { number: 42, url: 'https://github.com/saleem-hadad/nodus/issues/42' });
+    assert.deepEqual(res.json, { number: 42, url: 'https://github.com/saleem-hadad/nodus-feedback/issues/42' });
 
     const creates = github.issueCreates().map((c) => JSON.parse(c.body));
     assert.equal(creates.length, 2);
@@ -404,7 +404,7 @@ describe('GitHub failures', () => {
 
   test("a second 422 is a normal failure, not a loop", async (t) => {
     const github = fakeGitHub({
-      'POST api.github.com/repos/saleem-hadad/nodus/issues': () => json(422, { message: 'Validation Failed' }),
+      'POST api.github.com/repos/saleem-hadad/nodus-feedback/issues': () => json(422, { message: 'Validation Failed' }),
     });
     const { base } = await start(t, { github });
     assert.equal((await send(base, report())).status, 502);
@@ -414,7 +414,7 @@ describe('GitHub failures', () => {
   test("GitHub's response and the token never reach the client or the logs", async (t) => {
     const leaky = `Bad credentials for ${TOKEN} SECRET-DETAIL`;
     const github = fakeGitHub({
-      'POST api.github.com/repos/saleem-hadad/nodus/issues': () =>
+      'POST api.github.com/repos/saleem-hadad/nodus-feedback/issues': () =>
         json(401, { message: 'Bad credentials', documentation_url: 'https://docs.github.com', leaky }),
     });
     const { base, log } = await start(t, { github });
@@ -430,7 +430,7 @@ describe('GitHub failures', () => {
 
   test('a network failure is a 502', async (t) => {
     const github = fakeGitHub({
-      'POST api.github.com/repos/saleem-hadad/nodus/issues': () => {
+      'POST api.github.com/repos/saleem-hadad/nodus-feedback/issues': () => {
         throw new TypeError('fetch failed', { cause: new Error('getaddrinfo ENOTFOUND api.github.com') });
       },
     });
@@ -442,7 +442,7 @@ describe('GitHub failures', () => {
   test('a failed repository lookup is not cached', async (t) => {
     let failNext = true;
     const github = fakeGitHub({
-      'GET api.github.com/repos/saleem-hadad/nodus': () => {
+      'GET api.github.com/repos/saleem-hadad/nodus-feedback': () => {
         if (failNext) {
           failNext = false;
           return json(503, { message: 'Service Unavailable' });

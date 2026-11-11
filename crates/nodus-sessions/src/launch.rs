@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::time::Duration;
 
-use nodus_domain::{BoardNode, SessionKind, SessionStatus};
+use nodus_domain::{BoardNode, SessionKind, SessionModel, SessionStatus};
 use nodus_platform::env::EnvMap;
 use nodus_platform::{ClaudeNotFound, Env, ShellCommand};
 use regex::Regex;
@@ -59,6 +59,8 @@ pub struct SpawnOptions {
     pub initial_prompt: Option<String>,
     /// `acceptEdits` when none.
     pub permission_mode: Option<PermissionMode>,
+    /// The card's model, a `SessionModel` alias; Claude Code's default when none.
+    pub model: Option<String>,
     /// More `claude` options, such as an action run's system prompt.
     pub extra_args: Option<Vec<String>>,
     pub cols: Option<f64>,
@@ -152,6 +154,10 @@ pub fn command_for(
     // SESS-122
     let mode = opts.permission_mode.unwrap_or(PermissionMode::AcceptEdits);
     args.extend(["--permission-mode".to_owned(), mode.as_str().to_owned()]);
+    // The model the card was started on, on every launch: a resume doesn't keep it.
+    if let Some(model) = opts.model.as_deref().and_then(SessionModel::parse) {
+        args.extend(["--model".to_owned(), model.as_str().to_owned()]);
+    }
     // SESS-123: the board tools, allowed outright so they never stop to ask.
     // Both lists are followed by another option, so neither swallows the prompt.
     if let Some(tools) = board_tools {
@@ -238,6 +244,7 @@ pub fn for_create(
         name: if terminal { None } else { node.title.clone() },
         initial_prompt: if terminal { None } else { first_prompt },
         permission_mode: (action.is_some() || node.auto_mode == Some(true)).then_some(PermissionMode::Auto),
+        model: node.model().map(str::to_owned),
         extra_args: action.map(|a| a.args),
         cols: None,
         rows: None,
@@ -266,6 +273,7 @@ pub fn for_open(
         permission_mode: node
             .is_some_and(|n| n.auto_mode == Some(true))
             .then_some(PermissionMode::Auto),
+        model: node.and_then(BoardNode::model).map(str::to_owned),
         extra_args: brain_args.filter(|_| node.is_some_and(is_brain)),
         cols: Some(cols),
         rows: Some(rows),
@@ -290,6 +298,7 @@ pub fn for_send(
         resume: has_transcript,
         initial_prompt: Some(nodus_domain::js::trim(prompt).to_owned()),
         permission_mode: (node.auto_mode == Some(true)).then_some(PermissionMode::Auto),
+        model: node.model().map(str::to_owned),
         extra_args: brain_args.filter(|_| is_brain(node)),
         ..SpawnOptions::default()
     }
@@ -435,6 +444,25 @@ mod tests {
         assert_eq!(argv(&opts, true), expected);
         assert_eq!(initial_status(&opts), SessionStatus::Working);
         assert_eq!(pty_size(&opts), (120.0, 36.0));
+    }
+
+    #[test]
+    fn starts_and_resumes_on_the_cards_model() {
+        let card = node(json!({ "model": "opus" }));
+        let created = for_create("p", "/work/repo", &card, None, Some("design it"));
+        let opened = for_open("p", "/work/repo", ID, Some(&card), true, None, (80.0, 24.0));
+        let sent = for_send("p", "/work/repo", &card, true, "and test it", None);
+        for opts in [&created, &opened, &sent] {
+            let args = argv(opts, false);
+            let at = args.iter().position(|a| a == "--model").expect("a --model");
+            assert_eq!(args[at + 1], "opus");
+        }
+    }
+
+    #[test]
+    fn leaves_out_a_model_it_doesnt_know() {
+        let opts = for_create("p", "/work/repo", &node(json!({ "model": "-rf" })), None, None);
+        assert!(!argv(&opts, false).iter().any(|a| a == "--model"));
     }
 
     #[test]

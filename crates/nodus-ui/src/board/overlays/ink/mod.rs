@@ -1,5 +1,5 @@
 //! Ink on the board (`InkLayer.tsx`, `ink.css`; spec 11 INKUI): pen lines,
-//! arrows and text labels drawn over everything, and the dock of tools that
+//! arrows, rectangles and text labels drawn over everything, and the dock of tools that
 //! draws them, above the zoom controls. While a tool is out, the board's own
 //! pointer handling stands aside; the pointer tool selects, moves and deletes
 //! ink. The geometry and the undo history are `nodus_board::ink_draw`.
@@ -44,24 +44,27 @@ pub enum InkTool {
     Select,
     Pen,
     Arrow,
+    Rect,
     Text,
     Eraser,
 }
 
 /// The dock's tools: tool, name, its key.
-const TOOLS: [(InkTool, &str, Option<&str>); 5] = [
+const TOOLS: [(InkTool, &str, Option<&str>); 6] = [
     (InkTool::Select, "Pointer", Some("Esc")),
     (InkTool::Pen, "Pen", Some("P")),
     (InkTool::Arrow, "Arrow", Some("A")),
+    (InkTool::Rect, "Rectangle", Some("R")),
     (InkTool::Text, "Text", None),
     (InkTool::Eraser, "Eraser", Some("X")),
 ];
 
-/// INKUI-002: the board's single-key shortcuts for the tools.
+/// INKUI-002, INKUI-027: the board's single-key shortcuts for the tools.
 pub fn tool_for_key(key: &str) -> Option<InkTool> {
     match key {
         "p" => Some(InkTool::Pen),
         "a" => Some(InkTool::Arrow),
+        "r" => Some(InkTool::Rect),
         "x" => Some(InkTool::Eraser),
         _ => None,
     }
@@ -198,7 +201,8 @@ fn measurer(window: &Window) -> impl Fn(&str, f64) -> f64 + use<> {
     move |text: &str, size: f64| label_width(&ts, text, size)
 }
 
-mod cursor;
+// The bubble's cursor is drawn the eraser's way.
+pub(crate) mod cursor;
 mod dock;
 mod draw;
 mod input;

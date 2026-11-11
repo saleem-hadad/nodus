@@ -160,6 +160,30 @@ pub struct CreateSessionOptions {
     /// The view on this board whose page started it. Claude sessions only.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub from_view: Option<String>,
+    /// The model it runs on, a [`SessionModel`] alias; Claude Code's default
+    /// when none. Claude sessions only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+}
+
+string_enum! {
+    /// The models a session can be started on, as `claude --model` aliases.
+    pub enum SessionModel {
+        Haiku = "haiku",
+        Sonnet = "sonnet",
+        Opus = "opus",
+    }
+}
+
+impl SessionModel {
+    /// How it's named to the user.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Haiku => "Haiku",
+            Self::Sonnet => "Sonnet",
+            Self::Opus => "Opus",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

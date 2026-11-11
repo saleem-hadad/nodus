@@ -12,6 +12,9 @@ mod text;
 mod view;
 mod voice;
 
+// The bubble's chip shows notes and views in the bar's colours.
+pub(crate) use view::{note_gradient, view_hue};
+
 use gpui::component::input::{InputEvent, TextareaState};
 use gpui::{AppContext as _, Context, Entity, Focusable as _, Subscription, Window};
 use nodus_board::compose::{SlashCommand, Target, match_commands, take_command};

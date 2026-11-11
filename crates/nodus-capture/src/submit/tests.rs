@@ -196,6 +196,7 @@ async fn makes_a_session_with_the_words_stuck_on() {
                 expanded: Some(true),
                 auto_mode: Some(true),
                 from_view: None,
+                model: None,
             }
         )]
     );

@@ -306,7 +306,8 @@ def run(a):
     print("8. Ink (P, a stroke)")
     ink_before = len(a.board().get("ink") or [])
     empty = empty_spot(a)
-    a.steps([AWAY, M("click", *empty), W(200), K("p"), M("down", empty[0], empty[1]),
+    # The click opens the bubble (BUBBLE-001); Esc puts it away and gives the board the keyboard.
+    a.steps([AWAY, M("click", *empty), W(200), K("escape"), W(100), K("p"), M("down", empty[0], empty[1]),
              M("drag", empty[0] + 40, empty[1] + 20), M("drag", empty[0] + 90, empty[1]),
              M("drag", empty[0] + 140, empty[1] + 30), M("up", empty[0] + 140, empty[1] + 30), W(600), K("escape")])
     a.until("a pen stroke saved", lambda: len(a.board().get("ink") or []) == ink_before + 1)

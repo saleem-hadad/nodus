@@ -4,7 +4,9 @@
 //! `nodus_sessions::launch` and the session host).
 
 use nodus_domain::js;
-use nodus_domain::{BoardNode, CreateSessionOptions, Project, ProjectAction, SessionCard, SessionKind, SessionStatus};
+use nodus_domain::{
+    BoardNode, CreateSessionOptions, Project, ProjectAction, SessionCard, SessionKind, SessionModel, SessionStatus,
+};
 use nodus_store::BoardState;
 
 use crate::archive::bare_node;
@@ -93,6 +95,12 @@ pub fn new_session(
         .from_view
         .clone()
         .filter(|v| !terminal && board.views.contains_key(v));
+    node.set_model(
+        opts.model
+            .as_deref()
+            .and_then(SessionModel::parse)
+            .filter(|_| !terminal),
+    );
     // SESS-117
     if let Some(action) = &action {
         node.title = Some(action.name.clone());

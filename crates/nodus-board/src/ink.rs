@@ -31,14 +31,14 @@ fn clamp_size(n: Option<&Value>) -> f64 {
 }
 
 /// How many numbers each kind of stroke has: a path, an arrow's two ends, a
-/// label's corner (INK-007).
+/// rectangle's two corners, a label's corner (INK-007).
 fn points_for(kind: InkKind, points: Vec<f64>) -> Option<Vec<f64>> {
     if points.len() < 2 || !points.len().is_multiple_of(2) {
         return None;
     }
     match kind {
         InkKind::Pen => Some(points.into_iter().take(INK_MAX_POINTS * 2).collect()),
-        InkKind::Arrow => (points.len() == 4).then_some(points),
+        InkKind::Arrow | InkKind::Rect => (points.len() == 4).then_some(points),
         InkKind::Text => (points.len() == 2).then_some(points),
     }
 }

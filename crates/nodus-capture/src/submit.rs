@@ -271,6 +271,7 @@ impl Maker<'_> {
                     expanded: Some(true),
                     auto_mode: Some(true),
                     from_view: None,
+                    model: None,
                 };
                 let session_id = self
                     .handlers

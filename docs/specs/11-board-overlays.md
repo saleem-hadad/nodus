@@ -1,4 +1,4 @@
-# 11 · Prompt bar, search, merge dialog, ink & selection bar
+# 11 · Prompt bar, search, merge dialog, ink, bubble & selection bar
 
 Sources:
 - `src/renderer/src/components/sidekick/Sidekick.tsx` (387 lines, all read)
@@ -20,13 +20,14 @@ Cross-domain owners: canvas mechanics, viewport, selection model, z-order, `ensu
 
 ## Summary
 
-Five overlays sit on the board:
+Six overlays sit on the board:
 
 1. **Prompt bar** ("sidekick"): a frosted pill, bottom centre, with a round mic button beside it. Type and press Return to start a Claude session in auto mode; its card lands **expanded** in a free spot in view, with the words stuck on it as a note; if it can't start, the words become a note. `/` opens a two-item menu; `/view` and `/note` turn into a token at the start of the pill so the bar makes a view or a note instead (a note token has a colour swatch). With exactly one live Claude session selected, the bar shows its name as a token and Return sends the text into that session (a session waiting on a question is opened instead). With more selected (sessions, notes, views) the new session gets them as context, in a fixed Markdown template, ahead of the prompt. The toast, the selection bar and voice notices stack above the bar.
 2. **⌘K search**: a Spotlight-like modal high on the window. Empty query lists the 30 latest sessions; typing searches every session's transcript (debounced, via 03) and shows rows with status, highlighted title, match count, time and up to a few snippets with highlighted ranges. ↑/↓, Return opens (centres and flashes a live card, or opens an archived one's transcript at the match), Tab marks rows, ⌘Return starts a new session from the marked rows (or the current one) through the merge dialog, focused on the query.
 3. **Merge dialog** ("New session from context"): summarizes each source session in a forked copy (03), showing per-session progress (Queued / Summarizing… / Ready / Failed) and an elapsed counter, then a review step to edit the combined handoff, write an instruction and a name; ⌘Return starts the session with `context + --- + instruction`.
-4. **Ink**: a vertical tool dock above the zoom controls (pointer, pen, arrow, text, eraser, colour, clear) and a layer that draws pen strokes, arrows and text labels over every card, sized so they keep the on-screen thickness they had when drawn. Pointer events are taken ahead of the board in the capture phase; the pointer tool selects, moves, recolours and deletes ink; ⌘Z/⇧⌘Z undo/redo up to 100 changes per board.
+4. **Ink**: a vertical tool dock above the zoom controls (pointer, pen, arrow, rectangle, text, eraser, colour, clear) and a layer that draws pen strokes, arrows, rectangles and text labels over every card, sized so they keep the on-screen thickness they had when drawn. Pointer events are taken ahead of the board in the capture phase; the pointer tool selects, moves, recolours and deletes ink; ⌘Z/⇧⌘Z undo/redo up to 100 changes per board.
 5. **Selection bar**: a pill above the prompt bar while cards are selected: `N selected`, **New session from context**, **Group**, **Archive**, ×.
+6. **Bubble** (added after 0.9.4): with the pointer tool out, the cursor over the empty board is a chat bubble, and a click there opens a small frosted field pointing at the spot. Claude (Haiku) guesses as the typing pauses whether the text is a session, a sticky note or a view, and for a session which model the ask needs (Haiku, Sonnet or Opus); Tab or a click on the chip picks instead. Return makes it at the spot. The session runs on that model from then on, resumes included.
 
 The theme follows `nativeTheme.themeSource` (System/Light/Dark, 01/08); the CSS uses `prefers-color-scheme`, so "dark" below means whenever the resolved scheme is dark. Every colour below is given as **L** (light) / **D** (dark).
 
@@ -149,8 +150,8 @@ The theme follows `nativeTheme.themeSource` (System/Light/Dark, 01/08); the CSS 
 
 ### Ink — INKUI
 
-- **INKUI-001** The ink dock is always shown on the board: a vertical frosted pill 16px from the board's left edge with its bottom 58px above the board's bottom (8px above the 34px zoom pill whose bottom is at 16px). Top to bottom: Pointer, Pen, Arrow, Text, Eraser, a separator, Colour, Clear all. Tooltips `Pointer (Esc)`, `Pen (P)`, `Arrow (A)`, `Text`, `Eraser (X)`, `Ink colour`, `Clear all ink`; accessible names `Pointer`, `Pen`, `Arrow`, `Text`, `Eraser`, `Ink colour: ${Name}`, `Clear all ink`; toolbar name `Ink`. The current tool's button is shown pressed. Pressing the dock never moves keyboard focus.
-- **INKUI-002** Tools are chosen from the dock or with the board keys `P` (pen), `A` (arrow), `X` (eraser) (no ⌘/Ctrl/Alt; Shift allowed; with the board's usual guards — not while typing, no modal/overlay). Text has no key. The tool is per board mount and starts as Pointer.
+- **INKUI-001** The ink dock is always shown on the board: a vertical frosted pill 16px from the board's left edge with its bottom 58px above the board's bottom (8px above the 34px zoom pill whose bottom is at 16px). Top to bottom: Pointer, Pen, Arrow, Rectangle (INKUI-027), Text, Eraser, a separator, Colour, Clear all. Tooltips `Pointer (Esc)`, `Pen (P)`, `Arrow (A)`, `Rectangle (R)`, `Text`, `Eraser (X)`, `Ink colour`, `Clear all ink`; accessible names `Pointer`, `Pen`, `Arrow`, `Rectangle`, `Text`, `Eraser`, `Ink colour: ${Name}`, `Clear all ink`; toolbar name `Ink`. The current tool's button is shown pressed. Pressing the dock never moves keyboard focus.
+- **INKUI-002** Tools are chosen from the dock or with the board keys `P` (pen), `A` (arrow), `R` (rectangle), `X` (eraser) (no ⌘/Ctrl/Alt; Shift allowed; with the board's usual guards — not while typing, no modal/overlay). Text has no key. The tool is per board mount and starts as Pointer.
 - **INKUI-003** Choosing any tool first finishes a label being typed (INKUI-013); choosing a tool other than Pointer also deselects the selected stroke.
 - **INKUI-004** Colours: graphite, red, orange, green, blue, purple (names `Graphite`, `Red`, `Orange`, `Green`, `Blue`, `Purple`). The colour button shows a dot in the current colour and toggles a palette to its right; picking a colour sets it, closes the palette, remembers it for next time (app-wide, across boards and restarts; key `nodus.inkColor`), and — if a stroke is selected and has a different colour — recolours that stroke (one undoable change). The first-ever colour (or an unreadable/unknown stored value) is red. The palette closes on a pointer-down anywhere outside the colour button and the palette.
 - **INKUI-005** **Clear all ink** is disabled when the board has no ink; otherwise it finishes any label, deselects, removes all strokes as one undoable change, and shows the toast `Cleared the ink. Press ⌘Z to bring it back.` (`Ctrl+Z` off macOS).
@@ -165,7 +166,7 @@ The theme follows `nativeTheme.themeSource` (System/Light/Dark, 01/08); the CSS 
 - **INKUI-014** Double-clicking a label with the Pointer tool edits it in place (same input, prefilled, its colour and size, the original hidden meanwhile): finishing with changed text updates it, with emptied text deletes it, with unchanged text does nothing (each change undoable); Esc leaves it unchanged.
 - **INKUI-015** Pointer tool: a press on a stroke (topmost; labels before lines; within 6 screen px of a line, or anywhere in a label's box) selects that stroke, deselects every selected card, note and view, and starts a move; once the pointer has travelled 3 screen px the stroke follows it; on release a moved stroke is committed at its new place (one undoable change). A press not on a stroke deselects the selected stroke (if any) and goes to the board as usual. Strokes are hit before cards, so ink over a card takes the press.
 - **INKUI-016** With the Pointer tool and no button held, hovering over a stroke on the board shows the move cursor over the whole board surface (checked once per animation frame).
-- **INKUI-017** Cursors over the board surface while a tool is out override the cards' own: Pen/Arrow → crosshair; Text → I-beam; Eraser → a 20×20 circle (radius 7, white fill at 65%, black outline at 70%, 1.5px) with its hotspot at the centre (fallback: cell). Switching away from Pointer drops the move cursor.
+- **INKUI-017** Cursors over the board surface while a tool is out override the cards' own: Pen/Arrow/Rectangle → crosshair; Text → I-beam; Eraser → a 20×20 circle (radius 7, white fill at 65%, black outline at 70%, 1.5px) with its hotspot at the centre (fallback: cell). Switching away from Pointer drops the move cursor.
 - **INKUI-018** While a tool other than Pointer is out, views' live pages ignore the pointer, so presses over a view go to the ink.
 - **INKUI-019** Double-clicking the board while a tool other than Pointer is out does nothing (no new session). With the Pointer tool, double-clicking a non-label stroke does nothing either (no new session, no card opened).
 - **INKUI-020** Holding Space (when focus isn't in a text field) makes ink ignore presses, so the board pans; releasing Space or the window losing focus ends it.
@@ -175,6 +176,34 @@ The theme follows `nativeTheme.themeSource` (System/Light/Dark, 01/08); the CSS 
 - **INKUI-024** Every change (add, move, recolour, erase, delete, clear, undo, redo, label edit) updates the board's ink at once and saves it (`board:saveInk`, 04).
 - **INKUI-025** Ink draws above every card (selected and expanded included), note, view, section and edge, and below the open archive panel and its results (RAISED_Z 1500). Within the ink: lines in stored order, then the live stroke, then the selection outline, then labels (labels always above lines), then the label input.
 - **INKUI-026** The selected stroke shows a dashed accent rectangle around its box (INKUI box + `6 × size` padding, corner radius `4 × size` board units), 1.5 screen px wide, dashes 5 / 4 (non-scaling); it follows the stroke while moving.
+- **INKUI-027** Rectangle (added after 0.9.4): from the press point to the current pointer, the two points being opposite corners; holding Shift while dragging makes it a square as wide as the longer side, on the pointer's side of the press. While drawing, before the first move it shows as a dot; on release it is discarded when its diagonal on screen is under 8px, otherwise added (one undoable change). It is drawn as an outline only (no fill), width `3 × size`, round joins, the path starting and ending mid-way along the top edge so every corner is a join. It is hit (pointer tool, eraser) within the usual reach of any of its four sides, not in its hollow inside, so a press inside it goes to the board. Its box is the corners' box padded by half the line width, as a pen's.
+
+### Bubble — BUBBLE
+
+Added after 0.9.4; nothing in 0.9.4 to match.
+
+- **BUBBLE-001** A click (press and release within the pane's click distance, no drag) on the empty board or inside a section's frame, with the pointer tool out, deselects as BOARD-049 does and opens the bubble at the pointer, its field focused. Not inside the archive and note pad's area (the board's dock), as a double-click there starts nothing. The second click of a double-click lands on the empty spot beside the bubble: it closes the bubble and starts a session there (BOARD-048, unchanged).
+- **BUBBLE-002** A press on the pane that closes something (an open bubble, a context menu, the confirm, the merge dialog, the New view dialog or search) only closes it: its click opens no bubble. A bubble waiting to go (BUBBLE-014) isn't closed by the press.
+- **BUBBLE-003** It closes on Esc, on a press on the pane, and when its field loses the keyboard (a press on a card, the bar, anything else), unless it's waiting to go. Closing stops a guess in progress; the text is dropped. The board takes the keyboard back if the field had it.
+- **BUBBLE-004** Placement, in canvas pixels (it doesn't scale with zoom; it follows the spot as the board pans or zooms): 360px wide; above and to the right of the spot, its bottom-left corner 6px right of and 6px above it. With under 84 + 12px of room above the spot it opens below (top-left corner 6px right and below); with under 360 + 18px of room to the right it opens to the left (the right corner 6px left of the spot, never past 12px from the board's left edge). The corner nearest the spot has a 4px radius, the others 16px, so it reads as a speech bubble. An 8px accent dot with a 3px ring at 25% marks the spot. Both fade in and rise 4px over 120ms ease-out.
+- **BUBBLE-005** Cursor: over the empty board, while a click there would open the bubble (pointer tool, no bubble open, no gesture, Space not held, no overlay open), an image cursor: a white speech bubble with a dark outline and three dots, 24×24, hotspot at its tail's tip (3.5, 21); the arrow where an image cursor can't be made. Ink under the pointer shows its own move cursor over it (INKUI-016); cards, notes, views and the HUD show their own.
+- **BUBBLE-006** Body: frosted (`--bg-elevated` at 92%, blur 24, saturate 1.8), `shadow-lg`, padding 8px 12px, gap 6px. The field: 14px/20px text, auto-grows 1–5 lines, placeholder `Ask Claude, jot a note, or describe a view`. Under it a footer (12px/16px): the chip, a line saying why (tertiary, one line, ellipsis), and a `↵` key cap once something is typed. The chip (22px tall, radius 11, medium weight, pointing hand, tooltip `Change (Tab)`) shows the pick, else the latest guess, which stays on while the text changes until the next one: `Session · Haiku|Sonnet|Opus` (Sparkles, accent on accent at 12%), `Note` (an 11px yellow note swatch, primary text on `--bg-hover`), `View` (LayoutDashboard, the bar's view hue at 15% with its ink, BAR-019); with neither, `Auto` (Sparkles) on `--bg-hover`.
+- **BUBBLE-007** While Claude is looking (a guess in progress, or waiting to go) and nothing was picked: the chip's mark is a spinner, and with no guess yet it reads `Thinking…`. The line says `Claude picks a session, note or view` while the field is empty, `Your pick` after Tab or a click, `Starts once Claude picks` while waiting to go, else the guess's reason.
+- **BUBBLE-010** The guess is asked 700ms after the text last changed, once the trimmed text is 3 UTF-16 units or more and differs from the text the guess on screen was made for, and only until the user picks.
+- **BUBBLE-011** Clearing the text forgets the guess and the pick, and drops answers in flight.
+- **BUBBLE-012** Only the latest guess counts; one that gives no answer keeps the guess on screen.
+- **BUBBLE-013** Return (no modifiers) with an empty field does nothing; with the pick, or a guess made for exactly this text, it goes at once (BUBBLE-030). ⇧Return is a new line. While an input method composes, keys are its own.
+- **BUBBLE-014** Otherwise Return waits for Claude's guess (asking now unless one is in progress), then goes on it; with no answer it goes as a session on Claude Code's own model. Return again, Tab and the chip do nothing while it waits; Esc closes it and nothing is made.
+- **BUBBLE-015** Tab (the field's IndentInline, taken in the capture phase) or a click on the chip picks the next of `Session · Haiku`, `Session · Sonnet`, `Session · Opus`, `Note`, `View`, round to the first, after the one shown; with none shown, `Session · Sonnet`.
+- **BUBBLE-016** Keys in the field stay out of the board's shortcuts (a focused field is typing, BOARD-156); ⌘K still opens search.
+- **BUBBLE-020** The guess is a headless `claude -p` as a capture's guess is (CAP-069): `--model haiku`, thinking off (`--settings {"alwaysThinkingEnabled":false}`), `--tools ""`, `--strict-mcp-config`, `--no-session-persistence`, `--json-schema` (kind `session|note|view`, model `haiku|sonnet|opus`, reason), `--output-format json`, the bubble's system prompt (`nodus_capture::bubble::SYSTEM_PROMPT`, verbatim), run in the temp folder with stdin closed.
+- **BUBBLE-021** Its prompt: `Project: <name>` (one line, 120 units at most), a blank line, then `The bubble:` and the text, trimmed and cut to 4000 UTF-16 units, between `"""` lines.
+- **BUBBLE-022** The answer is `structured_output` of a reply that isn't an error. A kind other than note or view is a session; a model it doesn't know is Sonnet; the reason is flattened to one line of at most 120 units. Notes and views ignore the model.
+- **BUBBLE-023** It runs on its own guesser, apart from the capture panel's, one at a time: a new guess stops the last (SIGKILL), and after 30 s it's stopped and gives no answer. No `claude` installed gives no answer.
+- **BUBBLE-024** The bubble closing stops its guess.
+- **BUBBLE-030** Going: the bubble closes, the board takes the keyboard, and the trimmed text is made centred on the spot, in the free place nearest it (BOARD-099's `findFreeSpot`).
+- **BUBBLE-031** A session is started as the bar starts one (BOARD-133, BOARD-134: expanded, auto mode, the text stuck on it as a note, or left as a note if it can't start), on the model picked or guessed: the card keeps it as `model` and every launch of it passes `--model <alias>` (SESS-121's arguments; create, open and send alike), since a resume doesn't keep the model. A session that went with no guess has no `model`, and Claude Code's own default applies.
+- **BUBBLE-032** A note is a yellow sticky note of the text (BOARD-137's note, at the spot); a view is created as the bar's `/view` is (BOARD-136, at the spot), with the same toast when it can't be.
 
 ### Selection bar — SEL
 
@@ -312,7 +341,7 @@ Stack ranking (BoardView 571–584): `hits = archivedInStackOrder.map((c, rank) 
 
 ### Ink (ink.ts, InkLayer.tsx) — exact
 
-- Stored stroke (04 owns persistence): `InkStroke { id: uuid, kind: 'pen'|'arrow'|'text', color: 'graphite'|'red'|'orange'|'green'|'blue'|'purple', points: number[] (flat x, y pairs, board units, each rounded to 0.1), size: number, text?: string }`. A pen has ≥ 1 point, an arrow exactly 2 (tail, tip), a label 1 (its top-left corner).
+- Stored stroke (04 owns persistence): `InkStroke { id: uuid, kind: 'pen'|'arrow'|'text'|'rect', color: 'graphite'|'red'|'orange'|'green'|'blue'|'purple', points: number[] (flat x, y pairs, board units, each rounded to 0.1), size: number, text?: string }`. A pen has ≥ 1 point, an arrow exactly 2 (tail, tip), a rectangle exactly 2 (opposite corners, in the order drawn; INKUI-027), a label 1 (its top-left corner). Versions without it (0.9.4, and 1.0.x before it) drop `rect` strokes when they clean the ink, so a board saved by one of them loses its rectangles.
 - Constants: `PEN_WIDTH = 3`, `ARROW_HEAD = 14`, `LABEL_FONT = 16`, `LABEL_LINE = 20` (board units at size 1); `HISTORY = 100`; `HIT_PX = 6`; `MIN_STEP_PX = 1.5`; `MIN_ARROW_PX = 8`; move threshold 3 screen px; colour key `nodus.inkColor` (renderer localStorage), default `red`.
 - `r1(n) = Math.round(n × 10) / 10` (JS round: .5 rounds up, also for negatives: use `floor(n·10 + 0.5) / 10`). `flatten(pts)` = r1 of every coordinate.
 - `sizeAt(zoom) = Math.round(min(4, max(0.5, 1 / zoom)) × 100) / 100`.
@@ -507,7 +536,7 @@ Horizontal, items centred, gap 4px, padding 6px 6px 6px 16px, radius 14px, frost
 | --- | --- | --- | --- |
 | Board (no field focused, no overlay) | `/` | Focus the bar (insert `/` if empty) | BAR-033 |
 | Board | `V` | Record / stop | BAR-034 |
-| Board | `P` / `A` / `X` | Pen / Arrow / Eraser | INKUI-002 |
+| Board | `P` / `A` / `R` / `X` | Pen / Arrow / Rectangle / Eraser | INKUI-002, INKUI-027 |
 | Board | Esc | Ink tool → Pointer, else deselect stroke, else board Esc; voice cancel takes precedence | INKUI-023, BAR-038 |
 | Board | ⌫ / Delete | Delete selected stroke first | INKUI-022 |
 | Board | ⌘Z / ⇧⌘Z | Ink undo / redo | INKUI-021 |
@@ -526,6 +555,10 @@ Horizontal, items centred, gap 4px, padding 6px 6px 6px 16px, radius 14px, frost
 | Merge | ⌘Return | Start | MERGE-015 |
 | Merge | Esc | Close (backdrop doesn't) | MERGE-002 |
 | Ink label | Return / blur / Esc | Commit / commit / discard | INKUI-013 |
+| Board, pointer tool | Click on the empty board | Open the bubble there | BUBBLE-001 |
+| Bubble field | Return / ⇧Return | Go (or wait for the guess) / newline | BUBBLE-013/014 |
+| Bubble field | Tab / chip click | Pick the next route | BUBBLE-015 |
+| Bubble field | Esc / press elsewhere | Close, nothing made | BUBBLE-003 |
 | Ink, Pointer | Double-click label | Edit | INKUI-014 |
 
 ## Platform differences
@@ -729,6 +762,12 @@ Risks:
 - [x] INKUI-024 Every change saved immediately
 - [x] INKUI-025 Z-order (above cards, below open archive panel) and paint order
 - [x] INKUI-026 Selection outline (dashed, non-scaling, padded)
+- [x] INKUI-027 Rectangle: R, corner to corner, Shift square, < 8px discarded, outline hit only
+- [x] BUBBLE-001…003 Open on a click on the empty board, close on Esc, press or blur, double-click unchanged
+- [x] BUBBLE-004…007 Placement and flips, speech-bubble corner, spot dot, cursor, chip and line states
+- [x] BUBBLE-010…016 Guess timing, latest only, Return goes or waits, Tab and chip cycle
+- [x] BUBBLE-020…024 Haiku guess arguments, prompt, reading, own guesser, stopped on close
+- [x] BUBBLE-030…032 Session on the model (kept for resumes), yellow note or view at the spot
 - [x] SEL-001 Visibility (session-type selection, no merge dialog), position
 - [x] SEL-002 `N selected` count
 - [x] SEL-003 New session from context (disabled for terminals only)

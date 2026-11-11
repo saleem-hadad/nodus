@@ -335,10 +335,19 @@ impl Guesser {
         if js::trim(input.text).is_empty() || input.targets.projects.is_empty() {
             return Ok(None);
         }
+        let stdout = self.ask(guess_args(&input, now)).await?;
+        Ok(stdout.and_then(|stdout| read_reply(&stdout, input.targets)))
+    }
+
+    /// Runs `claude` with `args` and gives what it printed: `None` when it
+    /// couldn't start, ran out of time, or a newer question (or [`cancel`](Self::cancel))
+    /// stopped it. Fails only when Claude Code isn't installed.
+    pub async fn ask(&self, args: Vec<String>) -> Result<Option<String>, ClaudeNotFound> {
+        self.cancel();
         let claude = self.env.claude()?;
         // CAP-069: stdin closed, or `claude -p` waits for piped input.
         let child = Command::new(&claude)
-            .args(guess_args(&input, now))
+            .args(args)
             .cwd(std::env::temp_dir())
             .env(self.env.spawn_env())
             .stdout(Capture::All)
@@ -361,7 +370,7 @@ impl Guesser {
             cancelled: cancelled.clone(),
         });
         let answer = tokio::select! {
-            output = child.wait() => read_reply(&output.stdout_text(), input.targets),
+            output = child.wait() => Some(output.stdout_text()),
             // CAP-070
             () = tokio::time::sleep(self.timeout) => {
                 killer.kill(Signal::KILL);

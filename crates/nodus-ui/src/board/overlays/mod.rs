@@ -1,9 +1,10 @@
 //! The board's overlays (spec 11): the ink layer and its dock, the prompt
-//! bar with the selection bar and toast stacked above it, ⌘K search and the
-//! merge dialog. The canvas holds their state in [`Overlays`] and draws them
+//! bar with the selection bar and toast stacked above it, the bubble a click
+//! on the empty board opens, ⌘K search and the merge dialog. The canvas holds their state in [`Overlays`] and draws them
 //! from its render; the board's side of what they do is in `board/bar.rs`.
 
 pub mod bar;
+pub mod bubble;
 pub mod icons;
 pub mod ink;
 pub mod merge;
@@ -30,6 +31,12 @@ pub const INK_Z_BELOW: i32 = super::scene::RAISED_Z;
 pub struct Overlays {
     pub(crate) ink: ink::Ink,
     pub(crate) bar: bar::Bar,
+    pub(crate) bubble: Option<bubble::Bubble>,
+    /// How many bubbles this mount has opened.
+    pub(crate) bubble_key: usize,
+    /// BUBBLE-002: the press under way closed the bubble or a menu, so its
+    /// click opens nothing.
+    pub(crate) bubble_dismissed: bool,
     pub(crate) search: search::Search,
     pub(crate) merge: Option<merge::MergeDialog>,
 }

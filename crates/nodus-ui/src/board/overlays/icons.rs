@@ -9,6 +9,7 @@ use gpui::{Rgba, SharedString, Styled, Svg, px, svg};
 pub enum OvIcon {
     MousePointer2,
     MoveUpRight,
+    Square,
     Type,
     Eraser,
     Mic,
@@ -21,9 +22,10 @@ pub enum OvIcon {
 }
 
 impl OvIcon {
-    const ALL: [Self; 11] = [
+    const ALL: [Self; 12] = [
         Self::MousePointer2,
         Self::MoveUpRight,
+        Self::Square,
         Self::Type,
         Self::Eraser,
         Self::Mic,
@@ -39,6 +41,7 @@ impl OvIcon {
         match self {
             Self::MousePointer2 => "mouse-pointer-2",
             Self::MoveUpRight => "move-up-right",
+            Self::Square => "square",
             Self::Type => "type",
             Self::Eraser => "eraser",
             Self::Mic => "mic",
@@ -58,6 +61,7 @@ impl OvIcon {
                 r#"<path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"/>"#
             }
             Self::MoveUpRight => r#"<path d="M13 5H19V11"/><path d="M19 5L5 19"/>"#,
+            Self::Square => r#"<rect width="18" height="18" x="3" y="3" rx="2"/>"#,
             Self::Type => {
                 r#"<path d="M12 4v16"/><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"/><path d="M9 20h6"/>"#
             }

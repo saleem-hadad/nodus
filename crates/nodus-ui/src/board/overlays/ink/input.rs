@@ -119,14 +119,14 @@ impl BoardCanvas {
         self.ink_take(window, cx);
         let color = self.overlays.ink.color(cx);
         match tool {
-            InkTool::Pen | InkTool::Arrow => {
+            InkTool::Pen | InkTool::Arrow | InkTool::Rect => {
                 self.overlays.ink.gesture = Some(InkGesture::Draw {
                     base: InkStroke {
                         id: uuid::Uuid::new_v4().to_string(),
-                        kind: if tool == InkTool::Pen {
-                            InkKind::Pen
-                        } else {
-                            InkKind::Arrow
+                        kind: match tool {
+                            InkTool::Pen => InkKind::Pen,
+                            InkTool::Arrow => InkKind::Arrow,
+                            _ => InkKind::Rect,
                         },
                         color,
                         points: Vec::new(),
@@ -183,7 +183,13 @@ impl BoardCanvas {
         let q = self.ink_point(e.position);
         match &mut self.overlays.ink.gesture {
             Some(InkGesture::Draw { base, pts, zoom }) => {
-                if base.kind == InkKind::Arrow {
+                if matches!(base.kind, InkKind::Arrow | InkKind::Rect) {
+                    // INKUI-027: Shift keeps a rectangle square.
+                    let q = if base.kind == InkKind::Rect && e.modifiers.shift {
+                        ink_draw::square_corner(pts[0], q)
+                    } else {
+                        q
+                    };
                     if pts.len() < 2 {
                         pts.push(q);
                     } else {
@@ -225,7 +231,10 @@ impl BoardCanvas {
         let current = self.ink_strokes();
         match gesture {
             InkGesture::Draw { base, pts, zoom } => {
-                if base.kind == InkKind::Arrow && (pts.len() < 2 || distance(pts[0], pts[1]) * zoom < MIN_ARROW_PX) {
+                // INKUI-009, INKUI-027: a short arrow or rectangle is a slip.
+                if matches!(base.kind, InkKind::Arrow | InkKind::Rect)
+                    && (pts.len() < 2 || distance(pts[0], pts[1]) * zoom < MIN_ARROW_PX)
+                {
                     cx.notify();
                     return;
                 }

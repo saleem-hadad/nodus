@@ -106,9 +106,9 @@ In Rust the frame becomes a `wry` webview embedded in the GPUI board (see Rust m
 - **INK-002** Only the last `2000` items (`INK_MAX_STROKES`) of the array are considered (`raw.slice(-2000)`), before any filtering.
 - **INK-003** An item that is falsy or not an object is dropped.
 - **INK-004** `id` must be a non-empty string of at most 64 UTF-16 units and not seen earlier in this pass (first occurrence wins); otherwise dropped.
-- **INK-005** `kind` must be one of `pen`, `arrow`, `text` and `color` one of `graphite`, `red`, `orange`, `green`, `blue`, `purple`; otherwise dropped.
+- **INK-005** `kind` must be one of `pen`, `arrow`, `text`, `rect` (the rectangle added after 0.9.4, spec 11 INKUI-027) and `color` one of `graphite`, `red`, `orange`, `green`, `blue`, `purple`; otherwise dropped.
 - **INK-006** `points` must be an array whose every element is a finite number (no `NaN`, no strings); otherwise dropped.
-- **INK-007** `points` needs length ≥ 2 and even; a `pen` keeps its first `4000` numbers (`INK_MAX_POINTS × 2`); an `arrow` needs exactly 4; a `text` exactly 2; otherwise dropped.
+- **INK-007** `points` needs length ≥ 2 and even; a `pen` keeps its first `4000` numbers (`INK_MAX_POINTS × 2`); an `arrow` and a `rect` need exactly 4; a `text` exactly 2; otherwise dropped.
 - **INK-008** A `text` stroke's `text` is `trim()`ed and cut to `500` UTF-16 units (`INK_MAX_TEXT`); missing/blank → dropped. Other kinds never keep a `text` key.
 - **INK-009** Every kept point is rounded to one decimal: `Math.round(n × 10) / 10` (JS rounding: halves go toward +∞).
 - **INK-010** `size`: a finite number → `Math.round(min(10, max(0.25, n)) × 100) / 100`; anything else (missing, non-number) → `1`.
@@ -805,7 +805,7 @@ interface BoardNote {
   fromProject?: string; fromTitle?: string   // written from another project's board
   createdAt: number
 }
-interface InkStroke { id: string; kind: 'pen'|'arrow'|'text'; color: 'graphite'|'red'|'orange'|'green'|'blue'|'purple'; points: number[]; size: number; text?: string }
+interface InkStroke { id: string; kind: 'pen'|'arrow'|'text'|'rect'; color: 'graphite'|'red'|'orange'|'green'|'blue'|'purple'; points: number[]; size: number; text?: string }
 // A brain node: { sessionId, x, y, archived: false, title: "View: <title>", createdByApp: true, viewOf: <view id>, autoMode: true, createdAt }
 // A session a page started: { …, expanded: true, autoMode: true, fromView: <view id> }
 ```
@@ -1482,7 +1482,7 @@ One line per behavior ID, in the order above. Tick only when the Rust build matc
 - [x] INK-002 Only the last 2000 items (INK_MAX_STROKES) of the array are considered (raw.slice(-2000)), before any filtering
 - [x] INK-003 An item that is falsy or not an object is dropped
 - [x] INK-004 id must be a non-empty string of at most 64 UTF-16 units and not seen earlier in this pass (first occurrence wins)
-- [x] INK-005 kind must be one of pen, arrow, text and color one of graphite, red, orange, green, blue, purple
+- [x] INK-005 kind must be one of pen, arrow, text, rect and color one of graphite, red, orange, green, blue, purple
 - [x] INK-006 points must be an array whose every element is a finite number (no NaN, no strings)
 - [x] INK-007 points needs length ≥ 2 and even
 - [x] INK-008 A text stroke's text is trim()ed and cut to 500 UTF-16 units (INK_MAX_TEXT)

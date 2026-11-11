@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::project::FolderColor;
-use crate::session::SessionStatus;
+use crate::session::{SessionModel, SessionStatus};
 
 string_enum! {
     /// What floating capture makes of what the user typed. `ALL` is the
@@ -171,6 +171,39 @@ pub struct CaptureGuess {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
     /// One short line saying why, for the user.
+    pub reason: String,
+}
+
+/// What the board's bubble makes of what was typed into it: where it goes,
+/// and for a session, the model that suits the ask.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BubbleRoute {
+    Session(SessionModel),
+    Note,
+    View,
+}
+
+impl BubbleRoute {
+    /// The order Tab and a click on the chip go through them.
+    pub const ALL: [Self; 5] = [
+        Self::Session(SessionModel::Haiku),
+        Self::Session(SessionModel::Sonnet),
+        Self::Session(SessionModel::Opus),
+        Self::Note,
+        Self::View,
+    ];
+
+    /// The next one after this, round to the first.
+    pub fn next(self) -> Self {
+        let at = Self::ALL.iter().position(|r| *r == self).unwrap_or(0);
+        Self::ALL[(at + 1) % Self::ALL.len()]
+    }
+}
+
+/// Claude's guess at a bubble's route, with one short line saying why.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BubbleGuess {
+    pub route: BubbleRoute,
     pub reason: String,
 }
 

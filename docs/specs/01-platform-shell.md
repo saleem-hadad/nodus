@@ -480,7 +480,7 @@ Top level (`State`):
 `BoardView` (04): `id`, `title`, `description`, `x`, `y`, `w?`, `h?`, `sessionId?`, `from?`, `commands?: ViewCommand[]`, `allowedRuns?: string[]`, `deniedRuns?: string[]`, `refresh?: ViewRefresh`, `startsSessions?: bool`, `version` number (0 until there's a page), `createdAt`, `updatedAt`.
 `ViewCommand`: `name`, `run`, `every?` (minutes), `approved?`, `denied?`. `ViewRefresh`: `every` (minutes), `prompt`.
 
-`InkStroke` (04/11): `id`, `kind` `'pen'|'arrow'|'text'`, `color` `'graphite'|'red'|'orange'|'green'|'blue'|'purple'`, `points` number[] (flat x,y pairs), `size` number (multiple of the default), `text?`.
+`InkStroke` (04/11): `id`, `kind` `'pen'|'arrow'|'text'|'rect'`, `color` `'graphite'|'red'|'orange'|'green'|'blue'|'purple'`, `points` number[] (flat x,y pairs), `size` number (multiple of the default), `text?`.
 
 `Rect`: `x, y, w, h` numbers. `Viewport`: `x, y, zoom` numbers.
 
@@ -495,7 +495,7 @@ Checked against a real 0.9.4 `state.json`, by key names only: the fields listed 
 | `SessionStatus` | `'working' \| 'waiting' \| 'done'` |
 | `SessionKind` | `'claude' \| 'terminal'` |
 | `FOLDER_COLORS` | `['blue','purple','pink','red','orange','yellow','green','graphite']` (order matters, PLAT-073) |
-| `INK_COLORS` / `INK_KINDS` | `['graphite','red','orange','green','blue','purple']` / `['pen','arrow','text']` |
+| `INK_COLORS` / `INK_KINDS` | `['graphite','red','orange','green','blue','purple']` / `['pen','arrow','text']` (`'rect'` added after 0.9.4, 11 INKUI-027) |
 | `ProjectStats` | `{ total, active, working, waiting: number, running: RunningCounts }` |
 | `RunningCounts` | `{ sessions, background, terminals: number }` |
 | `SessionMeta` | `{ sessionId, title, firstPrompt?, lastPrompt?, lastAssistantText?, gitBranch?, messageCount, createdAt, updatedAt, transcriptPath }` |

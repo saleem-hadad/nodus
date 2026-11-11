@@ -14,7 +14,7 @@ use std::time::Duration;
 use nodus_board::BoxFuture;
 use nodus_domain::js;
 use nodus_domain::{
-    CaptureAttachment, CaptureContext, CaptureContextPatch, CaptureGuess, CaptureReceipt, CaptureShortcut,
+    BubbleGuess, CaptureAttachment, CaptureContext, CaptureContextPatch, CaptureGuess, CaptureReceipt, CaptureShortcut,
     CaptureTargets, ClipboardOffer, Event, EventSink, OpenCardRequest, Rect, TabAttachment,
 };
 use nodus_platform::ClaudeNotFound;
@@ -227,6 +227,8 @@ struct ShortcutState {
 pub struct Capture {
     deps: CaptureDeps,
     guesser: Guesser,
+    /// The board bubble's guesses, apart from the panel's.
+    bubble: Guesser,
     state: Mutex<PanelState>,
     shortcut: Mutex<ShortcutState>,
     me: Weak<Capture>,
@@ -240,6 +242,7 @@ impl Capture {
     pub fn new(deps: CaptureDeps) -> Arc<Self> {
         Arc::new_cyclic(|me| Self {
             guesser: Guesser::new(deps.claude.clone()),
+            bubble: Guesser::new(deps.claude.clone()),
             deps,
             state: Mutex::new(PanelState::default()),
             shortcut: Mutex::new(ShortcutState::default()),
@@ -472,6 +475,17 @@ impl Capture {
             targets: &targets,
         };
         self.guesser.guess(input, (self.deps.clock)()).await
+    }
+
+    /// Claude's guess at what the board bubble's text becomes, in `project`
+    /// (BUBBLE-023). Fails when Claude Code isn't installed.
+    pub async fn guess_bubble(&self, text: &str, project: &str) -> Result<Option<BubbleGuess>, ClaudeNotFound> {
+        self.bubble.guess_bubble(text, project).await
+    }
+
+    /// Stops the bubble's guess in progress: the bubble closed (BUBBLE-024).
+    pub fn cancel_bubble(&self) {
+        self.bubble.cancel();
     }
 
     /// `capture:submit` (CAP-125…CAP-131): makes it, then rests the panel

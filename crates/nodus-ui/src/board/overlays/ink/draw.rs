@@ -50,7 +50,9 @@ impl BoardCanvas {
             move |bounds, window, _| window.insert_hitbox(bounds, HitboxBehavior::Normal),
             move |_, hitbox, window, cx| {
                 match tool {
-                    InkTool::Pen | InkTool::Arrow => window.set_cursor_style(CursorStyle::Crosshair, &hitbox),
+                    InkTool::Pen | InkTool::Arrow | InkTool::Rect => {
+                        window.set_cursor_style(CursorStyle::Crosshair, &hitbox);
+                    }
                     InkTool::Eraser => window.set_cursor_style(cursor::eraser(), &hitbox),
                     InkTool::Text => window.set_cursor_style(CursorStyle::IBeam, &hitbox),
                     InkTool::Select if hover => window.set_cursor_style(CursorStyle::Move, &hitbox),
@@ -317,11 +319,28 @@ pub(crate) fn paint_line(
         .with_line_cap(LineCap::Round)
         .with_line_join(LineJoin::Round);
     let mut path = PathBuilder::stroke(px(width)).with_style(PathStyle::Stroke(options));
-    for seg in segs {
+    // Where the current subpath started, and how many steps it has taken.
+    let mut start = None;
+    let mut steps = 0;
+    for (i, seg) in segs.iter().enumerate() {
+        let last = !matches!(segs.get(i + 1), Some(Seg::Line(_) | Seg::Quad(..)));
         match *seg {
-            Seg::Move(p) => path.move_to(at(p)),
-            Seg::Line(p) => path.line_to(at(p)),
-            Seg::Quad(c, p) => path.curve_to(at(p), at(c)),
+            Seg::Move(p) => {
+                (start, steps) = (Some(p), 0);
+                path.move_to(at(p));
+            }
+            // A line back to where it started (a rectangle's outline) is
+            // closed: its ends join instead of capping twice over, which
+            // would show where they overlap on faded ink.
+            Seg::Line(p) if last && steps > 0 && Some(p) == start => path.close(),
+            Seg::Line(p) => {
+                steps += 1;
+                path.line_to(at(p));
+            }
+            Seg::Quad(c, p) => {
+                steps += 1;
+                path.curve_to(at(p), at(c));
+            }
         }
     }
     if let Ok(path) = path.build() {

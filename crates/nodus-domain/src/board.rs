@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::project::{FolderColor, Project};
-use crate::session::{SessionCard, SessionKind};
+use crate::session::{SessionCard, SessionKind, SessionModel};
 use crate::view::BoardView;
 
 /// A rectangle in board coordinates. Like [`Viewport`], a closed shape with
@@ -83,6 +83,28 @@ pub struct BoardNode {
     pub extra: Map<String, Value>,
 }
 
+impl BoardNode {
+    /// The model it was started on, and resumes on too: a [`SessionModel`]
+    /// alias in `model`. None is Claude
+    /// Code's own default. It's kept with the fields this version doesn't
+    /// know, so a `model` of another shape, from a newer version, is kept as
+    /// it was rather than making state.json unreadable.
+    pub fn model(&self) -> Option<&str> {
+        self.extra.get("model").and_then(Value::as_str)
+    }
+
+    pub fn set_model(&mut self, model: Option<SessionModel>) {
+        match model {
+            Some(model) => {
+                self.extra.insert("model".into(), Value::from(model.as_str()));
+            }
+            None => {
+                self.extra.remove("model");
+            }
+        }
+    }
+}
+
 /// A named frame grouping active cards on the board. The frame is drawn around
 /// its cards, so it grows and shrinks with them; x/y is its top-left corner,
 /// which is where it stays while it has no cards.
@@ -148,16 +170,19 @@ string_enum! {
 }
 
 string_enum! {
-    /// What an ink mark is. `ALL` is the TypeScript's INK_KINDS.
+    /// What an ink mark is. `ALL` is the TypeScript's INK_KINDS, and the
+    /// rectangle added since (INKUI-027).
     pub enum InkKind {
         Pen = "pen",
         Arrow = "arrow",
         Text = "text",
+        Rect = "rect",
     }
 }
 
 /// A mark drawn on the board with the ink tools, in board coordinates: a pen
-/// stroke's path, an arrow's tail and head, or the top-left corner of a label.
+/// stroke's path, an arrow's tail and head, a rectangle's two opposite
+/// corners, or the top-left corner of a label.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InkStroke {

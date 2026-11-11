@@ -778,6 +778,9 @@ impl Render for BoardCanvas {
         let ink_layer = self.render_ink_layer(window, cx);
         let ink_hitbox = self.render_ink_hitbox(cx);
         let ink_dock = self.render_ink_dock(window, cx);
+        let bubble = self.render_bubble(window, cx);
+        // BUBBLE-005: over the empty board, a click opens the bubble.
+        let bubble_cursor = self.bubble_cursor_shown(cx);
         // Spec 04: views' webviews kept in step, their large window and the New view dialog.
         let views_layer = crate::views::board_layer(self, window, cx);
 
@@ -790,6 +793,7 @@ impl Render for BoardCanvas {
             .overflow_hidden()
             .bg(t.bg_canvas)
             .when(panning, |d| d.cursor(CursorStyle::ClosedHand))
+            .when(bubble_cursor, |d| d.cursor(super::overlays::bubble::cursor()))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, e: &MouseDownEvent, window, cx| this.pane_mouse_down(e, window, cx)),
@@ -833,6 +837,7 @@ impl Render for BoardCanvas {
             .child(pill)
             .child(minimap)
             .child(bar)
+            .children(bubble)
             .children(search)
             .children(merge)
             .children(confirm)

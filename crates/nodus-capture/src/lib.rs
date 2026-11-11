@@ -7,6 +7,7 @@
 //! `src/main/screenContext.ts`, `src/main/captureGuess.ts` and the text
 //! helpers in `src/shared/capture.ts`.
 
+pub mod bubble;
 pub mod double_tap;
 pub mod guess;
 pub mod hook;

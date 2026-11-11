@@ -66,6 +66,21 @@ fn drops_anything_malformed() {
 }
 
 #[test]
+fn keeps_rectangles_by_their_two_corners() {
+    let rect = |id: &str, points: Value| json!({ "id": id, "kind": "rect", "color": "green", "points": points, "size": 1, "text": "x" });
+    let ink = clean_ink(&json!([
+        rect("a", json!([10.04, 20, 110, 80.06])),
+        rect("b", json!([0, 0])),
+        rect("c", json!([0, 0, 1, 1, 2, 2]))
+    ]));
+    // Two corners only, and like every kind but a label, no text (INK-007, INK-008).
+    assert_eq!(
+        nodus_domain::json::to_string(&ink).unwrap(),
+        r#"[{"id":"a","kind":"rect","color":"green","points":[10,20,110,80.1],"size":1}]"#
+    );
+}
+
+#[test]
 fn keeps_sizes_sensible() {
     let mut a = pen("a", json!([0, 0, 10, 10]));
     a["size"] = json!(100);

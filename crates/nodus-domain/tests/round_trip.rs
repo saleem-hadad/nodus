@@ -142,7 +142,7 @@ fn colours_and_kinds_are_the_typescript_lists() {
     );
     assert_eq!(
         strings(&InkKind::ALL.iter().map(|k| k.as_str()).collect::<Vec<_>>()),
-        "pen,arrow,text"
+        "pen,arrow,text,rect"
     );
     assert_eq!(
         strings(&CaptureKind::ALL.iter().map(|k| k.as_str()).collect::<Vec<_>>()),
@@ -189,6 +189,24 @@ fn imported_board_node_keeps_its_fractional_time() {
 fn board_node_keeps_fields_it_does_not_know() {
     let node: BoardNode = round_trip(r#"{"sessionId":"s","x":1,"y":2,"archived":false,"createdAt":3,"pinnedAt":4}"#);
     assert_eq!(node.extra["pinnedAt"], 4);
+}
+
+#[test]
+fn board_node_model_is_kept_whatever_its_shape() {
+    let mut node: BoardNode =
+        round_trip(r#"{"sessionId":"s","x":1,"y":2,"archived":false,"createdAt":3,"model":"opus"}"#);
+    assert_eq!(node.model(), Some("opus"));
+    node.set_model(Some(SessionModel::Haiku));
+    assert_eq!(
+        json::to_string(&node).unwrap(),
+        r#"{"sessionId":"s","x":1,"y":2,"archived":false,"createdAt":3,"model":"haiku"}"#
+    );
+    node.set_model(None);
+    assert_eq!(node.model(), None);
+    // A newer version's model, of another shape: no model here, written back as it was.
+    let newer: BoardNode =
+        round_trip(r#"{"sessionId":"s","x":1,"y":2,"archived":false,"createdAt":3,"model":{"name":"Opus 9"}}"#);
+    assert_eq!(newer.model(), None);
 }
 
 #[test]

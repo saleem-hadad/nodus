@@ -22,7 +22,8 @@ pub const HISTORY: usize = 100;
 pub const HIT_PX: f64 = 6.0;
 /// Points closer together than this on screen add nothing to a line.
 pub const MIN_STEP_PX: f64 = 1.5;
-/// An arrow shorter than this on screen is a slip, not an arrow.
+/// An arrow, or a rectangle's diagonal, shorter than this on screen is a
+/// slip, not a mark (INKUI-009, INKUI-027).
 pub const MIN_ARROW_PX: f64 = 8.0;
 /// How far the pointer travels on screen before a stroke follows it.
 pub const MOVE_PX: f64 = 3.0;
@@ -160,13 +161,48 @@ pub fn arrow_path_string(a: Pt, b: Pt, head: f64) -> String {
         .collect()
 }
 
-/// The path a stroke draws: an arrow's shaft and head, or a pen line.
+/// A rectangle's outline, corner to corner around the box `a` and `b`
+/// span: the corners its four lines go through.
+pub fn rect_corners(a: Pt, b: Pt) -> [Pt; 5] {
+    let (x0, x1) = (a[0].min(b[0]), a[0].max(b[0]));
+    let (y0, y1) = (a[1].min(b[1]), a[1].max(b[1]));
+    [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]
+}
+
+/// A rectangle's outline (INKUI-027), started and ended mid-way along the
+/// top so all four corners are joins: rounded by half the line's width,
+/// none of them a cap.
+pub fn rect_path(a: Pt, b: Pt) -> Vec<Seg> {
+    let [tl, tr, br, bl, _] = rect_corners(a, b);
+    let mid = [(tl[0] + tr[0]) / 2.0, tl[1]];
+    vec![
+        Seg::Move(mid),
+        Seg::Line(tr),
+        Seg::Line(br),
+        Seg::Line(bl),
+        Seg::Line(tl),
+        Seg::Line(mid),
+    ]
+}
+
+/// Shift held while drawing a rectangle (INKUI-027): `b` moved so the box
+/// from `a` is a square, as wide as its longer side, still on the pointer's
+/// side of `a`.
+pub fn square_corner(a: Pt, b: Pt) -> Pt {
+    let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+    let side = dx.abs().max(dy.abs());
+    let toward = |d: f64| if d < 0.0 { -side } else { side };
+    [a[0] + toward(dx), a[1] + toward(dy)]
+}
+
+/// The path a stroke draws: an arrow's shaft and head, a rectangle's
+/// outline, or a pen line.
 pub fn stroke_path(s: &InkStroke) -> Vec<Seg> {
     let pts = points_of(s);
-    if s.kind == InkKind::Arrow && pts.len() > 1 {
-        arrow_path(pts[0], pts[1], ARROW_HEAD * s.size)
-    } else {
-        pen_path(&pts)
+    match s.kind {
+        InkKind::Arrow if pts.len() > 1 => arrow_path(pts[0], pts[1], ARROW_HEAD * s.size),
+        InkKind::Rect if pts.len() > 1 => rect_path(pts[0], pts[1]),
+        _ => pen_path(&pts),
     }
 }
 
@@ -240,10 +276,14 @@ pub fn hit_stroke(s: &InkStroke, p: Pt, tolerance: f64, measure: Measure<'_>) ->
     if s.kind == InkKind::Text {
         return true;
     }
-    let pts = points_of(s);
+    let mut pts = points_of(s);
     let reach = tolerance + PEN_WIDTH * s.size / 2.0;
     if pts.len() == 1 {
         return distance(p, pts[0]) <= reach;
+    }
+    // A rectangle is hit on its outline, not in the hollow inside it.
+    if s.kind == InkKind::Rect {
+        pts = rect_corners(pts[0], pts[1]).to_vec();
     }
     if pts.windows(2).any(|w| segment_distance(p, w[0], w[1]) <= reach) {
         return true;
@@ -459,6 +499,67 @@ mod tests {
             strokes_along(&strokes, [0., 0.], [100., 0.], 3., M),
             vec!["a".to_owned()]
         );
+    }
+
+    fn rect(id: &str, points: &[f64], size: f64) -> InkStroke {
+        stroke(id, InkKind::Rect, InkColor::Green, points, size, None)
+    }
+
+    #[test]
+    fn rect_path_goes_round_the_box_from_the_middle_of_the_top() {
+        // Drawn from the bottom right: the same box.
+        let segs = rect_path([100., 60.], [0., 0.]);
+        assert_eq!(
+            segs,
+            vec![
+                Seg::Move([50., 0.]),
+                Seg::Line([100., 0.]),
+                Seg::Line([100., 60.]),
+                Seg::Line([0., 60.]),
+                Seg::Line([0., 0.]),
+                Seg::Line([50., 0.]),
+            ]
+        );
+        assert_eq!(stroke_path(&rect("r", &[100., 60., 0., 0.], 1.)), segs);
+        // Before the pointer moves it's a dot, as an arrow is.
+        assert_eq!(stroke_path(&rect("r", &[5., 5.], 1.)).len(), 2);
+    }
+
+    #[test]
+    fn square_corner_keeps_the_longer_side_and_the_pointers_direction() {
+        assert_eq!(square_corner([10., 10.], [50., 20.]), [50., 50.]);
+        assert_eq!(square_corner([10., 10.], [0., 40.]), [-20., 40.]);
+        assert_eq!(square_corner([10., 10.], [-30., -5.]), [-30., -30.]);
+    }
+
+    #[test]
+    fn hit_stroke_hits_a_rectangle_on_its_outline_not_inside() {
+        let r = rect("r", &[0., 0., 100., 60.], 1.);
+        let b = stroke_box(&r, M);
+        assert_eq!((b.x, b.y, b.w, b.h), (-1.5, -1.5, 103., 63.));
+        // Each side.
+        assert!(hit_stroke(&r, [50., 3.], 3., M));
+        assert!(hit_stroke(&r, [98., 30.], 3., M));
+        assert!(hit_stroke(&r, [50., 62.], 3., M));
+        assert!(hit_stroke(&r, [-3., 30.], 3., M));
+        // The hollow middle, and outside.
+        assert!(!hit_stroke(&r, [50., 30.], 3., M));
+        assert!(!hit_stroke(&r, [50., 10.], 3., M));
+        assert!(!hit_stroke(&r, [120., 30.], 3., M));
+        // A card under the middle of a rectangle still takes the press.
+        let all = [r];
+        assert!(stroke_at(&all, [50., 30.], 3., M).is_none());
+        assert_eq!(stroke_at(&all, [0., 30.], 3., M).map(|s| s.id.as_str()), Some("r"));
+    }
+
+    #[test]
+    fn strokes_along_erases_a_rectangle_crossed_but_not_one_wiped_inside() {
+        let strokes = [rect("r", &[0., 0., 100., 60.], 1.)];
+        assert_eq!(
+            strokes_along(&strokes, [50., -20.], [50., 20.], 3., M),
+            vec!["r".to_owned()]
+        );
+        assert!(strokes_along(&strokes, [20., 30.], [80., 30.], 3., M).is_empty());
     }
 
     // translate · moves every point

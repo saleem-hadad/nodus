@@ -22,6 +22,7 @@ impl BoardCanvas {
                 InkTool::Select => ov_icon(OvIcon::MousePointer2, 15., 2., fg),
                 InkTool::Pen => icon(Icon::Pencil, 15., 2., fg),
                 InkTool::Arrow => ov_icon(OvIcon::MoveUpRight, 15., 2., fg),
+                InkTool::Rect => ov_icon(OvIcon::Square, 15., 2., fg),
                 InkTool::Text => ov_icon(OvIcon::Type, 15., 2., fg),
                 InkTool::Eraser => ov_icon(OvIcon::Eraser, 15., 2., fg),
             };

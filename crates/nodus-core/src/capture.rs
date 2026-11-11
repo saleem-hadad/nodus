@@ -25,7 +25,7 @@ use nodus_capture::{
     Permissions, RunningHook, Screen, Screenshot,
 };
 use nodus_domain::{
-    CaptureAttachment, CaptureContext, CaptureGuess, CaptureReceipt, CaptureShortcut, CaptureSubmission,
+    BubbleGuess, CaptureAttachment, CaptureContext, CaptureGuess, CaptureReceipt, CaptureShortcut, CaptureSubmission,
     CaptureTargets, CreateSessionOptions, CreateViewOptions, Event, EventSink, MenuCommand, OpenCardRequest, Rect,
     SessionMeta, SessionStatus, TabAttachment,
 };
@@ -538,6 +538,28 @@ impl CaptureApi<'_> {
         })
         .await
         .on("capture:guess")
+    }
+
+    /// Claude's guess at what the board bubble's text becomes (BUBBLE-023):
+    /// None when Claude can't say, or a newer guess replaced it; fails when
+    /// Claude Code isn't installed.
+    pub async fn guess_bubble(&self, text: &str, project: &str) -> CommandResult<Option<BubbleGuess>> {
+        let capture = self.service();
+        let (text, project) = (text.to_owned(), project.to_owned());
+        self.run(Ok(None), async move {
+            capture
+                .guess_bubble(&text, &project)
+                .await
+                .map_err(|err| err.to_string())
+        })
+        .await
+        .on("bubble:guess")
+    }
+
+    /// Stops the bubble's guess in progress (BUBBLE-024).
+    pub async fn cancel_bubble(&self) {
+        let capture = self.service();
+        self.run((), async move { capture.cancel_bubble() }).await;
     }
 
     /// `capture:submit` (CAP-125…CAP-131): makes it on the board; the panel

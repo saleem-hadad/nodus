@@ -674,10 +674,12 @@ impl BoardCanvas {
             }
             let _ = this.update(cx, |c, cx| {
                 c.moving = false;
-                // The text drawn crisp again at the zoom it stopped at.
-                if std::mem::take(&mut c.zooming) {
-                    cx.notify();
-                }
+                // Drawn again, even after a pan with no zoom: views' pages
+                // let the pointer through to the board while it moves, and
+                // only take it back in the next frame. The text is drawn
+                // crisp again at the zoom it stopped at.
+                c.zooming = false;
+                cx.notify();
                 c.schedule_viewport_save(cx);
             });
         }));

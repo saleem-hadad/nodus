@@ -699,6 +699,8 @@ struct MacWindowState {
     select_previous_tab_callback: Option<Box<dyn FnMut()>>,
     toggle_tab_bar_callback: Option<Box<dyn FnMut()>>,
     activated_least_once: bool,
+    // Nodus patch: the Metal link was detached for a frame presented with native views.
+    relink_after_present: bool,
     closed: Arc<AtomicBool>,
     accesskit_adapter: Option<accesskit_macos::SubclassingAdapter>,
     // The parent window if this window is a sheet (Dialog kind)
@@ -1161,6 +1163,7 @@ impl MacWindow {
                 select_previous_tab_callback: None,
                 toggle_tab_bar_callback: None,
                 activated_least_once: false,
+                relink_after_present: false,
                 closed: Arc::new(AtomicBool::new(false)),
                 accesskit_adapter: None,
                 sheet_parent: None,
@@ -2148,11 +2151,26 @@ impl PlatformWindow for MacWindow {
     }
 
     // Nodus patch: one frame in step with native views (`Window::present_with_native_views`).
+    // A `CAMetalDisplayLink`'s drawable shows at the link's own target time, frames after the
+    // transaction that changed the views, whatever the layer's `presentsWithTransaction`
+    // says. So, as a live resize does (`display_layer`), that frame draws into the layer's
+    // next drawable with the link detached, and the link starts again once it's presented.
     fn set_presents_with_transaction(&self, presents_with_transaction: bool) {
-        self.0
-            .lock()
-            .renderer
-            .set_presents_with_transaction(presents_with_transaction);
+        let mut lock = self.0.lock();
+        if presents_with_transaction {
+            if let FrameSource::Metal(metal_frames) = &lock.frame_source
+                && metal_frames.is_attached()
+            {
+                lock.stop_display_link();
+                lock.relink_after_present = true;
+            }
+            lock.renderer.set_presents_with_transaction(true);
+        } else {
+            lock.renderer.set_presents_with_transaction(false);
+            if mem::take(&mut lock.relink_after_present) {
+                lock.start_display_link(&self.0);
+            }
+        }
     }
 
     // GPUI calls this without waking the frame waker when a window only needs

@@ -57,8 +57,13 @@ pub fn placed(
     let ink = f.ink.clone();
     let mut paint = None;
     let mut swapped = false;
+    let mut moved = false;
     if let Some(fr) = f.get_mut(view_id, slot) {
         let now = Instant::now();
+        let changed = fr
+            .geometry
+            .is_none_or(|prev| prev.document != g.document || prev.clip != g.clip || prev.radius != g.radius);
+        let was_offscreen = fr.web.offscreen();
         if let Some(prev) = fr.geometry {
             if (prev.zoom - g.zoom).abs() > 1e-4 {
                 fr.zoom_changed = Some(now);
@@ -76,6 +81,11 @@ pub fn placed(
         if !zoom_moving || fr.live {
             fr.web.place(g.document, g.clip, g.zoom, g.radius, window.ui_zoom());
         }
+        // A live page that moved on screen (the board panned under it) moves
+        // with this frame: presented on GPUI's own clock, the frame lands a
+        // few vsyncs after the webview has moved, and the page swims ahead
+        // of its card while the board moves.
+        moved = fr.live && changed && !(was_offscreen && fr.web.offscreen());
         fr.web.set_edge(g.edge);
         let visible = g.document.intersect(&g.clip);
         fr.occluded = !fr.web.offscreen() && covered(&hitbox, visible, window);
@@ -97,7 +107,7 @@ pub fn placed(
         }
     }
     drop(f);
-    if swapped {
+    if swapped || moved {
         window.present_with_native_views();
     }
     if schedule {

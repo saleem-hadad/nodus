@@ -21,13 +21,22 @@ describe('neutralizeMentions', () => {
     assert.equal(neutralizeMentions('ask.@octocat'), `ask.@${WJ}octocat`);
   });
 
+  test('breaks mentions GitHub only sees once the markdown is rendered', () => {
+    assert.equal(neutralizeMentions('_@octocat_ and __@hubot__'), `_@${WJ}octocat_ and __@${WJ}hubot__`);
+    for (const at of ['&#64;', '&#064;', '&#x40;', '&#X0040;', '&commat;']) {
+      assert.equal(neutralizeMentions(`hi ${at}octocat`), `hi ${at}${WJ}octocat`);
+    }
+    assert.equal(neutralizeMentions('www.example.com@octocat'), `www.example.com@${WJ}octocat`);
+    assert.equal(neutralizeMentions('name_@octocat'), `name_@${WJ}octocat`);
+  });
+
   test('leaves emails and lone @ signs alone', () => {
     assert.equal(neutralizeMentions('mail a@b.com or me_x@example.org'), 'mail a@b.com or me_x@example.org');
     assert.equal(neutralizeMentions('5 @ 10, @ home, @-dash'), '5 @ 10, @ home, @-dash');
   });
 
   test('is idempotent', () => {
-    const once = neutralizeMentions('hey @octocat');
+    const once = neutralizeMentions('hey @octocat, _@hubot_, &#64;ada');
     assert.equal(neutralizeMentions(once), once);
   });
 });
@@ -75,14 +84,21 @@ describe('buildTitle', () => {
 });
 
 describe('buildBody', () => {
-  const FOOTER = '---\n<sub>Sent from Nodus feedback · 1.0.2 · macOS 27.2 · arm64</sub>';
+  const SOURCE = '<sub>Sent from Nodus feedback · 1.0.2 · macOS 27.2 · arm64</sub>';
   const META = { version: '1.0.2', os: 'macOS 27.2', arch: 'arm64' };
+  const PLAIN = '<sub>Sent from Nodus feedback</sub>\n\n';
 
-  test('adds the footer to a plain body', () => {
-    assert.equal(buildBody({ body: 'It froze.', ...META }), `It froze.\n\n${FOOTER}`);
+  test('puts the source line above a plain body', () => {
+    assert.equal(buildBody({ body: 'It froze.', ...META }), `${SOURCE}\n\nIt froze.`);
   });
 
-  test('lists screenshots between the body and the footer', () => {
+  test('keeps the source line above whatever the body opens and never closes', () => {
+    for (const trap of ['<!--', "<details title='x"]) {
+      assert.ok(buildBody({ body: `It froze.\n\n${trap}`, ...META }).startsWith(`${SOURCE}\n\n`), trap);
+    }
+  });
+
+  test('lists screenshots under the body', () => {
     const body = buildBody({
       body: 'It froze.',
       screenshotUrls: ['https://github.com/user-attachments/assets/a', 'https://github.com/user-attachments/assets/b'],
@@ -90,26 +106,26 @@ describe('buildBody', () => {
     });
     assert.equal(
       body,
-      'It froze.\n\n' +
+      `${SOURCE}\n\n` +
+        'It froze.\n\n' +
         '![Screenshot 1](https://github.com/user-attachments/assets/a)\n\n' +
-        '![Screenshot 2](https://github.com/user-attachments/assets/b)\n\n' +
-        FOOTER,
+        '![Screenshot 2](https://github.com/user-attachments/assets/b)',
     );
   });
 
-  test('leaves out missing footer parts', () => {
-    assert.equal(buildBody({ body: 'x', os: 'Windows 11' }), 'x\n\n---\n<sub>Sent from Nodus feedback · Windows 11</sub>');
-    assert.equal(buildBody({ body: 'x' }), 'x\n\n---\n<sub>Sent from Nodus feedback</sub>');
+  test('leaves out missing parts of the source line', () => {
+    assert.equal(buildBody({ body: 'x', os: 'Windows 11' }), '<sub>Sent from Nodus feedback · Windows 11</sub>\n\nx');
+    assert.equal(buildBody({ body: 'x' }), `${PLAIN}x`);
   });
 
   test("keeps the reporter's own line live and neutralizes the rest", () => {
     const body = buildBody({ body: 'Reported by @OctoCat\nIt froze. cc @hubot', reporter: 'octocat' });
-    assert.equal(body, `Reported by @OctoCat\nIt froze. cc @${WJ}hubot\n\n---\n<sub>Sent from Nodus feedback</sub>`);
+    assert.equal(body, `${PLAIN}Reported by @OctoCat\nIt froze. cc @${WJ}hubot`);
   });
 
   test('handles a body that is only the reporter line, and CRLF', () => {
-    assert.ok(buildBody({ body: 'Reported by @octocat', reporter: 'octocat' }).startsWith('Reported by @octocat\n\n'));
-    assert.ok(buildBody({ body: 'Reported by @octocat\r\nhi @x', reporter: 'octocat' }).startsWith(`Reported by @octocat\r\nhi @${WJ}x`));
+    assert.equal(buildBody({ body: 'Reported by @octocat', reporter: 'octocat' }), `${PLAIN}Reported by @octocat`);
+    assert.equal(buildBody({ body: 'Reported by @octocat\r\nhi @x', reporter: 'octocat' }), `${PLAIN}Reported by @octocat\r\nhi @${WJ}x`);
   });
 
   test('neutralizes the reporter line when it is not exactly the reporter', () => {
@@ -126,7 +142,7 @@ describe('buildBody', () => {
   });
 
   test('leaves emails untouched', () => {
-    assert.ok(buildBody({ body: 'Write to a@b.com' }).startsWith('Write to a@b.com\n\n'));
+    assert.equal(buildBody({ body: 'Write to a@b.com' }), `${PLAIN}Write to a@b.com`);
   });
 });
 

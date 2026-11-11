@@ -2,7 +2,7 @@
 
 A small Express server that turns **Report a Problem** submissions from the Nodus desktop app into GitHub issues. The app sends the report with any screenshots. The server checks it, uploads the screenshots to GitHub and opens an issue with the token it holds, then returns the issue link.
 
-It has no database. Rate limits live in memory, so a restart (or scaling to zero) resets them.
+It has no database. Rate limits live in memory, so a restart (or scaling to zero) resets them. Screenshots stream to a temporary folder rather than memory and are deleted when their request ends; with at most two reports with screenshots handled at once, that needs up to about 200 MB of disk.
 
 ## Environment variables
 
@@ -32,7 +32,9 @@ Send the header `X-Nodus-Key: <NODUS_APP_KEY>` and a `multipart/form-data` body:
 | `body` | Required. Trimmed, 1 to 20,000 characters. The description as the user reviewed it. Its first line may be `Reported by @<reporter>`. |
 | `reporter` | Optional GitHub username. |
 | `version`, `os`, `arch` | Optional, for example `1.0.2`, `macOS 27.2`, `arm64`. Up to 40 characters each; anything outside `A-Z a-z 0-9 space . _ ( ) -` is removed. |
-| `screenshots` | 0 to 5 files, each up to 10 MB. PNG, JPEG, GIF or WebP, checked by the file's bytes, not its declared type. |
+| `screenshots` | 0 to 5 files, each up to 10 MB and 40 million pixels. PNG, JPEG, GIF or WebP, checked by the file's bytes, not its declared type. |
+
+Send the text fields before the screenshots (the app does). A report whose text is missing or invalid is turned away as its first screenshot starts to arrive, so the server never keeps screenshots it would throw away.
 
 On success: `201 {"number": 42, "url": "https://github.com/saleem-hadad/nodus/issues/42"}`.
 
@@ -41,18 +43,18 @@ On failure the body is `{"error": "<one sentence for the user>"}` with:
 - `400`: the report is invalid (missing title, bad username, too many screenshots, not an image, and so on).
 - `401`: the app key is missing or wrong.
 - `413`: a screenshot or field is too large.
-- `429`: rate limited. The `Retry-After` header gives the seconds to wait. The limits are 5 reports per IP and 60 reports overall, each per rolling hour. Only reports that pass validation count.
+- `429`: rate limited, or busy. The `Retry-After` header gives the seconds to wait. The limits are 5 reports per IP and 60 reports overall, each per rolling hour. A report counts once its text passes; one with screenshots counts as its first screenshot arrives, even if a screenshot is then turned down. Two reports with screenshots are handled at once; a third waits a minute.
 - `502`: GitHub didn't accept the report. GitHub's own response is logged on the server, never returned.
 
 ### What the issue looks like
 
-- Every `@mention` in the title and body is broken with an invisible word joiner (`@⁠name`), so the server can't be used to ping people. The one exception is a first line that reads exactly `Reported by @<reporter>`; that mention stays live so the reporter is notified. Email addresses aren't touched.
-- Screenshots are uploaded first (the same way `gh issue create --attach` does) and added below the description as images.
-- A footer records where the report came from: `Sent from Nodus feedback · 1.0.2 · macOS 27.2 · arm64`.
+- It opens with where it came from: `Sent from Nodus feedback · 1.0.2 · macOS 27.2 · arm64`. That line goes first because the issue is opened under the token's account, and markdown the reporter leaves open (an unclosed `<!--` or `<details title='`) would hide anything after it.
+- Every `@mention` in the title and body is broken with an invisible word joiner (`@⁠name`), so the server can't be used to ping people. That includes mentions GitHub only sees once the markdown is rendered, like `_@name_` and `&#64;name`. The one exception is a first line that reads exactly `Reported by @<reporter>`; that mention stays live so the reporter is notified. Email addresses aren't touched.
+- Screenshots are decoded and encoded again in their own format, so nothing hidden in or after the image data and no metadata (such as a photo's location) reaches GitHub. One that comes out over 10 MB becomes a JPEG. They're uploaded the same way `gh issue create --attach` does, then added below the description as images.
 
 ## Run the tests
 
-Needs Node 22 or newer. The tests use a fake GitHub, so no token or network is needed.
+Needs Node 22 or newer. The tests use a fake GitHub, so no token or network is needed. `npm ci` fetches [sharp](https://sharp.pixelplumbing.com)'s prebuilt image library for the platform it runs on.
 
 ```sh
 npm ci && npm test

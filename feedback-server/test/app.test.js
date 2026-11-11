@@ -4,6 +4,10 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import sharp from 'sharp';
 import { createApp } from '../app.js';
 
 const KEY = 'test-app-key';
@@ -12,14 +16,15 @@ const ENV = { GITHUB_TOKEN: TOKEN, NODUS_APP_KEY: KEY };
 const WJ = '⁠';
 const HOUR = 60 * 60 * 1000;
 
-const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('rest of a png')]);
-const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from('rest of a jpeg')]);
+const blank = (width, height) => sharp({ create: { width, height, channels: 3, background: '#3366cc' } });
+const PNG = await blank(40, 30).png().toBuffer();
+const JPEG = await blank(40, 30).jpeg().withExif({ IFD0: { Artist: 'Ada Lovelace' } }).toBuffer();
 
 const json = (status, data) =>
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
 
 // Stands in for GitHub. `overrides` maps "METHOD host/path" to a handler that
-// may return a Response; returning nothing falls through to the default.
+// may return or resolve to a Response; returning nothing falls through to the default.
 function fakeGitHub(overrides = {}) {
   const calls = [];
   let assets = 0;
@@ -29,7 +34,7 @@ function fakeGitHub(overrides = {}) {
     calls.push(call);
     const route = `${call.method} ${call.url.host}${call.url.pathname}`;
 
-    const custom = overrides[route]?.(call);
+    const custom = await overrides[route]?.(call);
     if (custom) return custom;
 
     switch (route) {
@@ -57,20 +62,42 @@ function fakeGitHub(overrides = {}) {
   };
 }
 
+// A promise and the function that settles it.
+function deferred() {
+  let resolve;
+  const promise = new Promise((r) => (resolve = r));
+  return { promise, resolve };
+}
+
 function captureLog() {
   const lines = [];
   const push = (...args) => lines.push(args.join(' '));
   return { lines, log: push, info: push, warn: push, error: push };
 }
 
-// Starts the app on an ephemeral port and stops it when the test ends.
+// Starts the app on an ephemeral port, with its own folder for screenshots in
+// transit, and stops it when the test ends.
 async function start(t, { github = fakeGitHub(), env = ENV, clock = { now: 1_800_000_000_000 } } = {}) {
   const log = captureLog();
-  const app = createApp({ fetch: github.fetch, env, now: () => clock.now, log });
+  const uploadDir = await mkdtemp(join(tmpdir(), 'nodus-feedback-test-'));
+  const app = createApp({ fetch: github.fetch, env, now: () => clock.now, log, uploadDir });
   const server = app.listen(0);
   await once(server, 'listening');
-  t.after(() => new Promise((resolve) => server.close(resolve)));
-  return { base: `http://127.0.0.1:${server.address().port}`, github, log, clock };
+  t.after(async () => {
+    await new Promise((resolve) => server.close(resolve));
+    await rm(uploadDir, { recursive: true, force: true });
+  });
+  return { base: `http://127.0.0.1:${server.address().port}`, github, log, clock, uploadDir };
+}
+
+// Files are deleted just after the response goes out; give that a moment.
+async function leftovers(dir) {
+  for (let i = 0; i < 50; i++) {
+    const names = await readdir(dir);
+    if (names.length === 0) return names;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  return readdir(dir);
 }
 
 function report({ title = 'Board froze', body = 'It froze when I pinched.', screenshots = [], ...rest } = {}) {
@@ -154,6 +181,12 @@ describe('validation', () => {
       "Screenshot 1 isn't a PNG, JPEG, GIF or WebP image.",
     ],
     [
+      'a PNG header with junk behind it',
+      () => report({ screenshots: [Buffer.concat([PNG.subarray(0, 8), Buffer.alloc(1000, 7)])] }),
+      400,
+      "Screenshot 1 couldn't be read as an image.",
+    ],
+    [
       'a file in another field',
       () => {
         const form = report();
@@ -211,12 +244,23 @@ describe('validation', () => {
     assert.ok(!JSON.parse(github.issueCreates()[0].body).body.includes('\r'));
   });
 
-  test('rejected reports do not use up the rate limit', async (t) => {
+  test('reports with bad text do not use up the rate limit, screenshots or not', async (t) => {
     const { base } = await start(t);
     for (let i = 0; i < 8; i++) {
-      assert.equal((await send(base, report({ title: null }), { ip: '198.51.100.1' })).status, 400);
+      const res = await send(base, report({ title: null, screenshots: i % 2 ? [PNG] : [] }), { ip: '198.51.100.1' });
+      assert.equal(res.status, 400);
+      assert.equal(res.json.error, 'Add a title.');
     }
     assert.equal((await send(base, report(), { ip: '198.51.100.1' })).status, 201);
+  });
+
+  test('a report counts once its screenshots start, even if one is then turned down', async (t) => {
+    const { base } = await start(t);
+    const junk = { bytes: Buffer.from('not an image'), type: 'image/png', name: 'a.png' };
+    for (let i = 0; i < 5; i++) {
+      assert.equal((await send(base, report({ screenshots: [junk] }), { ip: '198.51.100.2' })).status, 400);
+    }
+    assert.equal((await send(base, report(), { ip: '198.51.100.2' })).status, 429);
   });
 });
 
@@ -261,13 +305,14 @@ describe('happy path', () => {
       [first, PNG, 'screenshot-1.png', 'image/png'],
       [second, JPEG, 'screenshot-2.jpg', 'image/jpeg'],
     ];
-    for (const [call, bytes, name, type] of expected) {
+    for (const [call, , name, type] of expected) {
       assert.equal(call.url.searchParams.get('name'), name);
       assert.equal(call.url.searchParams.get('content_type'), type);
       assert.equal(call.url.searchParams.get('repository_id'), '123');
       assert.equal(call.headers.get('content-type'), 'application/octet-stream');
-      assert.equal(call.headers.get('content-length'), String(bytes.length));
-      assert.ok(Buffer.from(call.body).equals(bytes), 'raw bytes are uploaded unchanged');
+      assert.equal(call.headers.get('content-length'), String(call.body.length));
+      const uploaded = await sharp(call.body).metadata();
+      assert.deepEqual([uploaded.format, uploaded.width, uploaded.height], [type.slice(6), 40, 30]);
     }
 
     const [create] = github.issueCreates();
@@ -275,13 +320,25 @@ describe('happy path', () => {
     assert.deepEqual(JSON.parse(create.body), {
       title: `Board froze when @${WJ}bob pinches`,
       body:
+        '<sub>Sent from Nodus feedback · 1.0.2 · macOS 27.2 · arm64</sub>\n\n' +
         'Reported by @OctoCat\n' +
         `The board froze after I pinched. cc @${WJ}someone, or mail me@example.com\n\n` +
         '![Screenshot 1](https://github.com/user-attachments/assets/asset-1)\n\n' +
-        '![Screenshot 2](https://github.com/user-attachments/assets/asset-2)\n\n' +
-        '---\n<sub>Sent from Nodus feedback · 1.0.2 · macOS 27.2 · arm64</sub>',
+        '![Screenshot 2](https://github.com/user-attachments/assets/asset-2)',
       labels: ['feedback'],
     });
+  });
+
+  test('screenshots are re-encoded: no metadata, nothing riding behind the image', async (t) => {
+    const { base, github } = await start(t);
+    const payload = Buffer.from('PK\x03\x04 a zip hiding behind the PNG');
+    const res = await send(base, report({ screenshots: [Buffer.concat([PNG, payload]), JPEG] }));
+    assert.equal(res.status, 201);
+
+    const [png, jpeg] = github.uploads().map((c) => Buffer.from(c.body));
+    assert.ok(!png.includes(payload), 'the payload is gone');
+    assert.ok((await sharp(JPEG).metadata()).exif, 'the original JPEG has EXIF');
+    assert.equal((await sharp(jpeg).metadata()).exif, undefined);
   });
 
   test('the repository id is looked up once and reused', async (t) => {
@@ -399,6 +456,65 @@ describe('GitHub failures', () => {
   });
 });
 
+describe('screenshots in transit', () => {
+  test('are deleted whether the report is posted or turned down', async (t) => {
+    const github = fakeGitHub();
+    const { base, uploadDir } = await start(t, { github });
+    const junk = { bytes: Buffer.from('not an image'), type: 'image/png', name: 'a.png' };
+    const huge = Buffer.concat([PNG, Buffer.alloc(11 * 1024 * 1024)]);
+    const cases = [
+      [report({ screenshots: [PNG, JPEG] }), 201],
+      [report({ screenshots: [PNG, junk] }), 400],
+      [report({ screenshots: [PNG, huge] }), 413],
+    ];
+    for (const [i, [form, status]] of cases.entries()) {
+      assert.equal((await send(base, form, { ip: `198.51.100.${30 + i}` })).status, status);
+      assert.deepEqual(await leftovers(uploadDir), [], `after the ${status}`);
+    }
+  });
+
+  test('are deleted when GitHub fails', async (t) => {
+    const github = fakeGitHub({ 'POST uploads.github.com/user-attachments/assets': () => json(500, {}) });
+    const { base, uploadDir } = await start(t, { github });
+    assert.equal((await send(base, report({ screenshots: [PNG, JPEG] }))).status, 502);
+    assert.deepEqual(await leftovers(uploadDir), []);
+  });
+
+  test('a client that leaves mid-upload frees its place and its files', async (t) => {
+    const { base, uploadDir } = await start(t);
+    const boundary = 'nodus-test-boundary';
+    const head =
+      `--${boundary}\r\nContent-Disposition: form-data; name="title"\r\n\r\nIt broke\r\n` +
+      `--${boundary}\r\nContent-Disposition: form-data; name="body"\r\n\r\nDetails\r\n` +
+      `--${boundary}\r\nContent-Disposition: form-data; name="screenshots"; filename="a.png"\r\n` +
+      'Content-Type: image/png\r\n\r\n';
+
+    // Two uploads that stall after their first bytes, then go away.
+    for (let i = 0; i < 2; i++) {
+      const leave = new AbortController();
+      const body = new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(head));
+          controller.enqueue(PNG.subarray(0, 100));
+        },
+      });
+      const sent = fetch(`${base}/v1/feedback`, {
+        method: 'POST',
+        headers: { 'X-Nodus-Key': KEY, 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+        body,
+        duplex: 'half',
+        signal: leave.signal,
+      }).catch(() => {});
+      while ((await readdir(uploadDir)).length === 0) await new Promise((r) => setTimeout(r, 5));
+      leave.abort();
+      await sent;
+      assert.deepEqual(await leftovers(uploadDir), []);
+    }
+
+    assert.equal((await send(base, report({ screenshots: [PNG] }))).status, 201);
+  });
+});
+
 describe('rate limits', () => {
   test('five reports per IP per rolling hour', async (t) => {
     const { base, clock } = await start(t);
@@ -439,6 +555,25 @@ describe('rate limits', () => {
 
     clock.now += HOUR;
     assert.equal((await send(base, report(), { ip: '192.0.2.200' })).status, 201);
+  });
+
+  test('two reports with screenshots at a time; the rest wait, text-only ones do not', async (t) => {
+    const gate = deferred();
+    const github = fakeGitHub({ 'POST uploads.github.com/user-attachments/assets': () => gate.promise.then(() => undefined) });
+    const { base } = await start(t, { github });
+
+    const busy = [1, 2].map((n) => send(base, report({ screenshots: [PNG] }), { ip: `203.0.113.${20 + n}` }));
+    while (github.uploads().length < 2) await new Promise((r) => setTimeout(r, 5));
+
+    const third = await send(base, report({ screenshots: [PNG] }), { ip: '203.0.113.23' });
+    assert.equal(third.status, 429);
+    assert.equal(third.headers.get('retry-after'), '60');
+    assert.equal(third.json.error, 'Nodus is sending other reports right now. Try again in a minute.');
+    assert.equal((await send(base, report(), { ip: '203.0.113.24' })).status, 201);
+
+    gate.resolve();
+    assert.deepEqual((await Promise.all(busy)).map((r) => r.status), [201, 201]);
+    assert.equal((await send(base, report({ screenshots: [PNG] }), { ip: '203.0.113.23' })).status, 201);
   });
 
   test('a limited client is turned away before its upload is read', async (t) => {

@@ -8,11 +8,15 @@ const META_MAX = 40;
 // either end, 39 characters at most.
 const USERNAME = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
 
-// An "@" starts a mention when no word character sits right before it (so
-// "a@b.com" stays an email) and a name character follows it. This mirrors the
-// rule GitHub uses to find mentions, but neutralizes even the odd cases GitHub
-// would skip: when in doubt, nobody gets pinged.
-const MENTION = /(?<![A-Za-z0-9_])@(?=[A-Za-z0-9])/g;
+// Any "@" with a name character after it could start a mention. GitHub looks
+// for mentions in the rendered text, not the markdown, so "_@name_" (the
+// underscores become italics) and "&#64;name" (an entity for "@") count too.
+const AT = /(?:@|&#0*64;|&#[xX]0*40;|&commat;)(?=[A-Za-z0-9])/g;
+
+// The one "@" left alone is inside an email address, like "ada@example.com".
+// GitHub never reads a name followed by a dot and a letter as a mention, so
+// keeping these can't ping anyone. When in doubt, nobody gets pinged.
+const EMAIL_AT = /(?<=[A-Za-z0-9._%+-])@(?=[A-Za-z0-9-]+\.[A-Za-z0-9])/y;
 
 // U+2060 WORD JOINER is invisible, but sitting between "@" and the name it
 // stops GitHub from seeing a mention, so the server can't be used to ping people.
@@ -31,10 +35,13 @@ export function isValidUsername(name) {
 }
 
 export function neutralizeMentions(text) {
-  return text.replace(MENTION, `@${WORD_JOINER}`);
+  return text.replace(AT, (at, offset) => {
+    EMAIL_AT.lastIndex = offset;
+    return EMAIL_AT.test(text) ? at : at + WORD_JOINER;
+  });
 }
 
-// version, os and arch only ever land in the footer. Keeping them to a small
+// version, os and arch only ever land in the source line. Keeping them to a small
 // alphabet means they can't carry markdown, HTML or mentions into the issue.
 export function cleanMeta(value) {
   if (typeof value !== 'string') return '';
@@ -53,15 +60,16 @@ export function buildTitle(title) {
   return [...oneLine].slice(0, TITLE_MAX).join('');
 }
 
+// The issue opens under the token's account, so the line saying where it came
+// from goes first: anything after the reporter's markdown can be hidden by it
+// (an unclosed "<!--" or "<details title='" swallows the rest of the page).
 export function buildBody({ body, reporter, screenshotUrls = [], version, os, arch }) {
-  const parts = [neutralizeBody(body, reporter)];
+  const source = ['Sent from Nodus feedback', version, os, arch].filter(Boolean).join(' · ');
+  const parts = [`<sub>${source}</sub>`, neutralizeBody(body, reporter)];
 
   if (screenshotUrls.length > 0) {
     parts.push(screenshotUrls.map((url, i) => `![Screenshot ${i + 1}](${url})`).join('\n\n'));
   }
-
-  const footer = ['Sent from Nodus feedback', version, os, arch].filter(Boolean).join(' · ');
-  parts.push(`---\n<sub>${footer}</sub>`);
 
   return parts.join('\n\n');
 }

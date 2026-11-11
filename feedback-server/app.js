@@ -1,10 +1,14 @@
 // The HTTP side: checks the app key, reads and validates the report, applies
-// the rate limits, then hands off to GitHub. Fetch, env and the clock are
-// injected so tests can run the whole thing without GitHub or real time.
+// the rate limits, re-encodes the screenshots, then hands off to GitHub. Fetch,
+// env and the clock are injected so tests can run the whole thing without
+// GitHub or real time.
 
+import { open, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import express from 'express';
 import multer from 'multer';
 import { createGitHub, GitHubError } from './github.js';
+import { ImageError, reencode } from './images.js';
 import { createRateLimiter } from './rate-limit.js';
 import {
   BODY_MAX,
@@ -20,6 +24,9 @@ const MAX_SCREENSHOTS = 5;
 const MAX_SCREENSHOT_BYTES = 10 * 1024 * 1024; // GitHub's limit for an image
 const REPORTS_PER_CLIENT = 5; // per IP, per rolling hour
 const REPORTS_OVERALL = 60; // across everyone, per rolling hour
+// Reports whose screenshots are being received, re-encoded or uploaded at
+// once. Each can bring 50 MB of them, so this bounds the work and the disk.
+const SCREENSHOT_REPORTS_AT_ONCE = 2;
 
 const REPO_PATTERN = /^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/;
 
@@ -34,7 +41,7 @@ class HttpError extends Error {
 
 const badRequest = (message) => new HttpError(400, message);
 
-export function createApp({ fetch, env, now, log = console }) {
+export function createApp({ fetch, env, now, log = console, uploadDir = tmpdir() }) {
   const token = env.GITHUB_TOKEN;
   const appKey = env.NODUS_APP_KEY;
   const repo = env.GITHUB_REPO || 'saleem-hadad/nodus';
@@ -50,8 +57,32 @@ export function createApp({ fetch, env, now, log = console }) {
 
   const github = createGitHub({ fetch, token, repo, log });
   const limiter = createRateLimiter({ now, perClient: REPORTS_PER_CLIENT, overall: REPORTS_OVERALL });
+
+  // Reports with screenshots are counted when their first screenshot starts
+  // to arrive, before any of its bytes are kept. The app sends the text
+  // first, so a report that would be turned away anyway is turned away here,
+  // and nobody can make us hold 50 MB of junk over and over for free.
+  const admitted = new WeakSet();
+  let reportsWithScreenshots = 0;
+
+  function admitScreenshots(req) {
+    if (admitted.has(req)) return;
+    readReport(req.body);
+    throwIfLimited(limiter.check(clientOf(req)));
+    if (reportsWithScreenshots >= SCREENSHOT_REPORTS_AT_ONCE) {
+      throw new HttpError(429, 'Nodus is sending other reports right now. Try again in a minute.', {
+        'Retry-After': '60',
+      });
+    }
+    limiter.record(clientOf(req));
+    admitted.add(req);
+    reportsWithScreenshots += 1;
+  }
+
   const parseForm = multer({
-    storage: multer.memoryStorage(),
+    // Screenshots stream to disk rather than memory, which a small instance
+    // has little of; they're deleted when the request ends (see removeFiles).
+    storage: multer.diskStorage({ destination: uploadDir }),
     limits: {
       fileSize: MAX_SCREENSHOT_BYTES,
       files: MAX_SCREENSHOTS,
@@ -59,6 +90,14 @@ export function createApp({ fetch, env, now, log = console }) {
       // 20,000 characters can take up to 80 KB in UTF-8, so a valid
       // description always fits; anything bigger is junk.
       fieldSize: 100 * 1024,
+    },
+    fileFilter(req, file, accept) {
+      try {
+        admitScreenshots(req);
+        accept(null, true);
+      } catch (err) {
+        accept(err);
+      }
     },
   }).array('screenshots', MAX_SCREENSHOTS);
 
@@ -79,36 +118,47 @@ export function createApp({ fetch, env, now, log = console }) {
       throw new HttpError(401, "This app key isn't valid.");
     }
 
-    // Someone already over the limit gets turned away before we read up to
-    // 50 MB of screenshots. Nothing is counted yet.
-    const client = req.ip ?? 'unknown';
+    // Someone already over the limit gets turned away before we read anything.
+    const client = clientOf(req);
     throwIfLimited(limiter.check(client));
 
     if (!req.is('multipart/form-data')) {
       throw badRequest('Send the report as multipart/form-data.');
     }
-    await readForm(parseForm, req, res);
-    const report = validate(req.body, req.files ?? []);
 
-    // Count only reports that are about to reach GitHub. Check again, since
-    // other reports may have been counted while this one was uploading.
-    throwIfLimited(limiter.check(client));
-    limiter.record(client);
+    try {
+      await readForm(parseForm, req, res);
+      const report = readReport(req.body);
 
-    // One at a time, so the first failure stops the rest; an upload failure
-    // fails the whole report rather than leaving a half-written issue.
-    const screenshotUrls = [];
-    for (const screenshot of report.screenshots) {
-      screenshotUrls.push(await github.uploadScreenshot(screenshot));
+      // A report with screenshots was counted as they arrived; count one
+      // without them now. Check again, since other reports may have been
+      // counted while this one was read.
+      if (!admitted.has(req)) {
+        throwIfLimited(limiter.check(client));
+        limiter.record(client);
+      }
+      const screenshots = await prepareScreenshots(req.files ?? []);
+
+      // One at a time, so the first failure stops the rest; an upload failure
+      // fails the whole report rather than leaving a half-written issue.
+      const screenshotUrls = [];
+      for (const { path, ...screenshot } of screenshots) {
+        screenshotUrls.push(await github.uploadScreenshot({ ...screenshot, bytes: await readFile(path) }));
+      }
+
+      const issue = await github.createIssue({
+        title: buildTitle(report.title),
+        body: buildBody({ ...report, screenshotUrls }),
+        label,
+      });
+      log.info(`Created issue #${issue.number} with ${screenshotUrls.length} screenshot(s).`);
+      res.status(201).json(issue);
+    } finally {
+      // Posted or turned down, the report is done with its screenshots. multer
+      // gives up on a client that goes away mid-upload, so this always runs.
+      if (admitted.has(req)) reportsWithScreenshots -= 1;
+      removeFiles(req.files, log);
     }
-
-    const issue = await github.createIssue({
-      title: buildTitle(report.title),
-      body: buildBody({ ...report, screenshotUrls }),
-      label,
-    });
-    log.info(`Created issue #${issue.number} with ${screenshotUrls.length} screenshot(s).`);
-    res.status(201).json(issue);
   });
 
   app.use((req, res) => {
@@ -160,6 +210,7 @@ function readForm(parse, req, res) {
 }
 
 function formError(err) {
+  if (err instanceof HttpError) return err; // from admitScreenshots
   if (!(err instanceof multer.MulterError)) {
     // busboy couldn't parse the body: truncated upload, bad boundary, etc.
     return badRequest("That report couldn't be read. Try sending it again.");
@@ -183,7 +234,9 @@ function formError(err) {
   }
 }
 
-function validate(form, files) {
+// The report's text. It's read again once the whole form is in, since a
+// report with screenshots was already checked as its first one arrived.
+function readReport(form) {
   const title = readText(form, 'title');
   if (!title) throw badRequest('Add a title.');
   if (charCount(title) > TITLE_MAX) {
@@ -199,12 +252,6 @@ function validate(form, files) {
   const reporter = readText(form, 'reporter');
   if (reporter && !isValidUsername(reporter)) throw badRequest("That isn't a GitHub username.");
 
-  const screenshots = files.map((file, i) => {
-    const type = sniffImage(file.buffer);
-    if (!type) throw badRequest(`Screenshot ${i + 1} isn't a PNG, JPEG, GIF or WebP image.`);
-    return { name: `screenshot-${i + 1}.${type.ext}`, contentType: type.mime, bytes: file.buffer };
-  });
-
   return {
     title,
     body,
@@ -212,8 +259,58 @@ function validate(form, files) {
     version: cleanMeta(form.version),
     os: cleanMeta(form.os),
     arch: cleanMeta(form.arch),
-    screenshots,
   };
+}
+
+// Checks every screenshot's type before decoding any, then re-encodes each
+// into a file beside it.
+async function prepareScreenshots(files) {
+  const types = [];
+  for (const [i, file] of files.entries()) {
+    const type = sniffImage(await readHead(file.path));
+    if (!type) throw badRequest(`Screenshot ${i + 1} isn't a PNG, JPEG, GIF or WebP image.`);
+    types.push(type);
+  }
+
+  const screenshots = [];
+  for (const [i, file] of files.entries()) {
+    let image;
+    try {
+      image = await reencode(file.path, reencodedPath(file), types[i].ext, MAX_SCREENSHOT_BYTES);
+    } catch (err) {
+      if (err instanceof ImageError) throw new HttpError(err.status, `Screenshot ${i + 1} ${err.message}`);
+      throw err;
+    }
+    screenshots.push({ name: `screenshot-${i + 1}.${image.ext}`, contentType: image.mime, path: reencodedPath(file) });
+  }
+  return screenshots;
+}
+
+// Enough of a file to tell its type.
+async function readHead(path) {
+  const file = await open(path);
+  try {
+    const { buffer, bytesRead } = await file.read(Buffer.alloc(12), 0, 12, 0);
+    return buffer.subarray(0, bytesRead);
+  } finally {
+    await file.close();
+  }
+}
+
+const reencodedPath = (file) => `${file.path}.reencoded`;
+
+// multer deletes what it saved when it fails partway; everything else goes here.
+function removeFiles(files = [], log) {
+  for (const file of files.filter((f) => f.path)) {
+    for (const path of [file.path, reencodedPath(file)]) {
+      rm(path, { force: true }).catch((err) => log.error(`Couldn't delete ${path}: ${err.message}`));
+    }
+  }
+}
+
+// Who the rate limits count against.
+function clientOf(req) {
+  return req.ip ?? 'unknown';
 }
 
 // multer turns a repeated or bracketed field name into an array or object;

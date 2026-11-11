@@ -4,8 +4,9 @@
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AppContext as _, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyDownEvent,
-    KeyUpEvent, ModifiersChangedEvent, ParentElement, Render, Styled, Subscription, Window, div, px,
+    AppContext as _, Context, DispatchPhase, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement,
+    KeyDownEvent, KeyUpEvent, ModifiersChangedEvent, MouseDownEvent, ParentElement, Render, Styled, Subscription,
+    Window, canvas, div, px,
 };
 use nodus_core::Nodus;
 
@@ -317,6 +318,23 @@ impl Render for Shell {
                     rail.update(cx, |r, _| r.cancel_numbers());
                 }
             }))
+            // VIEW-051: any press GPUI gets takes the keyboard back from a
+            // board view's page. A window listener, since what's pressed may
+            // block the pointer from everything under it, this root included.
+            .child(
+                canvas(
+                    |_, _, _| {},
+                    |_, _, window, _| {
+                        window.on_mouse_event(|_: &MouseDownEvent, phase, window, _| {
+                            if phase == DispatchPhase::Capture {
+                                crate::views::keyboard_to_board(window);
+                            }
+                        });
+                    },
+                )
+                .absolute()
+                .size_0(),
+            )
             .child(bar)
             .child(main)
             .child(self.terminal_layers.clone())

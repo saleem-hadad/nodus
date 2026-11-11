@@ -39,7 +39,21 @@ use gpui::{AnyElement, App, Context, Window};
 use crate::board::canvas::BoardCanvas;
 use crate::board::nodes::ViewRenderer;
 #[cfg(target_os = "macos")]
-pub use mac::{hit_class, native_click, native_keys};
+pub use mac::{hit_class, native_click, native_keys, responder_class};
+
+/// A press anywhere GPUI draws gives GPUI the keyboard back from the page
+/// the user last clicked, as a click outside a frame blurs it (VIEW-051,
+/// VIEW-149: the board's keys are the board's again). The window's root calls
+/// it on every press: a page keeps the keyboard while none of its frames is
+/// drawn (off screen, its board closed), and a page closed while it had the
+/// keyboard leaves it with the window.
+pub fn keyboard_to_board(window: &Window) {
+    #[cfg(target_os = "macos")]
+    mac::keyboard_to_board(window);
+    // WebView2: the shell's own check (its frame has the focus) stands.
+    #[cfg(not(target_os = "macos"))]
+    let _ = window;
+}
 
 /// Sets views up once at start-up: the view renderer the canvas draws view
 /// nodes with.

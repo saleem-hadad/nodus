@@ -21,7 +21,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use gpui::{App, Bounds, DispatchPhase, Hitbox, MouseDownEvent, Pixels, RenderImage, Window, point, px};
+use gpui::{App, Bounds, Hitbox, Pixels, RenderImage, Window, point, px};
 
 use super::frames::{Frame, Geometry, Slot, frames};
 
@@ -102,14 +102,6 @@ pub fn placed(
     }
     if schedule {
         window.on_next_frame(after_frame);
-        // A press anywhere GPUI draws takes the keyboard off the page the
-        // user last clicked, as a click outside a frame blurs it (VIEW-051,
-        // VIEW-149: the board's keys are the board's again).
-        window.on_mouse_event(|_: &MouseDownEvent, phase, window, cx| {
-            if phase == DispatchPhase::Capture {
-                keyboard_to_board(window, cx);
-            }
-        });
     }
     paint
 }
@@ -125,17 +117,6 @@ fn update_ink(fr: &mut Frame, ink: Option<&super::ink::BoardInk>, window: &Windo
         fr.web.set_ink(wanted.as_ref());
         fr.ink = wanted;
     }
-}
-
-fn keyboard_to_board(window: &mut Window, cx: &mut App) {
-    let Some(rc) = super::frames::existing(cx) else { return };
-    let any = rc.borrow().frames.iter().any(|fr| fr.web.has_keyboard());
-    #[cfg(target_os = "macos")]
-    if any && let Some(number) = crate::mac::window_number(window) {
-        super::mac::keyboard_to_board(number);
-    }
-    #[cfg(not(target_os = "macos"))]
-    let _ = (any, window);
 }
 
 fn zooming(fr: &Frame, now: Instant) -> bool {

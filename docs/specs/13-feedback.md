@@ -55,7 +55,7 @@ Help › Report a Problem… opens a dialog over the main window. The user write
 
 ## The browser instead
 
-- **RPT-040** While `SERVER_URL` is empty and no `NODUS_FEEDBACK_URL` is set, every post is unreachable (RPT-034), so the browser takes over.
+- **RPT-040** The server is `https://nodus-feedback.laravel.cloud` (`feedback-server/` on Laravel Cloud). Were `SERVER_URL` empty with no `NODUS_FEEDBACK_URL`, every post would be unreachable (RPT-034) and the browser would take over.
 - **RPT-041** `Open the issue in your browser` opens `https://github.com/saleem-hadad/nodus/issues/new?title=…&body=…` (form-encoded as `URLSearchParams`) with the review's title, and its description with `---` and `<sub><footer></sub>` under it. Nothing is posted until the user presses Create there.
 - **RPT-042** If the link would be over 8,000 characters (GitHub answers 414), the description goes on the clipboard and the page's body says `_The description is on the clipboard: paste it here._` with the footer.
 - **RPT-043** The screenshots are saved as `captures/report-<uuid>/screenshot-<n>.<ext>` and the first is shown in Finder (Explorer), opened before the browser so the page is in front. The dialog then shows `Finish on GitHub`: `The issue is open in your browser, filled in. Press Create there to post it.`, plus `Your screenshots are in the Finder window: drag them into the description.` when there were any and `The description was too long for the link, so it's on the clipboard: paste it in.` when RPT-042 applied.

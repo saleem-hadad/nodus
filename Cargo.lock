@@ -4233,7 +4233,7 @@ dependencies = [
 
 [[package]]
 name = "nodus-feedback"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "image",
  "reqwest",

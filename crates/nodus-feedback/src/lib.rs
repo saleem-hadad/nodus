@@ -21,9 +21,9 @@ pub use images::{MAX_IMAGE_BYTES, MAX_SHOTS, PrepareError, png_of_rgba, prepare}
 pub use send::{ClientInfo, Posted, Report, SendError, send};
 pub use text::{InvalidUsername, Scrub, draft_body, draft_title, footer, github_username};
 
-/// Where reports go. Empty until the server is deployed: then every send
-/// counts as unreachable and the browser takes over (RPT-040).
-pub const SERVER_URL: &str = "";
+/// Where reports go: `feedback-server/` on Laravel Cloud (RPT-031). Empty,
+/// every send would count as unreachable and the browser take over (RPT-040).
+pub const SERVER_URL: &str = "https://nodus-feedback.laravel.cloud";
 
 /// Stands in for [`SERVER_URL`] when set and not empty (tests, a local
 /// server).

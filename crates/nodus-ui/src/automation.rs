@@ -29,6 +29,7 @@
 //! {"cmd":"views"}                                   views' frames: live or snapshot, and why
 //! {"cmd":"native-click","x":500,"y":300}            a click AppKit routes (into a page, or GPUI)
 //! {"cmd":"hit","x":500,"y":300}                     the native view a click there reaches
+//! {"cmd":"responder"}                               the class of the window's first responder
 //! {"cmd":"quit"}
 //! ```
 //!
@@ -574,6 +575,10 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
             crate::views::native_keys(number, text);
             Ok(Value::Null)
         }
+        #[cfg(target_os = "macos")]
+        "responder" => Ok(Value::String(with_window(cx, |window, _| {
+            crate::views::responder_class(window)
+        })?)),
         #[cfg(target_os = "macos")]
         "hit" => {
             let (x, y) = (f64::from(num(command, "x")), f64::from(num(command, "y")));

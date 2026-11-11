@@ -22,7 +22,8 @@ pub fn content_view(window: &Window) -> Option<Retained<NSView>> {
     let RawWindowHandle::AppKit(h) = handle.as_raw() else {
         return None;
     };
-    // SAFETY: the pointer is GPUI's live content view, retained for the caller.
+    // SAFETY: the pointer is GPUI's live view (a subview of the window's
+    // content view, not the content view itself), retained for the caller.
     unsafe { Retained::retain(h.ns_view.as_ptr().cast::<NSView>()) }
 }
 
@@ -376,24 +377,47 @@ pub fn no_context_menu(webview: &NSView) {
 
 /// Gives the keyboard back to GPUI's view after a press on the board: AppKit
 /// leaves it with the page the user last clicked, where a browser would move
-/// the focus off the frame. On the main queue, off any GPUI update (the
-/// responder change calls back into GPUI).
-pub fn keyboard_to_board(window_number: isize) {
+/// the focus off the frame. GPUI's own view, not the window's content view
+/// it sits in: with the content view as first responder GPUI got no plain
+/// keys, and with the page keeping it a space went to the page and no text
+/// reached a note, the prompt bar or a terminal. On the main queue, off any
+/// GPUI update (the responder change calls back into GPUI).
+pub fn keyboard_to_board(window: &Window) {
+    let Some(view) = content_view(window) else {
+        return;
+    };
+    let has_it = view.window().and_then(|w| w.firstResponder()).is_some_and(|r| {
+        std::ptr::eq(
+            Retained::as_ptr(&r).cast::<AnyObject>(),
+            Retained::as_ptr(&view).cast::<AnyObject>(),
+        )
+    });
+    if has_it {
+        return;
+    }
+    // Kept retained across the hop to the main queue (this thread's).
+    let view = Retained::into_raw(view) as usize;
     dispatch2::DispatchQueue::main().exec_async(move || {
-        // SAFETY: NSApplication and NSWindow on the main thread, checked
-        // for nil; makeFirstResponder: takes the window's content view.
-        unsafe {
-            let app: *mut AnyObject = msg_send![objc2::class!(NSApplication), sharedApplication];
-            let w: *mut AnyObject = msg_send![app, windowWithWindowNumber: window_number];
-            if w.is_null() {
-                return;
-            }
-            let content: *mut AnyObject = msg_send![w, contentView];
-            if !content.is_null() {
-                let _: Bool = msg_send![w, makeFirstResponder: content];
-            }
+        // SAFETY: the pointer `into_raw` gave above, taken back once; the
+        // view and its window are used on the main thread.
+        let view = unsafe { Retained::from_raw(view as *mut NSView) };
+        if let Some(view) = view
+            && let Some(w) = view.window()
+        {
+            // SAFETY: makeFirstResponder: takes a view in the window.
+            let _: Bool = unsafe { msg_send![&*w, makeFirstResponder: &*view] };
         }
     });
+}
+
+/// Test driver: the class of the window's first responder (`GPUIView` while
+/// GPUI has the keyboard).
+pub fn responder_class(window: &Window) -> String {
+    let Some(w) = content_view(window).and_then(|v| v.window()) else {
+        return "-".into();
+    };
+    w.firstResponder()
+        .map_or_else(|| "nil".into(), |r| r.class().name().to_string_lossy().into_owned())
 }
 
 /// Test driver: a left click at a point in the window through

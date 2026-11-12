@@ -46,11 +46,13 @@ pub(crate) struct Listener(tokio::net::UnixListener);
 
 #[cfg(unix)]
 impl Listener {
-    /// Listens at `socket`, readable and writable only by the user. (HOST-027, HOST-028)
-    pub(crate) fn bind(socket: &Path) -> io::Result<Self> {
+    /// Listens at `socket`, readable and writable only by the user
+    /// (HOST-027, HOST-028), or by its group too when `group` (SRV-004).
+    pub(crate) fn bind(socket: &Path, group: bool) -> io::Result<Self> {
         use std::os::unix::fs::PermissionsExt;
         let listener = tokio::net::UnixListener::bind(socket)?;
-        std::fs::set_permissions(socket, std::fs::Permissions::from_mode(0o600))?;
+        let mode = if group { 0o660 } else { 0o600 };
+        std::fs::set_permissions(socket, std::fs::Permissions::from_mode(mode))?;
         Ok(Self(listener))
     }
 
@@ -70,7 +72,7 @@ pub(crate) struct Listener {
 
 #[cfg(windows)]
 impl Listener {
-    pub(crate) fn bind(socket: &Path) -> io::Result<Self> {
+    pub(crate) fn bind(socket: &Path, _group: bool) -> io::Result<Self> {
         use tokio::net::windows::named_pipe::ServerOptions;
         let name = socket.as_os_str().to_owned();
         let next = ServerOptions::new().first_pipe_instance(true).create(&name)?;

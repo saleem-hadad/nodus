@@ -90,6 +90,10 @@ pub(crate) struct Host {
     pub(crate) hook_token: String,
     /// Shows the app this pipe is ours, on Windows (trustsHost).
     pub(crate) host_key: Option<String>,
+    /// Run on its own (`host --socket`, SRV-004): something else (systemd)
+    /// starts and restarts it, so it waits for its app however long it's
+    /// gone, and leaves when an app on another protocol says hello.
+    pub(crate) standalone: bool,
     pub(crate) hook_port: AtomicU64,
     next_id: AtomicU64,
     /// Lines handed to a connection and not yet written, so an exiting host
@@ -99,7 +103,7 @@ pub(crate) struct Host {
 }
 
 impl Host {
-    pub(crate) fn new(log: Logger, hook_token: String, host_key: Option<String>) -> Arc<Self> {
+    pub(crate) fn new(log: Logger, hook_token: String, host_key: Option<String>, standalone: bool) -> Arc<Self> {
         Arc::new_cyclic(|me| Self {
             me: me.clone(),
             state: Mutex::new(State {
@@ -109,6 +113,7 @@ impl Host {
             log,
             hook_token,
             host_key,
+            standalone,
             hook_port: AtomicU64::new(0),
             next_id: AtomicU64::new(1),
             unwritten: Arc::new(AtomicUsize::new(0)),
@@ -174,9 +179,11 @@ impl Host {
         state.relays.clear();
     }
 
-    /// The idle rule: no sessions, and no app or stopping. (HOST-047)
+    /// The idle rule: no sessions, and no app or stopping (HOST-047). A
+    /// standalone host only leaves when it's stopping (SRV-004).
     fn exit_if_idle(&self, state: &State) {
-        if state.sessions.is_empty() && (state.clients.is_empty() || state.stopping) {
+        let unattended = state.clients.is_empty() && !self.standalone;
+        if state.sessions.is_empty() && (unattended || state.stopping) {
             self.log.log(&["idle, exiting"]);
             self.exit(0);
         }
@@ -284,6 +291,12 @@ impl Host {
             } else {
                 self.log
                     .log(&["app connected", &format!("(protocol {})", js_string(protocol))]);
+                // SRV-004: `nodus serve` from another version. Its sessions
+                // stop with this host, and systemd starts the new binary's.
+                if self.standalone {
+                    self.log.log(&["another protocol, exiting"]);
+                    self.shutdown(&mut state);
+                }
             }
             return true;
         }
@@ -1009,7 +1022,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn host_086_each_relay_gives_up_20_seconds_after_it_was_sent() {
         let (log, _lines) = Logger::memory();
-        let host = Host::new(log, "token".into(), None);
+        let host = Host::new(log, "token".into(), None, false);
         // An app that never answers.
         let (app, mut heard) = mpsc::unbounded_channel::<Line>();
         host.lock().clients.insert(1, app);
@@ -1050,7 +1063,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn host_064_exits_4_seconds_after_shutdown_whatever_is_left() {
         let (log, lines) = Logger::memory();
-        let host = Host::new(log, "token".into(), None);
+        let host = Host::new(log, "token".into(), None, false);
         // A session that ignores SIGTERM and SIGHUP, whose exit the host never
         // hears of (nothing follows its events), so it's still there when the
         // time is up: as a process that outlived SIGKILL would be.

@@ -16,11 +16,15 @@ use std::sync::OnceLock;
 
 pub use claude::exe_behind_shim;
 
-/// Claude Code's own program on this PATH, as [`Env`] finds it at startup
-/// (claude.exe before an npm shim on Windows). A runner finds `claude` this
-/// way on the side that runs it ([`crate::runner::Program::Claude`]).
-pub fn find_claude(path_var: &str) -> Option<PathBuf> {
-    claude::find(path_var)
+/// Claude Code's own program as [`Env`] finds it at startup: on `env`'s
+/// PATH with the folders its installers use under `home` added to the end,
+/// claude.exe before an npm shim on Windows. A runner finds `claude` this way
+/// on the side that runs it ([`crate::runner::Program::Claude`]), under its
+/// own user's home.
+pub fn find_claude(env: &EnvMap, home: Option<&Path>) -> Option<PathBuf> {
+    let mut lookup = env.clone();
+    path_search::add_fallback_dirs(&mut lookup, home);
+    claude::find(lookup.get("PATH").map_or("", String::as_str))
 }
 
 /// Environment variables by name.
@@ -275,7 +279,7 @@ fn should_strip(name: &str) -> bool {
     STRIP_EXACT.contains(&name) || STRIP_PREFIXES.iter().any(|prefix| name.starts_with(prefix))
 }
 
-fn process_env() -> EnvMap {
+pub(crate) fn process_env() -> EnvMap {
     to_env_map(
         std::env::vars_os().map(|(k, v)| (k.to_string_lossy().into_owned(), v.to_string_lossy().into_owned())),
         cfg!(windows),

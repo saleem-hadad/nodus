@@ -174,13 +174,18 @@ impl RunRequest {
         let program = match &self.program {
             Program::Path(path) => path.clone(),
             Program::Claude => {
-                let own = || std::env::var("PATH").unwrap_or_default();
-                let path_var = match &self.env {
-                    Some(env) => env.get("PATH").cloned().unwrap_or_default(),
-                    None => own(),
+                // The installers' folders under this side's own home, as `Env`
+                // adds them: on a server, the host's user's (SRV-005).
+                let own;
+                let env = match &self.env {
+                    Some(env) => env,
+                    None => {
+                        own = crate::env::process_env();
+                        &own
+                    }
                 };
                 // ENOENT, which Windows numbers ERROR_FILE_NOT_FOUND, both 2.
-                find_claude(&path_var)
+                find_claude(env, std::env::home_dir().as_deref())
                     .ok_or_else(|| SpawnError::reported("claude", ClaudeNotFound.to_string(), Some(2)))?
             }
         };
@@ -297,13 +302,17 @@ mod tests {
             .unwrap();
         assert_eq!(output.stdout_text(), "claude -p\n");
 
+        // Not on the PATH, nor where the installers put it for this user;
+        // a machine with a real one there skips this, and never runs it.
         let bare = EnvMap::from([("PATH".to_owned(), "/nowhere".to_owned())]);
-        let err = LocalRunner
-            .run(RunRequest::new(Program::Claude).env(bare))
-            .await
-            .unwrap_err();
-        assert_eq!(err.to_string(), ClaudeNotFound.to_string());
-        assert_eq!((err.program.as_str(), err.code), ("claude", "ENOENT"));
+        if find_claude(&bare, std::env::home_dir().as_deref()).is_none() {
+            let err = LocalRunner
+                .run(RunRequest::new(Program::Claude).env(bare))
+                .await
+                .unwrap_err();
+            assert_eq!(err.to_string(), ClaudeNotFound.to_string());
+            assert_eq!((err.program.as_str(), err.code), ("claude", "ENOENT"));
+        }
     }
 
     #[tokio::test]

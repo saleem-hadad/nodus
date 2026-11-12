@@ -118,10 +118,20 @@ fn script(dir: &Path, name: &str, body: &str) -> PathBuf {
     path
 }
 
+/// Whether `pid` has gone, or is a zombie nothing will reap (in a container
+/// without an init, an orphan's parent never waits for it).
+fn dead(pid: i32) -> bool {
+    // SAFETY: signal 0 only asks whether the process is there.
+    if unsafe { libc::kill(pid, 0) } != 0 {
+        return true;
+    }
+    std::fs::read_to_string(format!("/proc/{pid}/stat"))
+        .is_ok_and(|stat| stat.rsplit_once(") ").is_some_and(|(_, rest)| rest.starts_with('Z')))
+}
+
 async fn gone(pid: i32) -> bool {
     for _ in 0..150 {
-        // SAFETY: signal 0 only asks whether the process is there.
-        if unsafe { libc::kill(pid, 0) } != 0 {
+        if dead(pid) {
             return true;
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
@@ -209,17 +219,22 @@ async fn finds_claude_where_it_runs() {
         (&json!(0), &json!("stand-in -p hi\n"))
     );
 
-    let none = app
-        .exec(json!({"id": 2, "argv": ["claude", "-p"], "claude": true, "env": {"PATH": "/nowhere"}}))
-        .await;
-    assert!(
-        none["error"]
-            .as_str()
-            .unwrap()
-            .starts_with("Claude Code CLI not found."),
-        "{none}"
-    );
-    assert_eq!(none["errno"], 2);
+    // Also where the installers put it for the host's user: a machine with a
+    // real one there skips this, and never runs it.
+    let bare = nodus_platform::env::EnvMap::from([("PATH".to_owned(), "/nowhere".to_owned())]);
+    if nodus_platform::env::find_claude(&bare, std::env::home_dir().as_deref()).is_none() {
+        let none = app
+            .exec(json!({"id": 2, "argv": ["claude", "-p"], "claude": true, "env": {"PATH": "/nowhere"}}))
+            .await;
+        assert!(
+            none["error"]
+                .as_str()
+                .unwrap()
+                .starts_with("Claude Code CLI not found."),
+            "{none}"
+        );
+        assert_eq!(none["errno"], 2);
+    }
 }
 
 /// Past its timeout the whole tree is stopped with the signal asked for.

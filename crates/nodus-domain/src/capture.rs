@@ -183,23 +183,6 @@ pub enum BubbleRoute {
     View,
 }
 
-impl BubbleRoute {
-    /// The order Tab and a click on the chip go through them.
-    pub const ALL: [Self; 5] = [
-        Self::Session(SessionModel::Haiku),
-        Self::Session(SessionModel::Sonnet),
-        Self::Session(SessionModel::Opus),
-        Self::Note,
-        Self::View,
-    ];
-
-    /// The next one after this, round to the first.
-    pub fn next(self) -> Self {
-        let at = Self::ALL.iter().position(|r| *r == self).unwrap_or(0);
-        Self::ALL[(at + 1) % Self::ALL.len()]
-    }
-}
-
 /// Claude's guess at a bubble's route, with one short line saying why.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BubbleGuess {

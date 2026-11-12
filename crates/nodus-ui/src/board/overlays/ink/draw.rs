@@ -55,6 +55,9 @@ impl BoardCanvas {
                     }
                     InkTool::Eraser => window.set_cursor_style(cursor::eraser(), &hitbox),
                     InkTool::Text => window.set_cursor_style(CursorStyle::IBeam, &hitbox),
+                    // BUBBLE-005: each the dock's own icon.
+                    InkTool::Bubble => window.set_cursor_style(crate::board::overlays::bubble::cursor(), &hitbox),
+                    InkTool::Mic => window.set_cursor_style(crate::board::overlays::bubble::mic_cursor(), &hitbox),
                     InkTool::Select if hover => window.set_cursor_style(CursorStyle::Move, &hitbox),
                     InkTool::Select => {}
                 }

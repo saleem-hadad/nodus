@@ -8,6 +8,7 @@ use gpui::{Rgba, SharedString, Styled, Svg, px, svg};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum OvIcon {
     MousePointer2,
+    MessageCircleMore,
     MoveUpRight,
     Square,
     Type,
@@ -22,8 +23,9 @@ pub enum OvIcon {
 }
 
 impl OvIcon {
-    const ALL: [Self; 12] = [
+    const ALL: [Self; 13] = [
         Self::MousePointer2,
+        Self::MessageCircleMore,
         Self::MoveUpRight,
         Self::Square,
         Self::Type,
@@ -40,6 +42,7 @@ impl OvIcon {
     pub fn name(self) -> &'static str {
         match self {
             Self::MousePointer2 => "mouse-pointer-2",
+            Self::MessageCircleMore => "message-circle-more",
             Self::MoveUpRight => "move-up-right",
             Self::Square => "square",
             Self::Type => "type",
@@ -59,6 +62,9 @@ impl OvIcon {
         match self {
             Self::MousePointer2 => {
                 r#"<path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"/>"#
+            }
+            Self::MessageCircleMore => {
+                r#"<path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"/><path d="M8 12h.01"/><path d="M12 12h.01"/><path d="M16 12h.01"/>"#
             }
             Self::MoveUpRight => r#"<path d="M13 5H19V11"/><path d="M19 5L5 19"/>"#,
             Self::Square => r#"<rect width="18" height="18" x="3" y="3" rx="2"/>"#,

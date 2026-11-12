@@ -1,15 +1,19 @@
-//! Claude's guess at what's typed into the board's bubble (BUBBLE-020…BUBBLE-024):
-//! a new session, a sticky note or a view, and for a session, the model the
-//! ask needs. The same quick headless call as a floating capture's guess
-//! (Haiku, no thinking, tools or MCP servers, outside any repository), on its
-//! own [`Guesser`] so the two never stop each other.
+//! Where what was typed or said into the board's bubble goes
+//! (BUBBLE-020…BUBBLE-024): a new session, a sticky note or a view, and for a
+//! session, the model the ask needs. The same quick headless call as a
+//! floating capture's guess (Haiku, no thinking, tools or MCP servers,
+//! outside any repository), asked once the bubble is sent; each ask runs on
+//! its own, so several can be under way at once.
+
+use std::time::Duration;
 
 use nodus_domain::js;
 use nodus_domain::{BubbleGuess, BubbleRoute, SessionModel};
 use nodus_platform::ClaudeNotFound;
+use nodus_platform::process::{Capture, Command, Signal};
 use serde_json::Value;
 
-use crate::guess::{Guesser, MAX_REASON_CHARS, MAX_TEXT_CHARS, SETTINGS, flat};
+use crate::guess::{ClaudeEnv, MAX_REASON_CHARS, MAX_TEXT_CHARS, SETTINGS, TIMEOUT, flat};
 
 /// The system prompt, verbatim.
 pub const SYSTEM_PROMPT: &str = "You route what the user typed into a bubble on their Nodus board, a canvas of Claude Code sessions for one project. Decide what it becomes:
@@ -86,17 +90,47 @@ pub fn read_reply(stdout: &str) -> Option<BubbleGuess> {
     read_answer(parsed.get("structured_output")?)
 }
 
-impl Guesser {
-    /// Asks Claude where the bubble's text goes; `None` if it can't say, or
-    /// a newer guess (or the bubble closing) stopped this one (BUBBLE-023).
-    pub async fn guess_bubble(&self, text: &str, project: &str) -> Result<Option<BubbleGuess>, ClaudeNotFound> {
-        self.cancel();
-        if js::trim(text).is_empty() {
+/// Asks Claude where the bubble's text goes (BUBBLE-023): `None` when it
+/// can't say, or hasn't by [`TIMEOUT`] (it's stopped then). Fails only when
+/// Claude Code isn't installed.
+pub async fn route(env: &dyn ClaudeEnv, text: &str, project: &str) -> Result<Option<BubbleGuess>, ClaudeNotFound> {
+    route_within(env, text, project, TIMEOUT).await
+}
+
+/// [`route`], giving up after `timeout` (tests).
+pub async fn route_within(
+    env: &dyn ClaudeEnv,
+    text: &str,
+    project: &str,
+    timeout: Duration,
+) -> Result<Option<BubbleGuess>, ClaudeNotFound> {
+    if js::trim(text).is_empty() {
+        return Ok(None);
+    }
+    let claude = env.claude()?;
+    // Stdin closed, or `claude -p` waits for piped input (CAP-069).
+    let child = Command::new(&claude)
+        .args(bubble_args(text, project))
+        .cwd(std::env::temp_dir())
+        .env(env.spawn_env())
+        .stdout(Capture::All)
+        .stderr(Capture::First(0))
+        .spawn();
+    let child = match child {
+        Ok(child) => child,
+        Err(err) => {
+            tracing::error!(%err, "[bubble] route failed");
             return Ok(None);
         }
-        let stdout = self.ask(bubble_args(text, project)).await?;
-        Ok(stdout.as_deref().and_then(read_reply))
-    }
+    };
+    let killer = child.killer();
+    Ok(tokio::select! {
+        output = child.wait() => read_reply(&output.stdout_text()),
+        () = tokio::time::sleep(timeout) => {
+            killer.kill(Signal::KILL);
+            None
+        }
+    })
 }
 
 #[cfg(test)]

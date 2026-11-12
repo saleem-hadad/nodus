@@ -117,6 +117,12 @@ impl BoardCanvas {
             return;
         }
         self.ink_take(window, cx);
+        // BUBBLE-001, BUBBLE-040: asking Claude on the spot.
+        match tool {
+            InkTool::Bubble => return self.bubble_press(e.position, window, cx),
+            InkTool::Mic => return self.voice_press(e.position, window, cx),
+            _ => {}
+        }
         let color = self.overlays.ink.color(cx);
         match tool {
             InkTool::Pen | InkTool::Arrow | InkTool::Rect => {
@@ -153,7 +159,7 @@ impl BoardCanvas {
                 let at = [p[0], p[1] - LABEL_LINE * size / 2.0];
                 self.ink_open_label(None, at, size, color, "", window, cx);
             }
-            InkTool::Select => {}
+            InkTool::Select | InkTool::Bubble | InkTool::Mic => {}
         }
         cx.notify();
     }

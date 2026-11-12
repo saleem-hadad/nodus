@@ -37,11 +37,16 @@ use crate::platform::keys;
 use crate::theme::tokens::{Tokens, inset_shadow};
 use crate::theme::{self, fonts, motion, tokens::DUR_FAST};
 
-/// The ink tools.
+/// The dock's tools: the pointer, the two that ask Claude on the spot
+/// (BUBBLE), and the ink tools.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum InkTool {
     #[default]
     Select,
+    /// A click opens the bubble there (BUBBLE-001).
+    Bubble,
+    /// A click starts speaking there, the next one sends it (BUBBLE-040).
+    Mic,
     Pen,
     Arrow,
     Rect,
@@ -50,8 +55,10 @@ pub enum InkTool {
 }
 
 /// The dock's tools: tool, name, its key.
-const TOOLS: [(InkTool, &str, Option<&str>); 6] = [
+const TOOLS: [(InkTool, &str, Option<&str>); 8] = [
     (InkTool::Select, "Pointer", Some("Esc")),
+    (InkTool::Bubble, "Ask Claude here", Some("B")),
+    (InkTool::Mic, "Speak to Claude here", Some("M")),
     (InkTool::Pen, "Pen", Some("P")),
     (InkTool::Arrow, "Arrow", Some("A")),
     (InkTool::Rect, "Rectangle", Some("R")),
@@ -59,9 +66,12 @@ const TOOLS: [(InkTool, &str, Option<&str>); 6] = [
     (InkTool::Eraser, "Eraser", Some("X")),
 ];
 
-/// INKUI-002, INKUI-027: the board's single-key shortcuts for the tools.
+/// INKUI-002, INKUI-027, BUBBLE-001, BUBBLE-040: the board's single-key
+/// shortcuts for the tools.
 pub fn tool_for_key(key: &str) -> Option<InkTool> {
     match key {
+        "b" => Some(InkTool::Bubble),
+        "m" => Some(InkTool::Mic),
         "p" => Some(InkTool::Pen),
         "a" => Some(InkTool::Arrow),
         "r" => Some(InkTool::Rect),

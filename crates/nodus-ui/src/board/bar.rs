@@ -134,18 +134,23 @@ impl BoardCanvas {
             Submission::Session { text } => self.start_bar_session(&text, None, None, cx),
             Submission::Into { session_id, text } => self.send_to_session(session_id, text, cx),
             // BOARD-136.
-            Submission::View { text } => self.make_view(text, None, cx),
+            Submission::View { text } => {
+                let made = self.create_view(text, None, cx);
+                self.toast_view_error(made, cx)
+            }
             Submission::Note { text, color } => {
                 // BOARD-137.
-                self.put_note(text, color, self.viewport_centre(NOTE_SIZE), cx);
+                let spot = self.free_note_spot(self.viewport_centre(NOTE_SIZE));
+                self.put_note(text, color, spot, true, cx);
                 Task::ready(true)
             }
         }
     }
 
-    /// BUBBLE-030…BUBBLE-032: what the bubble made of its text, centred on
-    /// the spot it was opened on: a session as the bar starts one, on the
-    /// model picked (Claude Code's own with none), a yellow note, or a view.
+    /// BUBBLE-030…BUBBLE-032: what the bubble made of its text, its top
+    /// left on the spot it was asked at, the board left where it is: a
+    /// session as the bar starts one, on the model Claude picked (Claude
+    /// Code's own with none), a yellow note, or a view.
     pub fn submit_from_bubble(
         &mut self,
         text: String,
@@ -157,21 +162,22 @@ impl BoardCanvas {
             Some(BubbleRoute::Session(model)) => self.start_bar_session(&text, Some(at), Some(model), cx),
             None => self.start_bar_session(&text, Some(at), None, cx),
             Some(BubbleRoute::Note) => {
-                let near = Point {
-                    x: at.x - NOTE_SIZE.w / 2.0,
-                    y: at.y - NOTE_SIZE.h / 2.0,
-                };
-                self.put_note(text, FolderColor::Yellow, near, cx);
+                self.put_note(text, FolderColor::Yellow, at, false, cx);
                 Task::ready(true)
             }
-            Some(BubbleRoute::View) => self.make_view(text, Some(at), cx),
+            Some(BubbleRoute::View) => {
+                let made = self.create_view_at(text, at, cx);
+                self.toast_view_error(made, cx)
+            }
         }
     }
 
-    /// A view made from the text, centred on `at` or the viewport; a toast
-    /// says why when it can't be.
-    fn make_view(&mut self, text: String, at: Option<Point>, cx: &mut Context<'_, Self>) -> Task<bool> {
-        let made = self.create_view(text, at, cx);
+    /// True once the view is made; a toast says why when it can't be.
+    fn toast_view_error(
+        &mut self,
+        made: Task<Result<(), nodus_core::CommandError>>,
+        cx: &mut Context<'_, Self>,
+    ) -> Task<bool> {
         cx.spawn(async move |this, cx| match made.await {
             Ok(()) => true,
             Err(err) => {
@@ -183,9 +189,8 @@ impl BoardCanvas {
         })
     }
 
-    /// A sticky note of the text in the free spot nearest `near`, brought into view.
-    fn put_note(&mut self, text: String, color: FolderColor, near: Point, cx: &mut Context<'_, Self>) {
-        let spot = self.free_note_spot(near);
+    /// A sticky note of the text at `spot`, brought into view when `follow`.
+    fn put_note(&mut self, text: String, color: FolderColor, spot: Point, follow: bool, cx: &mut Context<'_, Self>) {
         let note = BoardNote {
             id: uuid::Uuid::new_v4().to_string(),
             text,
@@ -202,14 +207,16 @@ impl BoardCanvas {
             extra: serde_json::Map::new(),
         };
         self.state.update(cx, |s, cx| s.save_note(note, cx));
-        self.ensure_visible(spot, NOTE_SIZE, cx);
+        if follow {
+            self.ensure_visible(spot, NOTE_SIZE, cx);
+        }
     }
 
     /// `startBarSession` (BOARD-133, BOARD-134): a Claude session on the
     /// prompt, expanded and in auto mode, below the selected sessions or in
     /// view; the prompt rides on it as a note, or stays as one if it can't
-    /// start. `at` is a spot to centre it on (the bubble's) and `model` the
-    /// one it runs on.
+    /// start. With `at` (the bubble's spot), its top left is there and the
+    /// board stays where it is; `model` is the one it runs on.
     fn start_bar_session(
         &mut self,
         text: &str,
@@ -218,18 +225,18 @@ impl BoardCanvas {
         cx: &mut Context<'_, Self>,
     ) -> Task<bool> {
         let (sources, context) = self.bar_context();
-        let dock = self.dock();
-        let preferred = match at {
-            Some(at) => Point {
-                x: at.x - NEW_CARD_SIZE.w / 2.0,
-                y: at.y - NEW_CARD_SIZE.h / 2.0,
-            },
-            None if sources.is_empty() => self.viewport_centre(NEW_CARD_SIZE),
-            None => spot_below(&sources.iter().collect::<Vec<_>>(), dock, NEW_CARD_SIZE),
-        };
-        let mut obstacles = card_obstacles(self.cards(), &[]);
-        obstacles.extend(self.notes_in_the_way());
-        let spot = find_free_spot(preferred, &obstacles, Some(dock), NEW_CARD_SIZE);
+        let follow = at.is_none();
+        let spot = at.unwrap_or_else(|| {
+            let dock = self.dock();
+            let preferred = if sources.is_empty() {
+                self.viewport_centre(NEW_CARD_SIZE)
+            } else {
+                spot_below(&sources.iter().collect::<Vec<_>>(), dock, NEW_CARD_SIZE)
+            };
+            let mut obstacles = card_obstacles(self.cards(), &[]);
+            obstacles.extend(self.notes_in_the_way());
+            find_free_spot(preferred, &obstacles, Some(dock), NEW_CARD_SIZE)
+        });
         let pos = Point {
             x: js::round(spot.x),
             y: js::round(spot.y),
@@ -298,11 +305,15 @@ impl BoardCanvas {
                     if had_context {
                         c.clear_selection(cx);
                     }
-                    c.ensure_visible(pos, NEW_CARD_SIZE, cx);
+                    if follow {
+                        c.ensure_visible(pos, NEW_CARD_SIZE, cx);
+                    }
                 }
                 Err(err) => {
                     c.state.update(cx, |s, cx| s.save_note(note, cx));
-                    c.ensure_visible(pos, NOTE_SIZE, cx);
+                    if follow {
+                        c.ensure_visible(pos, NOTE_SIZE, cx);
+                    }
                     c.show_toast(
                         format!(
                             "Couldn't start a session, so your prompt is on a note: {}",

@@ -119,11 +119,11 @@ The xAI API key comes from Settings or from `XAI_API_KEY` in your shell, and a s
 
 Audio leaves your machine only when you stop a recording, and goes to xAI alone. It counts toward your xAI usage.
 
-## The bubble
+## Asking Claude on the spot
 
-Over an empty part of the board the pointer is a chat bubble. Click there and a small field opens, pointing at the spot. Type what you want: as you pause, Claude (Haiku, a quick call like a capture's guess) decides whether it's a session, a sticky note or a view, and for a session, which model the ask needs. Haiku takes small, clear asks, Sonnet everyday coding work, and Opus hard or open-ended work. The chip under the field says what it picked and the line beside it says why. Tab, or a click on the chip, picks for yourself instead.
+The tool dock on the board's left has two tools under the pointer for asking Claude right where you click. With the **bubble** (B) out, the pointer is a chat bubble: click anywhere on the board and a small field opens, pointing at the spot. Type what you want and press Return. It goes at once, and you can open the next one straight away. A marker waits on the spot while Claude (Haiku, a quick call like a capture's guess) decides in the background whether it's a session, a sticky note or a view, and for a session, which model the ask needs: Haiku for small, clear asks, Sonnet for everyday coding work, Opus for hard or open-ended work. Then it lands with its top left on the spot: a session starts as the bar starts one, expanded, in auto mode and with your words stuck on it, and it stays on its model when it resumes. If Claude can't say, a session starts on Claude Code's own model. Several asks can be on their way at once. Shift+Return starts a new line, and Esc puts the bubble away; a bubble you've typed in stays put until you send it or press Esc.
 
-Return makes it right there. A session starts as the bar starts one, expanded, in auto mode and with your words stuck on it, on the chosen model, and it stays on that model when it resumes. Press Return before Claude has looked and the bubble waits for its pick. If Claude can't say, a session starts on Claude Code's own model. Esc or a click elsewhere puts the bubble away, and a double-click still starts an empty session on the spot.
+With the **mic** (M) out, click on the board and speak, then click again to send what you said. It's asked at the spot you first clicked, exactly as a bubble is. Esc, or the × on its pill, cancels. It records and transcribes as the bar's mic does.
 
 ## Floating capture
 
@@ -223,8 +223,7 @@ Nodus runs on Windows 10 and 11, on x64 and Arm. The installer puts it in your u
 | | Rename · remove | Enter · ⌘⌫ |
 | | Color, Reveal in Finder, Add to Focus (once focus is on in Settings) | Right-click |
 | Board | New session | N · ⌘N · double-click empty canvas |
-| | Ask for a session, a note or a view right here | Click empty canvas · Return |
-| | Pick it yourself in the bubble | Tab · click the chip |
+| | Ask Claude right here: type · speak | B, then click and Return · M, then click, speak, click |
 | | New terminal in the project folder | T · ⌘T |
 | | Open a card | Click · Enter |
 | | Expand a card on the board, or collapse it | E · the card's ⤢ button |

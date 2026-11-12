@@ -1,6 +1,6 @@
 //! The board's overlays (spec 11): the ink layer and its dock, the prompt
-//! bar with the selection bar and toast stacked above it, the bubble a click
-//! on the empty board opens, ⌘K search and the merge dialog. The canvas holds their state in [`Overlays`] and draws them
+//! bar with the selection bar and toast stacked above it, asking Claude on
+//! the spot (the dock's bubble and mic), ⌘K search and the merge dialog. The canvas holds their state in [`Overlays`] and draws them
 //! from its render; the board's side of what they do is in `board/bar.rs`.
 
 pub mod bar;
@@ -34,9 +34,12 @@ pub struct Overlays {
     pub(crate) bubble: Option<bubble::Bubble>,
     /// How many bubbles this mount has opened.
     pub(crate) bubble_key: usize,
-    /// BUBBLE-002: the press under way closed the bubble or a menu, so its
-    /// click opens nothing.
-    pub(crate) bubble_dismissed: bool,
+    /// What was sent from the board, while Claude decides where it goes.
+    pub(crate) asking: Vec<bubble::Asking>,
+    pub(crate) asking_key: usize,
+    /// The mic tool's mic, once used, and the spot it's listening for.
+    pub(crate) voice: Option<gpui::Entity<crate::voice::Mic>>,
+    pub(crate) voice_at: Option<nodus_board::geometry::Point>,
     pub(crate) search: search::Search,
     pub(crate) merge: Option<merge::MergeDialog>,
 }
@@ -56,6 +59,8 @@ pub(crate) fn bounds_probe(
         },
     )
     .absolute()
+    .top_0()
+    .left_0()
     .size_full()
     .into_any_element()
 }

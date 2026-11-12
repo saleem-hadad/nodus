@@ -35,6 +35,13 @@ impl BoardCanvas {
     /// lets go of the selected stroke.
     pub(crate) fn ink_set_tool(&mut self, tool: InkTool, window: Option<&mut Window>, cx: &mut Context<'_, Self>) {
         self.ink_finish_label(window, cx);
+        // BUBBLE-003, BUBBLE-044: what the tool left behind goes with it.
+        if tool != InkTool::Bubble {
+            self.close_empty_bubble(cx);
+        }
+        if tool != InkTool::Mic {
+            self.voice_cancel(cx);
+        }
         self.overlays.ink.tool = tool;
         if tool != InkTool::Select {
             self.overlays.ink.selected = None;

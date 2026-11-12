@@ -925,6 +925,28 @@ impl BoardCanvas {
         let mut obstacles = card_obstacles(self.cards(), &[]);
         obstacles.extend(self.notes_in_the_way());
         let spot = find_free_spot(preferred, &obstacles, Some(self.dock()), VIEW_SIZE);
+        self.place_view(description, spot, true, cx)
+    }
+
+    /// A view with its top left exactly at `at`, the board left where it is
+    /// (BUBBLE-031). Errors go back to the caller.
+    pub fn create_view_at(
+        &mut self,
+        description: String,
+        at: Point,
+        cx: &mut Context<'_, Self>,
+    ) -> gpui::Task<Result<(), nodus_core::CommandError>> {
+        self.place_view(description, at, false, cx)
+    }
+
+    /// A view at `spot`, brought into view when `follow`.
+    fn place_view(
+        &mut self,
+        description: String,
+        spot: Point,
+        follow: bool,
+        cx: &mut Context<'_, Self>,
+    ) -> gpui::Task<Result<(), nodus_core::CommandError>> {
         let opts = nodus_domain::CreateViewOptions {
             description,
             x: js::round(spot.x),
@@ -941,7 +963,9 @@ impl BoardCanvas {
             .await?;
             let _ = this.update(cx, |c, cx| {
                 c.state.update(cx, |s, cx| s.upsert_view(view, cx));
-                c.ensure_visible(spot, VIEW_SIZE, cx);
+                if follow {
+                    c.ensure_visible(spot, VIEW_SIZE, cx);
+                }
             });
             Ok(())
         })

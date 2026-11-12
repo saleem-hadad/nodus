@@ -210,12 +210,6 @@ impl BoardCanvas {
                 self.move_started(cx);
             }
             MouseButton::Left => {
-                // BUBBLE-002: a press that closes the bubble or a menu only closes it.
-                self.overlays.bubble_dismissed = self.overlays.bubble.is_some() || self.overlay_open(cx);
-                // One waiting on Claude's pick to go still goes.
-                if !self.overlays.bubble.as_ref().is_some_and(|b| b.sending) {
-                    self.close_bubble(Some(window), cx);
-                }
                 self.focus_board(window, cx);
                 if self.space {
                     self.gesture = Gesture::Pan { last: e.position };
@@ -339,7 +333,7 @@ impl BoardCanvas {
             Gesture::Idle => {}
             Gesture::Pan { .. } | Gesture::MinimapPan { .. } => self.move_ends_in(150, cx),
             Gesture::PanePress { click_count, .. } if e.button == MouseButton::Left => {
-                self.pane_click(e.position, click_count, window, cx);
+                self.pane_click(e.position, click_count, cx);
             }
             Gesture::Marquee { .. } => {
                 // React Flow swallows the click that ends a marquee.
@@ -492,19 +486,15 @@ impl BoardCanvas {
     }
 
     /// A click on the pane (BOARD-049): deselects everything, closes the menu;
-    /// a double-click starts a session there (BOARD-048). A click that closed
-    /// nothing opens the bubble there (BUBBLE-001), which the double-click's
-    /// second click closes again.
-    fn pane_click(&mut self, at: GPoint<Pixels>, click_count: usize, window: &mut Window, cx: &mut Context<'_, Self>) {
+    /// a double-click starts a session there (BOARD-048).
+    fn pane_click(&mut self, at: GPoint<Pixels>, click_count: usize, cx: &mut Context<'_, Self>) {
         self.close_menu(cx);
         self.clear_selection(cx);
-        let p = self.to_flow(at);
         if click_count == 2 {
+            let p = self.to_flow(at);
             if !self.in_dock(p) {
                 self.create_session_centred(p, SessionKind::Claude, cx);
             }
-        } else if click_count == 1 && !std::mem::take(&mut self.overlays.bubble_dismissed) && !self.in_dock(p) {
-            self.open_bubble(at, window, cx);
         }
     }
 
@@ -1307,7 +1297,7 @@ impl BoardCanvas {
                     self.bar_focus_from_board(Some("/".to_owned()), cx);
                     true
                 }
-                "p" | "a" | "r" | "x" => {
+                "p" | "a" | "r" | "x" | "b" | "m" => {
                     if let Some(tool) = super::overlays::ink::tool_for_key(&ch) {
                         self.ink_set_tool(tool, None, cx);
                     }

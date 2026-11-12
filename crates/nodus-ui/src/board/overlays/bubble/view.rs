@@ -1,19 +1,21 @@
-//! Drawing the bubble (BUBBLE-004…BUBBLE-008): a frosted card whose square
-//! corner points at the spot it was opened on, its field, and a footer
-//! saying what it will make; and the chat-bubble cursor over the empty board.
+//! Drawing asks on the spot (BUBBLE-004…BUBBLE-008, BUBBLE-030,
+//! BUBBLE-043): the bubble, a frosted card whose square corner points at its
+//! spot; the markers that wait on their spots while Claude decides; the
+//! mic's pill while it listens; and the two tools' cursors, drawn from their
+//! dock icons.
 
 use std::sync::OnceLock;
 
 use gpui::component::Sizable as _;
-use gpui::component::input::{IndentInline, Textarea};
+use gpui::component::input::Textarea;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Context, CursorBitmap, CursorImage, CursorStyle, CustomCursor, Focusable as _, InteractiveElement,
     IntoElement, MouseButton, ParentElement, Rgba, StatefulInteractiveElement, Styled, Window, div, point, px, size,
 };
-use nodus_domain::{BubbleRoute, FolderColor, js};
+use nodus_domain::js;
+use nodus_voice::controller::Phase;
 
-use super::super::bar::{note_gradient, view_hue};
 use super::super::ink::cursor::rasterize;
 use super::super::{kbd, spinner};
 use crate::board::canvas::BoardCanvas;
@@ -22,57 +24,88 @@ use crate::components::frosted::frosted;
 use crate::components::icon::{Icon, icon};
 use crate::components::tooltip::native_tooltip;
 use crate::components::tween::enter;
-use crate::theme::tokens::{DUR_FAST, TEXT_SM, Tokens, inset_shadow, rgba};
+use crate::theme::tokens::{DUR_FAST, TEXT_SM, Tokens};
 use crate::theme::{self, motion};
+use crate::voice::{NoticeAnchor, Z, voice_notice, voice_status};
 
-/// How wide it is, and how far its square corner sits from the spot.
+/// How wide the bubble is, and how far its square corner sits from the spot.
 const WIDTH: f32 = 360.;
 const OFFSET: f32 = 6.;
 /// The room it keeps from the board's edges.
 const MARGIN: f32 = 12.;
 /// About how tall it is with one line: under this much room above the
 /// spot, it opens below it.
-const ONE_LINE_H: f32 = 84.;
+const ONE_LINE_H: f32 = 76.;
+/// How wide a marker's words get.
+const MARKER_W: f32 = 240.;
 
-/// BUBBLE-005: a speech bubble, white with a dark outline so it reads on
-/// either board, its tail's tip the hotspot.
-pub(crate) const CURSOR_SVG: &str = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><path d='M9 3.5h9.5a3.5 3.5 0 0 1 3.5 3.5v5a3.5 3.5 0 0 1-3.5 3.5h-7.5l-7.5 5.5 2.6-6.1A3.5 3.5 0 0 1 5.5 12V7A3.5 3.5 0 0 1 9 3.5z' fill='white' stroke='black' stroke-opacity='0.85' stroke-width='1.4' stroke-linejoin='round'/><circle cx='10' cy='9.5' r='1.1'/><circle cx='13.75' cy='9.5' r='1.1'/><circle cx='17.5' cy='9.5' r='1.1'/></svg>";
+/// BUBBLE-005: the bubble tool's dock icon (lucide `message-circle-more`),
+/// white with a dark outline so it reads on either board; the tip of its
+/// tail is the hotspot.
+pub(crate) const CURSOR_SVG: &str = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><path d='M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719z' fill='white' stroke='black' stroke-opacity='0.85' stroke-width='1.5' stroke-linejoin='round'/><circle cx='8' cy='12' r='1.25' fill-opacity='0.85'/><circle cx='12' cy='12' r='1.25' fill-opacity='0.85'/><circle cx='16' cy='12' r='1.25' fill-opacity='0.85'/></svg>";
 
-/// The bubble's cursor, registered the first time it's asked for; the arrow
-/// where an image cursor can't be made.
-pub(crate) fn cursor() -> CursorStyle {
-    static CURSOR: OnceLock<CursorStyle> = OnceLock::new();
-    *CURSOR.get_or_init(|| {
-        let bitmaps: Vec<CursorBitmap> = [1.0, 2.0]
-            .into_iter()
-            .filter_map(|s| rasterize(CURSOR_SVG, 24, s))
-            .collect();
+/// BUBBLE-005: the mic tool's dock icon (lucide `mic`) the same way, its
+/// stand haloed in white; the foot of the stand is the hotspot.
+pub(crate) const MIC_CURSOR_SVG: &str = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><g fill='none' stroke='white' stroke-width='4' stroke-linecap='round'><path d='M19 10v2a7 7 0 0 1-14 0v-2'/><path d='M12 19v3'/></g><g fill='none' stroke='black' stroke-opacity='0.85' stroke-width='1.75' stroke-linecap='round'><path d='M19 10v2a7 7 0 0 1-14 0v-2'/><path d='M12 19v3'/></g><rect x='9' y='2' width='6' height='13' rx='3' fill='white' stroke='black' stroke-opacity='0.85' stroke-width='1.5'/></svg>";
+
+/// An image cursor from a 24×24 SVG, registered once into `slot`; the
+/// arrow where an image cursor can't be made.
+fn image_cursor(slot: &'static OnceLock<CursorStyle>, svg: &str, hotspot: (f32, f32)) -> CursorStyle {
+    *slot.get_or_init(|| {
+        let bitmaps: Vec<CursorBitmap> = [1.0, 2.0].into_iter().filter_map(|s| rasterize(svg, 24, s)).collect();
         if bitmaps.is_empty() {
             return CursorStyle::Arrow;
         }
         CursorStyle::Custom(CustomCursor::register(CursorImage {
             size: size(24.0, 24.0),
-            hotspot: point(3.5, 21.0),
+            hotspot: point(hotspot.0, hotspot.1),
             bitmaps,
             fallback: CursorStyle::Arrow,
         }))
     })
 }
 
+/// The bubble tool's cursor.
+pub(crate) fn cursor() -> CursorStyle {
+    static CURSOR: OnceLock<CursorStyle> = OnceLock::new();
+    image_cursor(&CURSOR, CURSOR_SVG, (2.5, 21.5))
+}
+
+/// The mic tool's cursor.
+pub(crate) fn mic_cursor() -> CursorStyle {
+    static CURSOR: OnceLock<CursorStyle> = OnceLock::new();
+    image_cursor(&CURSOR, MIC_CURSOR_SVG, (12.0, 22.0))
+}
+
 impl BoardCanvas {
-    /// BUBBLE-004: the bubble beside the spot it was opened on, above and to
-    /// the right of it, or below or to the left where the board runs out,
-    /// with a dot on the spot.
+    /// Everything asked on the spot: the markers waiting on Claude, the
+    /// mic's pill, and the bubble.
     pub(crate) fn render_bubble(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> Vec<AnyElement> {
+        let mut out = self.render_asking(window, cx);
+        out.extend(self.render_voice(window, cx));
+        out.extend(self.render_bubble_card(window, cx));
+        out
+    }
+
+    /// A board point on the canvas, in pixels.
+    fn on_canvas(&self, p: nodus_board::geometry::Point) -> (f32, f32) {
+        let vp = self.viewport;
+        ((vp.x + p.x * vp.zoom) as f32, (vp.y + p.y * vp.zoom) as f32)
+    }
+
+    /// BUBBLE-004: the bubble beside its spot, above and to the right of it,
+    /// or below or to the left where the board runs out, with a dot on the
+    /// spot.
+    fn render_bubble_card(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> Vec<AnyElement> {
         // BUBBLE-003: the keyboard went elsewhere, as the frame has it (the
-        // field's blur doesn't fire for a focus given from outside, such as
-        // a new note's).
+        // field's blur doesn't fire for a focus given from outside). An
+        // empty bubble goes; one with words stays.
         let Some(bubble) = self.overlays.bubble.as_mut() else {
             return Vec::new();
         };
-        if bubble.field.read(cx).focus_handle(cx).is_focused(window) {
-            bubble.had_focus = true;
-        } else if bubble.had_focus && !bubble.sending {
+        let focused = bubble.field.read(cx).focus_handle(cx).is_focused(window);
+        bubble.had_focus |= focused;
+        if !focused && bubble.had_focus && js::trim(&bubble.text).is_empty() {
             self.close_bubble(None, cx);
             return Vec::new();
         }
@@ -82,11 +115,10 @@ impl BoardCanvas {
         let t = theme::tokens(cx);
         let key = bubble.key;
         let field = bubble.field.clone();
+        let typed = !js::trim(&bubble.text).is_empty();
         let (w, h) = self.canvas_size();
         let (w, h) = (w as f32, h as f32);
-        let vp = self.viewport;
-        let sx = (vp.x + bubble.at.x * vp.zoom) as f32;
-        let sy = (vp.y + bubble.at.y * vp.zoom) as f32;
+        let (sx, sy) = self.on_canvas(bubble.at);
         let above = sy - OFFSET - ONE_LINE_H >= MARGIN;
         let right = sx + OFFSET + WIDTH <= w - MARGIN;
         let left = if right {
@@ -95,8 +127,25 @@ impl BoardCanvas {
             (sx - OFFSET - WIDTH).max(MARGIN)
         };
         let rise = enter(window, cx, ("bubble-in", key), DUR_FAST, motion::ease_out);
-        let footer = self.render_bubble_footer(&t, window, cx);
         let me = cx.entity().downgrade();
+        let hint = div()
+            .flex()
+            .items_center()
+            .gap(px(6.))
+            .text_size(TEXT_SM)
+            .line_height(px(16.))
+            .text_color(t.text_tertiary)
+            .child(icon(Icon::Sparkles, 12., 2., t.text_tertiary))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .text_ellipsis()
+                    .whitespace_nowrap()
+                    .child("Claude decides: a session, a note or a view"),
+            )
+            .when(typed, |d| d.child(kbd(&t, "↵")));
         let card = div()
             .id(("bubble", key))
             .absolute()
@@ -127,6 +176,7 @@ impl BoardCanvas {
             .shadow(t.lg())
             .opacity(rise)
             .occlude()
+            .cursor(CursorStyle::IBeam)
             .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                 cx.stop_propagation();
                 window.prevent_default();
@@ -144,14 +194,9 @@ impl BoardCanvas {
                     cx.stop_propagation();
                 }
             }))
-            // BUBBLE-015: Tab comes as the field's IndentInline.
-            .capture_action(cx.listener(|this, _: &IndentInline, _, cx| {
-                this.bubble_cycle(cx);
-                cx.stop_propagation();
-            }))
             .child(
                 // XSmall's editor insets are 4px across: taken back.
-                div().mx(px(-4.)).cursor(CursorStyle::IBeam).child(
+                div().mx(px(-4.)).child(
                     Textarea::new(&field)
                         .appearance(false)
                         .xsmall()
@@ -161,164 +206,181 @@ impl BoardCanvas {
                         .px(px(0.)),
                 ),
             )
-            .child(footer);
-        let dot = div()
-            .absolute()
-            .left(px(sx - 4.))
-            .top(px(sy - 4.))
-            .size(px(8.))
-            .rounded_full()
-            .bg(t.accent)
-            .shadow(vec![theme::tokens::ring(3., rgba_mix(t.accent, 0.25))])
-            .opacity(rise);
-        vec![dot.into_any_element(), card.into_any_element()]
+            .child(hint);
+        vec![spot_dot(sx, sy, t.accent, rise), card.into_any_element()]
     }
 
-    /// BUBBLE-006, BUBBLE-007: what it will make, and why.
-    fn render_bubble_footer(&mut self, t: &Tokens, window: &mut Window, cx: &mut Context<'_, Self>) -> AnyElement {
-        let Some(bubble) = self.overlays.bubble.as_ref() else {
-            return div().into_any_element();
-        };
-        let typed = !js::trim(&bubble.text).is_empty();
-        let route = bubble.shown();
-        // BUBBLE-007: Claude is looking at it, and nothing the user picked stands.
-        let thinking = bubble.choice.is_none() && (bubble.guessing || bubble.sending);
-        let (bg, fg, lead, label): (Rgba, Rgba, AnyElement, String) = match route {
-            Some(BubbleRoute::Session(model)) => (
-                rgba_mix(t.accent, 0.12),
-                t.accent,
-                icon(Icon::Sparkles, 12., 2., t.accent).into_any_element(),
-                format!("Session · {}", model.label()),
-            ),
-            Some(BubbleRoute::Note) => (
-                t.bg_hover,
-                t.text_primary,
-                div()
-                    .flex_none()
-                    .size(px(11.))
-                    .rounded(px(3.))
-                    .bg(note_gradient(FolderColor::Yellow))
-                    .shadow(vec![inset_shadow(0., 0., 0., 0.5, rgba(0, 0, 0, 0.2))])
+    /// BUBBLE-030: each ask waiting on Claude, as a dot on its spot and a
+    /// spinner beside the first line of what was asked.
+    fn render_asking(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> Vec<AnyElement> {
+        let t = theme::tokens(cx);
+        let asks: Vec<(usize, (f32, f32), String)> = self
+            .overlays
+            .asking
+            .iter()
+            .map(|a| (a.id, self.on_canvas(a.at), a.text.clone()))
+            .collect();
+        let mut out = Vec::new();
+        for (id, (sx, sy), text) in asks {
+            let rise = enter(window, cx, ("bubble-asking-in", id), DUR_FAST, motion::ease_out);
+            let first_line = text.lines().next().unwrap_or_default().to_owned();
+            out.push(spot_dot(sx, sy, t.accent, rise));
+            out.push(
+                pill(&t, sx, sy, rise)
+                    .id(("bubble-asking", id))
+                    .max_w(px(MARKER_W))
+                    .child(spinner("bubble-asking-spin", 12., 2., t.text_secondary, cx))
+                    .child(div().min_w_0().overflow_hidden().text_ellipsis().child(first_line))
                     .into_any_element(),
-                "Note".into(),
-            ),
-            Some(BubbleRoute::View) => {
-                let (hue, ink) = view_hue(t);
-                (
-                    Rgba { a: 0.15, ..hue },
-                    ink,
-                    icon(Icon::LayoutDashboard, 12., 2., ink).into_any_element(),
-                    "View".into(),
-                )
-            }
-            None if thinking => (
-                t.bg_hover,
-                t.text_secondary,
-                spinner("bubble-thinking", 12., 2., t.text_secondary, cx),
-                "Thinking…".into(),
-            ),
-            None => (
-                t.bg_hover,
-                t.text_secondary,
-                icon(Icon::Sparkles, 12., 2., t.text_secondary).into_any_element(),
-                "Auto".into(),
-            ),
-        };
-        // A guess on screen that's being asked again turns its mark to the spinner.
-        let lead = if thinking && route.is_some() {
-            spinner("bubble-thinking", 12., 2., fg, cx)
-        } else {
-            lead
-        };
-        let why = if !typed {
-            "Claude picks a session, note or view".to_owned()
-        } else if bubble.choice.is_some() {
-            "Your pick".to_owned()
-        } else if bubble.sending {
-            "Starts once Claude picks".to_owned()
-        } else {
-            bubble.guess.as_ref().map(|g| g.reason.clone()).unwrap_or_default()
-        };
-        let hovered = window.use_keyed_state("bubble-chip-hover", cx, |_, _| false);
-        let hover = *hovered.read(cx);
-        let me = cx.entity().downgrade();
-        let chip = div()
-            .id("bubble-route")
-            .flex_none()
-            .h(px(22.))
-            .pl(px(7.))
-            .pr(px(9.))
-            .flex()
-            .items_center()
-            .gap(px(5.))
-            .rounded(px(11.))
-            .bg(bg)
-            .when(hover, |d| {
-                d.shadow(vec![inset_shadow(0., 0., 0., 1., rgba_mix(fg, 0.35))])
-            })
-            .text_color(fg)
-            .font_weight(gpui::FontWeight::MEDIUM)
-            .whitespace_nowrap()
-            .cursor(CursorStyle::PointingHand)
-            .tooltip(native_tooltip("Change (Tab)".into()))
-            .on_hover(move |h, _, cx| {
-                hovered.update(cx, |s, cx| {
-                    *s = *h;
-                    cx.notify();
-                });
-            })
-            .on_mouse_down(MouseButton::Left, |_, window, cx| {
-                cx.stop_propagation();
-                window.prevent_default();
-            })
-            .on_click(move |_, _, cx| {
-                if let Some(c) = me.upgrade() {
-                    c.update(cx, BoardCanvas::bubble_cycle);
-                }
-            })
-            .child(lead)
-            .child(label);
-        div()
-            .flex()
-            .items_center()
-            .gap(px(8.))
-            .text_size(TEXT_SM)
-            .line_height(px(16.))
-            .child(chip)
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .overflow_hidden()
-                    .text_ellipsis()
-                    .whitespace_nowrap()
-                    .text_color(t.text_tertiary)
-                    .child(why),
-            )
-            .when(typed, |d| d.child(kbd(t, "↵")))
-            .into_any_element()
+            );
+        }
+        out
     }
+
+    /// BUBBLE-043: while the mic tool listens or writes down, a pill on its
+    /// spot with the clock and meter (or the spinner), and its notice under
+    /// it when something went wrong.
+    fn render_voice(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> Vec<AnyElement> {
+        let (Some(mic), Some(at)) = (self.overlays.voice.clone(), self.overlays.voice_at) else {
+            return Vec::new();
+        };
+        let t = theme::tokens(cx);
+        let (sx, sy) = self.on_canvas(at);
+        let phase = mic.read(cx).phase();
+        let mut out = Vec::new();
+        if phase != Phase::Idle {
+            let recording = phase == Phase::Recording;
+            let rise = enter(window, cx, "bubble-voice-in", DUR_FAST, motion::ease_out);
+            let status = voice_status("bubble-voice-status", &mic, false, Z(1.), window, cx);
+            let hint = match phase {
+                Phase::Recording => Some("Click to send"),
+                Phase::Opening => Some("Opening the mic…"),
+                _ => None,
+            };
+            let cancel = mic.clone();
+            let dot = if recording { t.status_waiting } else { t.accent };
+            out.push(spot_dot(sx, sy, dot, rise));
+            out.push(
+                pill(&t, sx, sy, rise)
+                    .id("bubble-voice")
+                    .children(status)
+                    .when_some(hint, |d, hint| d.child(div().text_color(t.text_tertiary).child(hint)))
+                    .when(phase != Phase::Transcribing, |d| {
+                        d.child(
+                            div()
+                                .id("bubble-voice-cancel")
+                                .flex_none()
+                                .size(px(20.))
+                                .rounded_full()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .hover(|s| s.bg(t.bg_hover))
+                                .cursor(CursorStyle::Arrow)
+                                .tooltip(native_tooltip("Cancel (Esc)".into()))
+                                .on_mouse_down(MouseButton::Left, |_, window, cx| {
+                                    cx.stop_propagation();
+                                    window.prevent_default();
+                                })
+                                .on_click(move |_, _, cx| cancel.read(cx).cancel())
+                                .child(icon(Icon::X, 11., 2.4, t.text_tertiary)),
+                        )
+                    })
+                    .into_any_element(),
+            );
+        }
+        if let Some(notice) = voice_notice("bubble-voice-notice", &mic, NoticeAnchor::SessionMic, Z(1.), window, cx) {
+            out.push(
+                div()
+                    .absolute()
+                    .left(px(sx + 10.))
+                    .top(px(sy + 20.))
+                    .occlude()
+                    .child(notice)
+                    .into_any_element(),
+            );
+        }
+        out
+    }
+}
+
+/// A dot on a spot: 8px, with a 3px ring of its colour at 25%.
+fn spot_dot(sx: f32, sy: f32, color: Rgba, rise: f32) -> AnyElement {
+    div()
+        .absolute()
+        .left(px(sx - 4.))
+        .top(px(sy - 4.))
+        .size(px(8.))
+        .rounded_full()
+        .bg(color)
+        .shadow(vec![theme::tokens::ring(3., rgba_mix(color, 0.25))])
+        .opacity(rise)
+        .into_any_element()
+}
+
+/// A small frosted pill just right of a spot, level with it.
+fn pill(t: &Tokens, sx: f32, sy: f32, rise: f32) -> gpui::Div {
+    div()
+        .absolute()
+        .left(px(sx + 12. + 4. * (1. - rise)))
+        .top(px(sy - 14.))
+        .h(px(28.))
+        .flex()
+        .items_center()
+        .gap(px(8.))
+        .px(px(10.))
+        .rounded(px(14.))
+        .map(|d| frosted(d, rgba_mix(t.bg_elevated, 0.92), 24., 1.8))
+        .shadow(t.md())
+        .text_size(TEXT_SM)
+        .text_color(t.text_secondary)
+        .whitespace_nowrap()
+        .opacity(rise)
+        .occlude()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn at(b: &CursorBitmap, x: u32, y: u32) -> [u8; 4] {
+        let i = ((y * b.width + x) * 4) as usize;
+        [b.rgba[i], b.rgba[i + 1], b.rgba[i + 2], b.rgba[i + 3]]
+    }
+
     #[test]
-    fn the_cursor_is_drawn_at_each_scale() {
-        let one = rasterize(CURSOR_SVG, 24, 1.0).unwrap();
-        assert_eq!((one.width, one.height), (24, 24));
+    fn the_bubble_cursor_is_the_dock_icon_filled_white() {
         let two = rasterize(CURSOR_SVG, 24, 2.0).unwrap();
         assert_eq!((two.width, two.height), (48, 48));
-        let at = |x: u32, y: u32| {
-            let i = ((y * two.width + x) * 4) as usize;
-            [two.rgba[i], two.rgba[i + 1], two.rgba[i + 2], two.rgba[i + 3]]
-        };
         // Inside the bubble, between the dots: white.
-        assert_eq!(at(24, 26), [255, 255, 255, 255]);
+        assert_eq!(at(&two, 20, 17), [255, 255, 255, 255]);
         // A dot: dark.
-        assert!(at(20, 19)[0] < 60);
+        assert!(at(&two, 24, 24)[0] < 80);
         // Outside it, top left: clear.
-        assert_eq!(at(2, 2)[3], 0);
+        assert_eq!(at(&two, 1, 1)[3], 0);
+    }
+
+    #[test]
+    fn the_mic_cursor_is_the_dock_icon_filled_white() {
+        let two = rasterize(MIC_CURSOR_SVG, 24, 2.0).unwrap();
+        // Inside the capsule: white.
+        assert_eq!(at(&two, 24, 12), [255, 255, 255, 255]);
+        // Its outline, and the stand: dark.
+        assert!(at(&two, 18, 12)[0] < 100);
+        assert!(at(&two, 24, 42)[0] < 100);
+        // Beside the capsule, above the stand's arc: clear.
+        assert_eq!(at(&two, 4, 4)[3], 0);
+    }
+
+    #[test]
+    fn each_cursor_is_an_image_falling_back_to_the_arrow() {
+        for (style, hotspot) in [(cursor(), point(2.5, 21.5)), (mic_cursor(), point(12.0, 22.0))] {
+            let CursorStyle::Custom(c) = style else {
+                panic!("not an image cursor")
+            };
+            let image = c.image().unwrap();
+            assert_eq!(image.hotspot, hotspot);
+            assert_eq!(image.fallback, CursorStyle::Arrow);
+        }
     }
 }

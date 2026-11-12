@@ -20,6 +20,8 @@ impl BoardCanvas {
             let me = me.clone();
             let glyph = move |fg: Rgba| match each {
                 InkTool::Select => ov_icon(OvIcon::MousePointer2, 15., 2., fg),
+                InkTool::Bubble => ov_icon(OvIcon::MessageCircleMore, 15., 2., fg),
+                InkTool::Mic => ov_icon(OvIcon::Mic, 15., 2., fg),
                 InkTool::Pen => icon(Icon::Pencil, 15., 2., fg),
                 InkTool::Arrow => ov_icon(OvIcon::MoveUpRight, 15., 2., fg),
                 InkTool::Rect => ov_icon(OvIcon::Square, 15., 2., fg),
@@ -45,8 +47,12 @@ impl BoardCanvas {
                 window,
                 cx,
             ));
+            // The asking tools stand apart from the ink's.
+            if each == InkTool::Mic {
+                children.push(separator(&t));
+            }
         }
-        children.push(div().w(px(16.)).h(px(1.)).my(px(3.)).bg(t.separator).into_any_element());
+        children.push(separator(&t));
 
         // The colour button and its palette.
         let toggle = me.clone();
@@ -101,7 +107,12 @@ impl BoardCanvas {
                             }
                         },
                     )
+                    // On the button: with no inset it would sit where it
+                    // falls after it, a button lower, and a press on the
+                    // palette would close it before it picked (INKUI-004).
                     .absolute()
+                    .top_0()
+                    .left_0()
                     .size_full(),
                 )
                 .into_any_element(),
@@ -250,6 +261,11 @@ pub(crate) fn tool_button(
             .on_click(move |_, window, cx| on_click(window, cx))
         });
     content(el, fg).into_any_element()
+}
+
+/// The dock's thin rule between groups.
+fn separator(t: &Tokens) -> AnyElement {
+    div().w(px(16.)).h(px(1.)).my(px(3.)).bg(t.separator).into_any_element()
 }
 
 /// A filled circle `size` across, `inset` from its parent's corner.

@@ -151,10 +151,13 @@ async fn exits_when_another_protocol_says_hello() {
     }))
     .await;
     assert_eq!(app.recv().await.unwrap(), json!({"type": "spawned", "id": 1}));
-    let pid = loop {
+    // Its first line, which can come in pieces.
+    let mut said = String::new();
+    let pid: i32 = loop {
         let msg = app.recv().await.unwrap();
-        if let Some(pid) = msg["data"].as_str().and_then(|data| data.trim().parse::<i32>().ok()) {
-            break pid;
+        said.push_str(msg["data"].as_str().unwrap_or_default());
+        if let Some((line, _)) = said.split_once('\n') {
+            break line.trim().parse().unwrap();
         }
     };
 

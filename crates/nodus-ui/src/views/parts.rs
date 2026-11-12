@@ -7,8 +7,8 @@ use std::time::Duration;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, App, ElementId, Entity, FontWeight, InteractiveElement, IntoElement,
-    MouseButton, ParentElement, Rgba, StatefulInteractiveElement, Styled, Window, div, relative,
+    AnyElement, App, ElementId, Entity, FontWeight, InteractiveElement, IntoElement, MouseButton, ParentElement, Rgba,
+    StatefulInteractiveElement, Styled, Window, div, relative,
 };
 use nodus_domain::{BoardView, SessionStatus, ViewCommand};
 

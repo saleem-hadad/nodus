@@ -4326,7 +4326,27 @@ dependencies = [
 
 [[package]]
 name = "nodus-server"
-version = "1.0.10"
+version = "1.0.12"
+dependencies = [
+ "futures-util",
+ "getrandom 0.3.4",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "libc",
+ "nodus-core",
+ "nodus-domain",
+ "nodus-host",
+ "nodus-host-proto",
+ "nodus-platform",
+ "nodus-updater",
+ "nodus-wire",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite",
+]
 
 [[package]]
 name = "nodus-sessions"
@@ -4507,7 +4527,7 @@ dependencies = [
 
 [[package]]
 name = "nodus-wire"
-version = "1.0.11"
+version = "1.0.12"
 dependencies = [
  "futures-util",
  "nodus-domain",

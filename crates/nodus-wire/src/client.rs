@@ -56,6 +56,12 @@ impl Events {
     pub async fn next(&mut self) -> Option<Event> {
         self.0.recv().await
     }
+
+    /// The next event that has arrived, without waiting. Once a call has
+    /// been answered, every event the server sent before the answer is here.
+    pub fn try_next(&mut self) -> Option<Event> {
+        self.0.try_recv().ok()
+    }
 }
 
 /// One connection to a server. Calls can be made from many tasks at once.

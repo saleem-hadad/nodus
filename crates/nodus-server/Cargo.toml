@@ -1,0 +1,43 @@
+[package]
+name = "nodus-server"
+description = "Nodus on a server: the core with no window, served over one WebSocket, and the session host"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# `nodus-server`, since the app's crate builds `nodus`; the install script
+# puts it on a server as `/opt/nodus/bin/nodus` (SRV-001).
+[[bin]]
+name = "nodus-server"
+path = "src/main.rs"
+
+[dependencies]
+futures-util.workspace = true
+getrandom.workspace = true
+http-body-util.workspace = true
+hyper = { workspace = true, features = ["http1", "server"] }
+hyper-util.workspace = true
+nodus-core.workspace = true
+nodus-domain.workspace = true
+nodus-host.workspace = true
+nodus-host-proto.workspace = true
+nodus-platform.workspace = true
+nodus-updater.workspace = true
+nodus-wire = { workspace = true, features = ["client"] }
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["fs", "net", "process", "signal"] }
+tokio-tungstenite.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -365,8 +365,12 @@ mod process {
     }
 
     impl ClaudeEnv for StandIn {
-        fn claude(&self) -> Result<PathBuf, ClaudeNotFound> {
-            self.claude.clone().ok_or(ClaudeNotFound)
+        fn claude(&self) -> Result<Program, ClaudeNotFound> {
+            self.claude.clone().map(Program::from).ok_or(ClaudeNotFound)
+        }
+
+        fn runner(&self) -> Arc<dyn Runner> {
+            Arc::new(LocalRunner)
         }
 
         fn spawn_env(&self) -> EnvMap {

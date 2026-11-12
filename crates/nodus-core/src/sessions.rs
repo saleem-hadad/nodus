@@ -181,7 +181,14 @@ impl SessionsApi<'_> {
                 self.nodus
                     .inner
                     .board
-                    .summarize(project_id, session_ids, request_id, focus, &env)
+                    .summarize(
+                        project_id,
+                        session_ids,
+                        request_id,
+                        focus,
+                        &env,
+                        &*self.nodus.inner.runner,
+                    )
                     .await
                     .on("session:summarize")
             })

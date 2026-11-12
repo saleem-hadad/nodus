@@ -10,7 +10,9 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
 use nodus_actions::Actions;
 use nodus_board::Board;
 use nodus_domain::{AppSettings, BoardNode, Event, EventSink, OpenCardRequest, SessionStatus};
+use nodus_git::Git;
 use nodus_platform::Env;
+use nodus_platform::runner::{LocalRunner, Runner};
 use nodus_platform::secrets::SafeStorage;
 use nodus_sessions::agents::Agents;
 use nodus_sessions::client::{ClientError, HostClient, HostLauncher, ProcessLauncher, Wiring};
@@ -29,8 +31,8 @@ use tokio::sync::{broadcast, mpsc, watch};
 use crate::notifications::{NoNotifier, Notifications, SystemNotifier};
 use crate::shell::{AppShell, Headless, ShellPrompt, ShellWindow};
 use crate::wiring::{
-    Broadcast, CoreBrains, CoreMetas, CoreProjects, CoreSessions, CoreUpdaterApp, CoreViewHost, CoreViewTools,
-    StatusChange, StatusFanout,
+    Broadcast, CoreBrains, CoreMetas, CoreProjects, CoreRunner, CoreSessions, CoreUpdaterApp, CoreViewHost,
+    CoreViewTools, StatusChange, StatusFanout,
 };
 use crate::{
     ActionsApi, AppApi, BoardApi, GitApi, GroupsApi, MenuApi, ProjectsApi, SessionsApi, SettingsApi, UpdatesApi,
@@ -79,6 +81,15 @@ pub enum EnvSource {
     Given(Env),
 }
 
+/// Where the processes the core starts run, other than sessions' terminals:
+/// git, the background `claude -p` calls and views' commands (SRV-005).
+pub enum RunnerSource {
+    /// Here, in this process, as the app always has ([`LocalRunner`]).
+    Local,
+    /// This one (tests).
+    Given(Arc<dyn Runner>),
+}
+
 /// What the service starts with.
 pub struct NodusConfig {
     /// The data folder: state.json and the rest (PLAT-003, PLAT-004).
@@ -100,6 +111,8 @@ pub struct NodusConfig {
     /// How a session host is started when none is running. None runs this
     /// binary as `Nodus host <socket> <key>` (HOST-091).
     pub host_launcher: Option<Arc<dyn HostLauncher>>,
+    /// Where git, the background `claude -p` calls and views' commands run.
+    pub runner: RunnerSource,
     /// GitHub and the OS as the updater reaches them. None for the real ones.
     pub updates: Option<Arc<dyn nodus_updater::System>>,
     /// Where the xAI key is sealed (0.9.4's safeStorage). None for the
@@ -122,6 +135,7 @@ impl NodusConfig {
             shell: None,
             notifications: Notifications::Off,
             host_launcher: None,
+            runner: RunnerSource::Local,
             updates: None,
             secrets: None,
         }
@@ -157,6 +171,8 @@ pub(crate) struct Inner {
     pub(crate) shell: Arc<dyn AppShell>,
     /// The session host and the sessions in it (`pty.ts`).
     pub(crate) host: HostClient,
+    /// What starts git, `claude -p` and views' commands (SRV-005).
+    pub(crate) runner: Arc<dyn Runner>,
     /// Each session's status, agents and usage (`hooks.ts`).
     pub(crate) status: StatusMachine,
     /// Where claude's hooks post (`hookSettings`, `hookEnv`).
@@ -228,6 +244,7 @@ impl Nodus {
                 host: Arc::new(CoreViewHost(core.clone())),
                 events: Arc::clone(&sink),
                 env: env.clone(),
+                runner: Arc::new(CoreRunner(core.clone())),
                 clock: nodus_board::real_clock(),
                 runtime: config.runtime.clone(),
             });
@@ -282,9 +299,14 @@ impl Nodus {
                 &store,
                 config.user_data.clone(),
                 env.clone(),
+                Arc::new(CoreRunner(core.clone())),
                 Arc::clone(&sink),
                 &config.runtime,
             );
+            let runner: Arc<dyn Runner> = match config.runner {
+                RunnerSource::Local => Arc::new(LocalRunner),
+                RunnerSource::Given(runner) => runner,
+            };
             let updater = Updater::new(
                 Arc::new(CoreUpdaterApp(core.clone())),
                 config
@@ -304,6 +326,7 @@ impl Nodus {
                 user_data: config.user_data.clone(),
                 shell,
                 host,
+                runner,
                 status,
                 endpoint,
                 agents,
@@ -571,6 +594,12 @@ impl Inner {
         }
         // The capture task ended without an answer (its runtime went away).
         Arc::new(Env::from_process())
+    }
+
+    /// Git with the user's environment, run by the core's runner (GIT-001,
+    /// SRV-005).
+    pub(crate) fn git(&self, env: &Env) -> Git {
+        Git::from_env(env, Arc::clone(&self.runner))
     }
 
     /// `pty.spawnSession` (SESS-119…131): starts a session's process in the

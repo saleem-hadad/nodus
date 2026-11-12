@@ -62,6 +62,6 @@ impl GitApi<'_> {
             .store
             .read(|state| state.project(project_id).map(|p| PathBuf::from(&p.repo_path)))
             .on(channel)?;
-        Ok((Git::from_env(&env), repo))
+        Ok((self.nodus.inner.git(&env), repo))
     }
 }

@@ -8,7 +8,8 @@ use nodus_domain::{
     SessionSearchHit, SummarizePhase, SummarizeProgress, SummaryResult, TranscriptMessage, Viewport,
 };
 use nodus_platform::Env;
-use nodus_transcripts::{NamingSource, SearchTarget, SummarizeTarget, is_agent_id, read_transcript};
+use nodus_platform::runner::Runner;
+use nodus_transcripts::{ClaudeCall, NamingSource, SearchTarget, SummarizeTarget, is_agent_id, read_transcript};
 use serde_json::{Map, Value};
 
 use crate::archive::{drop_node, is_empty, unstick_notes};
@@ -178,12 +179,14 @@ impl Board {
     }
 
     /// `board:name-section`, once the login-shell environment is ready: a name
-    /// from Claude for the sessions grouped in a section (SESS-102).
+    /// from Claude for the sessions grouped in a section (SESS-102), asked
+    /// through `runner` (SRV-005).
     pub async fn name_section(
         &self,
         project_id: &str,
         session_ids: &[String],
         env: &Env,
+        runner: &dyn Runner,
     ) -> Result<String, BoardError> {
         let project = self.project(project_id)?;
         let nodes = self.read_board(project_id, |_, board| {
@@ -217,8 +220,13 @@ impl Board {
         if sources.is_empty() {
             return Err(BoardError::NothingToName);
         }
-        let claude = env.require_claude()?;
-        Ok(nodus_transcripts::name_section(claude, &env.spawn_env(), &sources).await?)
+        let claude = runner.claude(env)?;
+        let call = ClaudeCall {
+            runner,
+            program: &claude,
+            env: &env.spawn_env(),
+        };
+        Ok(nodus_transcripts::name_section(call, &sources).await?)
     }
 
     /// `board:save-note`: the note as the window has it, checked (SESS-103).
@@ -393,7 +401,7 @@ impl Board {
 
     /// `session:summarize`, once the login-shell environment is ready:
     /// handoff summaries of sessions, one per id asked for, in that order
-    /// (SESS-165…174).
+    /// (SESS-165…174), each asked through `runner` (SRV-005).
     pub async fn summarize(
         &self,
         project_id: &str,
@@ -401,6 +409,7 @@ impl Board {
         request_id: &str,
         focus: Option<&str>,
         env: &Env,
+        runner: &dyn Runner,
     ) -> Result<Vec<SummaryResult>, BoardError> {
         let project = self.project(project_id)?;
         let titles: Vec<Option<String>> = self.read_board(project_id, |_, board| {
@@ -447,10 +456,14 @@ impl Board {
             }
         }
         // SESS-174: after the sessions without a conversation were reported.
-        let claude = env.require_claude()?;
+        let claude = runner.claude(env)?;
+        let call = ClaudeCall {
+            runner,
+            program: &claude,
+            env: &env.spawn_env(),
+        };
         let summaries = nodus_transcripts::summarize_sessions(
-            claude,
-            &env.spawn_env(),
+            call,
             &project.repo_path,
             &with_transcript,
             request_id,

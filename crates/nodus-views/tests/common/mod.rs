@@ -238,6 +238,7 @@ impl Fixture {
             host: Arc::clone(&host) as Arc<dyn ViewHost>,
             events: Arc::clone(&window) as Arc<dyn EventSink>,
             env,
+            runner: Arc::new(nodus_platform::runner::LocalRunner),
             clock,
             runtime: tokio::runtime::Handle::current(),
         });

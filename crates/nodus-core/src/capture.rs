@@ -29,6 +29,7 @@ use nodus_domain::{
     CaptureTargets, CreateSessionOptions, CreateViewOptions, Event, EventSink, MenuCommand, OpenCardRequest, Rect,
     SessionMeta, SessionStatus, TabAttachment,
 };
+use nodus_platform::runner::{Program, Runner};
 use nodus_platform::{ClaudeNotFound, Env};
 use nodus_store::Store;
 use serde_json::Value;
@@ -380,22 +381,32 @@ impl CaptureSessions for CoreCaptureSessions {
 }
 
 /// `requireClaude` and `spawnEnv` on the user's environment: the login
-/// shell's once it's in, the app's own until then.
-struct CoreClaude(watch::Receiver<Option<Arc<Env>>>);
+/// shell's once it's in, the app's own until then; run by the core's runner.
+struct CoreClaude {
+    env: watch::Receiver<Option<Arc<Env>>>,
+    runner: Arc<dyn Runner>,
+}
 
 impl CoreClaude {
     fn env(&self) -> Arc<Env> {
-        self.0.borrow().clone().unwrap_or_else(|| Arc::new(Env::from_process()))
+        self.env
+            .borrow()
+            .clone()
+            .unwrap_or_else(|| Arc::new(Env::from_process()))
     }
 }
 
 impl ClaudeEnv for CoreClaude {
-    fn claude(&self) -> Result<PathBuf, ClaudeNotFound> {
-        ClaudeEnv::claude(&*self.env())
+    fn claude(&self) -> Result<Program, ClaudeNotFound> {
+        self.runner.claude(&self.env())
     }
 
     fn spawn_env(&self) -> nodus_platform::env::EnvMap {
         ClaudeEnv::spawn_env(&*self.env())
+    }
+
+    fn runner(&self) -> Arc<dyn Runner> {
+        Arc::clone(&self.runner)
     }
 }
 
@@ -421,6 +432,7 @@ impl CaptureCore {
         store: &Arc<Store>,
         user_data: PathBuf,
         env: watch::Receiver<Option<Arc<Env>>>,
+        runner: Arc<dyn Runner>,
         events: Arc<dyn EventSink>,
         runtime: &tokio::runtime::Handle,
     ) -> Self {
@@ -438,7 +450,7 @@ impl CaptureCore {
             screen: Arc::new(late.clone()),
             permissions: Arc::new(late.clone()),
             hook: Arc::new(late),
-            claude: Arc::new(CoreClaude(env)),
+            claude: Arc::new(CoreClaude { env, runner }),
             events,
             runtime: runtime.clone(),
             clock: nodus_board::real_clock(),

@@ -4,7 +4,6 @@
 use std::sync::Arc;
 
 use nodus_domain::{TranscribeResult, VoiceKeySource};
-use nodus_git::Git;
 use nodus_voice::controller::{BoxFuture, LiveRecording, VoiceBackend};
 use nodus_voice::shell_key;
 
@@ -83,7 +82,7 @@ impl VoiceApi<'_> {
                     .nodus
                     .inner
                     .voice
-                    .transcribe(&Git::from_env(&env), &project, audio, mime_type, key.as_deref())
+                    .transcribe(&self.nodus.inner.git(&env), &project, audio, mime_type, key.as_deref())
                     .await)
             })
             .await

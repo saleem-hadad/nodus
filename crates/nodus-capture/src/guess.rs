@@ -7,7 +7,6 @@
 //! a JSON schema. The panel asks again each time the typing pauses, and a new
 //! question stops the one before it.
 
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
@@ -17,7 +16,8 @@ use nodus_domain::json::number_to_string;
 use nodus_domain::{CaptureAttachment, CaptureGuess, CaptureKind, CaptureTargets, SessionStatus};
 use nodus_platform::ClaudeNotFound;
 use nodus_platform::env::EnvMap;
-use nodus_platform::process::{Capture, Command, Killer, Signal};
+use nodus_platform::process::Capture;
+use nodus_platform::runner::{LocalRunner, Program, RunRequest, Runner};
 use serde_json::Value;
 use tokio::sync::Notify;
 
@@ -261,29 +261,35 @@ pub fn read_reply(stdout: &str, targets: &CaptureTargets) -> Option<CaptureGuess
     read_guess(parsed.get("structured_output").unwrap_or(&Value::Null), targets)
 }
 
-/// Where `claude` is and the environment it runs in (domain 01's
-/// `requireClaude` and `spawnEnv`).
+/// Where `claude` is, the environment it runs in (domain 01's
+/// `requireClaude` and `spawnEnv`) and what runs it (SRV-005).
 pub trait ClaudeEnv: Send + Sync {
-    /// The `claude` binary, or why there's none.
-    fn claude(&self) -> Result<PathBuf, ClaudeNotFound>;
+    /// The `claude` to run, or why there's none.
+    fn claude(&self) -> Result<Program, ClaudeNotFound>;
     /// The login-shell environment claude processes start in.
     fn spawn_env(&self) -> EnvMap;
+    /// What starts it.
+    fn runner(&self) -> Arc<dyn Runner>;
 }
 
+/// The `claude` this environment found, started here.
 impl ClaudeEnv for nodus_platform::Env {
-    fn claude(&self) -> Result<PathBuf, ClaudeNotFound> {
-        self.require_claude().map(PathBuf::from)
+    fn claude(&self) -> Result<Program, ClaudeNotFound> {
+        LocalRunner.claude(self)
     }
 
     fn spawn_env(&self) -> EnvMap {
         nodus_platform::Env::spawn_env(self)
+    }
+
+    fn runner(&self) -> Arc<dyn Runner> {
+        Arc::new(LocalRunner)
     }
 }
 
 /// The guess running now, which a new one or the panel hiding stops.
 struct Running {
     id: u64,
-    killer: Killer,
     cancelled: Arc<Notify>,
 }
 
@@ -311,14 +317,13 @@ impl Guesser {
         self
     }
 
-    /// `cancelGuess`: stops a guess still in progress (SIGKILL); it resolves
-    /// `None` at once (CAP-074). Called before every new guess and whenever
-    /// the panel hides.
+    /// `cancelGuess`: stops a guess still in progress (SIGKILL, as its run
+    /// is dropped); it resolves `None` at once (CAP-074). Called before every
+    /// new guess and whenever the panel hides.
     pub fn cancel(&self) {
         let Some(running) = self.lock().take() else {
             return;
         };
-        running.killer.kill(Signal::KILL);
         running.cancelled.notify_one();
     }
 
@@ -346,37 +351,31 @@ impl Guesser {
         self.cancel();
         let claude = self.env.claude()?;
         // CAP-069: stdin closed, or `claude -p` waits for piped input.
-        let child = Command::new(&claude)
+        let request = RunRequest::new(claude)
             .args(args)
             .cwd(std::env::temp_dir())
             .env(self.env.spawn_env())
             .stdout(Capture::All)
-            .stderr(Capture::First(0))
-            .spawn();
-        let child = match child {
-            Ok(child) => child,
-            Err(err) => {
-                // CAP-071
-                tracing::error!(%err, "[capture] guess failed");
-                return Ok(None);
-            }
-        };
+            .stderr(Capture::First(0));
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let cancelled = Arc::new(Notify::new());
-        let killer = child.killer();
         *self.lock() = Some(Running {
             id,
-            killer: killer.clone(),
             cancelled: cancelled.clone(),
         });
+        // A run that's dropped is stopped with SIGKILL, with what it started.
         let answer = tokio::select! {
-            output = child.wait() => Some(output.stdout_text()),
+            output = self.env.runner().run(request) => match output {
+                Ok(output) => Some(output.stdout_text()),
+                Err(err) => {
+                    // CAP-071
+                    tracing::error!(%err, "[capture] guess failed");
+                    None
+                }
+            },
             // CAP-070
-            () = tokio::time::sleep(self.timeout) => {
-                killer.kill(Signal::KILL);
-                None
-            }
-            // CAP-074: the wait is dropped, which stops what's left of it.
+            () = tokio::time::sleep(self.timeout) => None,
+            // CAP-074
             () = cancelled.notified() => None,
         };
         // CAP-073: it's no longer the running guess, if it still was.

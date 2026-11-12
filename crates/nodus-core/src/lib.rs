@@ -77,7 +77,7 @@ pub use git::GitApi;
 pub use groups::GroupsApi;
 pub use local_storage::LocalStorageApi;
 pub use menu::MenuApi;
-pub use nodus::{Dialogs, EnvSource, Nodus, NodusConfig, PickFolder, QuitAtOnce, SettingsHook};
+pub use nodus::{Dialogs, EnvSource, Nodus, NodusConfig, PickFolder, QuitAtOnce, RunnerSource, SettingsHook};
 /// What the windowed app gives capture, and what it answers.
 pub use nodus_capture as capture_service;
 /// Where the xAI key is sealed; tests give a synthetic one.

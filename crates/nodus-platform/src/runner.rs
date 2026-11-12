@@ -40,6 +40,16 @@ pub enum Program {
     Claude,
 }
 
+/// The path as given, or `claude`.
+impl std::fmt::Display for Program {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Path(path) => write!(f, "{}", path.display()),
+            Self::Claude => f.write_str("claude"),
+        }
+    }
+}
+
 impl From<&str> for Program {
     fn from(path: &str) -> Self {
         Self::Path(path.into())

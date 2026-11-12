@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use nodus_domain::{CaptureKind, ImageAttachment, RecordingSink};
 use nodus_platform::env::EnvMap;
+use nodus_platform::runner::{LocalRunner, Program, Runner};
 use serde_json::json;
 
 use super::*;
@@ -242,8 +243,12 @@ impl KeyHook for FakeHook {
 struct NoClaude;
 
 impl ClaudeEnv for NoClaude {
-    fn claude(&self) -> Result<PathBuf, ClaudeNotFound> {
+    fn claude(&self) -> Result<Program, ClaudeNotFound> {
         Err(ClaudeNotFound)
+    }
+
+    fn runner(&self) -> Arc<dyn Runner> {
+        Arc::new(LocalRunner)
     }
 
     fn spawn_env(&self) -> EnvMap {
@@ -791,8 +796,12 @@ struct StandIn(PathBuf);
 
 #[cfg(unix)]
 impl ClaudeEnv for StandIn {
-    fn claude(&self) -> Result<PathBuf, ClaudeNotFound> {
-        Ok(self.0.clone())
+    fn claude(&self) -> Result<Program, ClaudeNotFound> {
+        Ok(self.0.clone().into())
+    }
+
+    fn runner(&self) -> Arc<dyn Runner> {
+        Arc::new(LocalRunner)
     }
 
     fn spawn_env(&self) -> EnvMap {

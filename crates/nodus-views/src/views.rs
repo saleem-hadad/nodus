@@ -13,6 +13,7 @@ use nodus_domain::{
     BoardView, CommandResult, CreateViewOptions, Event, EventSink, Project, ViewEvent, ViewPatch, ViewReport, js,
 };
 use nodus_platform::Env;
+use nodus_platform::runner::Runner;
 use nodus_store::{BoardState, Store};
 use serde_json::{Map, Value, json};
 use tokio::runtime::Handle;
@@ -57,6 +58,9 @@ pub struct ViewsConfig {
     pub events: Arc<dyn EventSink>,
     /// The user's environment, once the login shell has given it (`envReady`).
     pub env: watch::Receiver<Option<Arc<Env>>>,
+    /// Where views' commands run: here, or in the session host on a server
+    /// (SRV-005, SRV-145).
+    pub runner: Arc<dyn Runner>,
     /// `Date.now()`.
     pub clock: Clock,
     /// Where timers and commands run.
@@ -79,6 +83,7 @@ pub(crate) struct Inner {
     pub(crate) host: Arc<dyn ViewHost>,
     pub(crate) events: Arc<dyn EventSink>,
     pub(crate) env: watch::Receiver<Option<Arc<Env>>>,
+    pub(crate) runner: Arc<dyn Runner>,
     pub(crate) clock: Clock,
     pub(crate) runtime: Handle,
     pub(crate) state: Mutex<State>,
@@ -146,6 +151,7 @@ impl Views {
                 host: config.host,
                 events: config.events,
                 env: config.env,
+                runner: config.runner,
                 clock: config.clock,
                 runtime: config.runtime,
                 state: Mutex::new(State::default()),
@@ -726,7 +732,8 @@ impl Views {
         let (project_id, view_id) = (project_id.to_owned(), view_id.to_owned());
         self.spawn(async move {
             let env = views.env().await;
-            let result = execute(&env, &repo, &cmd.name, &cmd.run, || views.now()).await;
+            let runner = Arc::clone(&views.inner.runner);
+            let result = execute(&*runner, &env, &repo, &cmd.name, &cmd.run, || views.now()).await;
             // The view may have gone while it ran.
             if views.view(&project_id, &view_id).is_some() {
                 let value = serde_json::to_value(&result).unwrap_or(Value::Null);

@@ -6,11 +6,22 @@ use std::time::Duration;
 
 use nodus_domain::js;
 use nodus_platform::env::EnvMap;
-use nodus_platform::process::{Command, Signal};
+use nodus_platform::process::Signal;
+use nodus_platform::runner::{Program, RunRequest, Runner};
 use serde_json::Value;
 
 use crate::nodeerr::spawn_message;
 use crate::value::{as_str, field, truthy};
+
+/// How a quick `claude -p` call runs: through `runner` (here, or in the
+/// session host on a server, SRV-005), starting `program`, the `claude` the
+/// runner asks for, with `env` (`spawnEnv()`).
+#[derive(Clone, Copy)]
+pub struct ClaudeCall<'a> {
+    pub runner: &'a dyn Runner,
+    pub program: &'a Program,
+    pub env: &'a EnvMap,
+}
 
 /// How a `claude -p` call ended.
 pub(crate) struct Finished {
@@ -32,21 +43,24 @@ pub(crate) enum RunError {
 /// `nodus_platform::process`, so no console window opens on Windows and it
 /// goes when the caller gives up on it.
 pub(crate) async fn run(
-    claude: &Path,
+    call: ClaudeCall<'_>,
     args: &[String],
     cwd: &Path,
-    env: &EnvMap,
     timeout: Duration,
 ) -> Result<Finished, RunError> {
-    let output = Command::new(claude)
-        .args(args)
+    let request = RunRequest::new(call.program.clone())
+        .args(args.iter().cloned())
         .cwd(cwd)
-        .env(env.clone())
+        .env(call.env.clone())
         .timeout(timeout)
-        .kill_signal(Signal::KILL)
-        .output()
-        .await
-        .map_err(|err| RunError::Spawn(spawn_message(&err.source, claude)))?;
+        .kill_signal(Signal::KILL);
+    let output = call.runner.run(request).await.map_err(|err| {
+        // The runner's own reason (no Claude Code, no session host) when it has one.
+        RunError::Spawn(
+            err.reason
+                .unwrap_or_else(|| spawn_message(&err.source, Path::new(&err.program))),
+        )
+    })?;
     if output.timed_out {
         return Err(RunError::TimedOut);
     }

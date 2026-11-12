@@ -185,7 +185,7 @@ fn git() -> Git {
     let mut env: nodus_platform::env::EnvMap = std::env::vars().collect();
     env.insert("GIT_CONFIG_GLOBAL".into(), "/dev/null".into());
     env.insert("GIT_CONFIG_NOSYSTEM".into(), "1".into());
-    Git::new(env)
+    Git::new(env, Arc::new(nodus_platform::runner::LocalRunner))
 }
 
 fn run_git(dir: &std::path::Path, args: &[&str]) {

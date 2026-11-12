@@ -36,6 +36,10 @@ pub type OnClick = Arc<dyn Fn(&str) + Send + Sync>;
 
 /// Shows notifications and reports their clicks.
 pub struct Notifier {
+    #[cfg_attr(
+        not(any(target_os = "macos", windows)),
+        expect(dead_code, reason = "nothing shows notifications elsewhere")
+    )]
     on_click: OnClick,
     #[cfg(target_os = "macos")]
     mac: mac::Center,
@@ -90,6 +94,7 @@ impl Notifier {
             #[cfg(windows)]
             self.windows.show(&id, notification, &self.on_click);
         }
+        let _ = notification;
         id
     }
 

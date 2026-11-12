@@ -32,7 +32,7 @@ pub fn open_default(sink: Sink) -> Result<Box<dyn Source>, OpenError> {
     }
     #[cfg(not(any(target_os = "macos", windows)))]
     {
-        let _ = sink;
+        drop(sink);
         Err(OpenError::NotFound)
     }
 }

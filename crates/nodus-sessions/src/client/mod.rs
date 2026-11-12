@@ -15,9 +15,14 @@
 //! What starts a session is [`launch::SpawnOptions`](crate::launch::SpawnOptions);
 //! the command line is built by the caller (`launch::command_for`) once the
 //! host is connected, since its hook endpoint and board tools come from it.
+//!
+//! On a server the host isn't the app's to start: it runs on its own as
+//! another user ([`HostClient::standalone`], SRV-004), and runs every other
+//! process the core starts too ([`HostRunner`], SRV-005).
 
 mod connection;
 mod launcher;
+mod runner;
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -30,13 +35,16 @@ use std::time::Duration;
 use indexmap::IndexMap;
 use nodus_domain::{Event, EventSink, SessionStatus};
 use nodus_host_proto::{
-    ClientMessage, HistoryEntry, HostMessage, HostPaths, PROTOCOL, Platform, ReplayBuffer, STATUS_LINE_EVENT,
-    SpawnRequest, Welcome, encode, host_paths, trusts_host, write_hook_config,
+    ClientMessage, ExecResult, HistoryEntry, HostMessage, HostPaths, PROTOCOL, Platform, ReplayBuffer,
+    STATUS_LINE_EVENT, SpawnRequest, Welcome, encode, host_paths, trusts_host, write_hook_config,
 };
+use nodus_platform::process::SpawnError;
+use nodus_platform::runner::{RunOutput, RunRequest};
 use serde_json::Value;
 use tokio::sync::{oneshot, watch};
 
 pub use launcher::{HostLauncher, ProcessLauncher};
+pub use runner::HostRunner;
 
 use self::connection::{Conn, Greeting, Reader};
 use crate::hooks::{HookEndpoint, SessionInput};
@@ -51,6 +59,8 @@ const HOST_START_TRIES: u32 = 100;
 const HOST_START_POLL: Duration = Duration::from_millis(100);
 /// A host that accepts a connection but never answers is treated as gone.
 const WELCOME: Duration = Duration::from_millis(5000);
+/// How often a standalone host is tried until it's up (SRV-004).
+const STANDALONE_RETRY: Duration = Duration::from_secs(1);
 
 const DIDNT_ANSWER: &str = "The session host didn’t answer";
 const UNTRUSTED: &str = "Another program answered as the session host, so Nodus didn’t trust it with your sessions.";
@@ -127,6 +137,9 @@ pub struct HostClient {
 struct Inner {
     me: std::sync::Weak<Inner>,
     paths: HostPaths,
+    /// The host runs on its own at `paths.socket`, and is never started
+    /// (SRV-004).
+    standalone: bool,
     platform: Platform,
     wiring: Wiring,
     state: Mutex<State>,
@@ -141,6 +154,9 @@ struct State {
     running: IndexMap<String, Running>,
     spawning: HashMap<String, Shared>,
     pending_spawns: HashMap<u64, PendingSpawn>,
+    /// `exec`s and `trust`s waiting for the host's answer, by request id.
+    pending_execs: HashMap<u64, oneshot::Sender<ExecResult>>,
+    pending_trusts: HashMap<u64, oneshot::Sender<Option<String>>>,
     exit_waiters: HashMap<String, Vec<oneshot::Sender<()>>>,
     host: Option<Conn>,
     relays_mcp: bool,
@@ -192,10 +208,30 @@ impl HostClient {
     /// A client for the host of the app whose data is in `user_data`.
     pub fn new(user_data: impl Into<PathBuf>, wiring: Wiring) -> Self {
         let platform = Platform::current();
+        Self::with_paths(host_paths(&user_data.into(), platform), false, wiring)
+    }
+
+    /// A client for a host something else runs and restarts (systemd), at
+    /// `socket` exactly (SRV-004). It's never started (`wiring.launcher`
+    /// isn't used): connecting waits for it, trying every second, and one
+    /// on another protocol is waited for in turn, as it exits on this
+    /// client's hello. The hook config still goes in `<user_data>/host`.
+    pub fn standalone(user_data: impl Into<PathBuf>, socket: impl Into<PathBuf>, wiring: Wiring) -> Self {
+        let platform = Platform::current();
+        let paths = HostPaths {
+            socket: socket.into(),
+            ..host_paths(&user_data.into(), platform)
+        };
+        Self::with_paths(paths, true, wiring)
+    }
+
+    fn with_paths(paths: HostPaths, standalone: bool, wiring: Wiring) -> Self {
+        let platform = Platform::current();
         Self {
             inner: Arc::new_cyclic(|me| Inner {
                 me: me.clone(),
-                paths: host_paths(&user_data.into(), platform),
+                paths,
+                standalone,
                 platform,
                 wiring,
                 state: Mutex::new(State {
@@ -377,6 +413,73 @@ impl HostClient {
             .unwrap_or_else(|_| Err(ClientError::Failed(STOPPED.into())))
     }
 
+    /// Runs a process in the host, as the host's user, connecting to (or
+    /// starting) a host first, and gives what it printed (SRV-005). Giving
+    /// up on the future stops the process tree, as dropping a local run
+    /// does. Fails with the host's own words when it couldn't start there,
+    /// and with `The session host stopped` when the host went first.
+    pub fn exec(&self, request: RunRequest) -> impl Future<Output = Result<RunOutput, SpawnError>> + Send + 'static {
+        let client = self.clone();
+        async move {
+            let failed = |why: &str| SpawnError::reported(request.program.to_string(), why, None);
+            client
+                .connect_host(true)
+                .await
+                .map_err(|err| failed(&err.to_string()))?;
+            let (done, answer) = oneshot::channel();
+            let id = {
+                let mut state = client.inner.lock();
+                if state.host.is_none() {
+                    return Err(failed(STOPPED));
+                }
+                let id = state.next_request;
+                state.next_request += 1;
+                state.pending_execs.insert(id, done);
+                let exec = nodus_host::exec::request(id as f64, &request);
+                Inner::send(&state, &ClientMessage::Exec(exec));
+                id
+            };
+            let cancel = CancelExec {
+                client: Some(client.clone()),
+                id,
+            };
+            let answer = answer.await;
+            cancel.disarm();
+            match answer {
+                Ok(result) => nodus_host::exec::outcome(&request, result),
+                Err(_) => Err(failed(STOPPED)),
+            }
+        }
+    }
+
+    /// Marks `folder` as trusted in the host user's `.claude.json`, as
+    /// accepting Claude Code's trust dialog there does, connecting to (or
+    /// starting) a host first (SRV-126). For a repository that's its root,
+    /// or the main checkout's for a worktree; outside one, the folder.
+    pub async fn trust(&self, folder: &str) -> Result<(), String> {
+        self.connect_host(true).await.map_err(|err| err.to_string())?;
+        let (done, answer) = oneshot::channel();
+        {
+            let mut state = self.inner.lock();
+            if state.host.is_none() {
+                return Err(STOPPED.into());
+            }
+            let id = state.next_request;
+            state.next_request += 1;
+            state.pending_trusts.insert(id, done);
+            let trust = ClientMessage::Trust {
+                id: id as f64,
+                path: folder.to_owned(),
+            };
+            Inner::send(&state, &trust);
+        }
+        match answer.await {
+            Ok(None) => Ok(()),
+            Ok(Some(error)) => Err(error),
+            Err(_) => Err(STOPPED.into()),
+        }
+    }
+
     /// Buffered output for replay (HOST-119). Pending output is sent first,
     /// so everything sent before this call is part of the snapshot and
     /// nothing is sent twice; `""` for a session that isn't live.
@@ -510,6 +613,9 @@ impl Inner {
     /// HOST-094: a running host first; another version's is offered to be
     /// stopped; then, with `start`, a new one.
     async fn connect(self: &Arc<Self>, start: bool) -> Result<(), ClientError> {
+        if self.standalone {
+            return self.connect_standalone(start).await;
+        }
         let paths = self.paths.clone();
         if let Ok(stream) = nodus_host::transport::connect(&paths.socket).await {
             match self.greet(stream).await? {
@@ -524,6 +630,33 @@ impl Inner {
         match self.greet(stream).await? {
             (true, _) => Ok(()),
             (false, _) => Err(ClientError::Failed(OTHER_PROTOCOL.into())),
+        }
+    }
+
+    /// SRV-004: a host on its own, which nothing here starts. With `wait`,
+    /// it's tried every second until it's up and on this protocol;
+    /// without, once (at launch, a host that isn't up has no sessions). One
+    /// on another protocol exits on this hello, for systemd to start the new
+    /// binary's; it's also asked to stop, as a host that doesn't exit by
+    /// itself only would (HOST-038), and its going is waited for. No one is
+    /// asked about its sessions (HOST-102): they're the server's.
+    async fn connect_standalone(self: &Arc<Self>, wait: bool) -> Result<(), ClientError> {
+        loop {
+            if let Ok(stream) = nodus_host::transport::connect(&self.paths.socket).await {
+                match self.greet(stream).await {
+                    Ok((true, _)) => return Ok(()),
+                    Ok((false, other)) => {
+                        other.write(encode(&ClientMessage::Shutdown));
+                        other.closed().await;
+                    }
+                    Err(err) if !wait => return Err(err),
+                    Err(err) => tracing::warn!("[host] {err}, trying again"),
+                }
+            }
+            if !wait {
+                return Ok(());
+            }
+            tokio::time::sleep(STANDALONE_RETRY).await;
         }
     }
 
@@ -688,6 +821,17 @@ impl Inner {
                     Inner::send(&inner.lock(), &ClientMessage::McpReply { id, reply });
                 });
             }
+            HostMessage::ExecResult(result) => {
+                let pending = self.lock().pending_execs.remove(&(result.id as u64));
+                if let Some(pending) = pending {
+                    let _ = pending.send(result);
+                }
+            }
+            HostMessage::Trusted { id, error } => {
+                if let Some(pending) = self.lock().pending_trusts.remove(&(id as u64)) {
+                    let _ = pending.send(error);
+                }
+            }
             HostMessage::Welcome(_) => {}
         }
     }
@@ -794,6 +938,9 @@ impl Inner {
             for (_, pending) in state.pending_spawns.drain() {
                 let _ = pending.done.send(Err(ClientError::Failed(STOPPED.into())));
             }
+            // Their callers hear `The session host stopped`.
+            state.pending_execs.clear();
+            state.pending_trusts.clear();
             if state.quitting {
                 return;
             }
@@ -801,6 +948,29 @@ impl Inner {
         };
         for session_id in ids {
             self.exited(&session_id, -1);
+        }
+    }
+}
+
+/// Tells the host to stop an `exec` the caller gave up on (dropped), so it
+/// goes as a local run would.
+struct CancelExec {
+    client: Option<HostClient>,
+    id: u64,
+}
+
+impl CancelExec {
+    fn disarm(mut self) {
+        self.client = None;
+    }
+}
+
+impl Drop for CancelExec {
+    fn drop(&mut self) {
+        let Some(client) = self.client.take() else { return };
+        let mut state = client.inner.lock();
+        if state.pending_execs.remove(&self.id).is_some() {
+            Inner::send(&state, &ClientMessage::ExecCancel { id: self.id as f64 });
         }
     }
 }

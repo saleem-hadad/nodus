@@ -15,7 +15,7 @@ use nodus_platform::Env;
 use nodus_platform::runner::{LocalRunner, Runner};
 use nodus_platform::secrets::SafeStorage;
 use nodus_sessions::agents::Agents;
-use nodus_sessions::client::{ClientError, HostClient, HostLauncher, ProcessLauncher, Wiring};
+use nodus_sessions::client::{ClientError, HostClient, HostLauncher, HostRunner, ProcessLauncher, Wiring};
 use nodus_sessions::hooks::{self, HookEndpoint, StatusMachine, SystemClock};
 use nodus_sessions::launch::{self, SpawnOptions};
 use nodus_sessions::notify::{NotificationId, Notifier, Notify};
@@ -86,8 +86,24 @@ pub enum EnvSource {
 pub enum RunnerSource {
     /// Here, in this process, as the app always has ([`LocalRunner`]).
     Local,
+    /// In the session host, through its `exec`, as the host's user: on a
+    /// server `nodus-run`, never `nodus` ([`HostRunner`]). Programs are
+    /// found there too.
+    Host,
     /// This one (tests).
     Given(Arc<dyn Runner>),
+}
+
+/// How the core reaches its session host.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HostMode {
+    /// Starts one when none is running, as the app does (HOST-091), with
+    /// [`NodusConfig::host_launcher`].
+    Launch,
+    /// Connects to the host already listening at this socket, which
+    /// something else runs and restarts (systemd), and never starts one:
+    /// it's waited for, tried every second, until it's up (SRV-004).
+    Connect(PathBuf),
 }
 
 /// What the service starts with.
@@ -108,8 +124,12 @@ pub struct NodusConfig {
     pub shell: Option<Arc<dyn AppShell>>,
     /// How the user hears about sessions while the app is in the background.
     pub notifications: Notifications,
-    /// How a session host is started when none is running. None runs this
-    /// binary as `Nodus host <socket> <key>` (HOST-091).
+    /// How the session host is reached: started by the core, or already
+    /// running on its own (`nodus serve`).
+    pub host: HostMode,
+    /// How a session host is started when none is running, in
+    /// [`HostMode::Launch`]. None runs this binary as `Nodus host <socket>
+    /// <key>` (HOST-091).
     pub host_launcher: Option<Arc<dyn HostLauncher>>,
     /// Where git, the background `claude -p` calls and views' commands run.
     pub runner: RunnerSource,
@@ -134,11 +154,22 @@ impl NodusConfig {
             home: std::env::home_dir().unwrap_or_default(),
             shell: None,
             notifications: Notifications::Off,
+            host: HostMode::Launch,
             host_launcher: None,
             runner: RunnerSource::Local,
             updates: None,
             secrets: None,
         }
+    }
+}
+
+/// The launcher of [`HostMode::Connect`], which is never asked: that host
+/// isn't the core's to start (SRV-004).
+struct NeverLaunch;
+
+impl HostLauncher for NeverLaunch {
+    fn start(&self, _paths: &nodus_host_proto::HostPaths) -> std::io::Result<()> {
+        Err(std::io::Error::other("The session host runs on its own here"))
     }
 }
 
@@ -217,9 +248,10 @@ impl Nodus {
                 });
             }
         }
-        let host_launcher = match config.host_launcher {
-            Some(launcher) => launcher,
-            None => Arc::new(ProcessLauncher::current_exe()?),
+        let host_launcher: Arc<dyn HostLauncher> = match (&config.host, config.host_launcher) {
+            (HostMode::Connect(_), _) => Arc::new(NeverLaunch),
+            (HostMode::Launch, Some(launcher)) => launcher,
+            (HostMode::Launch, None) => Arc::new(ProcessLauncher::current_exe()?),
         };
         let shell = config.shell.unwrap_or_else(|| Arc::new(Headless));
         let (changes, status_changes) = mpsc::unbounded_channel();
@@ -270,17 +302,18 @@ impl Nodus {
                 move |transcript| pending_work.has_pending_work(transcript),
             );
             let endpoint = Arc::new(HookEndpoint::new());
-            let host = HostClient::new(
-                &config.user_data,
-                Wiring {
-                    events: Arc::clone(&sink),
-                    status: Arc::new(status.clone()),
-                    endpoint: Arc::clone(&endpoint),
-                    board_tools: Arc::new(McpRelay(server)),
-                    prompt: Arc::new(ShellPrompt(Arc::clone(&shell))),
-                    launcher: host_launcher,
-                },
-            );
+            let wiring = Wiring {
+                events: Arc::clone(&sink),
+                status: Arc::new(status.clone()),
+                endpoint: Arc::clone(&endpoint),
+                board_tools: Arc::new(McpRelay(server)),
+                prompt: Arc::new(ShellPrompt(Arc::clone(&shell))),
+                launcher: host_launcher,
+            };
+            let host = match &config.host {
+                HostMode::Launch => HostClient::new(&config.user_data, wiring),
+                HostMode::Connect(socket) => HostClient::standalone(&config.user_data, socket, wiring),
+            };
             let notifier: Arc<dyn Notifier> = match config.notifications {
                 Notifications::Off => Arc::new(NoNotifier),
                 Notifications::System => Arc::new(SystemNotifier::new(core.clone())),
@@ -305,6 +338,7 @@ impl Nodus {
             );
             let runner: Arc<dyn Runner> = match config.runner {
                 RunnerSource::Local => Arc::new(LocalRunner),
+                RunnerSource::Host => Arc::new(HostRunner::new(host.clone())),
                 RunnerSource::Given(runner) => runner,
             };
             let updater = Updater::new(
@@ -528,6 +562,14 @@ impl Nodus {
     /// Records a card to open, for `takeOpenRequest`.
     pub fn set_open_request(&self, request: Option<OpenCardRequest>) {
         *lock(&self.inner.open_request) = request;
+    }
+
+    /// Marks `folder` as trusted for Claude Code in the session host's
+    /// user's `.claude.json`, so a session started in it doesn't stop at the
+    /// trust dialog (SRV-126). For a repository that's its root, or the main
+    /// checkout's for a worktree; outside one, the folder itself.
+    pub async fn trust_folder(&self, folder: &str) -> Result<(), String> {
+        self.on_core(self.inner.host.trust(folder)).await
     }
 
     /// `notify.openCard` (HOST-212): brings the window up on a card, or a

@@ -17,6 +17,7 @@ nodus-capture.workspace = true
 nodus-domain.workspace = true
 nodus-feedback.workspace = true
 nodus-git.workspace = true
+nodus-host-proto.workspace = true
 nodus-platform.workspace = true
 nodus-sessions.workspace = true
 nodus-store.workspace = true
@@ -34,7 +35,6 @@ uuid.workspace = true
 
 [dev-dependencies]
 nodus-host.workspace = true
-nodus-host-proto.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "net", "process", "rt", "rt-multi-thread", "test-util"] }
 

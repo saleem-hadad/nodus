@@ -4324,6 +4324,7 @@ name = "nodus-sessions"
 version = "1.0.12"
 dependencies = [
  "indexmap",
+ "libc",
  "nodus-domain",
  "nodus-host",
  "nodus-host-proto",

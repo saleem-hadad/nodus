@@ -30,6 +30,8 @@ mod store;
 pub mod units;
 pub mod viewport;
 
+// For the Mac's scroll monitor (`mac::watch_scroll_devices`).
+#[cfg(target_os = "macos")]
 pub(crate) use input::saw_scroll;
 
 use std::rc::Rc;

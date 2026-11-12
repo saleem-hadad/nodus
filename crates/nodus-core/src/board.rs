@@ -176,6 +176,19 @@ impl BoardApi<'_> {
             .await;
     }
 
+    /// The project whose board has this session, as a card or a view's
+    /// brain; none once it has left every board. A server sends a session's
+    /// events only to the clients watching its project (SRV-026).
+    pub fn session_project(&self, session_id: &str) -> Option<String> {
+        self.nodus.inner.store.read(|state| {
+            state
+                .boards
+                .iter()
+                .find(|(_, board)| board.nodes.contains_key(session_id))
+                .map(|(project_id, _)| project_id.clone())
+        })
+    }
+
     /// Where the board's pictures are kept: `board-images` in the data folder.
     pub fn images_dir(&self) -> PathBuf {
         images_dir(&self.nodus.inner.user_data)

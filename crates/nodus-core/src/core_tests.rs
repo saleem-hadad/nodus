@@ -553,3 +553,17 @@ async fn git_003_git_reads_the_project_folder_once_the_env_is_in() {
         "Error invoking remote method 'git:status': Error: Unknown project nope"
     );
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn srv_026_a_session_belongs_to_the_project_whose_board_has_it() {
+    let world = world();
+    let project = project(&world).await;
+    let board = world.nodus.board();
+    assert_eq!(board.session_project("s1"), None);
+    world.nodus.inner.store.update(|state| {
+        state.board_mut(&project.id).nodes.insert("s1".into(), node("s1"));
+    });
+    assert_eq!(board.session_project("s1"), Some(project.id.clone()));
+    board.remove_node(&project.id, "s1").await;
+    assert_eq!(board.session_project("s1"), None);
+}

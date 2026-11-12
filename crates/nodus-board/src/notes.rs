@@ -88,7 +88,7 @@ pub fn rightmost_card(board: &BoardState) -> Option<&BoardNode> {
 }
 
 /// What a note or view put up by a session keeps clear of: active cards,
-/// notes not stuck to a card, and views, but the one called `except`
+/// notes not stuck to a card, views but the one called `except`, and shapes
 /// (NOTE-005; views.ts's `obstacles`).
 pub fn obstacles(board: &BoardState, except: Option<&str>) -> Vec<Rect> {
     let rect = |x: f64, y: f64, size: Size| Rect {
@@ -113,6 +113,8 @@ pub fn obstacles(board: &BoardState, except: Option<&str>) -> Vec<Rect> {
                 .filter(|v| Some(v.id.as_str()) != except)
                 .map(|v| rect(v.x, v.y, view_size(v))),
         )
+        // Shapes too (added after 0.9.4).
+        .chain(board.shapes.values().map(nodus_domain::BoardShape::rect))
         .collect()
 }
 

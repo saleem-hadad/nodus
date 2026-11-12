@@ -1,5 +1,6 @@
 //! boardTools.test.ts, ported, and the answers compared byte for byte with
-//! what 0.9.4's boardTools.ts gives (fixtures/tools.json, from generate.mjs).
+//! what 0.9.4's boardTools.ts gives, with the drawing tools added since
+//! spliced in (fixtures/tools.json, from generate.mjs).
 
 use std::sync::Mutex;
 
@@ -142,6 +143,22 @@ impl BoardToolHandlers for Mock {
             }
         })
     }
+    fn list_board(&self, project_id: &str, self_id: &str) -> Result<Value, ToolError> {
+        self.record(json!(["listBoard", project_id, self_id]));
+        Ok(json!({ "linked_to_this_session": [] }))
+    }
+    fn draw_on_board(&self, project_id: &str, self_id: &str, args: &Value) -> Result<Value, ToolError> {
+        self.record(json!(["drawOnBoard", project_id, self_id, args]));
+        Ok(json!({ "shapes": { "a": "sh1" }, "links": [] }))
+    }
+    fn update_drawing(&self, project_id: &str, self_id: &str, args: &Value) -> Result<Value, ToolError> {
+        self.record(json!(["updateDrawing", project_id, self_id, args]));
+        Ok(json!({ "updated": ["sh1"] }))
+    }
+    fn erase_from_board(&self, project_id: &str, self_id: &str, args: &Value) -> Result<Value, ToolError> {
+        self.record(json!(["eraseFromBoard", project_id, self_id, args]));
+        Ok(json!({ "erased": ["sh1"], "skipped": [] }))
+    }
 }
 
 fn server(mock: Mock) -> McpServer<Mock> {
@@ -202,6 +219,7 @@ async fn protocol_answers_initialize_in_the_version_asked_for() {
     assert_eq!(result["capabilities"], json!({ "tools": {} }));
     assert_eq!(result["serverInfo"], json!({ "name": "nodus", "version": "9.9.9" }));
     assert!(result["instructions"].as_str().unwrap().contains("create_note"));
+    assert!(result["instructions"].as_str().unwrap().contains("list_board"));
 }
 
 #[tokio::test]
@@ -222,6 +240,7 @@ async fn protocol_answers_ping_and_unknown_methods_with_an_error() {
 #[tokio::test]
 async fn protocol_gives_every_session_the_note_and_view_tools_and_action_runs_the_session_tools_too() {
     let server = server(Mock::default());
+    // The drawing tools came after 0.9.4 (TOOL-101).
     let common = [
         "create_note",
         "update_note",
@@ -229,6 +248,10 @@ async fn protocol_gives_every_session_the_note_and_view_tools_and_action_runs_th
         "list_projects",
         "create_project",
         "archive_self",
+        "list_board",
+        "draw_on_board",
+        "update_drawing",
+        "erase_from_board",
         "create_view",
         "update_view",
         "get_view",
@@ -251,6 +274,10 @@ fn protocol_allows_every_tool_by_name_and_keeps_the_token_out_of_the_config() {
             "mcp__nodus__list_projects",
             "mcp__nodus__create_project",
             "mcp__nodus__archive_self",
+            "mcp__nodus__list_board",
+            "mcp__nodus__draw_on_board",
+            "mcp__nodus__update_drawing",
+            "mcp__nodus__erase_from_board",
             "mcp__nodus__create_view",
             "mcp__nodus__update_view",
             "mcp__nodus__get_view",
@@ -506,7 +533,7 @@ async fn tools_say_the_board_isnt_there_before_handlers_are_given() {
     let reply = call_none(&server).await;
     assert_eq!(reply["result"]["content"][0]["text"], "The board is not available");
     let tools = server.answer(RUN, &json!({ "id": 1, "method": "tools/list" })).await;
-    assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 10);
+    assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 14);
 }
 
 async fn call_none(server: &McpServer<Mock>) -> Value {
@@ -548,8 +575,63 @@ async fn tools_check_the_note_id_before_the_project() {
     assert_eq!(text(&reply), "note_id is required");
 }
 
+#[tokio::test]
+async fn tools_draw_on_this_sessions_own_board_passing_the_arguments_through() {
+    // TOOL-101: no project argument; the handlers check what Claude sent.
+    let server = server(Mock::default());
+    let shapes = json!({ "shapes": [{ "key": "a", "kind": "rect", "text": "API" }], "project": "p2" });
+    let drawn = call(&server, "s1", "draw_on_board", Some(shapes.clone())).await;
+    assert_eq!(parsed(&drawn), json!({ "shapes": { "a": "sh1" }, "links": [] }));
+    call(
+        &server,
+        "s1",
+        "update_drawing",
+        Some(json!({ "items": [{ "id": "sh1", "x": 5 }] })),
+    )
+    .await;
+    call(&server, "s1", "erase_from_board", Some(json!({ "ids": ["sh1"] }))).await;
+    call(&server, RUN, "list_board", None).await;
+    assert_eq!(
+        mock(&server).calls(),
+        [
+            json!(["drawOnBoard", "p1", "s1", shapes]),
+            json!(["updateDrawing", "p1", "s1", { "items": [{ "id": "sh1", "x": 5 }] }]),
+            json!(["eraseFromBoard", "p1", "s1", { "ids": ["sh1"] }]),
+            json!(["listBoard", "p1", RUN]),
+        ]
+    );
+    // A session that left the board can't draw on it.
+    let gone = call(&server, "gone", "draw_on_board", Some(json!({}))).await;
+    assert_eq!(text(&gone), "This session is no longer on a Nodus board");
+}
+
+#[tokio::test]
+async fn tools_describe_the_drawing_tools_with_the_ink_colours_and_drawable_kinds() {
+    let server = server(Mock::default());
+    let reply = server.answer("s1", &json!({ "id": 1, "method": "tools/list" })).await;
+    let tools = reply["result"]["tools"].as_array().unwrap();
+    let tool = |name: &str| tools.iter().find(|t| t["name"] == name).unwrap().clone();
+    let draw = tool("draw_on_board");
+    let shape = &draw["inputSchema"]["properties"]["shapes"]["items"];
+    assert_eq!(
+        shape["properties"]["kind"]["enum"],
+        json!(["rect", "ellipse", "diamond", "text", "sticker"])
+    );
+    assert_eq!(
+        shape["properties"]["color"]["enum"],
+        json!(["graphite", "red", "orange", "green", "blue", "purple"])
+    );
+    assert_eq!(shape["required"], json!(["kind"]));
+    assert_eq!(tool("erase_from_board")["inputSchema"]["required"], json!(["ids"]));
+    // Each says to draw only when the user asks.
+    for name in ["draw_on_board", "update_drawing", "erase_from_board"] {
+        let description = tool(name)["description"].as_str().unwrap().to_owned();
+        assert!(description.contains("only when the user asks"), "{name}: {description}");
+    }
+}
+
 // ---------------------------------------------------------------------------
-// Byte for byte against 0.9.4
+// Byte for byte against 0.9.4, and the tools added since
 
 fn fixtures() -> Value {
     let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/tools.json")).unwrap();

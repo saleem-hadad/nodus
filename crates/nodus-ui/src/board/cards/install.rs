@@ -9,9 +9,11 @@ use gpui::{AnyElement, App, Bounds, IntoElement, Window, point, px, size};
 use nodus_domain::{BoardNote, NodePatch, OpenCardRequest, Rect};
 
 use super::present::{Phase, StackLook};
-use super::{BoardEnv, CardActions, Resized, StackView, TerminalHost, Z, archive_zone, note, note_pad, session_card};
+use super::{
+    BoardEnv, CardActions, Resized, StackView, TerminalHost, Z, archive_zone, note, note_pad, session_card, shape,
+};
 use crate::board::nodes::{
-    self, ArchiveNode, BoardActions, BoardCx, CardNode, NodeRenderers, NoteNode, PadNode, StackPlace,
+    self, ArchiveNode, BoardActions, BoardCx, CardNode, NodeRenderers, NoteNode, PadNode, ShapeNode, StackPlace,
 };
 use crate::parity;
 use crate::platform::Platform;
@@ -85,6 +87,12 @@ impl CardActions for CanvasActions {
     fn start_note(&self, note_id: &str, cx: &mut App) {
         self.0.start_note(note_id, cx);
     }
+    fn edit_shape(&self, shape_id: &str, text: &str, cx: &mut App) {
+        self.0.edit_shape(shape_id, text, cx);
+    }
+    fn focus_board(&self, window: &mut Window, cx: &mut App) {
+        self.0.focus_board(window, cx);
+    }
     fn open_session(&self, session_id: &str, cx: &mut App) {
         self.0.open_session(session_id, cx);
     }
@@ -121,7 +129,7 @@ impl CardActions for CanvasActions {
     fn resize(&self, node: &Resized, rect: (f32, f32, f32, f32), done: bool, cx: &mut App) {
         let (x, y, w, h) = rect;
         let id = match node {
-            Resized::Card(id) => id.clone(),
+            Resized::Card(id) | Resized::Shape(id) => id.clone(),
             Resized::Note(note) => note.id.clone(),
         };
         if !done {
@@ -157,6 +165,7 @@ impl CardActions for CanvasActions {
                 },
                 cx,
             ),
+            Resized::Shape(id) => self.0.resize_shape(id, Rect { x, y, w, h }, cx),
         }
         self.0.hold_rect(&id, None, cx);
     }
@@ -338,6 +347,11 @@ impl NodeRenderers for CardRenderers {
     fn pad(&self, node: PadNode, board: &BoardCx, window: &mut Window, cx: &mut App) -> AnyElement {
         let env = env(board, node.node.zoom, window, cx);
         note_pad::render(&env, &node, window, cx)
+    }
+
+    fn shape(&self, node: ShapeNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut App) -> AnyElement {
+        let env = env(board, node.node.zoom, window, cx);
+        shape::render(&env, &node, window, cx)
     }
 
     fn wake(&self, session_id: &str, cx: &mut App) {

@@ -48,7 +48,7 @@ use gpui::{
     AnyElement, App, Global, IntoElement, ParentElement, Pixels, Point, SharedString, Size, Styled, WeakEntity, Window,
     div,
 };
-use nodus_domain::{BoardNote, BoardView, NodePatch, Rect, SessionCard, ViewPatch};
+use nodus_domain::{BoardNote, BoardShape, BoardView, NodePatch, Rect, SessionCard, ViewPatch};
 
 use super::canvas::BoardCanvas;
 use super::units::fu;
@@ -110,6 +110,13 @@ pub struct NoteNode<'a> {
     pub note: &'a BoardNote,
     /// The pad's top sheet, waiting to be peeled off (BOARD-022).
     pub draft: bool,
+}
+
+/// A shape (spec 14), and its picture's file when it's a picture.
+pub struct ShapeNode<'a> {
+    pub node: NodeState,
+    pub shape: &'a BoardShape,
+    pub image: Option<std::path::PathBuf>,
 }
 
 /// The archive frame: the folded stack, or the open panel.
@@ -257,6 +264,26 @@ impl BoardActions {
         self.with(cx, move |c, cx| c.edit_note(note, text, cx));
     }
 
+    /// Puts words in a shape (SHAPE-012).
+    pub fn edit_shape(&self, shape_id: &str, text: &str, cx: &mut App) {
+        let (id, text) = (shape_id.to_owned(), text.to_owned());
+        self.with(cx, move |c, cx| c.set_shape_text(&id, &text, cx));
+    }
+
+    /// Gives the keyboard back to the board (a shape's words put down).
+    pub fn focus_board(&self, window: &mut Window, cx: &mut App) {
+        if let Some(canvas) = self.canvas.upgrade() {
+            let focus = canvas.read(cx).focus.clone();
+            window.focus(&focus, cx);
+        }
+    }
+
+    /// A shape resized (SHAPE-011).
+    pub fn resize_shape(&self, shape_id: &str, rect: Rect, cx: &mut App) {
+        let id = shape_id.to_owned();
+        self.with(cx, move |c, cx| c.resize_shape(&id, rect, cx));
+    }
+
     /// Starts a Claude session on a note's text (BOARD-122, BOARD-123).
     pub fn start_note(&self, note_id: &str, cx: &mut App) {
         let id = note_id.to_owned();
@@ -390,6 +417,12 @@ pub trait NodeRenderers: 'static {
     fn pad(&self, node: PadNode, board: &BoardCx, window: &mut Window, cx: &mut App) -> AnyElement {
         let _ = (board, window);
         placeholder(&node.node, "Notes".to_owned(), cx)
+    }
+
+    /// A shape (spec 14).
+    fn shape(&self, node: ShapeNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut App) -> AnyElement {
+        let _ = (board, window);
+        placeholder(&node.node, node.shape.text.clone(), cx)
     }
 
     /// `ViewNode` (spec 04): the views' own renderer ([`ViewRenderer`])

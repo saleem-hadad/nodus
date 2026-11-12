@@ -3,7 +3,7 @@
 //! beside it, so a paste on any board can tell its own notes from other
 //! text.
 
-use gpui::{App, ClipboardEntry, ClipboardItem, Context};
+use gpui::{App, ClipboardEntry, ClipboardItem, Context, ImageFormat};
 use nodus_board::geometry::{Point, Size, note_size};
 use nodus_domain::{BoardNote, js};
 use serde::{Deserialize, Serialize};
@@ -79,7 +79,19 @@ impl BoardCanvas {
         if self.board.is_none() {
             return false;
         }
-        let Some(notes) = cx.read_from_clipboard().as_ref().and_then(copied_notes) else {
+        let item = cx.read_from_clipboard();
+        let Some(notes) = item.as_ref().and_then(copied_notes) else {
+            // SHAPE-007: a picture on the clipboard goes up as one.
+            let image = item.as_ref().and_then(|item| {
+                item.entries().iter().find_map(|e| match e {
+                    ClipboardEntry::Image(image) => picture_ext(image.format).map(|ext| (image.bytes.clone(), ext)),
+                    _ => None,
+                })
+            });
+            if let Some((bytes, ext)) = image {
+                self.paste_image(bytes, ext, cx);
+                return true;
+            }
             return false;
         };
         let rects: Vec<_> = notes
@@ -121,6 +133,18 @@ impl BoardCanvas {
         self.ensure_visible(spot, size, cx);
         cx.notify();
         true
+    }
+}
+
+/// The extension a pasted picture is kept under; none for kinds the board
+/// doesn't show.
+fn picture_ext(format: ImageFormat) -> Option<&'static str> {
+    match format {
+        ImageFormat::Png => Some("png"),
+        ImageFormat::Jpeg => Some("jpg"),
+        ImageFormat::Gif => Some("gif"),
+        ImageFormat::Webp => Some("webp"),
+        _ => None,
     }
 }
 

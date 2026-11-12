@@ -90,6 +90,14 @@ pub trait BoardToolHandlers: Send + Sync {
         self_id: &'a str,
         args: &'a Value,
     ) -> BoxFuture<'a, Result<Value, ToolError>>;
+    /// What's on the board and where, and the links touching the caller's card.
+    fn list_board(&self, project_id: &str, self_id: &str) -> Result<Value, ToolError>;
+    /// Draws shapes and links, `args` as Claude gave them.
+    fn draw_on_board(&self, project_id: &str, self_id: &str, args: &Value) -> Result<Value, ToolError>;
+    /// Changes shapes and links, and moves cards, notes and views.
+    fn update_drawing(&self, project_id: &str, self_id: &str, args: &Value) -> Result<Value, ToolError>;
+    /// Takes shapes and links off the board.
+    fn erase_from_board(&self, project_id: &str, self_id: &str, args: &Value) -> Result<Value, ToolError>;
 }
 
 impl<H: BoardToolHandlers + ?Sized> BoardToolHandlers for Arc<H> {
@@ -153,6 +161,18 @@ impl<H: BoardToolHandlers + ?Sized> BoardToolHandlers for Arc<H> {
         args: &'a Value,
     ) -> BoxFuture<'a, Result<Value, ToolError>> {
         (**self).update_view(project_id, self_id, args)
+    }
+    fn list_board(&self, project_id: &str, self_id: &str) -> Result<Value, ToolError> {
+        (**self).list_board(project_id, self_id)
+    }
+    fn draw_on_board(&self, project_id: &str, self_id: &str, args: &Value) -> Result<Value, ToolError> {
+        (**self).draw_on_board(project_id, self_id, args)
+    }
+    fn update_drawing(&self, project_id: &str, self_id: &str, args: &Value) -> Result<Value, ToolError> {
+        (**self).update_drawing(project_id, self_id, args)
+    }
+    fn erase_from_board(&self, project_id: &str, self_id: &str, args: &Value) -> Result<Value, ToolError> {
+        (**self).erase_from_board(project_id, self_id, args)
     }
 }
 
@@ -310,6 +330,11 @@ impl<H: BoardToolHandlers> McpServer<H> {
             "get_view" => handlers.get_view(&project_id, session_id, args.get("view_id")),
             "create_view" => handlers.create_view(&project_id, session_id, args).await,
             "update_view" => handlers.update_view(&project_id, session_id, args).await,
+            // TOOL-101: the drawing tools work on this session's own board too.
+            "list_board" => handlers.list_board(&project_id, session_id),
+            "draw_on_board" => handlers.draw_on_board(&project_id, session_id, args),
+            "update_drawing" => handlers.update_drawing(&project_id, session_id, args),
+            "erase_from_board" => handlers.erase_from_board(&project_id, session_id, args),
             _ => Err(format!("Unknown tool {name}").into()),
         }
     }

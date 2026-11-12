@@ -1,7 +1,8 @@
 //! The board tools: an MCP server that lets Claude sessions work with the
-//! board they run on. Sessions write sticky notes and put up views, action
-//! runs list and archive the board's sessions, and a session can add a
-//! project when the user asks for one.
+//! board they run on. Sessions write sticky notes, put up views, and draw
+//! shapes and links (and see the links touching their own card), action runs
+//! list and archive the board's sessions, and a session can add a project
+//! when the user asks for one.
 //!
 //! Claude Code reaches the server over the MCP streamable HTTP transport, at
 //! the session host, which passes each request on to the app (nodus-host,
@@ -22,6 +23,7 @@
 //! `VIEW_GUIDE`. The session host client hands it each relayed request and
 //! sends back what it answers (TOOL-014).
 
+mod drawing;
 mod handlers;
 mod schema;
 mod server;

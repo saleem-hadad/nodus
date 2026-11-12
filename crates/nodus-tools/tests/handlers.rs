@@ -1,14 +1,17 @@
 //! The handlers ipc.ts gives the board tools, on a real store and board with
-//! fake session processes (TOOL-026 to TOOL-039).
+//! fake session processes (TOOL-026 to TOOL-039), and the drawing tools
+//! added since (TOOL-101 to TOOL-110).
 
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
+use nodus_board::geometry::{GAP, intersects};
 use nodus_board::notes::NotePatch;
 use nodus_board::{Board, BoardSessions, BoxFuture as BoardFuture};
 use nodus_domain::{
-    BoardNode, Event, EventSink, FolderColor, Project, RecordingSink, SessionCard, SessionStatus, SessionUsage,
+    BoardLink, BoardNode, BoardNote, BoardShape, BoardView, Event, EventSink, FolderColor, InkColor, LinkEnd, Project,
+    RecordingSink, Rect, SessionCard, SessionStatus, SessionUsage, ShapeKind,
 };
 use nodus_store::Store;
 use nodus_tools::{
@@ -557,4 +560,626 @@ async fn answers_through_the_server_end_to_end() {
         .await;
     assert_eq!(views["result"]["content"][0]["text"], "A view needs a title");
     assert_eq!(views["result"]["isError"], true);
+}
+
+// ---------------------------------------------------------------------------
+// The drawing tools, added after 0.9.4 (TOOL-101 to TOOL-110)
+
+impl Fixture {
+    /// Card s2, "Fix cart rounding", at (600, 0); a free note; an archived
+    /// card; and a view, all on p1.
+    fn furnish(&self) {
+        let mut s2 = node("s2", 600.0);
+        s2.title = Some("Fix cart rounding".into());
+        let mut old = node("old", 1000.0);
+        old.archived = true;
+        self.add("p1", s2);
+        self.add("p1", old);
+        self.store.update(|s| {
+            let board = s.board_mut("p1");
+            let note: BoardNote = serde_json::from_value(json!({
+                "id": "n1", "text": "Release checklist\n- tag\n- notes", "color": "green",
+                "x": 600, "y": 600, "createdAt": 1
+            }))
+            .unwrap();
+            board.notes.insert("n1".into(), note);
+            let view: BoardView = serde_json::from_value(json!({
+                "id": "v1", "title": "Deploys", "description": "", "x": 1200, "y": 600,
+                "version": 1, "createdAt": 1, "updatedAt": 1
+            }))
+            .unwrap();
+            board.views.insert("v1".into(), view);
+        });
+    }
+
+    fn shape(&self, id: &str) -> Option<BoardShape> {
+        self.store
+            .read(|s| s.board("p1").and_then(|b| b.shapes.get(id).cloned()))
+    }
+
+    fn link(&self, id: &str) -> Option<BoardLink> {
+        self.store
+            .read(|s| s.board("p1").and_then(|b| b.links.get(id).cloned()))
+    }
+
+    fn counts(&self) -> (usize, usize) {
+        self.store.read(|s| {
+            let board = s.board("p1").unwrap();
+            (board.shapes.values().count(), board.links.values().count())
+        })
+    }
+}
+
+fn ids(value: &Value) -> Vec<String> {
+    value
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_owned())
+        .collect()
+}
+
+fn changed(project_id: &str) -> Vec<Event> {
+    vec![Event::BoardChanged {
+        project_id: project_id.into(),
+    }]
+}
+
+#[tokio::test]
+async fn draws_shapes_in_a_row_beside_the_sessions_card_and_links_them() {
+    let f = Fixture::new();
+    f.furnish();
+    let drawn = f
+        .handlers
+        .draw_on_board(
+            "p1",
+            "s1",
+            &json!({
+                "shapes": [
+                    { "key": "api", "kind": "rect", "text": "API" },
+                    { "key": "db", "kind": "ellipse", "text": "DB", "color": "blue" },
+                    { "kind": "sticker", "text": "🚀" }
+                ],
+                "links": [
+                    { "from": "api", "to": "db", "label": "reads" },
+                    { "from": "self", "to": "api" },
+                    { "from": "s2", "to": "self", "label": "blocks" }
+                ]
+            }),
+        )
+        .unwrap();
+    assert_eq!(f.events.take(), changed("p1"));
+    let names: Vec<&String> = drawn["shapes"].as_object().unwrap().keys().collect();
+    assert_eq!(names, ["api", "db", "2"]);
+    let shape = |name: &str| f.shape(drawn["shapes"][name].as_str().unwrap()).unwrap();
+    // TOOL-104: right of s1's card at (2000, 0), lined up with its top; in a
+    // row 64 apart, on their middles.
+    let (api, db, sticker) = (shape("api"), shape("db"), shape("2"));
+    assert_eq!(
+        (api.kind, api.x, api.y, api.w, api.h),
+        (ShapeKind::Rect, 2320.0, 0.0, 180.0, 90.0)
+    );
+    assert_eq!((db.kind, db.x, db.color), (ShapeKind::Ellipse, 2564.0, InkColor::Blue));
+    assert_eq!(
+        (sticker.x, sticker.y, sticker.w, sticker.text.as_str()),
+        (2808.0, 13.0, 64.0, "🚀")
+    );
+    assert_eq!(
+        (api.color, api.by.as_deref(), api.created_at),
+        (InkColor::Graphite, Some("s1"), NOW)
+    );
+    assert_eq!(drawn["area"], json!({ "x": 2320.0, "y": 0.0, "w": 552.0, "h": 90.0 }));
+
+    let links = ids(&drawn["links"]);
+    assert_eq!(links.len(), 3);
+    let reads = f.link(&links[0]).unwrap();
+    assert_eq!(
+        reads.from,
+        LinkEnd {
+            node: Some(api.id.clone()),
+            x: 2410.0,
+            y: 45.0
+        }
+    );
+    assert_eq!(
+        (reads.to.node.as_deref(), reads.label.as_str()),
+        (Some(db.id.as_str()), "reads")
+    );
+    let mine = f.link(&links[1]).unwrap();
+    assert_eq!(
+        (mine.from.node.as_deref(), mine.by.as_deref()),
+        (Some("s1"), Some("s1"))
+    );
+    let blocks = f.link(&links[2]).unwrap();
+    assert_eq!(
+        (blocks.from.node.as_deref(), blocks.to.node.as_deref()),
+        (Some("s2"), Some("s1"))
+    );
+}
+
+#[tokio::test]
+async fn draws_at_the_point_given_keeping_the_shapes_places() {
+    let f = Fixture::new();
+    let drawn = f
+        .handlers
+        .draw_on_board(
+            "p1",
+            "s1",
+            &json!({
+                "at": { "x": 100, "y": -50 },
+                "shapes": [
+                    { "kind": "diamond", "x": 0, "y": 0 },
+                    { "kind": "text", "text": "Ship it", "x": 200.4, "y": 20, "w": 5, "h": 9000 }
+                ]
+            }),
+        )
+        .unwrap();
+    let diamond = f.shape(drawn["shapes"]["0"].as_str().unwrap()).unwrap();
+    let words = f.shape(drawn["shapes"]["1"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        (diamond.x, diamond.y, diamond.w, diamond.h),
+        (100.0, -50.0, 160.0, 110.0)
+    );
+    // Sizes stay within what the board keeps.
+    assert_eq!((words.x, words.y, words.w, words.h), (300.0, -30.0, 16.0, 4000.0));
+}
+
+#[tokio::test]
+async fn keeps_a_drawing_clear_of_what_is_on_the_board() {
+    let f = Fixture::new();
+    f.furnish();
+    let row = json!({ "shapes": [{ "kind": "rect" }, { "kind": "rect" }, { "kind": "rect" }] });
+    let first = f.handlers.draw_on_board("p1", "s1", &row).unwrap();
+    let second = f.handlers.draw_on_board("p1", "s1", &row).unwrap();
+    let area = |drawn: &Value| Rect {
+        x: drawn["area"]["x"].as_f64().unwrap(),
+        y: drawn["area"]["y"].as_f64().unwrap(),
+        w: drawn["area"]["w"].as_f64().unwrap(),
+        h: drawn["area"]["h"].as_f64().unwrap(),
+    };
+    let (a, b) = (area(&first), area(&second));
+    assert!(!intersects(a, b, GAP / 2.0), "{a:?} {b:?}");
+    let card = Rect {
+        x: 2000.0,
+        y: 0.0,
+        w: 288.0,
+        h: 216.0,
+    };
+    assert!(!intersects(b, card, GAP / 2.0));
+    // Still beside the card, not a whole card's step away.
+    assert!(b.x <= 2000.0 + 288.0 + GAP && b.y <= 216.0 + GAP, "{b:?}");
+
+    // A run has no card on the board, so it draws beside the rightmost one.
+    let mut run = node("run", 0.0);
+    run.run_of = Some("a1".into());
+    f.add("p1", run);
+    let drawn = f
+        .handlers
+        .draw_on_board("p1", "run", &json!({ "shapes": [{ "kind": "sticker", "text": "✅" }] }))
+        .unwrap();
+    let c = area(&drawn);
+    assert!(
+        c.x >= 2000.0 - GAP - 64.0 && c.x <= 2000.0 + 288.0 + GAP + 600.0,
+        "{c:?}"
+    );
+
+    // A view's brain draws beside its view, at (1200, 600) and 480 wide.
+    let mut brain = node("brain", 0.0);
+    brain.view_of = Some("v1".into());
+    f.add("p1", brain);
+    let drawn = f
+        .handlers
+        .draw_on_board(
+            "p1",
+            "brain",
+            &json!({ "shapes": [{ "kind": "sticker", "text": "📈" }] }),
+        )
+        .unwrap();
+    assert_eq!(
+        (drawn["area"]["x"].as_f64(), drawn["area"]["y"].as_f64()),
+        (Some(1712.0), Some(600.0))
+    );
+}
+
+#[tokio::test]
+async fn refuses_a_drawing_it_cant_make_and_draws_none_of_it() {
+    let f = Fixture::new();
+    f.furnish();
+    let mut run = node("run", 0.0);
+    run.run_of = Some("a1".into());
+    f.add("p1", run);
+    let cases = [
+        (json!({}), "Nothing to draw: give shapes, links or both"),
+        (json!({ "shapes": "box" }), "shapes must be a list"),
+        (
+            json!({ "shapes": [{ "kind": "star" }] }),
+            "shapes[0]: kind must be rect, ellipse, diamond, text or sticker",
+        ),
+        (
+            json!({ "shapes": [{ "kind": "rect" }, { "kind": "image" }] }),
+            "shapes[1]: pictures can’t be drawn with the board tools; kind must be rect, ellipse, diamond, text or sticker",
+        ),
+        (
+            json!({ "shapes": [{ "kind": "text", "text": "  " }] }),
+            "shapes[0]: a text shape needs some text",
+        ),
+        (
+            json!({ "shapes": [{ "kind": "sticker" }] }),
+            "shapes[0]: a sticker needs its emoji in text",
+        ),
+        (
+            json!({ "shapes": [{ "kind": "rect", "color": "yellow" }] }),
+            "shapes[0]: color must be graphite, red, orange, green, blue or purple",
+        ),
+        (
+            json!({ "shapes": [{ "kind": "rect", "x": 5 }] }),
+            "shapes[0]: give both x and y, or neither to put it in the row",
+        ),
+        (
+            json!({ "shapes": [{ "kind": "rect", "w": "big" }] }),
+            "shapes[0]: w must be a number",
+        ),
+        (
+            json!({ "shapes": [{ "key": "a", "kind": "rect" }, { "key": "a", "kind": "rect" }] }),
+            "shapes[1]: another shape goes by “a”; give each shape its own key",
+        ),
+        (
+            json!({ "shapes": [{ "key": "self", "kind": "rect" }] }),
+            "shapes[0]: “self” means this session’s card; give the shape another key",
+        ),
+        (
+            json!({ "shapes": [{ "kind": "rect" }], "at": { "x": 1 } }),
+            "at must be {\"x\": …, \"y\": …}, in board coordinates as list_board gives them",
+        ),
+        (
+            json!({ "shapes": [{ "key": "a", "kind": "rect" }], "links": [{ "from": "a", "to": "nope" }] }),
+            "links[0]: “nope” isn’t a key from shapes or the id of anything on this board; list_board lists what’s there",
+        ),
+        (
+            json!({ "links": [{ "from": "self", "to": "old" }] }),
+            "links[0]: “old” isn’t drawn on the board right now (an archived card, an action run or a note stuck to a card can’t be linked)",
+        ),
+        (
+            json!({ "links": [{ "from": "s1", "to": "self" }] }),
+            "links[0]: a link needs two different ends",
+        ),
+        (
+            json!({ "links": [{ "to": "s2" }] }),
+            "links[0]: from must be a key from shapes, the id of something on the board, or “self”",
+        ),
+    ];
+    for (args, message) in cases {
+        assert_eq!(err(f.handlers.draw_on_board("p1", "s1", &args)), message, "{args}");
+    }
+    assert_eq!(
+        err(f
+            .handlers
+            .draw_on_board("p1", "run", &json!({ "links": [{ "from": "self", "to": "s2" }] }))),
+        "links[0]: this session has no card on the board to link"
+    );
+    assert_eq!(
+        err(f
+            .handlers
+            .draw_on_board("gone", "s1", &json!({ "shapes": [{ "kind": "rect" }] }))),
+        "Unknown project gone"
+    );
+    assert_eq!(f.counts(), (0, 0));
+    assert!(f.events.take().is_empty());
+}
+
+#[tokio::test]
+async fn lists_the_board_and_says_in_words_what_this_sessions_card_is_linked_to() {
+    let f = Fixture::new();
+    f.furnish();
+    let drawn = f
+        .handlers
+        .draw_on_board(
+            "p1",
+            "s1",
+            &json!({
+                "shapes": [{ "key": "api", "kind": "rect", "text": "API" }],
+                "links": [
+                    { "from": "self", "to": "api" },
+                    { "from": "s2", "to": "self", "label": "blocks" },
+                    { "from": "n1", "to": "self" },
+                    { "from": "v1", "to": "s2" }
+                ]
+            }),
+        )
+        .unwrap();
+    let api = drawn["shapes"]["api"].as_str().unwrap().to_owned();
+    let links = ids(&drawn["links"]);
+    // The user drew one to the archived card, which isn't shown while it's archived.
+    f.store.update(|s| {
+        let board = s.board_mut("p1");
+        let hidden = BoardLink {
+            id: "hidden".into(),
+            from: LinkEnd::on("s1"),
+            to: LinkEnd::on("old"),
+            color: InkColor::Red,
+            label: String::new(),
+            by: None,
+            created_at: 1.0,
+            extra: Default::default(),
+        };
+        board.links.insert("hidden".into(), hidden);
+    });
+
+    let listed = f.handlers.list_board("p1", "s1").unwrap();
+    assert_eq!(
+        listed["linked_to_this_session"],
+        json!([
+            "→ shape “API”",
+            "← card “Fix cart rounding” (label: blocks)",
+            "← note “Release checklist”"
+        ])
+    );
+    assert_eq!(
+        listed["cards"],
+        json!([
+            { "id": "s1", "title": "New session", "status": "done", "x": 2000.0, "y": 0.0, "w": 288.0, "h": 216.0, "this_session": true },
+            { "id": "s2", "title": "Fix cart rounding", "status": "done", "x": 600.0, "y": 0.0, "w": 288.0, "h": 216.0 }
+        ])
+    );
+    assert_eq!(
+        listed["notes"],
+        json!([{ "id": "n1", "text": "Release checklist\n- tag\n- notes", "color": "green", "x": 600.0, "y": 600.0, "w": 216.0, "h": 216.0 }])
+    );
+    assert_eq!(
+        listed["views"],
+        json!([{ "id": "v1", "title": "Deploys", "x": 1200.0, "y": 600.0, "w": 480.0, "h": 360.0 }])
+    );
+    assert_eq!(
+        listed["shapes"],
+        json!([{ "id": api, "kind": "rect", "text": "API", "color": "graphite", "x": 2320.0, "y": 0.0, "w": 180.0, "h": 90.0, "yours": true }])
+    );
+    let shown: Vec<&str> = listed["links"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|l| l["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(shown, links.iter().map(String::as_str).collect::<Vec<_>>());
+    assert_eq!(
+        listed["links"][1],
+        json!({
+            "id": links[1],
+            "from": { "id": "s2", "kind": "card", "name": "Fix cart rounding" },
+            "to": { "id": "s1", "kind": "card", "name": "New session" },
+            "label": "blocks",
+            "color": "graphite",
+            "yours": true
+        })
+    );
+    assert_eq!(
+        listed["links"][3]["from"],
+        json!({ "id": "v1", "kind": "view", "name": "Deploys" })
+    );
+
+    // Another session sees the same links from its own side, and none of them as its own.
+    let theirs = f.handlers.list_board("p1", "s2").unwrap();
+    assert_eq!(
+        theirs["linked_to_this_session"],
+        json!(["→ card “New session” (label: blocks)", "← view “Deploys”"])
+    );
+    assert!(theirs["links"][0].get("yours").is_none());
+    assert!(theirs["cards"][0].get("this_session").is_none());
+    assert!(f.handlers.list_board("gone", "s1").is_err());
+}
+
+#[tokio::test]
+async fn changes_shapes_and_links_and_moves_cards_notes_and_views_as_dragging_would() {
+    let f = Fixture::new();
+    f.furnish();
+    let drawn = f
+        .handlers
+        .draw_on_board(
+            "p1",
+            "s1",
+            &json!({
+                "shapes": [{ "key": "a", "kind": "rect", "text": "API" }, { "key": "s", "kind": "sticker", "text": "🚀" }],
+                "links": [{ "from": "a", "to": "self" }]
+            }),
+        )
+        .unwrap();
+    let (a, sticker) = (
+        drawn["shapes"]["a"].as_str().unwrap().to_owned(),
+        drawn["shapes"]["s"].as_str().unwrap().to_owned(),
+    );
+    let link = ids(&drawn["links"])[0].clone();
+    f.events.take();
+    let before = f.node("p1", "s2").unwrap();
+
+    let updated = f
+        .handlers
+        .update_drawing(
+            "p1",
+            "s1",
+            &json!({
+                "items": [
+                    { "id": a, "x": 10.4, "y": 20, "w": 300, "text": "Gateway", "color": "blue" },
+                    { "id": "s2", "x": 500.5, "y": 600 },
+                    { "id": "n1", "x": 7.6 },
+                    { "id": "v1", "y": -40.2 },
+                    { "id": a, "h": 120 }
+                ],
+                "links": [{ "id": link, "label": " calls ", "color": "red", "to": "s2" }]
+            }),
+        )
+        .unwrap();
+    assert_eq!(updated, json!({ "updated": [a, "s2", "n1", "v1", link] }));
+    assert_eq!(f.events.take(), changed("p1"));
+    let shape = f.shape(&a).unwrap();
+    assert_eq!(
+        (shape.x, shape.y, shape.w, shape.h, shape.text.as_str(), shape.color),
+        (10.0, 20.0, 300.0, 120.0, "Gateway", InkColor::Blue)
+    );
+    // Who drew it and when stay.
+    assert_eq!((shape.by.as_deref(), shape.created_at), (Some("s1"), NOW));
+    // A card moves as a card dragged on the board does, and nothing else changes.
+    let moved = f.node("p1", "s2").unwrap();
+    assert_eq!((moved.x, moved.y), (500.5, 600.0));
+    assert_eq!(
+        BoardNode {
+            x: before.x,
+            y: before.y,
+            ..moved
+        },
+        before
+    );
+    let (note, view) = f.store.read(|s| {
+        let board = s.board("p1").unwrap();
+        (board.notes["n1"].clone(), board.views["v1"].clone())
+    });
+    assert_eq!((note.x, note.y, view.x, view.y), (8.0, 600.0, 1200.0, -40.0));
+    let changed_link = f.link(&link).unwrap();
+    assert_eq!(
+        (
+            changed_link.label.as_str(),
+            changed_link.color,
+            changed_link.to.node.as_deref()
+        ),
+        ("calls", InkColor::Red, Some("s2"))
+    );
+    assert_eq!(changed_link.from.node.as_deref(), Some(a.as_str()));
+
+    // What it can't do, it says, and it changes nothing of the call.
+    let cases = [
+        (json!({}), "Nothing to change: give items, links or both".to_owned()),
+        (
+            json!({ "items": [{ "id": a, "x": 0 }, { "id": "s2", "w": 400 }] }),
+            "items[1]: “s2” is a card, which update_drawing only moves, so it takes x and y but not w".to_owned(),
+        ),
+        (
+            json!({ "items": [{ "id": "n1", "text": "New" }] }),
+            "items[0]: “n1” is a note, which update_drawing only moves, so it takes x and y but not text; update_note changes its text and colour".to_owned(),
+        ),
+        (
+            json!({ "items": [{ "id": "old", "x": 0 }] }),
+            "items[0]: “old” isn’t drawn on the board right now, so it can’t be moved".to_owned(),
+        ),
+        (
+            json!({ "items": [{ "id": link, "x": 0 }] }),
+            format!("items[0]: “{link}” is a link; change it under links"),
+        ),
+        (
+            json!({ "items": [{ "id": "nope", "x": 0 }] }),
+            "items[0]: there’s nothing with the id “nope” on this board; list_board lists what’s there".to_owned(),
+        ),
+        (json!({ "items": [{ "id": a }] }), "items[0]: nothing to change; give x, y, w, h, text or color".to_owned()),
+        (json!({ "items": [{ "x": 1 }] }), "items[0]: id is required".to_owned()),
+        (
+            json!({ "items": [{ "id": sticker, "text": "" }] }),
+            "items[0]: a sticker needs its emoji in text".to_owned(),
+        ),
+        (
+            json!({ "links": [{ "id": link, "from": "s2" }] }),
+            "links[0]: a link needs two different ends".to_owned(),
+        ),
+        (
+            json!({ "links": [{ "id": "nope", "label": "x" }] }),
+            "links[0]: there’s no link with the id “nope” on this board; list_board lists them".to_owned(),
+        ),
+        (
+            json!({ "links": [{ "id": link, "to": "old" }] }),
+            "links[0]: “old” isn’t drawn on the board right now (an archived card, an action run or a note stuck to a card can’t be linked)".to_owned(),
+        ),
+    ];
+    for (args, message) in cases {
+        assert_eq!(err(f.handlers.update_drawing("p1", "s1", &args)), message, "{args}");
+    }
+    assert_eq!(f.shape(&a).unwrap().x, 10.0);
+    assert!(f.events.take().is_empty());
+}
+
+#[tokio::test]
+async fn erases_shapes_with_their_links_but_never_cards_notes_or_views() {
+    let f = Fixture::new();
+    f.furnish();
+    let drawn = f
+        .handlers
+        .draw_on_board(
+            "p1",
+            "s1",
+            &json!({
+                "shapes": [{ "key": "a", "kind": "rect" }, { "key": "b", "kind": "ellipse" }],
+                "links": [{ "from": "a", "to": "b" }, { "from": "self", "to": "a" }, { "from": "s2", "to": "self" }]
+            }),
+        )
+        .unwrap();
+    let (a, b) = (
+        drawn["shapes"]["a"].as_str().unwrap().to_owned(),
+        drawn["shapes"]["b"].as_str().unwrap().to_owned(),
+    );
+    let links = ids(&drawn["links"]);
+    f.events.take();
+    let erased = f
+        .handlers
+        .erase_from_board(
+            "p1",
+            "s1",
+            &json!({ "ids": [a, "s1", "n1", "v1", "nope", 5, links[2], a] }),
+        )
+        .unwrap();
+    assert_eq!(
+        erased,
+        json!({
+            "erased": [a, links[2], links[0], links[1]],
+            "skipped": [
+                { "id": "s1", "reason": "it is a card; only shapes and links can be erased" },
+                { "id": "n1", "reason": "it is a note; only shapes and links can be erased" },
+                { "id": "v1", "reason": "it is a view; only shapes and links can be erased" },
+                { "id": "nope", "reason": "not on the board" }
+            ]
+        })
+    );
+    assert_eq!(f.events.take(), changed("p1"));
+    assert!(f.shape(&b).is_some());
+    assert_eq!(f.counts(), (1, 0));
+    assert!(f.node("p1", "s1").is_some());
+
+    // Nothing erased, nothing said.
+    let none = f
+        .handlers
+        .erase_from_board("p1", "s1", &json!({ "ids": ["s2"] }))
+        .unwrap();
+    assert_eq!(none["erased"], json!([]));
+    assert!(f.events.take().is_empty());
+    assert_eq!(
+        err(f.handlers.erase_from_board("p1", "s1", &json!({ "ids": "all" }))),
+        "ids must be a list of the ids of shapes and links, from list_board"
+    );
+    assert_eq!(
+        err(f.handlers.erase_from_board("p1", "s1", &json!({ "ids": [] }))),
+        "Nothing to erase: give the ids of shapes and links, from list_board"
+    );
+}
+
+#[tokio::test]
+async fn draws_and_lists_through_the_server_end_to_end() {
+    let f = Fixture::new();
+    let server = McpServer::new("1.0.8", "guide", Some(f.handlers));
+    let call = |id: i64, name: &str, args: Value| json!({ "id": id, "method": "tools/call", "params": { "name": name, "arguments": args } });
+    let drawn = server
+        .answer(
+            "s1",
+            &call(
+                1,
+                "draw_on_board",
+                json!({ "shapes": [{ "kind": "text", "text": "Plan" }] }),
+            ),
+        )
+        .await;
+    assert!(drawn["result"].get("isError").is_none(), "{drawn}");
+    let listed = server.answer("s1", &call(2, "list_board", json!({}))).await;
+    let text = listed["result"]["content"][0]["text"].as_str().unwrap();
+    let listed: Value = serde_json::from_str(text).unwrap();
+    assert_eq!(listed["shapes"][0]["text"], "Plan");
+    let bad = server
+        .answer(
+            "s1",
+            &call(3, "draw_on_board", json!({ "shapes": [{ "kind": "image" }] })),
+        )
+        .await;
+    assert_eq!(bad["result"]["isError"], true);
 }

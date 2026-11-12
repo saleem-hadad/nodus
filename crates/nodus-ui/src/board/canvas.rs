@@ -251,6 +251,8 @@ pub struct BoardCanvas {
     pub(crate) clock: Instant,
     /// The prompt bar, search, the merge dialog and the ink (spec 11).
     pub(crate) overlays: super::overlays::Overlays,
+    /// A link whose label the menu asked to write, opened when next drawn.
+    pub(crate) pending_link_label: Option<String>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -338,6 +340,7 @@ impl BoardCanvas {
             section_field_sub: None,
             clock: Instant::now(),
             overlays: super::overlays::Overlays::default(),
+            pending_link_label: None,
             _subscriptions: subscriptions,
         };
         canvas.sync(cx);

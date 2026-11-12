@@ -63,6 +63,9 @@ fn swatches(
 impl BoardCanvas {
     /// BOARD-173: right-click on the pane (or inside a section frame).
     pub(crate) fn pane_menu(&mut self, at: GPoint<Pixels>, cx: &mut Context<'_, Self>) {
+        if self.link_menu(at, cx) {
+            return;
+        }
         let p = self.to_flow(at);
         let in_archive = self.in_dock(p);
         let in_section = self.in_section(p);
@@ -120,6 +123,10 @@ impl BoardCanvas {
 
     /// BOARD-174: right-click on a node.
     pub(crate) fn node_menu(&mut self, id: &str, at: GPoint<Pixels>, cx: &mut Context<'_, Self>) {
+        // Links run over the nodes, so one there takes the right-click.
+        if self.link_menu(at, cx) {
+            return;
+        }
         let Some(node) = self.node(id).cloned() else { return };
         let Some(board) = self.board.clone() else { return };
         let me = cx.entity().downgrade();
@@ -145,9 +152,71 @@ impl BoardCanvas {
                     self.card_menu(card, stickers, &me)
                 }
             }
+            NodeKind::Shape { index } => self.shape_menu(&board.shapes[*index], &me),
             NodeKind::Archive { .. } => return,
         };
         self.open_menu(at, items, cx);
+    }
+
+    /// SHAPE-022: a shape's menu (the selection's, when it's in one).
+    fn shape_menu(&self, shape: &nodus_domain::BoardShape, me: &WeakEntity<BoardCanvas>) -> Vec<MenuItem> {
+        let sel = self.selected_shapes();
+        let ids = if sel.contains(&shape.id) && sel.len() > 1 {
+            sel
+        } else {
+            vec![shape.id.clone()]
+        };
+        let delete_label = if ids.len() > 1 {
+            format!("Delete {} shapes", ids.len())
+        } else {
+            "Delete".to_owned()
+        };
+        let mut items = Vec::new();
+        if shape.kind.has_text() {
+            let edit = shape.id.clone();
+            items.push(
+                item(me, "Edit text", Icon::PencilLine, move |c, cx| {
+                    c.set_renaming(Some(edit.clone()), cx);
+                })
+                .hint(keys("↩")),
+            );
+            items.push(MenuItem::Separator);
+        }
+        items.push(
+            item(me, delete_label, Icon::Trash2, move |c, cx| c.delete_shapes(&ids, cx))
+                .hint(keys("⌫"))
+                .danger(),
+        );
+        items
+    }
+
+    /// LINK-022: a right-click on a link: its menu. False when none is there.
+    pub(crate) fn link_menu(&mut self, at: GPoint<Pixels>, cx: &mut Context<'_, Self>) -> bool {
+        let p = self.to_flow(at);
+        let tol = super::shapes::LINK_HIT_PX / self.viewport.zoom;
+        let Some(id) = self.link_at(p, tol) else {
+            return false;
+        };
+        self.overlays.ink.link = Some(id.clone());
+        self.overlays.ink.selected = None;
+        self.clear_selection(cx);
+        let me = cx.entity().downgrade();
+        let (label, delete) = (id.clone(), id);
+        let items = vec![
+            item(&me, "Edit label", Icon::PencilLine, move |c, cx| {
+                let id = label.clone();
+                c.pending_link_label = Some(id);
+                cx.notify();
+            }),
+            MenuItem::Separator,
+            item(&me, "Delete link", Icon::Trash2, move |c, cx| {
+                c.delete_link(&delete, cx);
+            })
+            .hint(keys("⌫"))
+            .danger(),
+        ];
+        self.open_menu(at, items, cx);
+        true
     }
 
     /// `cardOpenItems`.

@@ -46,6 +46,8 @@ impl CardActions for NoActions {
     fn stop(&self, _: &[String], _: &mut App) {}
     fn edit_note(&self, _: &str, _: &BoardNote, _: &str, _: &mut App) {}
     fn start_note(&self, _: &str, _: &mut App) {}
+    fn edit_shape(&self, _: &str, _: &str, _: &mut App) {}
+    fn focus_board(&self, _: &mut Window, _: &mut App) {}
     fn open_session(&self, _: &str, _: &mut App) {}
     fn show_card(&self, _: &str, _: Option<&str>, _: &mut App) {}
     fn open_agents(&self, _: &str, _: Option<&str>, _: &mut App) {}

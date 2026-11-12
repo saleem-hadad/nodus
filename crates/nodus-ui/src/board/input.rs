@@ -477,6 +477,12 @@ impl BoardCanvas {
                     self.set_renaming(Some(id.to_owned()), cx);
                 }
             }
+            // SHAPE-012: a double-click writes in a shape that holds words.
+            NodeKind::Shape { index } => {
+                if self.board.as_ref().is_some_and(|b| b.shapes[*index].kind.has_text()) {
+                    self.set_renaming(Some(id.to_owned()), cx);
+                }
+            }
             NodeKind::Card { index, stack, .. } => {
                 let archived = self.board.as_ref().is_some_and(|b| b.cards[*index].node.archived);
                 let result = matches!(
@@ -705,7 +711,7 @@ impl BoardCanvas {
             if let Some(n) = self.node(id)
                 && matches!(
                     n.kind,
-                    NodeKind::Card { .. } | NodeKind::Note { .. } | NodeKind::View { .. }
+                    NodeKind::Card { .. } | NodeKind::Note { .. } | NodeKind::View { .. } | NodeKind::Shape { .. }
                 )
             {
                 let pos = n.position;
@@ -920,6 +926,10 @@ impl BoardCanvas {
             .iter()
             .filter(|n| matches!(n.kind, NodeKind::View { .. }))
             .collect();
+        let moved_shapes: Vec<&FlowNode> = moved
+            .iter()
+            .filter(|n| matches!(n.kind, NodeKind::Shape { .. }))
+            .collect();
 
         // BOARD-060, BOARD-061: bounces.
         let mut bounced: Vec<(String, Point)> = Vec::new();
@@ -959,6 +969,16 @@ impl BoardCanvas {
                     .copied()
                     .unwrap_or(Point { x: view.x, y: view.y });
                 bounced.push((n.id.clone(), back));
+            }
+        }
+        // SHAPE-010: a shape dropped on the archive or the pad goes back.
+        for n in &moved_shapes {
+            let Some(shape) = n.shape_index().map(|i| &board.shapes[i]) else {
+                continue;
+            };
+            let size = nodus_board::geometry::Size { w: shape.w, h: shape.h };
+            if is_in_archive(n.position, zone, size) || is_on_pad(n.position, pad, size) {
+                bounced.push((n.id.clone(), Point { x: shape.x, y: shape.y }));
             }
         }
         for (id, back) in &bounced {
@@ -1032,6 +1052,11 @@ impl BoardCanvas {
                 starts_sessions: None,
             })
             .collect();
+        let shapes_moved: Vec<(String, Point)> = moved_shapes
+            .iter()
+            .filter(|n| !is_bounced(&n.id))
+            .map(|n| (n.id.clone(), n.position))
+            .collect();
         let released: Vec<String> = moved.iter().map(|n| n.id.clone()).collect();
 
         // BOARD-065: the cards in one patch, then each moved note and view.
@@ -1045,6 +1070,7 @@ impl BoardCanvas {
                     s.patch_view(view, cx);
                 }
             });
+            c.move_shapes(&shapes_moved, cx);
         };
         // BOARD-064: archiving a running session asks first.
         if !running.is_empty() {
@@ -1256,7 +1282,8 @@ impl BoardCanvas {
         let sel = self.selected_cards();
         let note_sel = self.selected_notes();
         let view_sel = self.selected_views();
-        let any = !sel.is_empty() || !note_sel.is_empty() || !view_sel.is_empty();
+        let shape_sel = self.selected_shapes();
+        let any = !sel.is_empty() || !note_sel.is_empty() || !view_sel.is_empty() || !shape_sel.is_empty();
         let plain = !m.platform && !m.control && !m.alt;
         match key.as_str() {
             // BOARD-160.
@@ -1299,6 +1326,10 @@ impl BoardCanvas {
                     return false;
                 }
                 self.delete_notes(&note_sel, cx);
+                // SHAPE-020.
+                if !shape_sel.is_empty() {
+                    self.delete_shapes(&shape_sel, cx);
+                }
                 self.archive_cards(&sel, cx);
                 self.delete_views(&view_sel, cx);
                 true
@@ -1310,6 +1341,14 @@ impl BoardCanvas {
                     true
                 } else if sel.is_empty() && note_sel.len() == 1 {
                     self.set_renaming(Some(note_sel[0].clone()), cx);
+                    true
+                } else if sel.is_empty()
+                    && note_sel.is_empty()
+                    && let [one] = shape_sel.as_slice()
+                    && self.shape(one).is_some_and(|s| s.kind.has_text())
+                {
+                    // SHAPE-012: Return writes in the one selected shape.
+                    self.set_renaming(Some(one.clone()), cx);
                     true
                 } else {
                     false
@@ -1339,7 +1378,7 @@ impl BoardCanvas {
                     self.bar_focus_from_board(Some("/".to_owned()), cx);
                     true
                 }
-                "p" | "a" | "r" | "x" | "b" | "m" => {
+                "p" | "a" | "r" | "s" | "x" | "b" | "m" => {
                     if let Some(tool) = super::overlays::ink::tool_for_key(&ch) {
                         self.ink_set_tool(tool, None, cx);
                     }

@@ -45,12 +45,13 @@ impl BoardCanvas {
     pub(crate) fn render_ink_hitbox(&self, cx: &mut Context<'_, Self>) -> AnyElement {
         let tool = self.overlays.ink.tool;
         let hover = self.overlays.ink.hover;
+        let hover_link = self.overlays.ink.hover_link;
         let me = cx.entity();
         canvas(
             move |bounds, window, _| window.insert_hitbox(bounds, HitboxBehavior::Normal),
             move |_, hitbox, window, cx| {
                 match tool {
-                    InkTool::Pen | InkTool::Arrow | InkTool::Rect => {
+                    InkTool::Pen | InkTool::Arrow | InkTool::Shape | InkTool::Sticker => {
                         window.set_cursor_style(CursorStyle::Crosshair, &hitbox);
                     }
                     InkTool::Eraser => window.set_cursor_style(cursor::eraser(), &hitbox),
@@ -59,6 +60,7 @@ impl BoardCanvas {
                     InkTool::Bubble => window.set_cursor_style(crate::board::overlays::bubble::cursor(), &hitbox),
                     InkTool::Mic => window.set_cursor_style(crate::board::overlays::bubble::mic_cursor(), &hitbox),
                     InkTool::Select if hover => window.set_cursor_style(CursorStyle::Move, &hitbox),
+                    InkTool::Select if hover_link => window.set_cursor_style(CursorStyle::PointingHand, &hitbox),
                     InkTool::Select => {}
                 }
                 me.update(cx, |c, _| c.overlays.ink.hitbox = Some(hitbox));
@@ -111,6 +113,31 @@ impl BoardCanvas {
         };
         let vp = self.viewport;
         let z = vp.zoom;
+        // Spec 14: links under the strokes, the box a new end would hold,
+        // and a shape being drawn.
+        let (links, target) = self.link_paints(&t);
+        let drawing_shape = match &ink.gesture {
+            Some(InkGesture::Shape {
+                kind,
+                start,
+                end,
+                square,
+                ..
+            }) if start != end => Some((
+                *kind,
+                crate::board::shapes::box_between(
+                    nodus_board::geometry::Point {
+                        x: start[0],
+                        y: start[1],
+                    },
+                    nodus_board::geometry::Point { x: end[0], y: end[1] },
+                    *square,
+                ),
+                ink_rgba(&t, ink.color.unwrap_or(InkColor::Red)),
+            )),
+            _ => None,
+        };
+        let handle_fill = t.bg_elevated;
 
         let lines: Vec<(Vec<Seg>, f64, Rgba)> = shown
             .iter()
@@ -134,6 +161,15 @@ impl BoardCanvas {
                         bounds.origin.y + px((vp.y + p[1] * z) as f32),
                     )
                 };
+                for link in &links {
+                    links::paint_link(link, z, handle_fill, &at, window);
+                }
+                if let Some(r) = target {
+                    links::paint_target(r, z, accent, &at, window);
+                }
+                if let Some((kind, r, color)) = drawing_shape {
+                    links::paint_shape_outline(kind, r, z, color, &at, window);
+                }
                 for (segs, width, color) in &lines {
                     paint_line(segs, (width * z) as f32, *color, &at, window);
                 }
@@ -169,10 +205,12 @@ impl BoardCanvas {
             .collect();
 
         let input = self.render_label_input(&t, window, cx);
+        let link_labels = self.render_link_labels(&t, window, cx);
         div()
             .absolute()
             .size_full()
             .child(layer)
+            .children(link_labels)
             .children(labels)
             .children(input)
             .into_any_element()

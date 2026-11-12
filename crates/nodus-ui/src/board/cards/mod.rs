@@ -35,6 +35,7 @@ pub mod para;
 pub mod present;
 pub mod resize;
 pub mod session_card;
+pub mod shape;
 pub mod status_dot;
 pub mod sticker;
 
@@ -382,6 +383,8 @@ pub struct StackView {
 pub enum Resized {
     Card(String),
     Note(Box<BoardNote>),
+    /// A shape, by id (SHAPE-011).
+    Shape(String),
 }
 
 /// The board actions cards, notes and the archive use (`BoardActions` in
@@ -401,6 +404,10 @@ pub trait CardActions {
     /// (NOTEUI-015: if the board has changed since, save to that project).
     fn edit_note(&self, project_id: &str, note: &BoardNote, text: &str, cx: &mut App);
     fn start_note(&self, note_id: &str, cx: &mut App);
+    /// Puts words in a shape (SHAPE-012).
+    fn edit_shape(&self, shape_id: &str, text: &str, cx: &mut App);
+    /// Gives the keyboard back to the board.
+    fn focus_board(&self, window: &mut Window, cx: &mut App);
     /// Opens a card's session as clicking the card does.
     fn open_session(&self, session_id: &str, cx: &mut App);
     /// Switches to a project and shows a session's card (`showCard`).

@@ -1,7 +1,11 @@
 //! `window.api.board`: a project's board, merged with the sessions on disk,
 //! and what the window changes on it (`board:*` in `src/main/ipc.ts`).
 
-use nodus_domain::{BoardNote, BoardSection, BoardSnapshot, InkStroke, NodePatch, Rect, Viewport};
+use std::path::{Path, PathBuf};
+
+use nodus_domain::{
+    BoardLink, BoardNote, BoardSection, BoardShape, BoardSnapshot, InkStroke, NodePatch, Rect, Viewport,
+};
 use serde_json::Value;
 
 use crate::error::OnChannel;
@@ -134,6 +138,90 @@ impl BoardApi<'_> {
                 self.nodus.inner.board.save_ink(project_id, strokes);
             })
             .await;
+    }
+
+    /// `board:save-shapes` (added after 0.9.4): creates or updates shapes.
+    pub async fn save_shapes(&self, project_id: &str, shapes: &[BoardShape]) {
+        self.nodus
+            .on_core(async {
+                self.nodus.inner.board.save_shapes(project_id, shapes);
+            })
+            .await;
+    }
+
+    /// `board:remove-shapes`: the shapes go, with their links.
+    pub async fn remove_shapes(&self, project_id: &str, ids: &[String]) {
+        self.nodus
+            .on_core(async {
+                self.nodus.inner.board.remove_shapes(project_id, ids);
+            })
+            .await;
+    }
+
+    /// `board:save-links`: creates or updates links.
+    pub async fn save_links(&self, project_id: &str, links: &[BoardLink]) {
+        self.nodus
+            .on_core(async {
+                self.nodus.inner.board.save_links(project_id, links);
+            })
+            .await;
+    }
+
+    /// `board:remove-links`.
+    pub async fn remove_links(&self, project_id: &str, ids: &[String]) {
+        self.nodus
+            .on_core(async {
+                self.nodus.inner.board.remove_links(project_id, ids);
+            })
+            .await;
+    }
+
+    /// Where the board's pictures are kept: `board-images` in the data folder.
+    pub fn images_dir(&self) -> PathBuf {
+        images_dir(&self.nodus.inner.user_data)
+    }
+
+    /// A picture shape's file, by its name; none for a name that isn't one.
+    pub fn image_path(&self, name: &str) -> Option<PathBuf> {
+        nodus_board::shapes::image_name_ok(name).then(|| self.images_dir().join(name))
+    }
+
+    /// `board:save-image`: keeps a picture's bytes under a new name, with
+    /// the extension of its type (`png`, `jpg`, `gif`, `webp`…), and returns
+    /// the name a picture shape holds.
+    pub async fn save_image(&self, bytes: Vec<u8>, ext: &str) -> CommandResult<String> {
+        let dir = self.images_dir();
+        let ext = clean_ext(ext);
+        self.nodus
+            .on_core(async move {
+                let name = format!("{}.{ext}", uuid::Uuid::new_v4());
+                tokio::fs::create_dir_all(&dir).await.on("board:save-image")?;
+                tokio::fs::write(dir.join(&name), bytes).await.on("board:save-image")?;
+                Ok(name)
+            })
+            .await
+    }
+
+    /// `board:import-image`: copies a picture file in, as `save_image` keeps bytes.
+    pub async fn import_image(&self, file: &Path) -> CommandResult<String> {
+        let bytes = tokio::fs::read(file).await.on("board:import-image")?;
+        let ext = file.extension().and_then(|e| e.to_str()).unwrap_or("png").to_owned();
+        self.save_image(bytes, &ext).await
+    }
+}
+
+/// `board-images` in the data folder.
+pub(crate) fn images_dir(user_data: &Path) -> PathBuf {
+    user_data.join("board-images")
+}
+
+/// A picture's extension, lower case and plain; `png` for anything odd.
+fn clean_ext(ext: &str) -> String {
+    let ext = ext.trim_start_matches('.').to_ascii_lowercase();
+    if !ext.is_empty() && ext.len() <= 5 && ext.chars().all(|c| c.is_ascii_alphanumeric()) {
+        ext
+    } else {
+        "png".to_owned()
     }
 }
 

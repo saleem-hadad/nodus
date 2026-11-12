@@ -2,11 +2,13 @@
 
 use indexmap::IndexMap;
 use nodus_domain::{
-    AppSettings, BoardNode, BoardNote, BoardSection, BoardView, CaptureKind, InkStroke, Project, ProjectAction,
-    ProjectGroup, Rect, ThemePreference, Viewport,
+    AppSettings, BoardLink, BoardNode, BoardNote, BoardSection, BoardShape, BoardView, CaptureKind, InkStroke, Project,
+    ProjectAction, ProjectGroup, Rect, ThemePreference, Viewport,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+
+use crate::records::Records;
 
 /// Six 288px card columns with 24px gaps and 40px side padding.
 pub const DEFAULT_ARCHIVE_W: f64 = 2.0 * 40.0 + 6.0 * 288.0 + 5.0 * 24.0;
@@ -61,6 +63,13 @@ pub struct BoardState {
     /// Ink drawn on the board, oldest first.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ink: Option<Vec<InkStroke>>,
+    /// Shapes on the board, oldest first. Added after 0.9.4; left out while
+    /// there are none, so a board without any is written as before.
+    #[serde(default, skip_serializing_if = "Records::is_empty")]
+    pub shapes: Records<BoardShape>,
+    /// Links between things on the board, oldest first.
+    #[serde(default, skip_serializing_if = "Records::is_empty")]
+    pub links: Records<BoardLink>,
     /// Fields this version doesn't know, written back as they were read.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
@@ -129,6 +138,8 @@ impl Default for BoardState {
             views: IndexMap::new(),
             viewport: None,
             ink: None,
+            shapes: Records::default(),
+            links: Records::default(),
             extra: Map::new(),
         }
     }

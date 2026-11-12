@@ -15,6 +15,8 @@ impl BoardCanvas {
         let empty = self.ink_strokes().is_empty();
         let me = cx.entity().downgrade();
 
+        let shape_kind = self.overlays.ink.shape_kind();
+        let picker = self.overlays.ink.picker;
         let mut children: Vec<AnyElement> = Vec::new();
         for (each, name, key) in TOOLS {
             let me = me.clone();
@@ -23,16 +25,17 @@ impl BoardCanvas {
                 InkTool::Bubble => ov_icon(OvIcon::MessageCircleMore, 15., 2., fg),
                 InkTool::Mic => ov_icon(OvIcon::Mic, 15., 2., fg),
                 InkTool::Pen => icon(Icon::Pencil, 15., 2., fg),
+                InkTool::Shape => ov_icon(shape_icon(shape_kind), 15., 2., fg),
                 InkTool::Arrow => ov_icon(OvIcon::MoveUpRight, 15., 2., fg),
-                InkTool::Rect => ov_icon(OvIcon::Square, 15., 2., fg),
                 InkTool::Text => ov_icon(OvIcon::Type, 15., 2., fg),
+                InkTool::Sticker => ov_icon(OvIcon::Smile, 15., 2., fg),
                 InkTool::Eraser => ov_icon(OvIcon::Eraser, 15., 2., fg),
             };
             let title = match key {
                 Some(k) => format!("{name} ({k})"),
                 None => name.to_owned(),
             };
-            children.push(tool_button(
+            let button = tool_button(
                 ("ink-tool", each as usize),
                 &t,
                 tool == each,
@@ -41,15 +44,43 @@ impl BoardCanvas {
                 move |el, fg| el.child(glyph(fg)),
                 move |window, cx| {
                     if let Some(c) = me.upgrade() {
-                        c.update(cx, |c, cx| c.ink_set_tool(each, Some(window), cx));
+                        c.update(cx, |c, cx| c.ink_dock_press(each, window, cx));
                     }
                 },
                 window,
                 cx,
-            ));
+            );
+            // SHAPE-003, SHAPE-005: the Shape and Sticker tools' pickers.
+            let flyout = (picker == Some(each)).then(|| match each {
+                InkTool::Shape => self.render_shape_picker(&t, shape_kind, window, cx),
+                _ => self.render_sticker_picker(&t, window, cx),
+            });
+            children.push(div().relative().child(button).children(flyout).into_any_element());
             // The asking tools stand apart from the ink's.
             if each == InkTool::Mic {
                 children.push(separator(&t));
+            }
+            // SHAPE-006: pictures come in from a file, beside the sticker.
+            if each == InkTool::Sticker {
+                let me = cx.entity().downgrade();
+                children.push(tool_button(
+                    "ink-image",
+                    &t,
+                    false,
+                    false,
+                    "Add a picture…".to_owned(),
+                    move |el, fg| el.child(ov_icon(OvIcon::Image, 15., 2., fg)),
+                    move |window, cx| {
+                        if let Some(c) = me.upgrade() {
+                            c.update(cx, |c, cx| {
+                                c.ink_set_tool(InkTool::Select, Some(window), cx);
+                                c.pick_images(cx);
+                            });
+                        }
+                    },
+                    window,
+                    cx,
+                ));
             }
         }
         children.push(separator(&t));
@@ -135,6 +166,19 @@ impl BoardCanvas {
             cx,
         ));
 
+        let area = me.clone();
+        let dock_probe = canvas(
+            |_, _, _| {},
+            move |bounds, _, _, cx| {
+                if let Some(c) = area.upgrade() {
+                    c.update(cx, |c, _| c.overlays.ink.dock_area = Some(bounds));
+                }
+            },
+        )
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full();
         div()
             .id("ink-dock")
             .absolute()
@@ -155,7 +199,13 @@ impl BoardCanvas {
                 cx.stop_propagation();
             })
             .children(children)
+            .child(dock_probe)
             .into_any_element()
+    }
+
+    /// Whether a window point is on the dock.
+    pub(crate) fn on_dock(&self, p: GPoint<Pixels>) -> bool {
+        self.overlays.ink.dock_area.is_some_and(|b| b.contains(&p))
     }
 
     /// INKUI-004: the palette, to the right of the colour button.
@@ -211,6 +261,142 @@ impl BoardCanvas {
             .group_opacity(rise)
             .translate(px(-4. * (1. - rise)), px(0.))
             .children(swatches)
+            .into_any_element()
+    }
+}
+
+/// The Shape tool's icon for each kind.
+fn shape_icon(kind: ShapeKind) -> OvIcon {
+    match kind {
+        ShapeKind::Ellipse => OvIcon::Circle,
+        ShapeKind::Diamond => OvIcon::Diamond,
+        _ => OvIcon::Square,
+    }
+}
+
+impl BoardCanvas {
+    /// SHAPE-003: rectangle, ellipse and diamond, to the right of the
+    /// Shape button.
+    fn render_shape_picker(
+        &mut self,
+        t: &Tokens,
+        current: ShapeKind,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> AnyElement {
+        let me = cx.entity().downgrade();
+        let buttons: Vec<AnyElement> = SHAPE_KINDS
+            .iter()
+            .map(|&(kind, name)| {
+                let me = me.clone();
+                tool_button(
+                    ("ink-shape-kind", kind as usize),
+                    t,
+                    kind == current,
+                    false,
+                    name.to_owned(),
+                    move |el, fg| el.child(ov_icon(shape_icon(kind), 15., 2., fg)),
+                    move |_, cx| {
+                        if let Some(c) = me.upgrade() {
+                            c.update(cx, |c, cx| {
+                                c.overlays.ink.shape_kind = Some(kind);
+                                c.overlays.ink.picker = None;
+                                cx.notify();
+                            });
+                        }
+                    },
+                    window,
+                    cx,
+                )
+            })
+            .collect();
+        self.picker_panel(
+            t,
+            "ink-shape-picker-in",
+            div().flex().gap(px(2.)).children(buttons),
+            window,
+            cx,
+        )
+    }
+
+    /// SHAPE-005: the stickers, two rows of eight.
+    fn render_sticker_picker(&mut self, t: &Tokens, window: &mut Window, cx: &mut Context<'_, Self>) -> AnyElement {
+        let me = cx.entity().downgrade();
+        let current = self.overlays.ink.sticker();
+        let cells: Vec<AnyElement> = STICKERS
+            .iter()
+            .enumerate()
+            .map(|(i, &emoji)| {
+                let me = me.clone();
+                tool_button(
+                    ("ink-sticker", i),
+                    t,
+                    emoji == current,
+                    false,
+                    emoji.to_owned(),
+                    move |el, _| el.text_size(px(17.)).child(emoji),
+                    move |_, cx| {
+                        if let Some(c) = me.upgrade() {
+                            c.update(cx, |c, cx| {
+                                c.overlays.ink.sticker = Some(emoji);
+                                c.overlays.ink.picker = None;
+                                cx.notify();
+                            });
+                        }
+                    },
+                    window,
+                    cx,
+                )
+            })
+            .collect();
+        let grid = div().flex().flex_wrap().w(px(8. * 30.)).gap(px(2.)).children(cells);
+        self.picker_panel(t, "ink-sticker-picker-in", grid, window, cx)
+    }
+
+    /// A picker's frosted panel to the right of its button, as the palette's,
+    /// keeping its bounds for the press outside it.
+    fn picker_panel(
+        &mut self,
+        t: &Tokens,
+        key: &'static str,
+        content: gpui::Div,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> AnyElement {
+        let rise = enter(window, cx, key, DUR_FAST, motion::ease_out);
+        let me = cx.entity().downgrade();
+        let probe = canvas(
+            |_, _, _| {},
+            move |bounds, _, _, cx| {
+                if let Some(c) = me.upgrade() {
+                    c.update(cx, |c, _| {
+                        c.overlays.ink.picker_area.clear();
+                        c.overlays.ink.picker_area.push(bounds);
+                    });
+                }
+            },
+        )
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full();
+        div()
+            .absolute()
+            .left(px(38.))
+            .top(px(-6.))
+            .occlude()
+            .p(px(6.))
+            .rounded(px(12.))
+            .map(|d| frosted(d, crate::board::hud::rgba_mix(t.bg_elevated, 0.92), 24., 1.8))
+            .shadow(t.lg())
+            .group_opacity(rise)
+            .translate(px(-4. * (1. - rise)), px(0.))
+            .on_mouse_down(MouseButton::Left, |_, window, cx| {
+                window.prevent_default();
+                cx.stop_propagation();
+            })
+            .child(content)
+            .child(probe)
             .into_any_element()
     }
 }

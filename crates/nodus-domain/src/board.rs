@@ -1,4 +1,4 @@
-//! A project's board: its session cards, sections, sticky notes and ink.
+//! A project's board: its session cards, sections, sticky notes, ink, shapes and links.
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -201,6 +201,124 @@ pub struct InkStroke {
     pub extra: Map<String, Value>,
 }
 
+string_enum! {
+    /// What a shape on the board is: a box, an ellipse or a diamond with
+    /// words in it, words on their own, an emoji sticker, or a picture.
+    pub enum ShapeKind {
+        Rect = "rect",
+        Ellipse = "ellipse",
+        Diamond = "diamond",
+        Text = "text",
+        Sticker = "sticker",
+        Image = "image",
+    }
+}
+
+impl ShapeKind {
+    /// The kinds that hold words the user writes in them.
+    pub fn has_text(self) -> bool {
+        matches!(self, Self::Rect | Self::Ellipse | Self::Diamond | Self::Text)
+    }
+}
+
+/// A shape on the board, drawn by the user with the dock's tools or by a
+/// session with its board tools. Like a note it moves, resizes and can be
+/// linked; unlike ink it's a thing on the board, not a mark over it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BoardShape {
+    pub id: String,
+    pub kind: ShapeKind,
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+    pub color: InkColor,
+    /// The words in it; a sticker's emoji.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub text: String,
+    /// A picture's file, by name, in the app's board images folder.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
+    /// The session that drew it with its board tools.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub by: Option<String>,
+    pub created_at: f64,
+    /// Fields this version doesn't know, written back as they were read.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+impl BoardShape {
+    pub fn rect(&self) -> Rect {
+        Rect {
+            x: self.x,
+            y: self.y,
+            w: self.w,
+            h: self.h,
+        }
+    }
+}
+
+/// One end of a link: held by something on the board (a card's session id,
+/// or a note, view or shape id), or loose at a point.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkEnd {
+    /// What it's attached to; none for a loose end.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub node: Option<String>,
+    /// A loose end's point, in board coordinates. An attached end keeps
+    /// where it last was.
+    #[serde(default)]
+    pub x: f64,
+    #[serde(default)]
+    pub y: f64,
+}
+
+impl LinkEnd {
+    pub fn on(node: impl Into<String>) -> Self {
+        Self {
+            node: Some(node.into()),
+            ..Self::default()
+        }
+    }
+
+    pub fn at(x: f64, y: f64) -> Self {
+        Self { node: None, x, y }
+    }
+}
+
+/// An arrow on the board from one thing to another. Its ends follow what
+/// they're attached to as it moves; it's drawn while both ends are on the
+/// board (an archived card's links wait for it to come back).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BoardLink {
+    pub id: String,
+    pub from: LinkEnd,
+    /// The end with the arrowhead.
+    pub to: LinkEnd,
+    pub color: InkColor,
+    /// Words on the link, drawn at its middle.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub label: String,
+    /// The session that drew it with its board tools.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub by: Option<String>,
+    pub created_at: f64,
+    /// Fields this version doesn't know, written back as they were read.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+impl BoardLink {
+    /// Whether either end is held by `node`.
+    pub fn touches(&self, node: &str) -> bool {
+        self.from.node.as_deref() == Some(node) || self.to.node.as_deref() == Some(node)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BoardSnapshot {
@@ -212,6 +330,12 @@ pub struct BoardSnapshot {
     pub views: Vec<BoardView>,
     /// Ink drawn on the board, oldest first.
     pub ink: Vec<InkStroke>,
+    /// Shapes, oldest first (drawn in this order).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub shapes: Vec<BoardShape>,
+    /// Links, oldest first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub links: Vec<BoardLink>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub viewport: Option<Viewport>,
 }

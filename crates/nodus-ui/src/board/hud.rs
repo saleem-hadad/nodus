@@ -418,6 +418,12 @@ fn paint_minimap(
                 (folder_hues(color).front_top, None)
             }
             NodeKind::View { .. } => (folder_hues(nodus_domain::FolderColor::Purple).front_top, None),
+            NodeKind::Shape { index } => {
+                let color = board
+                    .and_then(|b| b.shapes.get(*index))
+                    .map_or(nodus_domain::InkColor::Graphite, |s| s.color);
+                (super::overlays::ink::ink_rgba(t, color), None)
+            }
             NodeKind::Card { index, .. } => {
                 let card = board.and_then(|b| b.cards.get(*index));
                 match card {

@@ -162,6 +162,9 @@ impl Board {
                 .ok_or_else(|| nodus_store::NotFound::Project(project_id.into()))?;
             let board = boards.entry(project_id.to_owned()).or_default();
             merge(board, &disk, folder_exists, self.sessions.as_ref());
+            // Links whose ends went while the board wasn't looking (a view
+            // deleted, a card dropped) go too.
+            crate::shapes::prune_links(board);
             // SESS-078
             project.opened_at = Some(now);
             let snapshot = BoardSnapshot {
@@ -172,6 +175,8 @@ impl Board {
                 notes: sorted(board.notes.values(), |n| n.created_at),
                 views: sorted(board.views.values(), |v| v.created_at),
                 ink: board.ink.clone().unwrap_or_default(),
+                shapes: board.shapes.values().cloned().collect(),
+                links: board.links.values().cloned().collect(),
                 viewport: board.viewport,
             };
             Ok::<_, BoardError>((snapshot, board.nodes.values().cloned().collect::<Vec<_>>()))

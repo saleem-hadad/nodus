@@ -4,8 +4,8 @@
 use indexmap::IndexMap;
 use nodus_domain::js::{self, slice_utf16};
 use nodus_domain::{
-    BoardNote, BoardSection, Event, FolderColor, InkStroke, NodePatch, Rect, SessionKind, SessionSearchHit,
-    SummarizePhase, SummarizeProgress, SummaryResult, TranscriptMessage, Viewport,
+    BoardLink, BoardNote, BoardSection, BoardShape, Event, FolderColor, InkStroke, NodePatch, Rect, SessionKind,
+    SessionSearchHit, SummarizePhase, SummarizeProgress, SummaryResult, TranscriptMessage, Viewport,
 };
 use nodus_platform::Env;
 use nodus_transcripts::{NamingSource, SearchTarget, SummarizeTarget, is_agent_id, read_transcript};
@@ -260,7 +260,36 @@ impl Board {
             for id in note_ids {
                 board.notes.shift_remove(id);
             }
+            crate::shapes::prune_links(board);
         });
+    }
+
+    /// `board:save-shapes` (added after 0.9.4): new or changed shapes, each
+    /// checked (`shapes::clean_shape`).
+    pub fn save_shapes(&self, project_id: &str, shapes: &[BoardShape]) {
+        let now = self.now();
+        self.store
+            .update(|state| crate::shapes::save_shapes(state.board_mut(project_id), shapes, now));
+    }
+
+    /// `board:remove-shapes`: the shapes go, with the links they held.
+    pub fn remove_shapes(&self, project_id: &str, ids: &[String]) {
+        self.store
+            .update(|state| crate::shapes::remove_shapes(state.board_mut(project_id), ids));
+    }
+
+    /// `board:save-links`: new or changed links, each checked; one whose
+    /// ends aren't on the board is left out.
+    pub fn save_links(&self, project_id: &str, links: &[BoardLink]) {
+        let now = self.now();
+        self.store
+            .update(|state| crate::shapes::save_links(state.board_mut(project_id), links, now));
+    }
+
+    /// `board:remove-links`.
+    pub fn remove_links(&self, project_id: &str, ids: &[String]) {
+        self.store
+            .update(|state| crate::shapes::remove_links(state.board_mut(project_id), ids));
     }
 
     /// `board:save-ink`, with strokes already cleaned (`cleanInk`, 04) (SESS-105).
@@ -294,6 +323,7 @@ impl Board {
                 unstick_notes(board, &node);
             }
             board.nodes.shift_remove(session_id);
+            crate::shapes::prune_links(board);
             // Terminals are never discovered on disk, so there is nothing to hide.
             if !terminal && !board.hidden.iter().any(|h| h == session_id) {
                 board.hidden.push(session_id.to_owned());

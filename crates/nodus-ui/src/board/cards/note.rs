@@ -573,9 +573,9 @@ fn editor(env: &Rc<BoardEnv>, note: &BoardNote, window: &mut Window, cx: &mut Ap
 /// Draws a field with the text caret in `color` (NOTEUI-011: the note's
 /// ink): gpui-component takes the caret's colour from its theme as the
 /// field lays out and paints, so the theme's is swapped for those moments.
-struct WithCaret {
-    color: gpui::Hsla,
-    child: AnyElement,
+pub(super) struct WithCaret {
+    pub(super) color: gpui::Hsla,
+    pub(super) child: AnyElement,
 }
 
 impl IntoElement for WithCaret {

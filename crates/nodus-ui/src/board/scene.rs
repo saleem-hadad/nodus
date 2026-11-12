@@ -52,6 +52,10 @@ pub enum NodeKind {
     Note {
         index: Option<usize>,
     },
+    /// Index into the board's shapes (SHAPE-001).
+    Shape {
+        index: usize,
+    },
 }
 
 /// One node as React Flow held it.
@@ -103,6 +107,13 @@ impl FlowNode {
 
     pub fn is_draft(&self) -> bool {
         matches!(self.kind, NodeKind::Note { index: None })
+    }
+
+    pub fn shape_index(&self) -> Option<usize> {
+        match self.kind {
+            NodeKind::Shape { index } => Some(index),
+            _ => None,
+        }
     }
 }
 
@@ -157,8 +168,8 @@ pub struct BuildInput<'a> {
     pub draft_id: &'a str,
 }
 
-/// `buildNodes` (BOARD-007): archive, pad, sections, cards, views, free
-/// notes, the pad's top sheet.
+/// `buildNodes` (BOARD-007): archive, pad, sections, cards, views, shapes
+/// (SHAPE-001), free notes, the pad's top sheet.
 pub fn build_nodes(input: BuildInput<'_>) -> Vec<FlowNode> {
     let BuildInput {
         board,
@@ -431,6 +442,34 @@ pub fn build_nodes(input: BuildInput<'_>) -> Vec<FlowNode> {
             clip: None,
         });
     }
+    // SHAPE-001: shapes, oldest first, over the views and under the notes;
+    // stickers with the notes, so one stuck on a card shows over it.
+    for (index, shape) in board.shapes.iter().enumerate() {
+        let p = prev_by_id.get(shape.id.as_str());
+        let live = held.get(&shape.id);
+        let held_here = p.is_some_and(|p| p.dragging || busy.contains(&shape.id));
+        out.push(FlowNode {
+            id: shape.id.clone(),
+            kind: NodeKind::Shape { index },
+            position: match (live, p) {
+                (Some(r), _) => Point { x: r.x, y: r.y },
+                (None, Some(p)) if held_here => p.position,
+                _ => Point { x: shape.x, y: shape.y },
+            },
+            size: live.map_or(Size { w: shape.w, h: shape.h }, |r| Size { w: r.w, h: r.h }),
+            hidden: false,
+            z: if shape.kind == nodus_domain::ShapeKind::Sticker {
+                2
+            } else {
+                0
+            },
+            draggable: true,
+            selectable: true,
+            selected: selected_of(&shape.id),
+            dragging: dragging_of(&shape.id),
+            clip: None,
+        });
+    }
     let (free, _) = split_notes(&board.notes, &board.cards);
     for note in free {
         let index = board.notes.iter().position(|n| std::ptr::eq(n, note));
@@ -557,6 +596,8 @@ mod tests {
             notes: vec![],
             views: vec![],
             ink: vec![],
+            shapes: vec![],
+            links: vec![],
             viewport: None,
         }
     }

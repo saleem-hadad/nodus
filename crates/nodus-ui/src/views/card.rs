@@ -1,23 +1,23 @@
-//! The view card (`ViewNode.tsx`, `views.css`; VIEW-122…150): a title bar
-//! (its drag handle) with the brain's status, the title and the tools, the
-//! approvals strip, the body with the page (or its empty state), the error
-//! line and the ask bar. Lengths are flow units ([`fu`]), so the card scales
-//! with the board.
+//! A view on the board (VIEW-122…150): the page itself, a rounded panel
+//! straight on the board, with a caption above it on the board (its drag
+//! handle: the brain's status and the title). The panel holds the approvals
+//! strip, the page (or its empty state), the error line and the ask bar. Its
+//! actions are in its menu, a right-click away anywhere on it, the page
+//! included. Lengths are flow units ([`fu`]), so the view scales with the
+//! board.
 
-use std::cell::Cell;
-use std::rc::Rc;
+use std::collections::HashMap;
 use std::time::Duration;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, App, Bounds, BoxShadow, ElementId, Entity, FontWeight,
+    Animation, AnimationExt as _, AnyElement, App, Bounds, BoxShadow, ElementId, Entity, FontWeight, Global,
     InteractiveElement, IntoElement, MouseButton, ParentElement, Pixels, Rgba, SharedString,
-    StatefulInteractiveElement, Styled, Task, Transformation, Window, canvas, div, percentage, px, relative,
+    StatefulInteractiveElement, Styled, Task, Transformation, WeakEntity, Window, div, percentage, px, relative,
 };
 use nodus_domain::{BoardView, SessionStatus};
 
-use super::frames::{self, Geometry, Slot};
-use super::icons::{ViewIcon, view_icon};
+use super::frames::{self, Geometry, Rounding, Slot};
 use super::parts;
 use crate::board::nodes::{BoardCx, ViewNode};
 use crate::board::units::fu;
@@ -63,11 +63,54 @@ impl CardUi {
     }
 }
 
+/// The caption's height above the page: the view's drag handle.
+pub const CAPTION_H: f32 = 28.0;
+/// The page panel's corner radius.
+const RADIUS: f32 = 14.0;
+
+/// Every drawn view's UI state, for the view's menu to reach.
+#[derive(Default)]
+struct CardUis(HashMap<String, WeakEntity<CardUi>>);
+
+impl Global for CardUis {}
+
 /// The view's UI state.
 pub fn ui(id: &str, window: &mut Window, cx: &mut App) -> Entity<CardUi> {
-    window.use_keyed_state(ElementId::Name(format!("view-ui-{id}").into()), cx, |_, _| {
+    let ui = window.use_keyed_state(ElementId::Name(format!("view-ui-{id}").into()), cx, |_, _| {
         CardUi::default()
-    })
+    });
+    let uis = &mut cx.default_global::<CardUis>().0;
+    if uis.get(id).and_then(WeakEntity::upgrade).as_ref() != Some(&ui) {
+        uis.retain(|_, ui| ui.upgrade().is_some());
+        uis.insert(id.to_owned(), ui.downgrade());
+    }
+    ui
+}
+
+/// A drawn view's UI state.
+fn find(view_id: &str, cx: &App) -> Option<Entity<CardUi>> {
+    cx.try_global::<CardUis>()?.0.get(view_id)?.upgrade()
+}
+
+/// The menu's `Ask Claude to change it…`: opens the ask bar (VIEW-130).
+pub fn ask(view_id: &str, cx: &mut App) {
+    if let Some(ui) = find(view_id, cx) {
+        ui.update(cx, |u, cx| {
+            u.asking = true;
+            cx.notify();
+        });
+    }
+}
+
+/// The menu's `Refresh` (VIEW-129): runs the view's commands, with the
+/// caption spinning meanwhile and the first failure on the view. False when
+/// the view isn't drawn.
+pub fn refresh(project_id: &str, view_id: &str, cx: &mut App) -> bool {
+    let Some(ui) = find(view_id, cx) else {
+        return false;
+    };
+    parts::refresh(&ui, project_id, view_id, cx);
+    true
 }
 
 /// The brain's status as the card shows it (VIEW-124): the brain card's
@@ -137,7 +180,7 @@ fn card_shadow(t: &Tokens, hovered: bool, waiting: bool, selected: bool, draggin
     }
 }
 
-/// `ViewNode`: the card in its node's box. (By value: the canvas's renderer type.)
+/// `ViewNode`: the view in its node's box. (By value: the canvas's renderer type.)
 #[allow(clippy::needless_pass_by_value)]
 pub fn render(node: ViewNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut App) -> AnyElement {
     let t = theme::tokens(cx);
@@ -154,18 +197,23 @@ pub fn render(node: ViewNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut
     let working = status == SessionStatus::Working;
     let waiting = live && status == SessionStatus::Waiting;
     let shown = frames::shown(&id, Slot::Card, cx);
-    let (hovered, resizing, asking, error) = {
+    let (hovered, resizing, asking, refreshing, error) = {
         let u = ui.read(cx);
-        (u.hovered || shown.hovered, u.resizing, u.asking, u.error.clone())
+        (
+            u.hovered || shown.hovered,
+            u.resizing,
+            u.asking,
+            u.refreshing,
+            u.error.clone(),
+        )
     };
     let framed = view.version > 0 && !board.project_id.is_empty();
 
-    let header = header(
+    let caption = caption(
         &view,
         board,
         &ui,
-        working,
-        waiting,
+        (working, waiting, refreshing),
         renaming,
         hovered || state.selected,
         z,
@@ -173,7 +221,11 @@ pub fn render(node: ViewNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut
         cx,
     );
     let approvals = parts::approvals(&view, board, &ui, z, window, cx);
-    let bottom_round = error.is_none() && !asking;
+    let rounding = Rounding {
+        radius: RADIUS * z,
+        top: approvals.is_none(),
+        bottom: error.is_none() && !asking,
+    };
     let body = body(
         &view,
         board,
@@ -182,22 +234,37 @@ pub fn render(node: ViewNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut
         working,
         waiting,
         (resizing, state.dragging),
-        bottom_round,
+        rounding,
         z,
         window,
         cx,
     );
 
-    let card = div()
+    // The page's panel: nothing but the page, unless the view asks for
+    // approval, shows an error or takes a request.
+    let panel = div()
         .id(ElementId::Name(format!("view-{id}").into()))
         .relative()
         .flex()
         .flex_col()
-        .size_full()
-        .rounded(fu(14.))
+        .flex_1()
+        .min_h_0()
+        .rounded(fu(RADIUS))
         .bg(t.bg_elevated)
         .shadow(card_shadow(&t, hovered, waiting, state.selected, state.dragging, z))
         .overflow_hidden()
+        .children(approvals)
+        .child(body)
+        .when_some(error, |d, e| d.child(parts::error_line(e, z, &t)))
+        .when(asking && !board.project_id.is_empty(), |d| {
+            d.child(parts::ask_bar(&view, board, &ui, z, window, cx))
+        });
+    let card = div()
+        .id(ElementId::Name(format!("view-box-{id}").into()))
+        .relative()
+        .flex()
+        .flex_col()
+        .size_full()
         .on_hover({
             let ui = ui.clone();
             move |h: &bool, _, cx| {
@@ -209,36 +276,32 @@ pub fn render(node: ViewNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut
                 });
             }
         })
-        .child(header)
-        .children(approvals)
-        .child(body)
-        .when_some(error, |d, e| d.child(parts::error_line(e, z, &t)))
-        .when(asking && !board.project_id.is_empty(), |d| {
-            d.child(parts::ask_bar(&view, board, &ui, z, window, cx))
-        });
+        .child(caption)
+        .child(panel);
 
     let resize = (state.selected && !renaming).then(|| super::resize::zones(&view, &state, board, &ui, window, cx));
     div()
         .relative()
         .size_full()
-        // Resize handles under the card's contents, so nothing of the card
-        // draws over the page's probe (`swap.rs`).
+        // Resize handles under the view's contents, so nothing of it draws
+        // over the page's probe (`swap.rs`).
         .children(resize.into_iter().flatten())
         .child(card)
         .into_any_element()
 }
 
-/// The title bar (`.view-head`, 38 tall): status or icon, title, tools. The
-/// canvas drags the node by it (VIEW-122).
+/// The caption (`.view-head`, [`CAPTION_H`] tall) on the board above the
+/// page: the brain's status (or the view's icon) and the title, brighter
+/// while the view is hovered or selected. The canvas drags the node by it
+/// (VIEW-122).
 #[allow(clippy::too_many_arguments)]
-fn header(
+fn caption(
     view: &BoardView,
     board: &BoardCx,
     ui: &Entity<CardUi>,
-    working: bool,
-    waiting: bool,
+    (working, waiting, refreshing): (bool, bool, bool),
     renaming: bool,
-    tools_on: bool,
+    lit: bool,
     z: f32,
     window: &mut Window,
     cx: &mut App,
@@ -257,15 +320,21 @@ fn header(
             SessionStatus::Working
         };
         parts::status_dot(&id, status, z, tip, window, cx)
+    } else if refreshing {
+        spinning(
+            icon(Icon::RefreshCw, 12.0 * z, 2.0, t.text_tertiary),
+            ElementId::Name(format!("view-refresh-spin-{id}").into()),
+            cx,
+        )
     } else {
-        icon(Icon::LayoutDashboard, 14.0 * z, 2.0, t.text_tertiary).into_any_element()
+        icon(Icon::LayoutDashboard, 12.0 * z, 2.0, t.text_tertiary).into_any_element()
     };
     let title: AnyElement = if renaming {
         parts::title_editor(view, board, ui, z, window, cx)
     } else {
         let font = gpui::Font {
             family: fonts::DISPLAY.into(),
-            weight: FontWeight::SEMIBOLD,
+            weight: FontWeight::MEDIUM,
             ..gpui::Font::default()
         };
         let actions = board.actions.clone();
@@ -275,17 +344,16 @@ fn header(
         });
         div()
             .id(ElementId::Name(format!("view-title-{id}").into()))
-            .flex_1()
             .min_w_0()
             .overflow_hidden()
             .child(
                 spaced_text(
                     view.title.clone(),
                     font,
-                    px(13.0 * z),
-                    px(-0.13 * z),
+                    px(12.0 * z),
+                    px(-0.06 * z),
                     px(16.0 * z),
-                    t.text_primary,
+                    if lit { t.text_primary } else { t.text_secondary },
                 )
                 .truncate(),
             )
@@ -307,19 +375,16 @@ fn header(
             })
             .into_any_element()
     };
-    let tools = parts::tools(view, board, ui, z, window, cx);
     div()
         .id(ElementId::Name(format!("view-head-{id}").into()))
         .flex()
         .items_center()
-        .gap(fu(8.))
+        .gap(fu(6.))
         .flex_none()
-        .h(fu(38.))
-        .pl(fu(13.))
-        .pr(fu(6.))
-        .border_b(fu(0.5))
-        .border_color(t.separator)
-        // Double-clicks on the title bar never reach the board (VIEW-126).
+        .h(fu(CAPTION_H))
+        .pb(fu(4.))
+        .px(fu(4.))
+        // Double-clicks on the caption never reach the board (VIEW-126).
         .on_mouse_down(MouseButton::Left, |e, _, cx| {
             if e.click_count >= 2 {
                 cx.stop_propagation();
@@ -327,16 +392,6 @@ fn header(
         })
         .child(lead)
         .child(title)
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap(fu(1.))
-                .flex_none()
-                .ml_auto()
-                .opacity(if tools_on { 1.0 } else { 0.55 })
-                .children(tools),
-        )
         .into_any_element()
 }
 
@@ -366,7 +421,7 @@ fn body(
     working: bool,
     waiting: bool,
     (resizing, dragging): (bool, bool),
-    bottom_round: bool,
+    rounding: Rounding,
     z: f32,
     window: &mut Window,
     cx: &mut App,
@@ -378,7 +433,6 @@ fn body(
             .child(parts::empty_state(view, board, ui, working, waiting, z, window, cx))
             .into_any_element();
     }
-    let radius = if bottom_round { 14.0 * z } else { 0.0 };
     let id = view.id.clone();
     let pointer = board.pointer;
     // An ink tool is out: strokes draw over the page (INKUI-018, D3).
@@ -397,7 +451,7 @@ fn body(
                 document,
                 clip,
                 zoom: z,
-                radius,
+                rounding,
                 forced: parity || ink || dragging || resizing || marquee,
                 passthrough: pointer.dragging
                     || pointer.selection_rect
@@ -409,9 +463,10 @@ fn body(
         }
     };
     // The probe paints the page's snapshot while it's behind one. The fill
-    // takes the card's bottom corners: GPUI's overflow clip is square.
+    // takes the panel's corners: GPUI's overflow clip is square.
     base.bg(t.bg_elevated)
-        .when(bottom_round, |d| d.rounded_b(fu(14.)))
+        .when(rounding.top, |d| d.rounded_t(fu(RADIUS)))
+        .when(rounding.bottom, |d| d.rounded_b(fu(RADIUS)))
         .child(frames::probe(id, Slot::Card, geometry))
         .into_any_element()
 }
@@ -427,20 +482,6 @@ pub fn spinning(el: gpui::Svg, key: impl Into<ElementId>, cx: &App) -> AnyElemen
         |svg, delta| svg.with_transformation(Transformation::rotate(percentage(delta))),
     )
     .into_any_element()
-}
-
-/// Ellipsis icon, for the ⋯ tool.
-pub fn more_icon(z: f32, color: Rgba) -> gpui::Svg {
-    view_icon(ViewIcon::Ellipsis, 14.0 * z, 2.0, color)
-}
-
-/// Keeps the bounds an element was last laid out at.
-pub fn bounds_probe(cell: Rc<Cell<Bounds<Pixels>>>) -> impl IntoElement {
-    canvas(move |b, _, _| cell.set(b), |_, _, _, _| {})
-        .absolute()
-        .top_0()
-        .left_0()
-        .size_full()
 }
 
 /// `relative(p)`, for max heights in percent.

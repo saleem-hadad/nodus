@@ -1,21 +1,18 @@
-//! The card's parts (`ViewNode.tsx`, `views.css`): the status dot, the
-//! tools (VIEW-128…134), the approvals strip (VIEW-135), the empty state
-//! (VIEW-137, VIEW-138), the error line (VIEW-139) and the card's buttons,
-//! all in flow units.
+//! A view's parts (`ViewNode.tsx`, `views.css`): the status dot, refresh
+//! (VIEW-129), the approvals strip (VIEW-135), the empty state (VIEW-137,
+//! VIEW-138), the error line (VIEW-139) and the view's buttons, all in flow
+//! units.
 
-use std::cell::Cell;
-use std::rc::Rc;
 use std::time::Duration;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, App, Bounds, ElementId, Entity, FontWeight, InteractiveElement,
-    IntoElement, MouseButton, ParentElement, Pixels, Rgba, SharedString, StatefulInteractiveElement, Styled, Window,
-    div, point, px, relative,
+    Animation, AnimationExt as _, AnyElement, App, ElementId, Entity, FontWeight, InteractiveElement, IntoElement,
+    MouseButton, ParentElement, Rgba, StatefulInteractiveElement, Styled, Window, div, relative,
 };
 use nodus_domain::{BoardView, SessionStatus, ViewCommand};
 
-use super::card::{CardUi, bounds_probe, more_icon, shadows, spinning, tip_over_page};
+use super::card::{CardUi, shadows, spinning, tip_over_page};
 use super::icons::{ViewIcon, view_icon};
 use crate::board::nodes::BoardCx;
 use crate::board::units::fu;
@@ -53,15 +50,6 @@ pub fn fade(c: Rgba, p: f32) -> Rgba {
 /// A command is waiting for the user (VIEW-017).
 pub fn is_waiting(c: &ViewCommand) -> bool {
     c.approved.as_deref() != Some(c.run.as_str()) && c.denied.as_deref() != Some(c.run.as_str())
-}
-
-/// ⟳ shows when the view has a refresh or an allowed command (VIEW-128).
-pub fn can_refresh(view: &BoardView) -> bool {
-    view.refresh.is_some()
-        || view
-            .commands
-            .as_ref()
-            .is_some_and(|cs| cs.iter().any(|c| c.approved.as_deref() == Some(c.run.as_str())))
 }
 
 /// Runs a core command and hands its result back on the UI thread.
@@ -134,213 +122,9 @@ pub fn status_dot(
     dot.shadow(vec![ring_at(delta)]).into_any_element()
 }
 
-/// A `.card-tool` (28 square): `pressed` holds `--bg-pressed`
-/// (`aria-expanded`), `disabled` fades it to 40%. It doesn't start drags.
-#[allow(clippy::too_many_arguments)]
-fn card_tool(
-    board: &BoardCx,
-    view_id: &str,
-    name: &'static str,
-    glyph: impl Fn(Rgba) -> AnyElement,
-    tip: SharedString,
-    pressed: bool,
-    disabled: bool,
-    on_click: impl Fn(Bounds<Pixels>, &mut Window, &mut App) + 'static,
-    window: &mut Window,
-    cx: &mut App,
-) -> AnyElement {
-    let t = theme::tokens(cx);
-    let key = format!("view-tool-{name}-{view_id}");
-    let hovered = window.use_keyed_state(ElementId::Name(format!("{key}-hover").into()), cx, |_, _| false);
-    let press = window.use_keyed_state(ElementId::Name(format!("{key}-tip").into()), cx, |_, _| {
-        TooltipPress::default()
-    });
-    let bounds = window.use_keyed_state(ElementId::Name(format!("{key}-bounds").into()), cx, |_, _| {
-        Rc::new(Cell::new(Bounds::<Pixels>::default()))
-    });
-    let bounds = bounds.read(cx).clone();
-    let hot = *hovered.read(cx) && !disabled;
-    let color = if hot || pressed {
-        t.text_primary
-    } else {
-        t.text_secondary
-    };
-    let id = view_id.to_owned();
-    let actions = board.actions.clone();
-    div()
-        .id(ElementId::Name(key.into()))
-        .relative()
-        .flex()
-        .items_center()
-        .justify_center()
-        .flex_none()
-        .min_w(fu(28.))
-        .h(fu(28.))
-        .rounded(fu(6.))
-        .when(pressed, |d| d.bg(t.bg_pressed))
-        .when(hot && !pressed, |d| d.bg(t.bg_hover))
-        .when(disabled, |d| d.opacity(0.4))
-        .child(glyph(color))
-        .child(bounds_probe(bounds.clone()))
-        .when(!disabled, |d| {
-            let hover = hovered.clone();
-            let leave = press.clone();
-            let moved = press.clone();
-            let down = press.clone();
-            let tip_id = id.clone();
-            d.on_hover(move |h, _, cx| {
-                hover.update(cx, |s, cx| {
-                    *s = *h;
-                    cx.notify();
-                });
-                leave.update(cx, |p, _| p.hover(*h));
-                if !*h {
-                    super::swap::set_tooltip(&tip_id, false, cx);
-                }
-            })
-            .on_mouse_move(move |_, _, cx| moved.update(cx, |p, _| p.moved()))
-            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                // `nodrag`: the press is the tool's.
-                cx.stop_propagation();
-                down.update(cx, |p, _| p.press());
-            })
-            .active(|s| s.bg(t.bg_pressed))
-            .on_click({
-                let select_id = id.clone();
-                move |e, window, cx| {
-                    // The click still selects the view (React Flow's node click).
-                    actions.click_select(&select_id, &e.modifiers(), cx);
-                    on_click(bounds.get(), window, cx);
-                }
-            })
-            .tooltip(tip_over_page(&id, tip, press.clone()))
-        })
-        .when(disabled, |d| {
-            d.on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-        })
-        .into_any_element()
-}
-
-/// The tools, right-aligned: ⟳ ✎ ⌨ ⤢ ⋯ (VIEW-128…134).
-pub fn tools(
-    view: &BoardView,
-    board: &BoardCx,
-    ui: &Entity<CardUi>,
-    z: f32,
-    window: &mut Window,
-    cx: &mut App,
-) -> Vec<AnyElement> {
-    let id = view.id.clone();
-    let (refreshing, asking) = {
-        let u = ui.read(cx);
-        (u.refreshing, u.asking)
-    };
-    let mut out = Vec::new();
-    if can_refresh(view) {
-        let tip = if view.refresh.is_some() {
-            "Refresh: run its commands, and ask its brain for fresh data"
-        } else {
-            "Refresh: run its commands"
-        };
-        let (ui2, project) = (ui.clone(), board.project_id.to_string());
-        let view_id = id.clone();
-        let spin_key = format!("view-refresh-spin-{id}");
-        out.push(card_tool(
-            board,
-            &id,
-            "refresh",
-            move |c| {
-                let glyph = icon(Icon::RefreshCw, 14.0 * z, 2.0, c);
-                if refreshing {
-                    spinning_glyph(glyph, spin_key.clone())
-                } else {
-                    glyph.into_any_element()
-                }
-            },
-            tip.into(),
-            false,
-            refreshing,
-            move |_, _, cx| refresh(&ui2, &project, &view_id, cx),
-            window,
-            cx,
-        ));
-    }
-    let ask_ui = ui.clone();
-    out.push(card_tool(
-        board,
-        &id,
-        "change",
-        move |c| icon(Icon::PencilLine, 14.0 * z, 2.0, c).into_any_element(),
-        "Ask Claude to change this view".into(),
-        asking,
-        false,
-        move |_, _, cx| {
-            ask_ui.update(cx, |u, cx| {
-                u.asking = !u.asking;
-                if !u.asking {
-                    u.ask = None;
-                }
-                cx.notify();
-            });
-        },
-        window,
-        cx,
-    ));
-    let (actions, brain_id) = (board.actions.clone(), id.clone());
-    out.push(card_tool(
-        board,
-        &id,
-        "session",
-        move |c| icon(Icon::SquareTerminal, 14.0 * z, 2.0, c).into_any_element(),
-        "Open its brain, the Claude session that builds this view".into(),
-        false,
-        false,
-        move |_, _, cx| actions.open_view_session(&brain_id, cx),
-        window,
-        cx,
-    ));
-    let large_id = id.clone();
-    out.push(card_tool(
-        board,
-        &id,
-        "large",
-        move |c| icon(Icon::Maximize2, 14.0 * z, 2.0, c).into_any_element(),
-        "Open large".into(),
-        false,
-        view.version == 0,
-        move |_, window, cx| super::large::open(&large_id, window, cx),
-        window,
-        cx,
-    ));
-    let (actions, menu_id) = (board.actions.clone(), id.clone());
-    out.push(card_tool(
-        board,
-        &id,
-        "more",
-        move |c| more_icon(z, c).into_any_element(),
-        "More".into(),
-        false,
-        false,
-        move |b, _, cx| actions.view_menu(&menu_id, point(b.left(), b.bottom() + px(4.)), cx),
-        window,
-        cx,
-    ));
-    out
-}
-
-fn spinning_glyph(glyph: gpui::Svg, key: String) -> AnyElement {
-    glyph
-        .with_animation(
-            ElementId::Name(key.into()),
-            Animation::new(Duration::from_millis(900)).repeat(),
-            |svg, delta| svg.with_transformation(gpui::Transformation::rotate(gpui::percentage(delta))),
-        )
-        .into_any_element()
-}
-
 /// VIEW-129: runs the view's commands (and asks its brain, with a refresh);
-/// the first that failed shows on the card.
-fn refresh(ui: &Entity<CardUi>, project_id: &str, view_id: &str, cx: &mut App) {
+/// the first that failed shows on the view.
+pub fn refresh(ui: &Entity<CardUi>, project_id: &str, view_id: &str, cx: &mut App) {
     if project_id.is_empty() || ui.read(cx).refreshing {
         return;
     }
@@ -573,6 +357,8 @@ pub fn approvals(
             .max_h(relative(0.45))
             .px(fu(12.))
             .py(fu(10.))
+            // The panel's top corners: GPUI's overflow clip is square.
+            .rounded_t(fu(14.))
             .border_b(fu(0.5))
             .border_color(t.separator)
             .bg(mix(t.accent, 0.07, t.bg_elevated))

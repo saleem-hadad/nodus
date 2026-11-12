@@ -109,7 +109,7 @@ fn the_scheme_policy_and_empty_page_are_0_9_4s() {
 }
 
 #[test]
-fn the_guide_is_0_9_4s_with_powershell_on_windows() {
+fn the_guide_is_the_fixtures_with_powershell_on_windows() {
     let fixtures = fixtures();
     let (darwin, win32) = (
         fixtures["guide"]["darwin"].as_str().unwrap(),

@@ -141,9 +141,16 @@ impl PageWebview {
     /// Follows the card: `document` is the body on screen, `clip` what of it
     /// may show (the board's edges), `zoom` the board's zoom: the shell lays
     /// the page out at the body's size in flow units and scales it with a
-    /// CSS transform, as 0.9.4's board scaled its iframe. `radius` rounds the
-    /// bottom corners. `ui` is the window's UI zoom (View › Zoom In/Out).
-    pub fn place(&self, document: Bounds<Pixels>, clip: Bounds<Pixels>, zoom: f32, radius: f32, ui: f32) {
+    /// CSS transform, as 0.9.4's board scaled its iframe. `rounding` rounds
+    /// its corners. `ui` is the window's UI zoom (View › Zoom In/Out).
+    pub fn place(
+        &self,
+        document: Bounds<Pixels>,
+        clip: Bounds<Pixels>,
+        zoom: f32,
+        rounding: super::frames::Rounding,
+        ui: f32,
+    ) {
         let visible = document.intersect(&clip);
         let offscreen = visible.size.width < gpui::px(1.) || visible.size.height < gpui::px(1.);
         self.offscreen.set(offscreen);
@@ -166,12 +173,17 @@ impl PageWebview {
             if offscreen {
                 visible = Bounds::new(document.origin, gpui::size(Pixels::ZERO, Pixels::ZERO));
             }
-            self.container
-                .set_geometry(&self.webview.webview(), visible, document, radius * ui, f64::from(ui));
+            self.container.set_geometry(
+                &self.webview.webview(),
+                visible,
+                document,
+                rounding.scaled(ui),
+                f64::from(ui),
+            );
         }
         #[cfg(not(target_os = "macos"))]
         {
-            let _ = (radius, &mut visible);
+            let _ = (rounding, &mut visible);
             let _ = self.webview.set_visible(!offscreen && self.live.get());
             let _ = self.webview.set_bounds(wry::Rect {
                 position: wry::dpi::LogicalPosition::new(

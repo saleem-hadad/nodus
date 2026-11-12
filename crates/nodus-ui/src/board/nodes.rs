@@ -45,8 +45,7 @@ use std::rc::Rc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, Global, IntoElement, ParentElement, Pixels, Point, SharedString, Size, Styled, WeakEntity, Window,
-    div,
+    AnyElement, App, Global, IntoElement, ParentElement, Point, SharedString, Size, Styled, WeakEntity, Window, div,
 };
 use nodus_domain::{BoardNote, BoardShape, BoardView, NodePatch, Rect, SessionCard, ViewPatch};
 
@@ -310,17 +309,10 @@ impl BoardActions {
     }
 
     /// Commits a new title for a view (BOARD-151, as are `open_session`,
-    /// `open_view_session`, `start_note`, `archive`, `stop`, `edit_note` and
-    /// `view_menu`).
+    /// `open_view_session`, `start_note`, `archive`, `stop` and `edit_note`).
     pub fn rename_view(&self, view_id: &str, title: &str, cx: &mut App) {
         let (id, title) = (view_id.to_owned(), title.to_owned());
         self.with(cx, move |c, cx| c.rename_view(&id, &title, cx));
-    }
-
-    /// Shows a view's menu at a point in the window (BOARD-128).
-    pub fn view_menu(&self, view_id: &str, at: Point<Pixels>, cx: &mut App) {
-        let id = view_id.to_owned();
-        self.with(cx, move |c, cx| c.view_menu(&id, at, cx));
     }
 
     /// The archive search's query (BOARD-072).

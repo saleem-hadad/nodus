@@ -52,22 +52,26 @@ def DOCS(brain="working"):
 
 
 BUILD = AT(960, 180)  # the middle of Docs build status
-# Its tools, right-aligned in the 38-unit title bar: ⟳ ✎ ⌨ ⤢ ⋯, 28 units each, 1 apart.
-TOOL_Y = AT(0, 19)[1]
-def TOOL(i):  # 0 = ⋯ (rightmost)
-    right = AT(720 + 480 - 6, 0)[0]
-    return (right - (14 + i * 29) * 0.62, TOOL_Y)
+# Its caption, 28 units on the board above its page (1.0.12: no title bar).
+TOOL_Y = AT(0, 12)[1]
+
+
+# Its menu, opened by a right-click on the page, and its first rows (26px
+# apart, the first 19px below the pointer): Refresh, Ask Claude to change
+# it…, Open large, Open its session.
+def MENU(row):
+    return [M("right", *BUILD), {"cmd": "wait", "ms": 300},
+            M("click", BUILD[0] + 40, BUILD[1] + 19 + 26 * row)]
 
 
 SCENES = {
     "views-board": DOCS() + [AWAY],
     "views-brain-waiting": DOCS("waiting") + [AWAY],
-    "views-menu": DOCS() + [M("move", *BUILD), {"cmd": "wait", "ms": 200}, M("click", *TOOL(0))],
-    "views-large": DOCS() + [M("move", *BUILD), {"cmd": "wait", "ms": 200}, M("click", *TOOL(1)),
-                             {"cmd": "wait", "ms": 1500}],
-    "views-change": DOCS() + [M("move", *BUILD), {"cmd": "wait", "ms": 200}, M("click", *TOOL(3)),
-                              {"cmd": "wait", "ms": 300}, {"cmd": "type", "text": "Show the failed build’s error"},
-                              {"cmd": "wait", "ms": 600}],
+    "views-menu": DOCS() + [M("move", *BUILD), {"cmd": "wait", "ms": 200}, M("right", *BUILD)],
+    "views-large": DOCS() + MENU(2) + [{"cmd": "wait", "ms": 1500}],
+    "views-change": DOCS() + MENU(1) + [{"cmd": "wait", "ms": 300},
+                                        {"cmd": "type", "text": "Show the failed build’s error"},
+                                        {"cmd": "wait", "ms": 600}],
     # The pane menu snaps up from (1100, 720); New view here… is its fifth row.
     "views-new": DOCS() + [M("right", 1100, 720), {"cmd": "wait", "ms": 300}, M("click", 1150, 787),
                            {"cmd": "wait", "ms": 400}, {"cmd": "type", "text": "Open issues labelled docs, grouped by page"}],
@@ -201,13 +205,20 @@ SCENES["try-relay"] = DOCS() + [{"cmd": "wait", "ms": 1500}, {"cmd": "views"},
 
 
 # Interactions to look at (not 0.9.4 goldens).
-HEAD = (600, TOOL_Y)  # Docs build status's title bar, clear of its tools
+HEAD = (600, TOOL_Y)  # Docs build status's caption, right of its title
 CORNER = AT(1200, 360)  # its bottom-right corner
 SCENES["try-rename"] = DOCS() + [M("double", 530, TOOL_Y), {"cmd": "wait", "ms": 300},
                                  {"cmd": "key", "keystroke": "cmd-a"}, {"cmd": "type", "text": "Builds"},
                                  {"cmd": "key", "keystroke": "enter"}, {"cmd": "wait", "ms": 300}, AWAY]
-SCENES["try-refresh"] = DOCS() + [M("move", *BUILD), {"cmd": "wait", "ms": 200}, M("click", *TOOL(4)),
-                                  {"cmd": "wait", "ms": 2500}]
+SCENES["try-refresh"] = DOCS() + MENU(0) + [{"cmd": "wait", "ms": 2500}]
+# A right-click and a ⌃-click on the live page reach the board, which opens
+# the view's menu (run with VIEWS_LIVE=1).
+SCENES["try-right-click"] = DOCS() + [{"cmd": "wait", "ms": 1500},
+                                      {"cmd": "native-click", "x": BUILD[0], "y": BUILD[1], "button": "right"},
+                                      {"cmd": "wait", "ms": 600}]
+SCENES["try-control-click"] = DOCS() + [{"cmd": "wait", "ms": 1500},
+                                        {"cmd": "native-click", "x": BUILD[0], "y": BUILD[1], "button": "control"},
+                                        {"cmd": "wait", "ms": 600}]
 SCENES["try-resize"] = DOCS() + [M("click", *HEAD), {"cmd": "wait", "ms": 200}, M("down", *CORNER),
                                  M("drag", CORNER[0] + 40, CORNER[1] + 40), M("drag", CORNER[0] + 100, CORNER[1] + 100),
                                  {"cmd": "views"}, M("up", CORNER[0] + 100, CORNER[1] + 100), {"cmd": "wait", "ms": 800}]

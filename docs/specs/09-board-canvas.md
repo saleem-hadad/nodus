@@ -91,7 +91,7 @@ All values are from the installed React Flow + the props in `BoardView.tsx:2533-
 | Threshold | drag starts when the pointer has moved **> 1px** (screen, Euclidean) from pointer-down (`nodeDragThreshold = 1`). |
 | Click suppression | `nodeClickDistance = 0`: if the pointer moved at all (> 0px) between down and up on a draggable node, no click fires (no select-on-click, no open). Movement in (0, 1] px therefore yields neither click nor drag. |
 | Buttons | left only (`!event.button`). |
-| Handles | sections drag only by `.section-header` (44px strip), the archive only by `.archive-header` (52px strip), views only by `.view-head` (04); cards and notes anywhere except `nodrag` regions (10). |
+| Handles | sections drag only by `.section-header` (44px strip), the archive only by `.archive-header` (52px strip), views only by their caption `.view-head` (04); cards and notes anywhere except `nodrag` regions (10). |
 | Select on drag | starting a drag on an unselected selectable node selects it (replacing the selection unless multi-select held) before moving. Starting a drag on a non-selectable node (section, archive, pile top card) while no multi-select key is held **clears the whole selection**. |
 | What moves | the grabbed node plus every selected draggable node (pile cards and non-draggable nodes never). Positions = pointer − grab offset, unsnapped (`snapToGrid` off), unclamped. |
 | Auto-pan | as for the marquee: within 40px of an edge, up to 15px/frame, moving the dragged nodes with it. |

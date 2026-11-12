@@ -156,7 +156,7 @@ pub struct ArchiveStack {
 /// What the whole board tells its nodes: 0.9.4's `RenamingContext`,
 /// `ArchiveHotContext`, `SectionHotContext`, `SectionNamingContext`,
 /// `ArchiveStackContext`, the canvas's classes, and `BoardActions`.
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct BoardCx {
     pub project_id: SharedString,
     pub zoom: f32,
@@ -208,6 +208,13 @@ pub struct BoardPointer {
 pub struct BoardActions {
     pub(crate) canvas: WeakEntity<BoardCanvas>,
     pub(crate) title_pressed: Rc<Cell<bool>>,
+}
+
+/// The same board's actions (a node drawn with either draws the same).
+impl PartialEq for BoardActions {
+    fn eq(&self, other: &Self) -> bool {
+        self.canvas.entity_id() == other.canvas.entity_id() && Rc::ptr_eq(&self.title_pressed, &other.title_pressed)
+    }
 }
 
 impl BoardActions {

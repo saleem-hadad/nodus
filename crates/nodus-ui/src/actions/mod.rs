@@ -592,7 +592,7 @@ impl Render for ActionRail {
                     leave.update(cx, ActionRail::hide);
                 }
             })
-            .children(edge_status.map(|status| edge_mark(status, cx)));
+            .children(edge_status.map(|status| edge_mark(status, window, cx)));
 
         let hint = if shown {
             self.hint(&actions, viewport.width, window, cx)
@@ -1124,8 +1124,7 @@ fn dealt(window: &mut Window, cx: &mut App, key: gpui::ElementId, i: usize) -> f
 
 /// ACT-059: the 3×36 sliver on the edge, breathing (1.6 s, or 1.1 s red when
 /// a run waits on the user).
-fn edge_mark(status: SessionStatus, cx: &App) -> AnyElement {
-    use gpui::{Animation, AnimationExt as _};
+fn edge_mark(status: SessionStatus, window: &mut Window, cx: &mut App) -> AnyElement {
     let t = theme::tokens(cx);
     let (color, period) = if status == SessionStatus::Waiting {
         (t.status_waiting, 1100)
@@ -1143,14 +1142,8 @@ fn edge_mark(status: SessionStatus, cx: &App) -> AnyElement {
     if parity::frozen(cx) {
         return mark.into_any_element();
     }
-    mark.with_animation(
-        ("act-rail-mark", period),
-        Animation::new(Duration::from_millis(period)).repeat(),
-        |d, p| {
-            // `action-mark-breathe`: 0.45 at 50%, ease-in-out each way.
-            let half = if p < 0.5 { p * 2.0 } else { (1.0 - p) * 2.0 };
-            d.opacity(1.0 - 0.55 * motion::ease_in_out(half))
-        },
-    )
-    .into_any_element()
+    let p = crate::components::ambient::cycle(window, cx, ("act-rail-mark", period), Duration::from_millis(period));
+    // `action-mark-breathe`: 0.45 at 50%, ease-in-out each way.
+    let half = if p < 0.5 { p * 2.0 } else { (1.0 - p) * 2.0 };
+    mark.opacity(1.0 - 0.55 * motion::ease_in_out(half)).into_any_element()
 }

@@ -119,15 +119,13 @@ pub fn enter(
 }
 
 /// Where an infinite animation of `period` is (0…1, linear), started the
-/// first time `key` rendered; 0 in parity mode, where shots hold still.
+/// first time `key` rendered; 0 in parity mode, where shots hold still. It
+/// moves on the ambient clock, not every frame.
 pub fn cycle(window: &mut Window, cx: &mut App, key: impl Into<ElementId>, period: Duration) -> f32 {
-    if parity::frozen(cx) || cx.reduce_motion() || period.is_zero() {
+    if parity::frozen(cx) {
         return 0.0;
     }
-    let start = window.use_keyed_state(key, cx, |_, _| Instant::now());
-    let elapsed = start.read(cx).elapsed().as_secs_f32();
-    window.request_animation_frame();
-    (elapsed / period.as_secs_f32()).fract()
+    crate::components::ambient::cycle(window, cx, key, period)
 }
 
 /// A keyframe animation that defines only `50%`: how far toward the peak
@@ -152,12 +150,15 @@ pub fn tick(window: &mut Window, cx: &mut App, key: impl Into<ElementId>, every:
         return;
     }
     pending.update(cx, |p, _| *p = true);
+    // Its own view, not the whole window: the rest of the board keeps what
+    // it drew.
+    let view = window.current_view();
     window
         .spawn(cx, async move |cx| {
             cx.background_executor().timer(every).await;
-            let _ = cx.update(|window, cx| {
+            let _ = cx.update(|_, cx| {
                 pending.update(cx, |p, _| *p = false);
-                window.refresh();
+                cx.notify(view);
             });
         })
         .detach();

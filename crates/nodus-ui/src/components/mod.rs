@@ -2,6 +2,7 @@
 //! uses (spec 08: `.btn`, `.switch`, `.status-dot`, Modal, ContextMenu,
 //! ColorSwatches, SplitButton, FolderIcon, UsageStats, RunningCount).
 
+pub mod ambient;
 pub mod button;
 pub mod color_swatches;
 pub mod context_menu;

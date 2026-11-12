@@ -200,6 +200,8 @@ pub struct BoardCanvas {
     pub(crate) held: HashMap<String, Rect>,
     pub(crate) raised: HashSet<String>,
     pub(crate) glides: HashMap<String, Glide>,
+    /// Cards and notes, each its own cached view (`node_view`).
+    pub(crate) node_views: HashMap<String, Entity<super::node_view::NodeView>>,
 
     pub(crate) renaming: Option<String>,
     pub(crate) archive_hot: bool,
@@ -302,6 +304,7 @@ impl BoardCanvas {
             held: HashMap::new(),
             raised: HashSet::new(),
             glides: HashMap::new(),
+            node_views: HashMap::new(),
             renaming: None,
             archive_hot: false,
             hot_section: None,

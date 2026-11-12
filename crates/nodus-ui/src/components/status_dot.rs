@@ -4,12 +4,10 @@
 use std::time::Duration;
 
 use gpui::prelude::FluentBuilder as _;
-use gpui::{
-    Animation, AnimationExt as _, App, BoxShadow, ElementId, IntoElement, Pixels, RenderOnce, Rgba, Styled, Window,
-    div, px,
-};
+use gpui::{App, BoxShadow, ElementId, IntoElement, Pixels, RenderOnce, Rgba, Styled, Window, div, px};
 use nodus_domain::SessionStatus;
 
+use crate::components::ambient;
 use crate::parity;
 use crate::theme::motion;
 use crate::theme::tokens::{alpha, ring};
@@ -100,7 +98,7 @@ fn ring_shadow(color: Rgba, spread: f32, share: f32) -> BoxShadow {
 }
 
 impl RenderOnce for StatusDot {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let t = theme::tokens(cx);
         let color = t.status(self.status);
         let frozen = parity::frozen(cx);
@@ -115,48 +113,24 @@ impl RenderOnce for StatusDot {
             SessionStatus::Done => base.into_any_element(),
             SessionStatus::Working if self.still_working => base.into_any_element(),
             SessionStatus::Working => {
-                let (spread, share) = breathe_at(0.0, small);
-                let base = base.shadow(vec![ring_shadow(color, spread, share)]);
-                if frozen {
-                    return base.into_any_element();
-                }
-                base.with_animation(
-                    self.id,
-                    Animation::new(motion_duration(cx, Duration::from_millis(1600))).repeat(),
-                    move |d, t| {
-                        let (spread, share) = breathe_at(t, small);
-                        d.shadow(vec![ring_shadow(color, spread, share)])
-                    },
-                )
-                .into_any_element()
+                let phase = if frozen {
+                    0.0
+                } else {
+                    ambient::cycle(window, cx, self.id, Duration::from_millis(1600))
+                };
+                let (spread, share) = breathe_at(phase, small);
+                base.shadow(vec![ring_shadow(color, spread, share)]).into_any_element()
             }
             SessionStatus::Waiting => {
-                let (spread, share) = pulse_at(0.0);
-                let base = base.shadow(vec![ring_shadow(color, spread, share)]);
-                if frozen {
-                    return base.into_any_element();
-                }
-                base.with_animation(
-                    self.id,
-                    Animation::new(motion_duration(cx, Duration::from_millis(1100))).repeat(),
-                    move |d, t| {
-                        let (spread, share) = pulse_at(t);
-                        d.shadow(vec![ring_shadow(color, spread, share)])
-                    },
-                )
-                .into_any_element()
+                let phase = if frozen {
+                    0.0
+                } else {
+                    ambient::cycle(window, cx, self.id, Duration::from_millis(1100))
+                };
+                let (spread, share) = pulse_at(phase);
+                base.shadow(vec![ring_shadow(color, spread, share)]).into_any_element()
             }
         }
-    }
-}
-
-fn motion_duration(cx: &App, d: Duration) -> Duration {
-    // Reduced motion runs an infinite animation in 0.01ms: it shows its
-    // first frame and effectively stops.
-    if cx.reduce_motion() {
-        Duration::from_secs(3600)
-    } else {
-        d
     }
 }
 

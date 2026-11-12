@@ -49,7 +49,7 @@ define_class!(
     impl HostView {
         #[unsafe(method(hitTest:))]
         fn hit_test(&self, point: NSPoint) -> *mut NSView {
-            if self.ivars().passthrough.get() {
+            if self.ivars().passthrough.get() || secondary_click() {
                 return std::ptr::null_mut();
             }
             let edge = self.ivars().edge.get();
@@ -72,6 +72,31 @@ define_class!(
         }
     }
 );
+
+/// Whether AppKit is placing a right-click, or a ⌃-click (GPUI's right
+/// click): those are the board's, which opens the view's menu (VIEW-143), so
+/// the page never gets them.
+fn secondary_click() -> bool {
+    // NSEventTypeRightMouseDown, NSEventTypeLeftMouseDown; NSEventModifierFlagControl.
+    const RIGHT_DOWN: usize = 3;
+    const LEFT_DOWN: usize = 1;
+    const CONTROL: usize = 1 << 18;
+    // SAFETY: NSApplication's current event, on the main thread (hit tests
+    // run there); nil is checked before use.
+    unsafe {
+        let app: *mut AnyObject = msg_send![objc2::class!(NSApplication), sharedApplication];
+        if app.is_null() {
+            return false;
+        }
+        let event: *mut AnyObject = msg_send![app, currentEvent];
+        if event.is_null() {
+            return false;
+        }
+        let ty: usize = msg_send![event, type];
+        let flags: usize = msg_send![event, modifierFlags];
+        ty == RIGHT_DOWN || (ty == LEFT_DOWN && flags & CONTROL != 0)
+    }
+}
 
 /// A container view inside GPUI's content view holding one WKWebView: its
 /// frame is the visible part of the card's body, the webview's the whole
@@ -171,14 +196,14 @@ impl Container {
 
     /// `visible` and `document` in the window's points (from the top left),
     /// `ui` the points per GPUI px (the UI zoom) that the ink and the edge
-    /// are given in. `radius` rounds the document's bottom corners where
-    /// they're on screen.
+    /// are given in. `rounding` rounds the document's corners where they're
+    /// on screen.
     pub fn set_geometry(
         &self,
         child: &NSView,
         visible: Bounds<Pixels>,
         document: Bounds<Pixels>,
-        radius: f32,
+        rounding: super::frames::Rounding,
         ui: f64,
     ) {
         self.ui.set(ui);
@@ -215,19 +240,28 @@ impl Container {
         if self.ink_rect.get().is_some() {
             self.ink.place(self.ink_frame());
         }
-        // Round only the bottom corners that are on screen.
+        // Round only the corners that are on screen.
         let eps = gpui::px(0.5);
-        let bottom = (visible.bottom() - document.bottom()).abs() < eps;
+        let radius = rounding.radius;
+        let top = rounding.top && (visible.top() - document.top()).abs() < eps;
+        let bottom = rounding.bottom && (visible.bottom() - document.bottom()).abs() < eps;
         let left = (visible.left() - document.left()).abs() < eps;
         let right = (visible.right() - document.right()).abs() < eps;
         // CALayer corners in an unflipped layer: MinXMinY = 1 (bottom left),
-        // MaxXMinY = 2 (bottom right).
+        // MaxXMinY = 2 (bottom right), MinXMaxY = 4 (top left), MaxXMaxY = 8
+        // (top right).
         let mut mask: usize = 0;
-        if radius > 0.0 && bottom && left {
-            mask |= 1;
-        }
-        if radius > 0.0 && bottom && right {
-            mask |= 2;
+        if radius > 0.0 {
+            for (on, bit) in [
+                (bottom && left, 1),
+                (bottom && right, 2),
+                (top && left, 4),
+                (top && right, 8),
+            ] {
+                if on {
+                    mask |= bit;
+                }
+            }
         }
         // SAFETY: the container is layer-backed; both setters take scalars.
         unsafe {
@@ -420,11 +454,11 @@ pub fn responder_class(window: &Window) -> String {
         .map_or_else(|| "nil".into(), |r| r.class().name().to_string_lossy().into_owned())
 }
 
-/// Test driver: a left click at a point in the window through
-/// `-[NSWindow sendEvent:]`, so AppKit's own hit test picks the view (a
-/// page, or GPUI's). Runs off any GPUI update, on the main queue; never
-/// moves the user's pointer.
-pub fn native_click(window_number: isize, x: f64, y: f64) {
+/// Test driver: a left click (or a right click, or a ⌃-click) at a point in
+/// the window through `-[NSWindow sendEvent:]`, so AppKit's own hit test
+/// picks the view (a page, or GPUI's). Runs off any GPUI update, on the main
+/// queue; never moves the user's pointer.
+pub fn native_click(window_number: isize, x: f64, y: f64, right: bool, control: bool) {
     dispatch2::DispatchQueue::main().exec_async(move || {
         // SAFETY: NSApplication, NSWindow and NSEvent on the main thread;
         // every object is checked for nil before use.
@@ -440,23 +474,59 @@ pub fn native_click(window_number: isize, x: f64, y: f64) {
             }
             let frame: NSRect = msg_send![content, frame];
             let loc = NSPoint::new(x, frame.size.height - y);
-            for (ty, pressure) in [(1usize, 1.0f32), (2usize, 0.0f32)] {
+            // NSEventType{Left,Right}Mouse{Down,Up}; NSEventModifierFlagControl.
+            let (down, up) = if right { (3usize, 4usize) } else { (1usize, 2usize) };
+            let flags: usize = if control { 1 << 18 } else { 0 };
+            for (ty, pressure) in [(down, 1.0f32), (up, 0.0f32)] {
                 let ev: *mut AnyObject = msg_send![objc2::class!(NSEvent),
                     mouseEventWithType: ty,
                     location: loc,
-                    modifierFlags: 0usize,
+                    modifierFlags: flags,
                     timestamp: 0.0f64,
                     windowNumber: window_number,
                     context: std::ptr::null_mut::<AnyObject>(),
                     eventNumber: 0isize,
                     clickCount: 1isize,
                     pressure: pressure];
-                if !ev.is_null() {
+                if ev.is_null() {
+                    continue;
+                }
+                let ev = if right { right_button(ev) } else { ev };
+                if right || control {
+                    // Through the app's queue, as a real click comes: AppKit
+                    // makes it the current event, which the page's hit test
+                    // reads (`secondary_click`).
+                    let _: () = msg_send![app, postEvent: ev, atStart: Bool::NO];
+                } else {
                     let _: () = msg_send![w, sendEvent: ev];
                 }
             }
         }
     });
+}
+
+/// A right-mouse event as a mouse makes it: `mouseEventWithType:` leaves its
+/// button number 0, which GPUI reads as the left button.
+///
+/// # Safety
+/// `ev` is a live NSEvent; the one returned is autoreleased, or `ev` itself.
+unsafe fn right_button(ev: *mut AnyObject) -> *mut AnyObject {
+    unsafe extern "C" {
+        fn CGEventSetIntegerValueField(event: *mut std::ffi::c_void, field: u32, value: i64);
+    }
+    // kCGMouseEventButtonNumber; kCGMouseButtonRight.
+    const BUTTON_NUMBER: u32 = 3;
+    // SAFETY: the caller's live NSEvent; its CGEvent lives as long as it,
+    // and eventWithCGEvent: copies it.
+    unsafe {
+        let cg: *mut std::ffi::c_void = msg_send![ev, CGEvent];
+        if cg.is_null() {
+            return ev;
+        }
+        CGEventSetIntegerValueField(cg, BUTTON_NUMBER, 1);
+        let made: *mut AnyObject = msg_send![objc2::class!(NSEvent), eventWithCGEvent: cg];
+        if made.is_null() { ev } else { made }
+    }
 }
 
 /// Test driver: types `text` (lowercase letters and spaces) as AppKit

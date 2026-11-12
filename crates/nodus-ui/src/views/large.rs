@@ -55,7 +55,11 @@ fn render_parts(
         document,
         clip,
         zoom: 1.0,
-        radius: 18.0,
+        rounding: frames::Rounding {
+            radius: 18.0,
+            top: false,
+            bottom: true,
+        },
         forced: parity,
         passthrough: false,
         edge: 0.0,

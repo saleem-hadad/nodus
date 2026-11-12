@@ -79,7 +79,7 @@ pub struct Geometry {
     /// What of it may show.
     pub clip: Bounds<Pixels>,
     pub zoom: f32,
-    pub radius: f32,
+    pub rounding: Rounding,
     /// Its own reasons to be a snapshot: dragged, resized, an ink tool out,
     /// the marquee over it, parity shots.
     pub forced: bool,
@@ -87,6 +87,40 @@ pub struct Geometry {
     pub passthrough: bool,
     /// The resize handles' reach into the page.
     pub edge: f32,
+}
+
+/// Which of the page's corners round, and by how much (px): the top ones
+/// when nothing of the view sits above the page, the bottom ones when
+/// nothing sits below it.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Rounding {
+    pub radius: f32,
+    pub top: bool,
+    pub bottom: bool,
+}
+
+impl Rounding {
+    /// The corners as GPUI paints them.
+    pub fn corners(self) -> Corners<Pixels> {
+        let (t, b) = (
+            if self.top { px(self.radius) } else { Pixels::ZERO },
+            if self.bottom { px(self.radius) } else { Pixels::ZERO },
+        );
+        Corners {
+            top_left: t,
+            top_right: t,
+            bottom_right: b,
+            bottom_left: b,
+        }
+    }
+
+    /// At `scale` (the window's UI zoom).
+    pub fn scaled(self, scale: f32) -> Self {
+        Self {
+            radius: self.radius * scale,
+            ..self
+        }
+    }
 }
 
 /// Every frame, for the open board.
@@ -387,15 +421,8 @@ pub fn probe(
         move |bounds, hitbox, window, cx| {
             let g = geometry(bounds, window.content_mask().bounds);
             if let Some(image) = super::swap::placed(&view_id, slot, g, hitbox, window, cx) {
-                // `object-fit: fill`, the body's rounded bottom corners.
-                let r = px(g.radius);
-                let corners = Corners {
-                    top_left: Pixels::ZERO,
-                    top_right: Pixels::ZERO,
-                    bottom_right: r,
-                    bottom_left: r,
-                };
-                let _ = window.paint_image(bounds, bounds, corners, image, 0, false);
+                // `object-fit: fill`, with the page's rounded corners.
+                let _ = window.paint_image(bounds, bounds, g.rounding.corners(), image, 0, false);
             }
         },
     )

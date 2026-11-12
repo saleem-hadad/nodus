@@ -26,8 +26,8 @@ use crate::platform::Platform;
 const DRAG_THRESHOLD: f32 = 1.0;
 /// The archive frame's drag handle (`.archive-header`).
 pub(crate) const ARCHIVE_HEADER_H: f64 = 52.0;
-/// A view's drag handle (`.view-head`).
-pub(crate) const VIEW_HEAD_H: f64 = 38.0;
+/// A view's drag handle (`.view-head`): the caption above its page.
+pub(crate) const VIEW_HEAD_H: f64 = crate::views::card::CAPTION_H as f64;
 
 /// `multiSelectionKeyCode = ['Meta', 'Shift']`: one of them held alone.
 pub(crate) fn multi_select(m: &Modifiers) -> bool {

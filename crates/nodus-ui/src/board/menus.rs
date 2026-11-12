@@ -502,30 +502,42 @@ impl BoardCanvas {
         ]
     }
 
-    /// The view menu (BOARD-128).
+    /// The view menu (BOARD-128, VIEW-143): every action on a view, from a
+    /// right-click anywhere on it, its page included.
     fn view_menu_items(&self, view: &nodus_domain::BoardView, me: &WeakEntity<BoardCanvas>) -> Vec<MenuItem> {
         let can_refresh = view.refresh.is_some()
             || view
                 .commands
                 .as_ref()
                 .is_some_and(|cmds| cmds.iter().any(|c| c.approved.as_deref() == Some(c.run.as_str())));
-        let (refresh, open, rename, stop, delete) = (
-            view.id.clone(),
-            view.id.clone(),
-            view.id.clone(),
-            view.id.clone(),
-            view.id.clone(),
-        );
+        let id = || view.id.clone();
+        let (refresh, change, large, open, rename, stop, delete) = (id(), id(), id(), id(), id(), id(), id());
         let mut items = vec![
             disabled(
                 item(me, "Refresh", Icon::RefreshCw, move |c, cx| {
-                    c.refresh_view(&refresh, cx);
+                    // On the view, as its ⟳ did (VIEW-129); a toast otherwise.
+                    if !crate::views::card::refresh(&c.project_id, &refresh, cx) {
+                        c.refresh_view(&refresh, cx);
+                    }
                 }),
                 !can_refresh,
+            ),
+            disabled(
+                MenuItem::item("Ask Claude to change it…", Icon::Sparkles, move |_, cx| {
+                    crate::views::card::ask(&change, cx);
+                }),
+                self.project_id.is_empty(),
+            ),
+            disabled(
+                MenuItem::item("Open large", Icon::Maximize2, move |window, cx| {
+                    crate::views::large::open(&large, window, cx);
+                }),
+                view.version == 0,
             ),
             item(me, "Open its session", Icon::SquareTerminal, move |c, cx| {
                 c.open_view_session(open.clone(), cx);
             }),
+            MenuItem::Separator,
             item(me, "Rename", Icon::PencilLine, move |c, cx| {
                 c.set_renaming(Some(rename.clone()), cx);
             }),
@@ -544,19 +556,5 @@ impl BoardCanvas {
             .danger(),
         );
         items
-    }
-
-    /// A view's own menu button (BOARD-128).
-    pub fn view_menu(&mut self, view_id: &str, at: GPoint<Pixels>, cx: &mut Context<'_, Self>) {
-        let Some(view) = self
-            .board
-            .as_ref()
-            .and_then(|b| b.views.iter().find(|v| v.id == view_id).cloned())
-        else {
-            return;
-        };
-        let me = cx.entity().downgrade();
-        let items = self.view_menu_items(&view, &me);
-        self.open_menu(at, items, cx);
     }
 }

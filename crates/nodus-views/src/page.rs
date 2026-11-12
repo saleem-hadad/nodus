@@ -31,8 +31,8 @@ pub const VIEW_GUIDE: &str = concat!(
     include_str!("page/guide-2.txt")
 );
 
-/// The board's colours (tokens.css), light then dark. A view sits on a card,
-/// so its ground is the card's (VIEW-026).
+/// The board's colours (tokens.css), light then dark. A view's page is its
+/// panel on the board, so its ground is the panel's (VIEW-026).
 pub const THEME: &str = include_str!("page/theme.css");
 
 /// `window.nodus`, with `__BOOT__` where what the page starts with goes

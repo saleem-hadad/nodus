@@ -532,6 +532,11 @@ impl AppState {
         self.settings.as_ref().is_some_and(|s| s.pin_project_rail)
     }
 
+    /// A mouse's wheel zooms the board (on until the settings say otherwise).
+    pub fn wheel_zoom(&self) -> bool {
+        self.settings.as_ref().is_none_or(|s| s.wheel_zoom)
+    }
+
     /// The board's project for the title bar: the loaded board's, else the
     /// list's entry for the route (UI-092).
     pub fn route_project(&self) -> Option<&Project> {
@@ -574,6 +579,9 @@ pub fn merge_settings(settings: &mut AppSettings, patch: &SettingsPatch) {
     }
     if let Some(v) = patch.capture {
         settings.capture = v;
+    }
+    if let Some(v) = patch.wheel_zoom {
+        settings.wheel_zoom = v;
     }
 }
 

@@ -6,13 +6,14 @@
 //! update closures (S1, Gotchas).
 
 use std::path::PathBuf;
+use std::ptr::NonNull;
 
 use gpui::{Rgba, Window};
 use nodus_domain::ThemePreference;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Bool};
 use objc2::{class, msg_send};
-use objc2_app_kit::{NSView, NSWindow};
+use objc2_app_kit::{NSEvent, NSEventMask, NSView, NSWindow};
 use objc2_foundation::NSString;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
@@ -148,6 +149,22 @@ pub fn pick_folder(parent: Option<Retained<NSWindow>>, done: impl FnOnce(Option<
             }
         }
     }
+}
+
+/// Notes whether a mouse's wheel made each scroll the app gets, including
+/// the ones AppKit sends views' pages, which relay what they don't use to
+/// the board without saying (BOARD-179).
+pub fn watch_scroll_devices() {
+    let handler = block2::RcBlock::new(|event: NonNull<NSEvent>| -> *mut NSEvent {
+        // SAFETY: AppKit hands the monitor a live event.
+        let precise = unsafe { event.as_ref() }.hasPreciseScrollingDeltas();
+        crate::board::saw_scroll(!precise);
+        event.as_ptr()
+    });
+    // SAFETY: the handler gives back the event it was given, unchanged.
+    let monitor = unsafe { NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::ScrollWheel, &handler) };
+    // It watches for the app's life.
+    std::mem::forget(monitor);
 }
 
 /// `About Nodus`: the standard About panel (PLAT-058).

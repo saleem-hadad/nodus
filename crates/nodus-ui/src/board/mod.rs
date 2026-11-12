@@ -30,6 +30,8 @@ mod store;
 pub mod units;
 pub mod viewport;
 
+pub(crate) use input::saw_scroll;
+
 use std::rc::Rc;
 use std::time::Duration;
 

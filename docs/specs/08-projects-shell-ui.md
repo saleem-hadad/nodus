@@ -380,6 +380,7 @@ CSS keyword easings used in this domain: `ease` = `cubic-bezier(0.25, 0.1, 0.25,
 - **UI-127 Theme previews.** Each tile shows a miniature board window: `Light` the light tone, `Dark` the dark tone, `System` the light tone with the dark tone over its right part split on a diagonal; the previews keep their tone's colours whatever the app's theme.
 - **UI-128 Appearance hint.** Under the tiles: `System follows the appearance set in macOS.` on a Mac, `System follows the appearance set in Windows.` elsewhere.
 - **UI-129 Pin sidebar row.** `Always show the project sidebar` / `When off, point at the window’s left edge to slide it in.` with a switch bound to `settings.pinProjectRail`.
+- **UI-306 Mouse wheel row.** Group `Board`, after Appearance: `Zoom with the mouse wheel` / `Hold ⇧ or ⌘ while scrolling to pan instead. A trackpad still pans with two fingers and zooms with a pinch.` (`Shift or Ctrl` in place of `⇧ or ⌘` off a Mac) with a switch bound to `settings.wheelZoom` (09, BOARD-179). Its switch is the tab stop after the pin sidebar switch. Added after 1.0.7.
 - **UI-130 Focus row.** Group `Focus`: `Focus mode` / `Adds a Focus switch to the title bar that shows only the projects in focus. Right-click a project and choose Add to Focus.` with a switch bound to `settings.focusFeature`.
 - **UI-131 Capture switch.** Group `Floating capture`: `Double-tap ⇧ in any app to capture` / `A panel floats up over what you’re doing. Type or say what you want, and Claude works out whether it’s a new session, a note, a view or a reply to a session.` with a switch bound to `settings.capture`.
 - **UI-132 Capture state polling.** While Settings is open the capture shortcut state is read at once and then every 2000ms; it is read again at once when `settings.capture` changes.
@@ -1236,6 +1237,7 @@ Risks:
 - [x] UI-127 Theme previews
 - [x] UI-128 Appearance hint
 - [x] UI-129 Pin sidebar row
+- [x] UI-306 Mouse wheel row (added after 1.0.7)
 - [x] UI-130 Focus row
 - [x] UI-131 Capture switch
 - [x] UI-132 Capture state polling

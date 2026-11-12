@@ -32,6 +32,11 @@ pub struct AppSettings {
     pub focus_mode: bool,
     /// Double-tapping Shift in any app opens the floating capture panel.
     pub capture: bool,
+    /// A mouse's wheel zooms the board; a trackpad's scroll still pans.
+    /// Added after 1.0.7 and written only when off, so a file that never
+    /// turned it off is written back as it was read.
+    #[serde(default = "on", skip_serializing_if = "is_on")]
+    pub wheel_zoom: bool,
     /// Settings this version doesn't know, written back as they were read.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
@@ -49,9 +54,20 @@ impl Default for AppSettings {
             focus_feature: false,
             focus_mode: false,
             capture: true,
+            wheel_zoom: true,
             extra: Map::new(),
         }
     }
+}
+
+/// A switch that starts on, when the file doesn't have it.
+fn on() -> bool {
+    true
+}
+
+/// A switch left on, which isn't written.
+fn is_on(value: &bool) -> bool {
+    *value
 }
 
 /// The settings `settings.update` changes; the rest stay as they are.
@@ -74,4 +90,6 @@ pub struct SettingsPatch {
     pub focus_mode: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub capture: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wheel_zoom: Option<bool>,
 }

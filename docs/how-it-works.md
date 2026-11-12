@@ -249,7 +249,7 @@ Nodus runs on Windows 10 and 11, on x64 and Arm. The installer puts it in your u
 | | Change a view | Its ✎ button · talk to its brain with ⌨ |
 | | Rename a view · delete it | Double-click its title · ⌫ (asks first) |
 | | Fan out a card's agents | Point at the deck under it · click to pin |
-| | Pan · zoom | Two-finger scroll, Space-drag or middle-drag · pinch |
+| | Pan · zoom | Two-finger scroll, Space-drag or middle-drag · pinch, or the mouse wheel (⇧ or ⌘ with the wheel pans; Settings › Board turns this off) |
 | Terminal | Newline in Claude's prompt | ⇧Enter |
 | | Clear · copy · select all | ⌘K · ⌘C · ⌘A |
 | New session from context | Start | ⌘Enter |

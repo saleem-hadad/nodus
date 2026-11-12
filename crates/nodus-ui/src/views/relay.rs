@@ -362,7 +362,7 @@ fn replay_wheel(w: &PageWheel, origin: gpui::Point<gpui::Pixels>, zoom: f32, cx:
         touch_phase: TouchPhase::Moved,
         source: Default::default(),
     };
-    board.update(cx, |c, cx| c.wheel(&e, cx));
+    board.update(cx, |c, cx| c.page_wheel(&e, cx));
 }
 
 /// Posts a message to one frame.

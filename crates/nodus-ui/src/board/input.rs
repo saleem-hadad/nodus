@@ -3,6 +3,8 @@
 //! handlers and key listener (spec 09, Canvas mechanics; BOARD-038…BOARD-066,
 //! BOARD-074…BOARD-077, BOARD-156…BOARD-171).
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use gpui::{
     Context, KeyDownEvent, KeyUpEvent, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
     PinchEvent, Pixels, Point as GPoint, ScrollDelta, ScrollEvent, Window,
@@ -70,6 +72,17 @@ impl Cover {
     pub(crate) fn menu(self) -> bool {
         !(self.overlay || self.agents || self.diff)
     }
+}
+
+/// Whether the last scroll the app saw came from a mouse's wheel. A page's
+/// relayed wheel (VIEW-047) can't say, since WebKit reports every wheel in
+/// pixels.
+static LAST_NOTCHED: AtomicBool = AtomicBool::new(false);
+
+/// Notes what made a scroll the app saw: a mouse's wheel (`notched`), or a
+/// trackpad or Magic Mouse.
+pub(crate) fn saw_scroll(notched: bool) {
+    LAST_NOTCHED.store(notched, Ordering::Relaxed);
 }
 
 /// The DOM wheel delta (`deltaX`, `deltaY`, `deltaMode` 0) Chromium gave
@@ -1099,6 +1112,22 @@ impl BoardCanvas {
 
     /// A wheel event over the board (the pane or a node that didn't take it).
     pub(crate) fn wheel(&mut self, e: &ScrollEvent, cx: &mut Context<'_, Self>) {
+        let notched = matches!(e.delta, ScrollDelta::Lines(_));
+        saw_scroll(notched);
+        self.scroll(e, notched, cx);
+    }
+
+    /// A wheel a view's page didn't use (VIEW-047): a mouse's when the last
+    /// scroll the app saw was. A ctrl-wheel is a pinch there (a touchpad's
+    /// arrives that way off a Mac), so it zooms as one.
+    pub(crate) fn page_wheel(&mut self, e: &ScrollEvent, cx: &mut Context<'_, Self>) {
+        let notched = LAST_NOTCHED.load(Ordering::Relaxed) && !e.modifiers.control;
+        self.scroll(e, notched, cx);
+    }
+
+    /// `notched`: the scroll came from a mouse's wheel, not a trackpad or a
+    /// Magic Mouse.
+    fn scroll(&mut self, e: &ScrollEvent, notched: bool, cx: &mut Context<'_, Self>) {
         let platform = Platform::CURRENT;
         let (dx, dy) = dom_delta(e.delta);
         let m = e.modifiers;
@@ -1124,13 +1153,26 @@ impl BoardCanvas {
             }
         }
         let zoom_key = if platform.is_mac() { m.platform } else { m.control };
-        if m.control {
+        let wheel_zooms = notched && !self.space && self.state.read(cx).wheel_zoom();
+        let zoom = if wheel_zooms {
+            // A mouse's wheel zooms (BOARD-179); with Shift or the zoom key
+            // it pans. A Mac's ctrl-wheel stays a pinch.
+            (!zoom_key && !m.shift).then(|| {
+                if m.control {
+                    viewport::wheel_zoom_exponent(dy, 0, true)
+                } else {
+                    viewport::notch_zoom_exponent(dy, platform.is_mac())
+                }
+            })
+        } else if m.control {
             // A pinch arrives as a ctrl-wheel (×10 on a Mac).
-            let exp = viewport::wheel_zoom_exponent(dy, 0, platform.is_mac());
-            let vp = viewport::zoom_about(self.viewport, self.viewport.zoom * 2f64.powf(exp), px, py);
-            self.set_viewport(vp, Some(300), cx);
+            Some(viewport::wheel_zoom_exponent(dy, 0, platform.is_mac()))
         } else if zoom_key && !self.space {
-            let exp = viewport::wheel_zoom_exponent(dy, 0, false);
+            Some(viewport::wheel_zoom_exponent(dy, 0, false))
+        } else {
+            None
+        };
+        if let Some(exp) = zoom {
             let vp = viewport::zoom_about(self.viewport, self.viewport.zoom * 2f64.powf(exp), px, py);
             self.set_viewport(vp, Some(300), cx);
         } else {

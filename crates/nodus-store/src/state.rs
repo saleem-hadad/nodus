@@ -232,7 +232,7 @@ impl State {
 /// off unless they're `true`. Settings it doesn't know are kept, where the
 /// TypeScript drops them, so a newer version's survive.
 pub fn normalize_settings(raw: &Value) -> AppSettings {
-    const KNOWN: [&str; 8] = [
+    const KNOWN: [&str; 9] = [
         "theme",
         "autoUpdate",
         "notify",
@@ -241,6 +241,7 @@ pub fn normalize_settings(raw: &Value) -> AppSettings {
         "focusFeature",
         "focusMode",
         "capture",
+        "wheelZoom",
     ];
     let empty = Map::new();
     let raw = raw.as_object().unwrap_or(&empty);
@@ -259,6 +260,7 @@ pub fn normalize_settings(raw: &Value) -> AppSettings {
         focus_feature: only_if_true("focusFeature"),
         focus_mode: only_if_true("focusMode"),
         capture: unless_false("capture"),
+        wheel_zoom: unless_false("wheelZoom"),
         extra: raw
             .iter()
             .filter(|(key, _)| !KNOWN.contains(&key.as_str()))
@@ -312,12 +314,12 @@ mod tests {
     fn turns_switches_off_only_with_false_and_on_only_with_true() {
         let all = |value: &Value| {
             json!({
-                "autoUpdate": value, "notify": value, "dockBadge": value, "capture": value,
+                "autoUpdate": value, "notify": value, "dockBadge": value, "capture": value, "wheelZoom": value,
                 "pinProjectRail": value, "focusFeature": value, "focusMode": value
             })
         };
         let off = normalize_settings(&all(&json!(false)));
-        assert!(!off.auto_update && !off.notify && !off.dock_badge && !off.capture);
+        assert!(!off.auto_update && !off.notify && !off.dock_badge && !off.capture && !off.wheel_zoom);
         let on = normalize_settings(&all(&json!(true)));
         assert!(on.pin_project_rail && on.focus_feature && on.focus_mode);
         for value in [json!(0), json!(1), json!("false"), json!("true"), Value::Null] {

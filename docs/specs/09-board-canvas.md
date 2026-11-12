@@ -48,9 +48,10 @@ All values are from the installed React Flow + the props in `BoardView.tsx:2533-
 
 | Input | Condition | Effect |
 | --- | --- | --- |
-| Wheel / two-finger scroll | no zoom-activation key held, target not inside a `nowheel` region | pan: translate by `−deltaX/zoom × 0.5`, `−deltaY/zoom × 0.5` flow units (screen moves `0.5 × delta` px). `deltaMode === 1` (lines) multiplies deltas by 20. Off a Mac, Shift+wheel pans horizontally by deltaY (deltaY becomes deltaX, deltaY = 0). No inertia beyond what the OS sends. `preventDefault` on the event. |
+| Mouse wheel (BOARD-179) | `wheelZoom` on (the default), no Space, Shift or zoom-activation key held, target not inside a `nowheel` region | zoom about the pointer: `zoom' = zoom × 2^(−deltaY / n × 0.2)` with `n = 40` on macOS and `100` elsewhere (one notch's DOM pixels, so a notch zooms ≈ 15 % on both); clamped to [0.1, 2]. Instant. Ctrl on a Mac still takes the pinch formula. With Shift or the zoom-activation key held the wheel pans, as the row below. Added after 1.0.7. |
+| Wheel / two-finger scroll | no zoom-activation key held (a mouse wheel: any key but Space while `wheelZoom` is on, see the row above), target not inside a `nowheel` region | pan: translate by `−deltaX/zoom × 0.5`, `−deltaY/zoom × 0.5` flow units (screen moves `0.5 × delta` px). `deltaMode === 1` (lines) multiplies deltas by 20. Off a Mac, Shift+wheel pans horizontally by deltaY (deltaY becomes deltaX, deltaY = 0). No inertia beyond what the OS sends. `preventDefault` on the event. |
 | Pinch (wheel with `ctrlKey`) | `zoomOnPinch` true | zoom about the pointer: `zoom' = zoom × 2^(−deltaY × m × f)` with `m = 0.05` for line mode, `1` for page mode, `0.002` for pixel mode, and `f = 10` on macOS (ctrlKey + Mac) else `1`; clamped to [0.1, 2]. Instant (no transition). |
-| ⌘+wheel (Mac) / Ctrl+wheel (Windows/Linux) | zoom-activation key (`Meta` on Mac, `Control` elsewhere) held | the same zoom-about-pointer formula through d3's wheel zoom (Ctrl on Windows also counts as the pinch path; both give factor 1 off Mac). d3 ends the gesture 150ms after the last wheel event. |
+| ⌘+wheel (Mac) / Ctrl+wheel (Windows/Linux) | zoom-activation key (`Meta` on Mac, `Control` elsewhere) held; not a mouse wheel while `wheelZoom` is on | the same zoom-about-pointer formula through d3's wheel zoom (Ctrl on Windows also counts as the pinch path; both give factor 1 off Mac). d3 ends the gesture 150ms after the last wheel event. |
 | Wheel over a `nowheel` region | — | the board ignores it (the element scrolls natively); with ctrlKey the event is `preventDefault`ed so the page doesn't zoom, and the board does **not** zoom. |
 | Wheel over the open archive panel with overflow | panel/results carry `nowheel` | board handler scrolls the results instead (see Archive stack orchestration). |
 
@@ -180,6 +181,7 @@ Connections (`nodesConnectable={false}`), edge selection/focus, React Flow's del
 - **BOARD-035** `viewportCentre(size)` = the top-left that centres something of `size` in the visible flow rect; `(0, 0)` when the canvas element is not available.
 - **BOARD-036** Jumping to a search result for an active card: closes search, makes that card the only selected card (notes/views keep their selection), animates the viewport (320ms) to centre the card at zoom `max(current, 0.8)`, then flashes the card: two iterations of 800ms (ease cubic-bezier(0.2, 0.8, 0.2, 1)) of a box-shadow going from `0 0 0 2px <accent>, 0 0 0 2px <accent 55%>` to `0 0 0 2px <accent>, 0 0 0 18px <accent 0%>` (accent read from the card's computed `--accent`).
 - **BOARD-037** Jumping to a search result for an archived card closes search and opens its transcript preview at the match (`{query: trimmed search query, snippet}`); no viewport change. Unknown ids do nothing (search stays open).
+- **BOARD-179** A mouse's wheel zooms the board while the `wheelZoom` setting is on (Settings › Board, UI-306; on by default, 01). A scroll is a mouse wheel's when the platform reports it in lines (GPUI `ScrollDelta::Lines`: macOS `hasPreciseScrollingDeltas` false, Windows `WM_MOUSEWHEEL`); a trackpad, a Magic Mouse or a precision touchpad reports pixels and keeps panning, and pinch zooms as before. A view page's relayed wheel (VIEW-047) can't tell, since WebKit reports every wheel in pixels: it counts as a mouse wheel's when the last scroll the app saw was one (on macOS an AppKit local monitor sees every scroll, the pages' too; elsewhere only the board's), except a ctrl-wheel, which stays a pinch. Space held, Shift or the zoom-activation key (⌘ on a Mac, Ctrl elsewhere) make the wheel pan instead, Shift sideways. Wheel routing is otherwise unchanged: card terminals (XCARD-027), scrollable pages, a note being edited and the open archive's results still take the wheel first. Added after 1.0.7: 0.9.4 (React Flow) always panned on a wheel.
 
 ### Pointer: clicks and double-clicks
 
@@ -550,8 +552,9 @@ Guard **G** (applies unless noted): no terminal modal, transcript preview, agent
 | Edit › Search Sessions… (menu click; its ⌘K label isn't a registered accelerator) | same as above | close terminal modal + preview, open search |
 | Space (held alone) | focus not in an input | left-drag pans; wheel pans |
 | Shift or ⌘/Win (held) | — | click toggles selection; drag keeps selection when grabbing non-selectable nodes |
-| ⌘ (Mac) / Ctrl (others) held + wheel | — | zoom about pointer |
-| Wheel / two-finger scroll | not over `nowheel` | pan (0.5× delta) |
+| ⌘ (Mac) / Ctrl (others) held + wheel | — | zoom about pointer; a mouse wheel while `wheelZoom` is on pans |
+| Mouse wheel | `wheelZoom` on; not over `nowheel` | zoom about pointer (≈ 15 % a notch); Shift pans sideways (BOARD-179) |
+| Wheel / two-finger scroll | not over `nowheel`; a trackpad, or `wheelZoom` off | pan (0.5× delta) |
 | Pinch | — | zoom about pointer (×10 sensitivity on Mac) |
 | Middle-drag | anywhere | pan |
 | Left-click empty pane | — | deselect all, close menu |
@@ -803,6 +806,7 @@ New Rust tests to add in `nodus-board` (pure functions, ported from layout.ts/se
 - [x] BOARD-035 `viewportCentre(size)` = the top-left that centres something of `size` in the visible flow rect; `(0, 0)` when the…
 - [x] BOARD-036 Jumping to a search result for an active card: closes search, makes that card the only selected card (notes/views…
 - [x] BOARD-037 Jumping to a search result for an archived card closes search and opens its transcript preview at the match…
+- [x] BOARD-179 A mouse's wheel zooms about the pointer while `wheelZoom` is on; Shift or ⌘/Ctrl with it pans; trackpads keep panning (added after 1.0.7).
 - [x] BOARD-038 A click on the pad's top sheet peels a note beside the pad (see Notes) only when it is the first click of a sequence…
 - [x] BOARD-039 A click on a pile card (archived, not a result) opens the stack (clearing any dismissal); nothing else happens.
 - [x] BOARD-040 A click on a card with Shift, ⌘ (Meta) or Ctrl held only changes selection (React Flow rules above); it never opens…

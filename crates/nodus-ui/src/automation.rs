@@ -12,7 +12,8 @@
 //! {"cmd":"type","text":"Hello"}                    text typed into what has the keyboard
 //! {"cmd":"modifiers","meta":true}                   modifiers held (⌘ for the rail's numbers)
 //! {"cmd":"mouse","kind":"click","x":100,"y":200}    move | down | up | click | double | right
-//! {"cmd":"scroll","x":720,"y":400,"dy":-600}       a wheel scroll at a point
+//! {"cmd":"scroll","x":720,"y":400,"dy":-600}       a trackpad scroll at a point
+//! {"cmd":"scroll","x":720,"y":400,"dy":-1,"lines":true,"meta":true}   a mouse wheel's notch, ⌘ held
 //! {"cmd":"pinch","x":720,"y":400,"delta":0.02}     a trackpad pinch step (+ zooms in)
 //! {"cmd":"files","kind":"entered","x":700,"y":400,"paths":["/…"]}   entered | pending | submit | exited
 //! {"cmd":"emit","event":"updateStatus","payload":{"state":"ready","version":"0.9.5","current":"0.9.4"}}
@@ -354,13 +355,26 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
         }
         "scroll" => {
             let position = point(px(num(command, "x")), px(num(command, "y")));
-            let delta = point(px(num(command, "dx")), px(num(command, "dy")));
+            let (dx, dy) = (num(command, "dx"), num(command, "dy"));
+            let flag = |key: &str| command.get(key).and_then(Value::as_bool).unwrap_or(false);
+            let delta = if flag("lines") {
+                ScrollDelta::Lines(point(dx, dy))
+            } else {
+                ScrollDelta::Pixels(point(px(dx), px(dy)))
+            };
+            let modifiers = Modifiers {
+                platform: flag("meta"),
+                control: flag("ctrl"),
+                alt: flag("alt"),
+                shift: flag("shift"),
+                function: false,
+            };
             with_window(cx, move |window, cx| {
                 window.dispatch_event(
                     PlatformInput::Scroll(ScrollEvent {
                         position,
-                        delta: ScrollDelta::Pixels(delta),
-                        modifiers: Modifiers::default(),
+                        delta,
+                        modifiers,
                         touch_phase: TouchPhase::Moved,
                         source: Default::default(),
                     }),

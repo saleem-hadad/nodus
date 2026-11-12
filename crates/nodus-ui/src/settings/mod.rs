@@ -1,6 +1,6 @@
 //! The Settings dialog (`SettingsDialog.tsx`, `SettingsDialog.css`;
-//! UI-116…UI-152): Appearance, Focus, Floating capture, Notifications, Voice
-//! prompts and Updates.
+//! UI-116…UI-152): Appearance, Board, Focus, Floating capture, Notifications,
+//! Voice prompts and Updates.
 //!
 //! The voice key (05) and the update status (06) come from the core; the
 //! capture shortcut state (07) comes with the capture panel track, and until
@@ -68,6 +68,7 @@ struct Stops {
     close: FocusHandle,
     tile: FocusHandle,
     pin: FocusHandle,
+    wheel: FocusHandle,
     focus: FocusHandle,
     capture: FocusHandle,
     notify: FocusHandle,
@@ -121,6 +122,7 @@ impl SettingsDialog {
             close: cx.focus_handle(),
             tile: cx.focus_handle(),
             pin: cx.focus_handle(),
+            wheel: cx.focus_handle(),
             focus: cx.focus_handle(),
             capture: cx.focus_handle(),
             notify: cx.focus_handle(),
@@ -221,6 +223,7 @@ impl SettingsDialog {
             stops.extend([
                 self.stops.tile.clone(),
                 self.stops.pin.clone(),
+                self.stops.wheel.clone(),
                 self.stops.focus.clone(),
                 self.stops.capture.clone(),
             ]);
@@ -485,6 +488,31 @@ impl Render for SettingsDialog {
                 .into_any_element(),
             ],
             true,
+            t,
+        );
+
+        // BOARD-179: what a mouse's wheel does on the board.
+        let board = group(
+            "Board",
+            vec![
+                switch_row(
+                    "wheel-zoom",
+                    "Zoom with the mouse wheel",
+                    Some(format!(
+                        "Hold {} while scrolling to pan instead. A trackpad still pans with two fingers and zooms with a pinch.",
+                        if platform.is_mac() { "⇧ or ⌘" } else { "Shift or Ctrl" }
+                    )),
+                    s.wheel_zoom && loaded,
+                    &self.stops.wheel,
+                    |v| SettingsPatch {
+                        wheel_zoom: Some(v),
+                        ..SettingsPatch::default()
+                    },
+                    update.clone(),
+                )
+                .into_any_element(),
+            ],
+            false,
             t,
         );
 
@@ -821,6 +849,7 @@ impl Render for SettingsDialog {
                     .flex()
                     .flex_col()
                     .child(appearance)
+                    .child(board)
                     .child(focus)
                     .child(capture)
                     .child(notifications)

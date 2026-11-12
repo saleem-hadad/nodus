@@ -67,6 +67,15 @@ pub fn wheel_zoom_exponent(delta_y: f64, mode: u8, mac_pinch: bool) -> f64 {
     -delta_y * m * factor
 }
 
+/// The zoom factor's exponent of 2 for a mouse wheel's `delta_y` in DOM
+/// pixels (positive scrolls down, zooming out): ×2^0.2 (about 15 %) a notch,
+/// a notch being 40 px on a Mac and 100 px elsewhere (`dom_delta`), so a
+/// notch zooms alike on both.
+pub fn notch_zoom_exponent(delta_y: f64, mac: bool) -> f64 {
+    let notch = if mac { 40.0 } else { 100.0 };
+    -delta_y / notch * 0.2
+}
+
 /// The pan of a plain wheel (`createPanOnScrollHandler`, speed 0.5): the
 /// viewport moves by half the DOM delta, the other way. Lines count 20 px.
 /// Off a Mac, Shift turns vertical scrolling horizontal.
@@ -281,6 +290,14 @@ mod tests {
         assert!((wheel_zoom_exponent(-10.0, 0, false) - 0.02).abs() < 1e-12);
         assert!((wheel_zoom_exponent(3.0, 1, false) + 0.15).abs() < 1e-12);
         assert!((wheel_zoom_exponent(1.0, 2, false) + 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn zooms_a_mouse_wheels_notch_alike_on_both() {
+        // A notch up: 40 DOM px on a Mac, 100 elsewhere; ×2^0.2 either way.
+        assert!((notch_zoom_exponent(-40.0, true) - 0.2).abs() < 1e-12);
+        assert!((notch_zoom_exponent(-100.0, false) - 0.2).abs() < 1e-12);
+        assert!((notch_zoom_exponent(80.0, true) + 0.4).abs() < 1e-12);
     }
 
     #[test]

@@ -46,7 +46,7 @@ wry.workspace = true
 block2.workspace = true
 dispatch2.workspace = true
 objc2.workspace = true
-objc2-app-kit = { workspace = true, features = ["NSAlert", "NSAppearance", "NSApplication", "NSButton", "NSControl", "NSColor", "NSGraphics", "NSMenu", "NSOpenPanel", "NSPanel", "NSResponder", "NSSavePanel", "NSView", "NSWindow", "NSWorkspace", "objc2-core-foundation"] }
+objc2-app-kit = { workspace = true, features = ["NSAlert", "NSAppearance", "NSApplication", "NSButton", "NSControl", "NSColor", "NSEvent", "NSGraphics", "NSMenu", "NSOpenPanel", "NSPanel", "NSResponder", "NSSavePanel", "NSView", "NSWindow", "NSWorkspace", "block2", "objc2-core-foundation"] }
 objc2-foundation = { workspace = true, features = ["NSArray", "NSGeometry", "NSProcessInfo", "NSString", "NSURL"] }
 # Views' page snapshots, redrawn in sRGB (spec 04).
 objc2-core-foundation = { workspace = true, features = ["CFAttributedString", "CFCGTypes", "CFDictionary", "CFNumber", "CFString"] }

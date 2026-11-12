@@ -384,16 +384,20 @@ fn update_status_flattens_its_state() {
 fn settings() {
     let settings: AppSettings = round_trip(concat!(
         r#"{"theme":"dark","autoUpdate":true,"notify":false,"dockBadge":true,"pinProjectRail":true,"#,
-        r#""focusFeature":true,"focusMode":false,"capture":true}"#
+        r#""focusFeature":true,"focusMode":false,"capture":true,"wheelZoom":false}"#
     ));
     assert_eq!(settings.theme, ThemePreference::Dark);
+    assert!(!settings.wheel_zoom);
+    // On, the mouse wheel switch isn't written; a file without it reads it as on.
+    let written = json::to_string(&AppSettings::default()).unwrap();
     assert_eq!(
-        json::to_string(&AppSettings::default()).unwrap(),
+        written,
         concat!(
             r#"{"theme":"system","autoUpdate":true,"notify":true,"dockBadge":true,"pinProjectRail":false,"#,
             r#""focusFeature":false,"focusMode":false,"capture":true}"#
         )
     );
+    assert!(json::from_str::<AppSettings>(&written).unwrap().wheel_zoom);
     round_trip::<SettingsPatch>(r#"{"theme":"light","autoUpdate":false}"#);
 }
 

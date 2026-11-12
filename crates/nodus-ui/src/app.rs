@@ -86,6 +86,9 @@ pub fn run(user_data: PathBuf) -> anyhow::Result<()> {
         crate::components::tooltip::init(cx);
         cx.set_global(crate::board::CoreRuntime(core_runtime));
         crate::board::init(cx);
+        // BOARD-179: a mouse's wheel zooms, so the board learns which scrolls are one.
+        #[cfg(target_os = "macos")]
+        crate::mac::watch_scroll_devices();
         cx.set_global(window::Core(nodus.clone()));
         cx.set_global(Flags(flags));
         core_shell::serve(shell_requests, cx);

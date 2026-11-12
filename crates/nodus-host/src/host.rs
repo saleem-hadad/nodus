@@ -12,9 +12,10 @@ use indexmap::IndexMap;
 use nodus_domain::SessionStatus;
 use nodus_domain::js::utf16_len;
 use nodus_host_proto::{
-    HistoryEntry, HostMessage, HostSession, MessageReader, PROTOCOL, ReplayBuffer, StatusLine, Welcome, encode,
-    is_status_key,
+    ExecRequest, HistoryEntry, HostMessage, HostSession, MessageReader, PROTOCOL, ReplayBuffer, StatusLine, Welcome,
+    encode, is_status_key,
 };
+use nodus_platform::process::{Killer, Signal as ProcessSignal, SpawnError};
 use serde_json::{Map, Value};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{mpsc, oneshot, watch};
@@ -76,6 +77,9 @@ struct State {
     relays: HashMap<u64, Relay>,
     next_relay: u64,
     stopping: bool,
+    /// `exec`s running, by the app that asked and its request id (the
+    /// number's bits), to stop them when it gives up or goes (SRV-005).
+    execs: HashMap<(u64, u64), Killer>,
 }
 
 /// The session host, shared by every task that serves it.
@@ -161,6 +165,10 @@ impl Host {
             if let Some(timer) = s.kill_timer.take() {
                 timer.abort();
             }
+        }
+        // Each runs in a process group of its own, which outlives the host.
+        for (_, exec) in state.execs.drain() {
+            exec.kill(ProcessSignal::KILL);
         }
         state.clients.clear();
         state.relays.clear();
@@ -281,7 +289,7 @@ impl Host {
         }
         // HOST-039: a greeted connection that isn't an app may only stop us.
         if state.clients.contains_key(&id) || kind == Some("shutdown") {
-            self.handle(&mut state, writer, kind, msg);
+            self.handle(&mut state, id, writer, kind, msg);
         }
         true
     }
@@ -329,13 +337,27 @@ impl Host {
                 let _ = relay.settle.send(None);
             }
         }
+        // Nobody is left to read what its `exec`s print (SRV-005).
+        state.execs.retain(|(client, _), exec| {
+            if *client == id {
+                exec.kill(ProcessSignal::KILL);
+            }
+            *client != id
+        });
         // A probe from another host never says hello, and must not stop this one.
         if greeted {
             self.exit_if_idle(&state);
         }
     }
 
-    fn handle(&self, state: &mut State, writer: &mpsc::UnboundedSender<Line>, kind: Option<&str>, msg: &Value) {
+    fn handle(
+        &self,
+        state: &mut State,
+        client: u64,
+        writer: &mpsc::UnboundedSender<Line>,
+        kind: Option<&str>,
+        msg: &Value,
+    ) {
         let session = || msg.get("sessionId").and_then(Value::as_str);
         match kind {
             Some("spawn") => {
@@ -393,6 +415,16 @@ impl Host {
                     let _ = relay.settle.send(msg.get("reply").cloned());
                 }
             }
+            Some("exec") => self.exec(state, client, writer, msg),
+            Some("exec-cancel") => {
+                // SIGKILL, as a run the app drops is stopped; it still answers.
+                if let Some(id) = msg.get("id").and_then(Value::as_f64)
+                    && let Some(exec) = state.execs.remove(&(client, id.to_bits()))
+                {
+                    exec.kill(ProcessSignal::KILL);
+                }
+            }
+            Some("trust") => self.trust(writer, msg),
             // HOST-040: a second hello or an unknown type is ignored.
             _ => {}
         }
@@ -532,6 +564,72 @@ impl Host {
         tokio::spawn(async move {
             tokio::time::sleep(KILL_GRACE + Duration::from_millis(1000)).await;
             host.exit(0);
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Running processes for the app, and trusting folders
+
+    /// SRV-005: runs a process outside any terminal, as this host's user, and
+    /// answers the connection that asked with `exec-result` once it ends, or
+    /// at once when it can't start. Its output is kept to
+    /// [`crate::exec::OUTPUT_LIMIT`] a stream; its timeout and the app
+    /// giving up stop its whole process tree.
+    fn exec(&self, state: &mut State, client: u64, writer: &mpsc::UnboundedSender<Line>, msg: &Value) {
+        // Without an id there's nobody to answer.
+        let Some(id) = msg.get("id").and_then(Value::as_f64) else {
+            return;
+        };
+        let request = serde_json::from_value::<ExecRequest>(msg.clone())
+            .ok()
+            .and_then(|exec| crate::exec::run_request(&exec))
+            .ok_or_else(|| SpawnError::reported("", "An exec needs a program to run", None));
+        let child = match request.and_then(|request| request.command()?.spawn()) {
+            Ok(child) => child,
+            Err(err) => {
+                self.send_to(writer, &HostMessage::ExecResult(crate::exec::result(id, Err(&err))));
+                return;
+            }
+        };
+        let key = (client, id.to_bits());
+        state.execs.insert(key, child.killer());
+        let (host, writer) = (self.arc(), writer.clone());
+        tokio::spawn(async move {
+            let output = child.wait().await;
+            host.lock().execs.remove(&key);
+            host.send_to(&writer, &HostMessage::ExecResult(crate::exec::result(id, Ok(&output))));
+        });
+    }
+
+    /// SRV-126: marks a folder trusted in this host user's `.claude.json`,
+    /// off the host's lock, and answers `trusted`.
+    fn trust(&self, writer: &mpsc::UnboundedSender<Line>, msg: &Value) {
+        let Some(id) = msg.get("id").and_then(Value::as_f64) else {
+            return;
+        };
+        let path = msg.get("path").and_then(Value::as_str).unwrap_or_default().to_owned();
+        let (host, writer) = (self.arc(), writer.clone());
+        tokio::spawn(async move {
+            let trusted = tokio::task::spawn_blocking(move || {
+                if path.is_empty() {
+                    return Err("There’s no folder to trust".to_owned());
+                }
+                let config =
+                    crate::trust::claude_config().ok_or_else(|| "The session host has no home folder".to_owned())?;
+                crate::trust::trust_folder(&config, &path).map_err(|err| err.to_string())
+            })
+            .await
+            .unwrap_or_else(|err| Err(err.to_string()));
+            if let Err(err) = &trusted {
+                host.log.log(&["trust failed", err]);
+            }
+            host.send_to(
+                &writer,
+                &HostMessage::Trusted {
+                    id,
+                    error: trusted.err(),
+                },
+            );
         });
     }
 

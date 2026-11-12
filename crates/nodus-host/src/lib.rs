@@ -15,11 +15,13 @@
 //!
 //! Ports `src/main/host.ts`.
 
+pub mod exec;
 mod host;
 mod http;
 mod log;
 pub mod pty;
 pub mod transport;
+pub mod trust;
 
 use std::path::Path;
 use std::sync::Arc;

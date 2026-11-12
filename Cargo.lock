@@ -4267,6 +4267,7 @@ dependencies = [
  "libc",
  "nodus-domain",
  "nodus-host-proto",
+ "nodus-platform",
  "serde_json",
  "tempfile",
  "tokio",

@@ -8,6 +8,8 @@
 //! the host only forwards (hooks, MCP requests and replies, status lines)
 //! stay `serde_json::Value`, in their original key order.
 
+use std::collections::BTreeMap;
+
 use nodus_domain::SessionStatus;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -87,6 +89,90 @@ pub struct SpawnRequest {
 /// turns anything else into one as JavaScript would.
 pub type EnvMap = serde_json::Map<String, Value>;
 
+/// `exec`: run a process to its end, outside any terminal, and answer with
+/// what it printed (SRV-005). `nodus serve` runs every process this way, so
+/// it runs as the host's user. Not in 0.9.4; a host that doesn't know it
+/// ignores it (HOST-040), so it needs no new protocol, and only a runner
+/// whose host comes from its own binary sends it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecRequest {
+    /// The request id the `exec-result` carries back.
+    pub id: f64,
+    /// The program, a path or a name looked up on `env`'s PATH, then its
+    /// arguments.
+    pub argv: Vec<String>,
+    /// The folder it runs in; the host's own when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
+    /// Exactly this environment; the host's own when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env: Option<BTreeMap<String, String>>,
+    /// Written to stdin, which is then closed; closed from the start when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stdin: Option<String>,
+    /// The whole process tree is stopped after this long.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<f64>,
+    /// `argv[0]` stands for Claude Code's own program, which the host finds
+    /// on `env`'s PATH.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claude: Option<bool>,
+    /// What's kept of stdout: everything when absent, up to the host's cap.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stdout: Option<ExecCapture>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stderr: Option<ExecCapture>,
+    /// The signal a timeout or a `maxBuffer` sends, by number; SIGTERM when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kill_signal: Option<f64>,
+    /// Unix: in a session of its own (`setsid`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub new_session: Option<bool>,
+}
+
+/// What's kept of an `exec`'s output stream: `"all"`, `"ignore"`,
+/// `{"first": bytes}` (the rest read and dropped) or `{"maxBuffer": bytes}`
+/// (past it the process is stopped and the run fails, as Node's `maxBuffer`).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ExecCapture {
+    All,
+    Ignore,
+    First(f64),
+    MaxBuffer(f64),
+}
+
+/// `exec-result`: how an `exec` ended.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecResult {
+    pub id: f64,
+    /// Its exit code; absent when a signal stopped it or it never started.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<f64>,
+    /// The signal that stopped it, by number.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signal: Option<f64>,
+    /// What it printed, decoded as UTF-8 with bad bytes replaced.
+    #[serde(default)]
+    pub stdout: String,
+    #[serde(default)]
+    pub stderr: String,
+    /// The timeout stopped it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timed_out: Option<bool>,
+    /// `"stdout"` or `"stderr"`: the stream that passed its `maxBuffer` first.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overflow: Option<String>,
+    /// Why it never started, as the host's side words it (`spawn git ENOENT`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    /// The OS's error number for that, when there was one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub errno: Option<f64>,
+}
+
 /// App → host (`ClientMessage`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -111,6 +197,17 @@ pub enum ClientMessage {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reply: Option<Value>,
     },
+    /// Runs a process outside any terminal (SRV-005); answered by `exec-result`.
+    #[serde(rename = "exec")]
+    Exec(ExecRequest),
+    /// The app gave up on an `exec`: its process tree is stopped (SIGKILL).
+    #[serde(rename = "exec-cancel")]
+    ExecCancel { id: f64 },
+    /// Marks `path` as a folder the host's user trusts, in its `.claude.json`,
+    /// as accepting Claude Code's trust dialog there does (SRV-126);
+    /// answered by `trusted`. Not in 0.9.4, like `exec`.
+    #[serde(rename = "trust")]
+    Trust { id: f64, path: String },
 }
 
 /// The host's `welcome`, the first thing it says to a connection that said hello.
@@ -175,6 +272,16 @@ pub enum HostMessage {
         id: f64,
         session_id: String,
         message: Value,
+    },
+    /// How an `exec` ended, to the connection that sent it.
+    #[serde(rename = "exec-result")]
+    ExecResult(ExecResult),
+    /// A `trust` done, or why it wasn't, to the connection that sent it.
+    #[serde(rename = "trusted")]
+    Trusted {
+        id: f64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
     },
 }
 
@@ -340,6 +447,108 @@ mod tests {
                     message: json!({"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"list_notes","arguments":{}}}),
                 },
                 r#"{"type":"mcp","id":1,"sessionId":"s1","message":{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"list_notes","arguments":{}}}}"#,
+            ),
+        ];
+        for (msg, wire) in cases {
+            assert_eq!(encode(&msg), format!("{wire}\n"));
+            assert_eq!(decode::<HostMessage>(wire), msg, "{wire}");
+        }
+    }
+
+    /// SRV-005, SRV-126: the messages the Rust app added, which 0.9.4 never sends.
+    #[test]
+    fn writes_exec_and_trust_messages() {
+        let exec = ExecRequest {
+            id: 4.0,
+            argv: vec!["git".into(), "status".into()],
+            cwd: Some("/repo".into()),
+            env: Some(BTreeMap::from([("PATH".into(), "/usr/bin".into())])),
+            stdin: None,
+            timeout_ms: Some(30_000.0),
+            claude: None,
+            stdout: Some(ExecCapture::MaxBuffer(1024.0)),
+            stderr: Some(ExecCapture::First(0.0)),
+            kill_signal: Some(9.0),
+            new_session: Some(true),
+        };
+        let cases = [
+            (
+                ClientMessage::Exec(exec),
+                r#"{"type":"exec","id":4,"argv":["git","status"],"cwd":"/repo","env":{"PATH":"/usr/bin"},"timeoutMs":30000,"stdout":{"maxBuffer":1024},"stderr":{"first":0},"killSignal":9,"newSession":true}"#,
+            ),
+            (
+                ClientMessage::ExecCancel { id: 4.0 },
+                r#"{"type":"exec-cancel","id":4}"#,
+            ),
+            (
+                ClientMessage::Trust {
+                    id: 5.0,
+                    path: "/srv/repo".into(),
+                },
+                r#"{"type":"trust","id":5,"path":"/srv/repo"}"#,
+            ),
+        ];
+        for (msg, wire) in cases {
+            assert_eq!(encode(&msg), format!("{wire}\n"));
+            assert_eq!(decode::<ClientMessage>(wire), msg, "{wire}");
+        }
+        let bare: ClientMessage =
+            decode(r#"{"type":"exec","id":1,"argv":["claude","-p"],"claude":true,"stdout":"all","stderr":"ignore"}"#);
+        let ClientMessage::Exec(bare) = bare else {
+            panic!("an exec");
+        };
+        assert_eq!((bare.cwd, bare.env, bare.timeout_ms), (None, None, None));
+        assert_eq!(
+            (bare.stdout, bare.stderr),
+            (Some(ExecCapture::All), Some(ExecCapture::Ignore))
+        );
+
+        let cases = [
+            (
+                HostMessage::ExecResult(ExecResult {
+                    id: 4.0,
+                    code: Some(0.0),
+                    signal: None,
+                    stdout: "## main\n".into(),
+                    stderr: String::new(),
+                    timed_out: None,
+                    overflow: None,
+                    error: None,
+                    errno: None,
+                }),
+                r###"{"type":"exec-result","id":4,"code":0,"stdout":"## main\n","stderr":""}"###,
+            ),
+            (
+                HostMessage::ExecResult(ExecResult {
+                    id: 6.0,
+                    code: None,
+                    signal: Some(9.0),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                    timed_out: Some(true),
+                    overflow: Some("stdout".into()),
+                    error: None,
+                    errno: None,
+                }),
+                r#"{"type":"exec-result","id":6,"signal":9,"stdout":"","stderr":"","timedOut":true,"overflow":"stdout"}"#,
+            ),
+            (
+                HostMessage::ExecResult(ExecResult {
+                    id: 7.0,
+                    code: None,
+                    signal: None,
+                    stdout: String::new(),
+                    stderr: String::new(),
+                    timed_out: None,
+                    overflow: None,
+                    error: Some("spawn git ENOENT".into()),
+                    errno: Some(2.0),
+                }),
+                r#"{"type":"exec-result","id":7,"stdout":"","stderr":"","error":"spawn git ENOENT","errno":2}"#,
+            ),
+            (
+                HostMessage::Trusted { id: 5.0, error: None },
+                r#"{"type":"trusted","id":5}"#,
             ),
         ];
         for (msg, wire) in cases {

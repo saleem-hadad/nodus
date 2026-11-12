@@ -17,6 +17,7 @@ hyper-util.workspace = true
 indexmap.workspace = true
 nodus-domain.workspace = true
 nodus-host-proto.workspace = true
+nodus-platform.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["net"] }
 

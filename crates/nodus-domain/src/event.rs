@@ -2,9 +2,15 @@
 //! `src/shared/api.ts` (the `ev:*` IPC channels).
 //!
 //! Domain crates emit these into an [`EventSink`] they're handed, and
-//! `nodus-core` passes them on: to the window today, and to a remote client
-//! once Nodus can run headless.
+//! `nodus-core` passes them on: to the window, and from a server to the apps
+//! connected to it.
+//!
+//! On a server's WebSocket an event is `{ "ev": "<channel>", "p": {…} }`,
+//! named after its channel without `ev:` (SRV-023, SRV-024): the arguments
+//! 0.9.4 passed one by one are `p`'s fields (`{ "sessionId", "data" }`), and
+//! an event of one value has that value as `p`.
 
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
@@ -13,7 +19,13 @@ use crate::{
 };
 
 /// One event, named after its channel.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(
+    tag = "ev",
+    content = "p",
+    rename_all = "kebab-case",
+    rename_all_fields = "camelCase"
+)]
 pub enum Event {
     /// `ev:pty-data`: output from a session's terminal.
     PtyData { session_id: String, data: String },
@@ -61,11 +73,16 @@ pub enum Event {
 }
 
 /// `Partial<CaptureContext>`: the parts of the context that arrived late.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CaptureContextPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub app: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tab: Option<TabAttachment>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub clipboard: Option<ClipboardOffer>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub shortcut: Option<CaptureShortcut>,
 }
 
@@ -122,5 +139,89 @@ mod tests {
         let count = |_: Event| *seen.lock().unwrap() += 1;
         count.emit(Event::ProjectsChanged);
         assert_eq!(*seen.lock().unwrap(), 1);
+    }
+
+    /// SRV-023: `{ ev, p }`, named after the channel, with JavaScript's numbers.
+    #[test]
+    fn goes_over_the_wire_named_after_its_channel() {
+        let cases = [
+            (
+                Event::PtyData {
+                    session_id: "s1".into(),
+                    data: "hi\r\n".into(),
+                },
+                r#"{"ev":"pty-data","p":{"sessionId":"s1","data":"hi\r\n"}}"#,
+            ),
+            (
+                Event::PtyExit {
+                    session_id: "s1".into(),
+                    exit_code: -1,
+                },
+                r#"{"ev":"pty-exit","p":{"sessionId":"s1","exitCode":-1}}"#,
+            ),
+            (
+                Event::Status {
+                    session_id: "s1".into(),
+                    status: SessionStatus::Waiting,
+                    live: true,
+                },
+                r#"{"ev":"status","p":{"sessionId":"s1","status":"waiting","live":true}}"#,
+            ),
+            (
+                Event::AgentStatus {
+                    session_id: "s1".into(),
+                    agent_id: "a1".into(),
+                    status: SessionStatus::Done,
+                },
+                r#"{"ev":"agent-status","p":{"sessionId":"s1","agentId":"a1","status":"done"}}"#,
+            ),
+            (
+                Event::BoardChanged {
+                    project_id: "p1".into(),
+                },
+                r#"{"ev":"board-changed","p":{"projectId":"p1"}}"#,
+            ),
+            (Event::ProjectsChanged, r#"{"ev":"projects-changed"}"#),
+            (Event::Menu(MenuCommand::Settings), r#"{"ev":"menu","p":"settings"}"#),
+            (
+                Event::View {
+                    project_id: "p1".into(),
+                    view_id: "v1".into(),
+                    event: ViewEvent::State,
+                    payload: serde_json::json!({ "tab": 2 }),
+                },
+                r#"{"ev":"view","p":{"projectId":"p1","viewId":"v1","event":"state","payload":{"tab":2}}}"#,
+            ),
+            (
+                Event::CaptureContext(CaptureContextPatch {
+                    app: Some("Safari".into()),
+                    ..CaptureContextPatch::default()
+                }),
+                r#"{"ev":"capture-context","p":{"app":"Safari"}}"#,
+            ),
+        ];
+        for (event, wire) in cases {
+            assert_eq!(crate::json::to_string(&event).unwrap(), wire);
+            assert_eq!(crate::json::from_str::<Event>(wire).unwrap(), event);
+        }
+
+        let usage = Event::Usage {
+            session_id: "s1".into(),
+            usage: SessionUsage {
+                model: Some("Opus 5.5".into()),
+                context_percent: None,
+                context_tokens: None,
+                context_size: None,
+                cost_usd: Some(0.25),
+                duration_ms: None,
+                at: 1_700_000_000_000.0,
+            },
+        };
+        let wire = crate::json::to_string(&usage).unwrap();
+        assert_eq!(
+            wire,
+            r#"{"ev":"usage","p":{"sessionId":"s1","usage":{"model":"Opus 5.5","costUsd":0.25,"at":1700000000000}}}"#
+        );
+        assert_eq!(crate::json::from_str::<Event>(&wire).unwrap(), usage);
     }
 }

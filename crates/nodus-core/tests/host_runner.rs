@@ -11,7 +11,7 @@
 #![cfg(unix)]
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Child, Stdio};
 use std::time::Duration;
 

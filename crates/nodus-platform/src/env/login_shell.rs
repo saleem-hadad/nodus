@@ -8,7 +8,7 @@
 use std::path::Path;
 use std::time::Duration;
 
-use super::EnvMap;
+use super::{DEFAULT_SHELL, EnvMap};
 use crate::process::{Capture, Command, Signal};
 
 const MARK_START: &str = "__NODUS_ENV_START__";
@@ -27,7 +27,7 @@ pub(super) async fn capture() -> Option<EnvMap> {
     }
     let shell = std::env::var_os("SHELL")
         .filter(|shell| !shell.is_empty())
-        .unwrap_or_else(|| "/bin/zsh".into());
+        .unwrap_or_else(|| DEFAULT_SHELL.into());
     run(Path::new(&shell), TIMEOUT).await
 }
 

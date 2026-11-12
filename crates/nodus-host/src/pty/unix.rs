@@ -19,6 +19,12 @@ use tokio::sync::{mpsc, oneshot};
 
 use super::{DEFAULT_COLS, DEFAULT_ROWS, PtyEvent, PtyOptions, check_size, or_default, to_int32};
 
+// Where the calling thread's `errno` lives, as each libc names it.
+#[cfg(not(target_os = "macos"))]
+use libc::__errno_location as errno_location;
+#[cfg(target_os = "macos")]
+use libc::__error as errno_location;
+
 /// node-pty's `DESTROY_SOCKET_TIMEOUT_MS`: how long the exit waits for the
 /// terminal to close once the process is gone, as something it started may
 /// hold it open.
@@ -266,7 +272,7 @@ impl ChildPlan {
             }
             for candidate in &self.candidates {
                 libc::execve(candidate.as_ptr(), self.argv.as_ptr(), self.envp.as_ptr());
-                if *libc::__error() == libc::ENOEXEC {
+                if *errno_location() == libc::ENOEXEC {
                     self.sh_argv[1] = candidate.as_ptr();
                     libc::execve(self.sh.as_ptr(), self.sh_argv.as_ptr(), self.envp.as_ptr());
                 }
@@ -325,8 +331,10 @@ fn open_pty(mut winsize: libc::winsize) -> io::Result<(OwnedFd, OwnedFd)> {
     }
 
     let (mut master, mut slave) = (-1, -1);
+    // Raw pointers, as macOS takes the termios and winsize as `*mut` and Linux as `*const`.
+    let (term, winsize) = (&raw mut term, &raw mut winsize);
     // SAFETY: openpty writes two descriptors and reads the termios and winsize given.
-    if unsafe { libc::openpty(&mut master, &mut slave, std::ptr::null_mut(), &mut term, &mut winsize) } == -1 {
+    if unsafe { libc::openpty(&mut master, &mut slave, std::ptr::null_mut(), term, winsize) } == -1 {
         return Err(io::Error::last_os_error());
     }
     // SAFETY: openpty just opened both, and nothing else owns them.

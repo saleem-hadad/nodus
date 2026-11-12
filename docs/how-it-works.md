@@ -329,6 +329,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all
 ```
 
+On Linux only the core builds, which is every crate but the app's UI and binary: `cargo test --workspace --exclude nodus-ui --exclude nodus`. CI lints and tests it on Ubuntu.
+
 Before pushing, `sh scripts/prepush.sh` runs gitleaks on the new commits and refuses added lines with personal paths.
 
 `NODUS_USER_DATA=/some/dir cargo run -p nodus` keeps app state separate from your real board, which is useful for testing. It gets its own session host too.

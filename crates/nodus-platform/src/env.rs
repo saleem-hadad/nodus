@@ -65,6 +65,14 @@ const INSTALL: &str = if cfg!(windows) {
     "npm i -g @anthropic-ai/claude-code"
 };
 
+/// The shell when `SHELL` names none: macOS's default, or `sh` elsewhere, as
+/// a Linux machine may well have no zsh.
+const DEFAULT_SHELL: &str = if cfg!(target_os = "macos") {
+    "/bin/zsh"
+} else {
+    "/bin/sh"
+};
+
 impl Env {
     /// The app's own environment, as it is until [`Env::init`] has read the
     /// login shell's. No `claude` has been looked for yet.
@@ -156,7 +164,7 @@ impl Env {
             .or_else(|| std::env::var("SHELL").ok().filter(|s| !s.is_empty()));
         match shell {
             Some(shell) if Path::new(&shell).is_absolute() => shell.into(),
-            _ => "/bin/zsh".into(),
+            _ => DEFAULT_SHELL.into(),
         }
     }
 
@@ -397,7 +405,7 @@ mod tests {
             }
         );
         // Only an absolute path will do.
-        assert_eq!(env(&[("SHELL", "fish")]).user_shell(), PathBuf::from("/bin/zsh"));
+        assert_eq!(env(&[("SHELL", "fish")]).user_shell(), PathBuf::from(DEFAULT_SHELL));
         assert_eq!(zsh.git_bash(), None);
     }
 

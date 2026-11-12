@@ -367,30 +367,31 @@ CSS keyword easings used in this domain: `ease` = `cubic-bezier(0.25, 0.1, 0.25,
 ### Settings dialog
 
 - **UI-116 Opening.** Settings opens from the app menu's Settings… (⌘, / Ctrl+,) on any route.
-- **UI-117 Dialog frame.** Settings is a 440px-wide Modal with a fixed header and a body that scrolls when the window is too short.
+- **UI-117 Dialog frame.** Settings is a 680×540px Modal (never taller than the window less 48px): a 188px sidebar on `--bg-sunken` with the title `Settings` over the sections `Appearance`, `Board`, `Capture & Voice`, `Notifications`, `Updates`, and beside it the section on show, under a fixed header (the section's name and Close) in a body that scrolls when it doesn't fit. A section's rows sit in boxes (`--bg-sunken`, 0.5px `--border`, radius 10) with a hairline between rows; a group's label, when it has one, sits above its box. Changed after 1.0.10: it was one 440px column of every group.
+- **UI-307 Sections.** Clicking a section in the sidebar shows it, scrolled to its top; the selected one has `--bg-selected` and an `--accent` icon. Settings opens at the section shown last (Appearance the first time), at Capture & Voice for the `voice-settings` menu command (a voice prompt found no key: the mic's Settings, CAP-159) and at Updates for `update-settings` (Check for Updates…, UPD-079); either switches an open dialog to its section. A 7px dot follows a section's name while something waits there: `--accent` on Updates when an update is ready, `--status-waiting` on Capture & Voice while the capture shortcut needs Accessibility (UI-133).
 - **UI-118 Reload on open.** Opening Settings re-reads the settings from the core.
 - **UI-119 Focus in and back.** Opening Settings moves keyboard focus into the dialog (the panel itself, with no ring); closing it returns focus to whatever had it before (often a terminal).
 - **UI-120 Keys stay inside.** No key pressed while focus is in Settings reaches the grid's or board's shortcuts or the rail's ⌘ numbers.
 - **UI-121 Escape closes Settings.** Escape pressed with focus inside Settings closes it.
 - **UI-122 Backdrop closes Settings.** Pressing on the dimmed backdrop outside the panel closes Settings.
-- **UI-123 Tab stays inside.** Tab from the last tab stop goes to the first; Shift+Tab from the first (or from the panel itself) goes to the last. Tab stops are the dialog's enabled buttons and inputs in document order, counting only the checked theme radio.
+- **UI-123 Tab stays inside.** Tab from the last tab stop goes to the first; Shift+Tab from the first (or from the panel itself) goes to the last. Tab stops are, in order, the sidebar's selected section (↑/↓ there move to the section above or below), Close, then the shown section's enabled buttons and inputs, counting only the checked theme radio. The dialog binds Tab and Shift+Tab under its own key context, so the window root's tab order never takes them out of it.
 - **UI-124 Disabled until loaded.** Theme tiles and every switch are disabled until settings are loaded.
 - **UI-125 Theme tiles.** Appearance shows three tiles `System`, `Light`, `Dark`; clicking a tile (preview or name) selects it and sets `settings.theme`; Left/Right/Up/Down arrows move the choice between tiles when one has focus.
 - **UI-126 Theme tile states.** The selected tile's preview has a 2px `--bg-elevated` gap ring plus 2px `--accent` ring and its name is `--text-primary` weight 500; a hovered unselected tile's shadow grows to `--shadow-md`; a keyboard-focused tile shows a 2px `--focus-ring` outline 5px outside its preview.
 - **UI-127 Theme previews.** Each tile shows a miniature board window: `Light` the light tone, `Dark` the dark tone, `System` the light tone with the dark tone over its right part split on a diagonal; the previews keep their tone's colours whatever the app's theme.
 - **UI-128 Appearance hint.** Under the tiles: `System follows the appearance set in macOS.` on a Mac, `System follows the appearance set in Windows.` elsewhere.
 - **UI-129 Pin sidebar row.** `Always show the project sidebar` / `When off, point at the window’s left edge to slide it in.` with a switch bound to `settings.pinProjectRail`.
-- **UI-306 Mouse wheel row.** Group `Board`, after Appearance: `Zoom with the mouse wheel` / `Hold ⇧ or ⌘ while scrolling to pan instead. A trackpad still pans with two fingers and zooms with a pinch.` (`Shift or Ctrl` in place of `⇧ or ⌘` off a Mac) with a switch bound to `settings.wheelZoom` (09, BOARD-179). Its switch is the tab stop after the pin sidebar switch. Added after 1.0.7.
-- **UI-130 Focus row.** Group `Focus`: `Focus mode` / `Adds a Focus switch to the title bar that shows only the projects in focus. Right-click a project and choose Add to Focus.` with a switch bound to `settings.focusFeature`.
-- **UI-131 Capture switch.** Group `Floating capture`: `Double-tap ⇧ in any app to capture` / `A panel floats up over what you’re doing. Type or say what you want, and Claude works out whether it’s a new session, a note, a view or a reply to a session.` with a switch bound to `settings.capture`.
+- **UI-306 Mouse wheel row.** Section `Board`, first: `Zoom with the mouse wheel` / `Hold ⇧ or ⌘ while scrolling to pan instead. A trackpad still pans with two fingers and zooms with a pinch.` (`Shift or Ctrl` in place of `⇧ or ⌘` off a Mac) with a switch bound to `settings.wheelZoom` (09, BOARD-179). Added after 1.0.7.
+- **UI-130 Focus row.** Section `Board`, after the mouse wheel: `Focus mode` / `Adds a Focus switch to the title bar that shows only the projects in focus. Right-click a project and choose Add to Focus.` with a switch bound to `settings.focusFeature`.
+- **UI-131 Capture switch.** Section `Capture & Voice`, group `Floating capture`: `Double-tap ⇧ in any app to capture` / `A panel floats up over what you’re doing. Type or say what you want, and Claude works out whether it’s a new session, a note, a view or a reply to a session.` with a switch bound to `settings.capture`.
 - **UI-132 Capture state polling.** While Settings is open the capture shortcut state is read at once and then every 2000ms; it is read again at once when `settings.capture` changes.
 - **UI-133 Accessibility row.** When the shortcut state is `needs-permission` a row shows `Allow Nodus in Accessibility` / `macOS lets an app hear a key pressed in other apps only with this permission. Click Allow… and turn Nodus on in Privacy & Security › Accessibility. Already on there? It was given to another copy of Nodus: Allow… clears it so macOS asks again.` with a primary `Allow…` button that asks the core to request the permission (07) and shows the state it returns.
 - **UI-134 Unavailable row.** When the shortcut state is `unavailable` a hint-only row shows `The double tap couldn’t start on this computer. File › Capture… still opens the panel.`
 - **UI-135 Try row.** When `settings.capture` is on a row shows the hint `Ready. File › Capture… opens it too.` (the `Ready. ` prefix only when the state is `ready`, else `File › Capture… opens it too.`) and a `Try It` button that opens the capture panel (07).
-- **UI-136 Notify row.** Group `Notifications`: `Notify me when a session needs me or finishes` / `Only while Nodus is in the background. Click one to open its card.` bound to `settings.notify`.
+- **UI-136 Notify row.** Section `Notifications`: `Notify me when a session needs me or finishes` / `Only while Nodus is in the background. Click one to open its card.` bound to `settings.notify`.
 - **UI-137 Dock badge row.** On a Mac only: `Count sessions that need me on the Dock icon` (no hint) bound to `settings.dockBadge`.
 - **UI-138 Whole row toggles.** Clicking anywhere on a switch row (title or hint text) toggles its switch; rows with buttons (Allow…, Try It, Check Now, Restart to Update) and hint-only rows do not toggle anything.
-- **UI-139 Key field loading.** Group `Voice prompts`: the password field (masked) is disabled until the key source is known.
+- **UI-139 Key field loading.** Section `Capture & Voice`, group `Voice prompts`: the password field (masked) is disabled until the key source is known.
 - **UI-140 Key placeholder.** The field's placeholder is `Replace the saved xAI API key` when a key is saved in Settings, else `xAI API key`.
 - **UI-141 Save enabled.** `Save` is enabled only when the field holds non-whitespace text.
 - **UI-142 Save key.** Clicking Save or pressing Enter in the field (with non-whitespace text) clears any error, saves the key (the core trims it), updates the source, empties the field and keeps focus in the field.
@@ -398,7 +399,7 @@ CSS keyword easings used in this domain: `ease` = `cubic-bezier(0.25, 0.1, 0.25,
 - **UI-144 Remove key.** `Remove` deletes the saved key and updates the source (to shell or none).
 - **UI-145 Key error.** A failed save shows the error message (without any IPC prefix) in `--status-waiting` below the hints, until the next save attempt.
 - **UI-146 Key privacy hint.** `Recordings are sent to xAI to be turned into text.` always shows under the source hint.
-- **UI-147 Version row.** Group `Updates`: the first row's title is `Nodus <current version>` (just `Nodus` before the status arrives) with the status text (UI-148) as its hint when there is one.
+- **UI-147 Version row.** Section `Updates`: the first row's title is `Nodus <current version>` (just `Nodus` before the status arrives) with the status text (UI-148) as its hint when there is one.
 - **UI-148 Update status text.** off → the reason given by the updater; idle → none; checking → `Checking for updates…`; latest → `You’re up to date.`; downloading → `Downloading version <v>… <percent>%`; ready → `Version <v> is ready to install.`; error → the error message.
 - **UI-149 Update button in Settings.** State `ready` → primary `Restart to Update` (installs); state `off` → no button; otherwise `Check Now` (checks now), disabled before the status arrives and while checking or downloading.
 - **UI-150 Auto-update row.** Unless the state is `off`: `Download updates automatically` / `They install when you quit Nodus. Sessions keep running.` (Mac) or `They install when you choose Restart to Update, which stops the sessions.` (elsewhere), bound to `settings.autoUpdate`.
@@ -686,12 +687,12 @@ Voice key form:
 
 Copy, in order (verbatim, see also UI-128…UI-151):
 
-1. `Appearance` — tiles `System` / `Light` / `Dark`; hint `System follows the appearance set in macOS.` (Mac) / `System follows the appearance set in Windows.`; row `Always show the project sidebar` / `When off, point at the window’s left edge to slide it in.`
-2. `Focus` — row `Focus mode` / `Adds a Focus switch to the title bar that shows only the projects in focus. Right-click a project and choose Add to Focus.`
-3. `Floating capture` — row `Double-tap ⇧ in any app to capture` / `A panel floats up over what you’re doing. Type or say what you want, and Claude works out whether it’s a new session, a note, a view or a reply to a session.`; conditional rows `Allow Nodus in Accessibility` / `macOS lets an app hear a key pressed in other apps only with this permission. Click Allow… and turn Nodus on in Privacy & Security › Accessibility. Already on there? It was given to another copy of Nodus: Allow… clears it so macOS asks again.` + `Allow…`; `The double tap couldn’t start on this computer. File › Capture… still opens the panel.`; `Ready. File › Capture… opens it too.` + `Try It`.
+1. `Appearance` — group `Theme`: tiles `System` / `Light` / `Dark`; hint `System follows the appearance set in macOS.` (Mac) / `System follows the appearance set in Windows.`; group `Sidebar`: row `Always show the project sidebar` / `When off, point at the window’s left edge to slide it in.`
+2. `Board` — rows `Zoom with the mouse wheel` (UI-306) and `Focus mode` / `Adds a Focus switch to the title bar that shows only the projects in focus. Right-click a project and choose Add to Focus.`
+3. `Capture & Voice` — group `Floating capture`: row `Double-tap ⇧ in any app to capture` / `A panel floats up over what you’re doing. Type or say what you want, and Claude works out whether it’s a new session, a note, a view or a reply to a session.`; conditional rows `Allow Nodus in Accessibility` / `macOS lets an app hear a key pressed in other apps only with this permission. Click Allow… and turn Nodus on in Privacy & Security › Accessibility. Already on there? It was given to another copy of Nodus: Allow… clears it so macOS asks again.` + `Allow…`; `The double tap couldn’t start on this computer. File › Capture… still opens the panel.`; `Ready. File › Capture… opens it too.` + `Try It`.
+   Group `Voice prompts`: field (`xAI API key` / `Replace the saved xAI API key`) + `Save`; hint per source; `Recordings are sent to xAI to be turned into text.`; error line.
 4. `Notifications` — `Notify me when a session needs me or finishes` / `Only while Nodus is in the background. Click one to open its card.`; Mac: `Count sessions that need me on the Dock icon`.
-5. `Voice prompts` — field (`xAI API key` / `Replace the saved xAI API key`) + `Save`; hint per source; `Recordings are sent to xAI to be turned into text.`; error line.
-6. `Updates` — `Nodus <version>` + status hint + `Check Now` / `Restart to Update`; `Download updates automatically` + platform hint; error: `You can also download the latest version yourself.`
+5. `Updates` — `Nodus <version>` + status hint + `Check Now` / `Restart to Update`; `Download updates automatically` + platform hint; error: `You can also download the latest version yourself.`
 
 ### Modal
 
@@ -951,6 +952,7 @@ Remove confirmation:
 | Title bar | click Focus label or switch | toggle focus mode | UI-097 |
 | Settings | Esc | close | UI-121 |
 | Settings | Tab / ⇧Tab | cycle inside the dialog | UI-123 |
+| Settings | ↑ / ↓ on the focused sidebar | the section above / below | UI-123, UI-307 |
 | Settings | arrows on a focused theme tile | change theme | UI-125 |
 | Settings | Space on a focused switch; click anywhere on a switch row | toggle | UI-018, UI-138 |
 | Settings | Enter in the key field | save key (if non-blank) | UI-142 |

@@ -70,11 +70,13 @@ fn mics(cx: &mut App) -> (VoiceSlot, tokio::sync::mpsc::UnboundedSender<()>) {
     (slot, settings)
 }
 
-/// Opens the Settings dialog in the main window.
+/// Opens the Settings dialog in the main window, at the voice key.
 fn open_settings(cx: &mut App) {
     if let Some(shell) = crate::shell::window::main_shell(cx) {
         let state = shell.read(cx).state.clone();
-        state.update(cx, crate::state::AppState::open_settings);
+        state.update(cx, |s, cx| {
+            s.open_settings_at(crate::settings::Section::CaptureVoice, cx);
+        });
     }
 }
 

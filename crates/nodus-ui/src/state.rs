@@ -14,6 +14,8 @@ use nodus_domain::{
     ProjectPatch, ProjectStats, SettingsPatch, UpdateStatus,
 };
 
+use crate::settings::Section as SettingsSection;
+
 /// Where the window is.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Route {
@@ -70,6 +72,8 @@ pub struct AppState {
     pub selection: Vec<String>,
 
     pub settings_open: bool,
+    /// The Settings section on show; it stays for the next opening.
+    pub settings_section: SettingsSection,
     /// Help › Report a Problem…'s dialog is up (RPT-001).
     pub report_open: bool,
     /// None until loaded.
@@ -123,6 +127,7 @@ impl AppState {
             agent_view: None,
             selection: Vec::new(),
             settings_open: false,
+            settings_section: SettingsSection::default(),
             report_open: false,
             settings: None,
             open_request: None,
@@ -187,6 +192,8 @@ impl AppState {
     pub fn on_menu(&mut self, command: MenuCommand, cx: &mut Context<'_, Self>) {
         match command {
             MenuCommand::Settings => self.open_settings(cx),
+            MenuCommand::VoiceSettings => self.open_settings_at(SettingsSection::CaptureVoice, cx),
+            MenuCommand::UpdateSettings => self.open_settings_at(SettingsSection::Updates, cx),
             MenuCommand::ReportProblem => self.open_report(cx),
             MenuCommand::Close => self.close_top_layer(cx),
             MenuCommand::NewProject => self.add_project(None, false, cx),
@@ -312,6 +319,12 @@ impl AppState {
     pub fn open_settings(&mut self, cx: &mut Context<'_, Self>) {
         self.settings_open = true;
         cx.notify();
+    }
+
+    /// Settings, open at `section` (or switched to it, if open).
+    pub fn open_settings_at(&mut self, section: SettingsSection, cx: &mut Context<'_, Self>) {
+        self.settings_section = section;
+        self.open_settings(cx);
     }
 
     pub fn close_settings(&mut self, cx: &mut Context<'_, Self>) {

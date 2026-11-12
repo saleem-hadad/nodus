@@ -1,5 +1,6 @@
 # Checks every pull request, and every push to main: formatting, lints and
-# tests of the Cargo workspace, on macOS and Windows. Packaging is checked by
+# tests of the Cargo workspace, on macOS and Windows, and lints and tests of
+# the core (everything but the GPUI app) on Linux. Packaging is checked by
 # package.yml.
 name: CI
 
@@ -54,3 +55,22 @@ jobs:
         env:
           EFFECTS_SECONDS: "4"
           EFFECTS_STRICT: "1"
+
+  # The core on Linux, where a headless server runs it: every crate but the
+  # app's UI and binary, which ship only for macOS and Windows. The tests
+  # include nodus-core's headless.rs, the whole core with a real session host.
+  # Nothing to install: ring's C builds with the runner's gcc, and the tests
+  # need only git, sh and the usual tools, which the runner has.
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      - run: cargo clippy --workspace --exclude nodus-ui --exclude nodus --all-targets -- -D warnings
+      - run: cargo test --workspace --exclude nodus-ui --exclude nodus

@@ -297,7 +297,7 @@ It owns the native application menu on macOS, and the same menu as a popup from 
 ### Login-shell environment and the `claude` binary
 
 - **PLAT-096** Until the capture finishes, the base environment is the app's own process environment, string values only. On Windows, every key whose upper case is `PATH` is folded into a single `PATH` key: the first one found wins, later ones are dropped. Elsewhere keys are kept as they are.
-- **PLAT-097** macOS (all non-Windows): the login-shell capture runs `$SHELL` (the app's own `SHELL`, or `/bin/zsh` if empty) with args `-ilc` and the script
+- **PLAT-097** macOS (all non-Windows): the login-shell capture runs `$SHELL` (the app's own `SHELL`, or `/bin/zsh` if empty; `/bin/sh` on Linux, where 0.9.4 also said `/bin/zsh`) with args `-ilc` and the script
   `printf '%s' '__NODUS_ENV_START__'; env -0; printf '%s' '__NODUS_ENV_END__'`.
   It runs with the app's environment, a 10 000 ms timeout and an 8 MiB output cap. The exit code and errors are ignored (interactive shells may print noise or exit non-zero).
 
@@ -325,7 +325,7 @@ It owns the native application menu on macOS, and the same menu as a popup from 
 - **PLAT-108** `envVar(name)` returns the **unstripped** base env value, for example `XAI_API_KEY` (05) or `CLAUDE_CODE_GIT_BASH_PATH`.
 - **PLAT-109** `userShell()`:
   - Windows: `pwsh.exe` found on PATH, else `<SystemRoot>\System32\WindowsPowerShell\v1.0\powershell.exe`, where SystemRoot is `SystemRoot`, then `SYSTEMROOT`, then `C:\Windows`.
-  - macOS: base `SHELL`, else the app's `SHELL`. It is used only if it is an absolute path, else `/bin/zsh`.
+  - macOS: base `SHELL`, else the app's `SHELL`. It is used only if it is an absolute path, else `/bin/zsh`. Linux falls back to `/bin/sh` instead, since zsh often isn't installed there (0.9.4 said `/bin/zsh`).
 - **PLAT-110** `terminalShell()` returns `{ file: userShell(), args }` with args `['-l']` (a login shell, as Terminal.app starts one) or `['-NoLogo']` on Windows.
 - **PLAT-111** `shellCommand(run)`:
   - macOS: `{ userShell(), ['-c', run] }`.

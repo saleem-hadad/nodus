@@ -1,0 +1,31 @@
+[package]
+name = "nodus-wire"
+description = "What a Nodus server and the apps connected to it say over its WebSocket: the frames, the calls a server answers, and the events"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+# A client over the frames, on tokio: for the app's own client, the server's
+# command line and tests. The frames themselves need none of it.
+client = ["dep:futures-util", "dep:tokio", "dep:tokio-tungstenite"]
+
+[dependencies]
+nodus-domain.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+futures-util = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true, features = ["net", "sync", "time"] }
+tokio-tungstenite = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "net", "rt", "rt-multi-thread"] }
+
+[lints]
+workspace = true

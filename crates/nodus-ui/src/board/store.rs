@@ -482,6 +482,88 @@ impl AppState {
         .detach();
     }
 
+    /// Shapes, new or changed: on the board at once, then saved (SHAPE-030).
+    pub fn save_shapes(&mut self, shapes: Vec<nodus_domain::BoardShape>, cx: &mut Context<'_, Self>) {
+        let Some(board) = self.board.as_mut() else { return };
+        if shapes.is_empty() {
+            return;
+        }
+        for shape in &shapes {
+            match board.shapes.iter_mut().find(|s| s.id == shape.id) {
+                Some(existing) => *existing = shape.clone(),
+                None => board.shapes.push(shape.clone()),
+            }
+        }
+        let project_id = board.project.id.clone();
+        cx.notify();
+        let nodus = self.nodus.clone();
+        let rt = crate::board::core_rt(cx);
+        cx.spawn(async move |_, _| {
+            crate::board::on_core(
+                &rt,
+                async move { nodus.board().save_shapes(&project_id, &shapes).await },
+            )
+            .await;
+        })
+        .detach();
+    }
+
+    /// Shapes off the board, and the links they held.
+    pub fn remove_shapes(&mut self, ids: Vec<String>, cx: &mut Context<'_, Self>) {
+        let Some(board) = self.board.as_mut() else { return };
+        if ids.is_empty() {
+            return;
+        }
+        board.shapes.retain(|s| !ids.contains(&s.id));
+        board.links.retain(|l| !ids.iter().any(|id| l.touches(id)));
+        let project_id = board.project.id.clone();
+        cx.notify();
+        let nodus = self.nodus.clone();
+        let rt = crate::board::core_rt(cx);
+        cx.spawn(async move |_, _| {
+            crate::board::on_core(&rt, async move { nodus.board().remove_shapes(&project_id, &ids).await }).await;
+        })
+        .detach();
+    }
+
+    /// Links, new or changed.
+    pub fn save_links(&mut self, links: Vec<nodus_domain::BoardLink>, cx: &mut Context<'_, Self>) {
+        let Some(board) = self.board.as_mut() else { return };
+        if links.is_empty() {
+            return;
+        }
+        for link in &links {
+            match board.links.iter_mut().find(|l| l.id == link.id) {
+                Some(existing) => *existing = link.clone(),
+                None => board.links.push(link.clone()),
+            }
+        }
+        let project_id = board.project.id.clone();
+        cx.notify();
+        let nodus = self.nodus.clone();
+        let rt = crate::board::core_rt(cx);
+        cx.spawn(async move |_, _| {
+            crate::board::on_core(&rt, async move { nodus.board().save_links(&project_id, &links).await }).await;
+        })
+        .detach();
+    }
+
+    pub fn remove_links(&mut self, ids: Vec<String>, cx: &mut Context<'_, Self>) {
+        let Some(board) = self.board.as_mut() else { return };
+        if ids.is_empty() {
+            return;
+        }
+        board.links.retain(|l| !ids.contains(&l.id));
+        let project_id = board.project.id.clone();
+        cx.notify();
+        let nodus = self.nodus.clone();
+        let rt = crate::board::core_rt(cx);
+        cx.spawn(async move |_, _| {
+            crate::board::on_core(&rt, async move { nodus.board().remove_links(&project_id, &ids).await }).await;
+        })
+        .detach();
+    }
+
     /// `setSelection`: the selected session cards (BOARD-…, store sync).
     pub fn set_selection(&mut self, ids: Vec<String>, cx: &mut Context<'_, Self>) {
         if self.selection != ids {

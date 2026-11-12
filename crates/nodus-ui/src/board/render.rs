@@ -22,8 +22,8 @@ use super::edges;
 use super::hud::rgba_mix;
 use super::layout::{note_pad_rect, pad_sheet_spot};
 use super::nodes::{
-    ArchiveNode, BoardCx, CardNode, NodeRenderers, NodeState, NoteNode, PadNode, StackPlace, StackStyle, ViewNode,
-    renderers,
+    ArchiveNode, BoardCx, CardNode, NodeRenderers, NodeState, NoteNode, PadNode, ShapeNode, StackPlace, StackStyle,
+    ViewNode, renderers,
 };
 use super::scene::{FlowNode, NodeKind, paint_order};
 use super::section::SectionProps;
@@ -77,6 +77,8 @@ impl BoardCanvas {
                 }
             }
             NodeKind::Pad | NodeKind::View { .. } => Motion::None,
+            // SHAPE-010: as notes, so ⌘Z and a session's moves glide.
+            NodeKind::Shape { .. } => Motion::Position(420, 0, motion::ease_out),
         }
     }
 
@@ -236,6 +238,20 @@ impl BoardCanvas {
                         matched: matched.as_deref(),
                         stickers: &stickers,
                         stack: *stack,
+                    },
+                    board,
+                    window,
+                    cx,
+                )
+            }
+            NodeKind::Shape { index } => {
+                let shape = &snapshot.shapes[*index];
+                let image = shape.image.as_deref().and_then(|name| self.image_path(name, cx));
+                renderers.shape(
+                    ShapeNode {
+                        node: state,
+                        shape,
+                        image,
                     },
                     board,
                     window,
@@ -652,6 +668,9 @@ impl Render for BoardCanvas {
         }
         self.init_viewport(cx);
         self.take_open_request(cx);
+        if let Some(id) = self.pending_link_label.take() {
+            self.ink_open_link_label(id, window, cx);
+        }
 
         let board_cx = self.board_cx(cx);
         let renderers = renderers(cx);
@@ -777,6 +796,19 @@ impl Render for BoardCanvas {
         let ink_input = self.render_ink_input(cx);
         let ink_layer = self.render_ink_layer(window, cx);
         let ink_hitbox = self.render_ink_hitbox(cx);
+        // SHAPE-008: pictures dropped from Finder go up where they land,
+        // over the nodes too (which hide the board's own box from a drop).
+        let drop_layer = div()
+            .id("board-drop")
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full()
+            .on_drop::<gpui::ExternalPaths>(cx.listener(|this, paths: &gpui::ExternalPaths, window, cx| {
+                let at = window.mouse_position();
+                let at = this.bounds.contains(&at).then(|| this.to_flow(at));
+                this.add_images(paths.paths().to_vec(), at, cx);
+            }));
         let ink_dock = self.render_ink_dock(window, cx);
         let bubble = self.render_bubble(window, cx);
         // Spec 04: views' webviews kept in step, their large window and the New view dialog.
@@ -829,6 +861,7 @@ impl Render for BoardCanvas {
             .children(selection)
             .children(marquee)
             .child(ink_hitbox)
+            .child(drop_layer)
             .children(hint)
             .child(ink_dock)
             .child(pill)

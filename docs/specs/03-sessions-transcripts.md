@@ -440,7 +440,7 @@ New session:
 
 ```
 <claude> --session-id <uuid> [--name <title>] --permission-mode <auto|acceptEdits>
-         [--mcp-config <BOARD_MCP_CONFIG> --allowedTools <rule1> … <rule12>]
+         [--mcp-config <BOARD_MCP_CONFIG> --allowedTools <rule1> … <rule16>]
          [<extra args>]
          --settings <hookSettings()>
          [-- <first prompt>]
@@ -454,11 +454,12 @@ Resumed session: same with `--resume <uuid>` instead of `--session-id <uuid>`, a
 {"mcpServers":{"nodus":{"type":"http","url":"http://127.0.0.1:${NODUS_PORT}/mcp","headers":{"Authorization":"Bearer ${NODUS_TOKEN}","X-Nodus-Session":"${NODUS_SESSION}"}}}}
 ```
 
-`--allowedTools` is followed by 12 separate arguments, in this order:
+`--allowedTools` is followed by 16 separate arguments, in this order (0.9.4 has 12, without the four drawing tools added since, spec 04 TOOL-101):
 
 ```
 mcp__nodus__create_note mcp__nodus__update_note mcp__nodus__list_notes mcp__nodus__list_projects
-mcp__nodus__create_project mcp__nodus__archive_self mcp__nodus__create_view mcp__nodus__update_view
+mcp__nodus__create_project mcp__nodus__archive_self mcp__nodus__list_board mcp__nodus__draw_on_board
+mcp__nodus__update_drawing mcp__nodus__erase_from_board mcp__nodus__create_view mcp__nodus__update_view
 mcp__nodus__get_view mcp__nodus__list_views mcp__nodus__list_sessions mcp__nodus__archive_sessions
 ```
 

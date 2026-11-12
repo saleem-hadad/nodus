@@ -1,5 +1,7 @@
 //! What the ink does: changes and their history, tools, colours, labels.
 
+use nodus_board::drawing::{Change, Step};
+
 use super::*;
 
 impl BoardCanvas {
@@ -25,8 +27,31 @@ impl BoardCanvas {
     /// A change ⌘Z can take back (`commit`).
     pub(crate) fn ink_commit(&mut self, next: Vec<InkStroke>, cx: &mut Context<'_, Self>) {
         let current = self.ink_strokes();
-        self.overlays.ink.history.commit(current);
+        self.overlays.ink.history.commit(Some(current), Change::default());
         self.set_ink(next, cx);
+    }
+
+    /// The ink and the shapes and links changed in one go (the eraser):
+    /// one step back.
+    pub(crate) fn ink_commit_with(&mut self, next: Vec<InkStroke>, change: Change, cx: &mut Context<'_, Self>) {
+        let current = self.ink_strokes();
+        let ink_changed = next != current;
+        let out = change.outcome();
+        self.overlays.ink.history.commit(ink_changed.then_some(current), change);
+        if ink_changed {
+            self.set_ink(next, cx);
+        }
+        self.apply_outcome(out, cx);
+    }
+
+    /// A step back or forward: its ink, then its shapes and links.
+    fn apply_step(&mut self, step: Step, cx: &mut Context<'_, Self>) {
+        if let Some(ink) = step.ink {
+            self.set_ink(ink, cx);
+        }
+        if !step.change.is_empty() {
+            self.apply_outcome(step.change.outcome(), cx);
+        }
     }
 
     // ---- the keys and the dock --------------------------------------------------------
@@ -42,13 +67,29 @@ impl BoardCanvas {
         if tool != InkTool::Mic {
             self.voice_cancel(cx);
         }
+        self.ink_finish_link_label(None, cx);
+        if self.overlays.ink.picker.is_some_and(|p| p != tool) {
+            self.overlays.ink.picker = None;
+        }
         self.overlays.ink.tool = tool;
         if tool != InkTool::Select {
             self.overlays.ink.selected = None;
+            self.overlays.ink.link = None;
             // INKUI-017: switching away from the pointer drops the move cursor.
             self.overlays.ink.hover = false;
         }
         cx.notify();
+    }
+
+    /// SHAPE-003: the Shape and Sticker buttons take up their tool with its
+    /// picker out, and a second press puts the picker away.
+    pub(crate) fn ink_dock_press(&mut self, tool: InkTool, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let again = self.overlays.ink.tool == tool;
+        self.ink_set_tool(tool, Some(window), cx);
+        if matches!(tool, InkTool::Shape | InkTool::Sticker) {
+            self.overlays.ink.picker = (!again || self.overlays.ink.picker.is_none()).then_some(tool);
+            cx.notify();
+        }
     }
 
     /// INKUI-023 (BOARD-160): back to the pointer, or lets go of the
@@ -58,7 +99,11 @@ impl BoardCanvas {
             self.ink_set_tool(InkTool::Select, None, cx);
             return true;
         }
-        if self.overlays.ink.selected.take().is_some() {
+        if self.overlays.ink.picker.take().is_some() {
+            cx.notify();
+            return true;
+        }
+        if self.overlays.ink.selected.take().is_some() || self.overlays.ink.link.take().is_some() {
             cx.notify();
             return true;
         }
@@ -67,6 +112,11 @@ impl BoardCanvas {
 
     /// INKUI-022 (BOARD-163): ⌫ deletes the selected stroke.
     pub(crate) fn ink_delete_selected(&mut self, cx: &mut Context<'_, Self>) -> bool {
+        // LINK-013: the selected link goes the same way.
+        if let Some(link) = self.overlays.ink.link.clone() {
+            self.delete_link(&link, cx);
+            return true;
+        }
         let Some(id) = self.overlays.ink.selected.take() else {
             return false;
         };
@@ -76,30 +126,34 @@ impl BoardCanvas {
     }
 
     /// INKUI-021 (BOARD-159): ⌘Z. False when there's nothing to undo.
+    /// SHAPE-040: shapes and links go back with it.
     pub(crate) fn ink_undo(&mut self, cx: &mut Context<'_, Self>) -> bool {
         self.ink_finish_label(None, cx);
+        self.ink_finish_link_label(None, cx);
         let current = self.ink_strokes();
-        let Some(prev) = self.overlays.ink.history.undo(current) else {
+        let Some(step) = self.overlays.ink.history.undo(&current) else {
             return false;
         };
         self.overlays.ink.selected = None;
-        self.set_ink(prev, cx);
+        self.apply_step(step, cx);
         true
     }
 
     /// INKUI-021: ⇧⌘Z.
     pub(crate) fn ink_redo(&mut self, cx: &mut Context<'_, Self>) -> bool {
         let current = self.ink_strokes();
-        let Some(next) = self.overlays.ink.history.redo(current) else {
+        let Some(step) = self.overlays.ink.history.redo(&current) else {
             return false;
         };
         self.overlays.ink.selected = None;
-        self.set_ink(next, cx);
+        self.apply_step(step, cx);
         true
     }
 
-    /// INKUI-004: a colour from the palette; a selected stroke takes it too.
+    /// INKUI-004: a colour from the palette; a selected stroke takes it
+    /// too, as do the selected shapes and link (SHAPE-015, LINK-021).
     pub(crate) fn ink_pick_color(&mut self, color: InkColor, cx: &mut Context<'_, Self>) {
+        self.recolor_selected(color, cx);
         self.overlays.ink.color = Some(color);
         self.overlays.ink.palette = false;
         self.state

@@ -6,12 +6,14 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use nodus_board::archive::{archive_node, drop_node, is_empty};
+use nodus_board::cards::session_list_items;
 use nodus_board::notes::{self, AwayAuthor, NotePatch};
-use nodus_board::{Board, BoardSessions, Clock, Effects};
-use nodus_domain::{Event, EventSink, Project, SessionKind, SessionStatus, js};
-use nodus_store::Store;
+use nodus_board::{Board, BoardSessions, Clock, Effects, to_card};
+use nodus_domain::{Event, EventSink, Project, SessionCard, SessionKind, SessionStatus, js};
+use nodus_store::{BoardState, Store};
 use serde_json::{Value, json};
 
+use crate::drawing;
 use crate::server::{BoardToolHandlers, BoxFuture, ToolError};
 
 /// Adds a project for a folder (`addProject`, 01 and 08), which nodus-core
@@ -399,5 +401,55 @@ impl BoardToolHandlers for StoreHandlers {
                 .await
                 .map_err(ToolError)
         })
+    }
+
+    /// TOOL-102
+    fn list_board(&self, project_id: &str, self_id: &str) -> Result<Value, ToolError> {
+        let project = self.project(project_id)?;
+        // Read before the state is held: titles come from the transcripts.
+        let disk = self.board.transcripts().scan_repo(&project.repo_path);
+        Ok(self.store.read(|state| {
+            let empty = BoardState::default();
+            let board = state.board(project_id).unwrap_or(&empty);
+            let cards: Vec<SessionCard> = notes::active_cards(board)
+                .map(|n| to_card(n, disk.get(&n.session_id), self.sessions.as_ref()))
+                .collect();
+            let items = session_list_items(&cards, &[], None, false);
+            drawing::list_board(board, self_id, &items)
+        }))
+    }
+
+    /// TOOL-103 to TOOL-106
+    fn draw_on_board(&self, project_id: &str, self_id: &str, args: &Value) -> Result<Value, ToolError> {
+        self.project(project_id)?;
+        let now = (self.clock)();
+        let drawn = self
+            .store
+            .update(|state| drawing::draw(state.board_mut(project_id), self_id, args, now))?;
+        self.board_changed(project_id);
+        Ok(drawn)
+    }
+
+    /// TOOL-107, TOOL-108
+    fn update_drawing(&self, project_id: &str, self_id: &str, args: &Value) -> Result<Value, ToolError> {
+        self.project(project_id)?;
+        let now = (self.clock)();
+        let updated = self
+            .store
+            .update(|state| drawing::update(state.board_mut(project_id), self_id, args, now))?;
+        self.board_changed(project_id);
+        Ok(updated)
+    }
+
+    /// TOOL-109
+    fn erase_from_board(&self, project_id: &str, _self_id: &str, args: &Value) -> Result<Value, ToolError> {
+        self.project(project_id)?;
+        let erased = self
+            .store
+            .update(|state| drawing::erase(state.board_mut(project_id), args))?;
+        if erased["erased"].as_array().is_some_and(|e| !e.is_empty()) {
+            self.board_changed(project_id);
+        }
+        Ok(erased)
     }
 }

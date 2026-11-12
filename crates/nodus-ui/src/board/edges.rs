@@ -120,7 +120,7 @@ fn control_offset(distance: f64, curvature: f64) -> f64 {
     }
 }
 
-fn control(side: Side, p: Point, other: Point) -> Point {
+pub(crate) fn control(side: Side, p: Point, other: Point) -> Point {
     const C: f64 = 0.25;
     match side {
         Side::Left => Point {

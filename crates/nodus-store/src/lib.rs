@@ -13,9 +13,11 @@
 //! moved aside rather than written over.
 
 mod paths;
+mod records;
 mod state;
 mod store;
 
 pub use paths::user_data_dir;
+pub use records::Records;
 pub use state::{BoardState, CaptureRecord, DEFAULT_ARCHIVE_W, NotFound, State, normalize_settings};
 pub use store::{SAVE_DELAY, Store};

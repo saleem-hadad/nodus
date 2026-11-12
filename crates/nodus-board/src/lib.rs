@@ -1,6 +1,7 @@
 //! A project's board: its stored cards merged with the sessions found on
 //! disk, the archive they're laid out in, sections, sticky notes and where
-//! they go, the geometry they share, and the ink drawn over them.
+//! they go, the geometry they share, the ink drawn over them, and the shapes
+//! and links drawn among them.
 //!
 //! Ports `src/main/board.ts`, `src/main/notes.ts`, `src/main/ink.ts`,
 //! `src/shared/geometry.ts` and `src/shared/sessions.ts`, the stop rules in
@@ -17,6 +18,7 @@ mod board;
 pub mod cards;
 pub mod compose;
 mod create;
+pub mod drawing;
 pub mod geometry;
 mod handlers;
 pub mod ink;
@@ -24,6 +26,7 @@ pub mod ink_draw;
 pub mod merge;
 pub mod notes;
 mod runs;
+pub mod shapes;
 pub mod stop;
 
 use std::future::Future;

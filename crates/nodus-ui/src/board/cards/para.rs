@@ -11,6 +11,8 @@
 //! places; this element shapes the whole text once and places every glyph
 //! itself.
 
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::ops::Range;
 use std::rc::Rc;
 
@@ -23,7 +25,7 @@ use unicode_linebreak::{BreakOpportunity, linebreaks};
 use unicode_segmentation::UnicodeSegmentation;
 
 /// How whitespace is treated (`white-space`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Space {
     /// `normal`: runs of whitespace are one space, newlines included.
     Normal,
@@ -433,7 +435,71 @@ impl Para {
     }
 }
 
+/// What a paragraph's layout depends on: its text and how it's set, and the
+/// width it wraps in (CSS px). Colours, marks and alignment only paint.
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct LayoutKey {
+    text: SharedString,
+    font: Font,
+    size: u32,
+    spacing: u32,
+    space: Space,
+    clamp: Option<usize>,
+    width: u32,
+}
+
+/// Laid-out paragraphs, for the frames that draw them again unchanged
+/// (a board redraws every card's title and every note each frame it draws):
+/// shaping, line breaking and grapheme bounds ran three times per paragraph
+/// per frame. Two generations, so what's still drawn survives a turnover.
+#[derive(Default)]
+struct LayoutCache {
+    current: HashMap<LayoutKey, Rc<Layout>>,
+    previous: HashMap<LayoutKey, Rc<Layout>>,
+}
+
+const LAYOUT_CACHE_GENERATION: usize = 2048;
+
+thread_local! {
+    static LAYOUTS: RefCell<LayoutCache> = RefCell::default();
+}
+
 impl Config {
+    /// The layout at `width` (CSS px), from the cache when this paragraph
+    /// was laid out at that width before.
+    fn layout(&self, width: f32, window: &mut Window) -> Rc<Layout> {
+        let key = LayoutKey {
+            text: self.text.clone(),
+            font: self.font.clone(),
+            size: f32::from(self.css_size()).to_bits(),
+            spacing: (f32::from(self.spacing) / self.zoom).to_bits(),
+            space: self.space,
+            clamp: self.clamp,
+            width: width.to_bits(),
+        };
+        let hit = LAYOUTS.with(|c| {
+            let mut c = c.borrow_mut();
+            if let Some(l) = c.current.get(&key) {
+                return Some(l.clone());
+            }
+            let l = c.previous.remove(&key)?;
+            c.current.insert(key.clone(), l.clone());
+            Some(l)
+        });
+        if let Some(l) = hit {
+            return l;
+        }
+        let l = Rc::new(self.lay_out(width, window));
+        LAYOUTS.with(|c| {
+            let mut c = c.borrow_mut();
+            if c.current.len() >= LAYOUT_CACHE_GENERATION {
+                c.previous = std::mem::take(&mut c.current);
+            }
+            c.current.insert(key, l.clone());
+        });
+        l
+    }
+
     fn prepared(&self) -> Prepared {
         prepare(&self.text, self.space)
     }
@@ -542,8 +608,7 @@ impl Config {
     }
 
     fn natural_width(&self, window: &mut Window) -> f32 {
-        let layout = self.lay_out(f32::INFINITY, window);
-        layout.widest()
+        self.layout(f32::INFINITY, window).widest()
     }
 }
 
@@ -578,7 +643,7 @@ impl IntoElement for Para {
 
 impl Element for Para {
     type RequestLayoutState = ();
-    type PrepaintState = Option<Layout>;
+    type PrepaintState = Option<Rc<Layout>>;
 
     fn id(&self) -> Option<ElementId> {
         None
@@ -623,7 +688,7 @@ impl Element for Para {
             let max = cfg.max_width.map_or(f32::INFINITY, f32::from);
             let natural = (cfg.natural_width(window) * z).min(max);
             let width = width.map_or(natural, |w| w.min(max));
-            let layout = cfg.lay_out(width / z, window);
+            let layout = cfg.layout(width / z, window);
             let lines = layout.lines.len().max(1) as f32;
             let w = if cfg.fill || cfg.grow {
                 width
@@ -651,8 +716,8 @@ impl Element for Para {
         _: &mut (),
         window: &mut Window,
         _: &mut App,
-    ) -> Option<Layout> {
-        Some(self.cfg.lay_out(f32::from(bounds.size.width) / self.cfg.zoom, window))
+    ) -> Option<Rc<Layout>> {
+        Some(self.cfg.layout(f32::from(bounds.size.width) / self.cfg.zoom, window))
     }
 
     fn paint(
@@ -661,7 +726,7 @@ impl Element for Para {
         _: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         _: &mut (),
-        layout: &mut Option<Layout>,
+        layout: &mut Option<Rc<Layout>>,
         window: &mut Window,
         _: &mut App,
     ) {

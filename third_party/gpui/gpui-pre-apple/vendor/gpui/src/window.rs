@@ -1307,6 +1307,9 @@ pub struct Window {
     present_with_native_views: bool,
     pub(crate) next_frame_callbacks: Rc<RefCell<Vec<FrameCallback>>>,
     pub(crate) dirty_views: FxHashSet<EntityId>,
+    /// Nodus patch: what was notified since the last frame, views and models
+    /// alike (`Window::notified_entities`).
+    notified_entities: FxHashSet<EntityId>,
     focus_listeners: SingleSubscriberSet<AnyWindowFocusListener>,
     pub(crate) focus_lost_listeners: SingleSubscriberSet<AnyObserver>,
     focus_lost_path: SmallVec<[FocusId; 8]>,
@@ -2441,6 +2444,7 @@ impl Window {
             tooltip_bounds: None,
             present_with_native_views: false,
             dirty_views: FxHashSet::default(),
+            notified_entities: FxHashSet::default(),
             focus_listeners: SingleSubscriberSet::new(),
             focus_lost_listeners: SingleSubscriberSet::new(),
             focus_lost_path: SmallVec::new(),
@@ -3015,6 +3019,21 @@ impl Window {
     pub fn request_animation_frame(&self) {
         let entity = self.current_view();
         self.on_next_frame(move |_, cx| cx.notify(entity));
+    }
+
+    /// Nodus patch: the entities notified since the last frame (views and the
+    /// models they read alike), as this frame's draw found them. A view that
+    /// holds cached children can tell from it whether anything but those
+    /// children changed.
+    pub fn notified_entities(&self) -> &FxHashSet<EntityId> {
+        &self.notified_entities
+    }
+
+    /// Nodus patch: the views `entity` was drawn inside in the last frame,
+    /// innermost first, `entity` itself included when it's a view. Empty for
+    /// a model, or a view the last frame didn't draw.
+    pub fn view_ancestors(&self, entity: EntityId) -> impl Iterator<Item = EntityId> + '_ {
+        self.rendered_frame.dispatch_tree.view_path_reversed(entity)
     }
 
     /// Runs all callbacks scheduled via [`Self::on_next_frame`], returning how many ran.
@@ -3975,6 +3994,9 @@ impl Window {
 
     fn invalidate_entities(&mut self) {
         let mut views = self.invalidator.take_views();
+        // Nodus patch: kept for `Window::notified_entities`.
+        self.notified_entities.clear();
+        self.notified_entities.extend(views.iter().copied());
         for entity in views.drain() {
             self.mark_view_dirty(entity);
         }

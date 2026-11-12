@@ -5,22 +5,24 @@
 //! confirm. Nodes glide to where they belong as their CSS transitions did
 //! (§ Node motion).
 
+use std::collections::HashSet;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Bounds, Context, CursorStyle, DispatchPhase, ElementId, InteractiveElement, IntoElement, MouseButton,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, PathBuilder, Pixels, Render, Styled, Window, canvas,
-    div, fill, point, px, size,
+    AnyElement, AppContext as _, Bounds, Context, CursorStyle, DispatchPhase, ElementId, Entity, EntityId,
+    InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement,
+    PathBuilder, Pixels, Render, Styled, Window, canvas, div, fill, point, px, size,
 };
 use nodus_board::geometry::Point;
-use nodus_domain::{BoardNote, FolderColor, Rect};
+use nodus_domain::{BoardNote, BoardSnapshot, FolderColor, Rect};
 
 use super::canvas::{BoardCanvas, Gesture, Glide};
 use super::edges;
 use super::hud::rgba_mix;
 use super::layout::{note_pad_rect, pad_sheet_spot};
+use super::node_view::{self, NodeView};
 use super::nodes::{
     ArchiveNode, BoardCx, CardNode, NodeRenderers, NodeState, NoteNode, PadNode, ShapeNode, StackPlace, StackStyle,
     ViewNode, renderers,
@@ -29,6 +31,15 @@ use super::scene::{FlowNode, NodeKind, paint_order};
 use super::section::SectionProps;
 use super::units::zoomed;
 use crate::theme::{self, motion, tokens::Tokens};
+
+/// Whether a node may keep last frame's drawing.
+#[derive(Clone, Copy)]
+struct NodeCache {
+    /// Nothing but the nodes changed since the last frame (`node_view`).
+    partial: bool,
+    /// The node is on the canvas.
+    visible: bool,
+}
 
 /// How a node's drawn box follows its place (`transition` in board.css).
 enum Motion {
@@ -142,14 +153,13 @@ impl BoardCanvas {
         &mut self,
         node: &FlowNode,
         drawn: Rect,
+        snapshot: &BoardSnapshot,
         board: &BoardCx,
         renderers: &Rc<dyn NodeRenderers>,
+        cache: NodeCache,
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
-        let Some(snapshot) = self.board.clone() else {
-            return div().into_any_element();
-        };
         let vp = self.viewport;
         let z = vp.zoom as f32;
         let left = (vp.x + drawn.x * vp.zoom) as f32;
@@ -165,16 +175,25 @@ impl BoardCanvas {
         let id = node.id.clone();
         let element_id = ElementId::Name(format!("node-{id}").into());
         let content: AnyElement = match &node.kind {
-            NodeKind::Archive { count } => renderers.archive(
-                ArchiveNode {
-                    node: state,
-                    count: *count,
-                },
-                board,
-                window,
-                cx,
-            ),
-            NodeKind::Pad => renderers.pad(PadNode { node: state }, board, window, cx),
+            NodeKind::Archive { count } => {
+                let view = self.node_view(&id, renderers, cx);
+                let changed = view.update(cx, |v, _| {
+                    v.set_archive(
+                        ArchiveNode {
+                            node: state,
+                            count: *count,
+                        },
+                        board,
+                        cache.visible,
+                    )
+                });
+                node_view::element(&view, changed || !cache.partial)
+            }
+            NodeKind::Pad => {
+                let view = self.node_view(&id, renderers, cx);
+                let changed = view.update(cx, |v, _| v.set_pad(PadNode { node: state }, board, cache.visible));
+                node_view::element(&view, changed || !cache.partial)
+            }
             NodeKind::View { index } => renderers.view(
                 ViewNode {
                     node: state,
@@ -208,16 +227,19 @@ impl BoardCanvas {
                         &draft
                     }
                 };
-                renderers.note(
-                    NoteNode {
-                        node: state,
-                        note,
-                        draft: index.is_none(),
-                    },
-                    board,
-                    window,
-                    cx,
-                )
+                let view = self.node_view(&id, renderers, cx);
+                let changed = view.update(cx, |v, _| {
+                    v.set_note(
+                        NoteNode {
+                            node: state,
+                            note,
+                            draft: index.is_none(),
+                        },
+                        board,
+                        cache.visible,
+                    )
+                });
+                node_view::element(&view, changed || !cache.partial)
             }
             NodeKind::Card { index, stack, matched } => {
                 let card = &snapshot.cards[*index];
@@ -231,18 +253,21 @@ impl BoardCanvas {
                         .map(|(_, notes)| notes.into_iter().cloned().collect())
                         .unwrap_or_default()
                 };
-                renderers.card(
-                    CardNode {
-                        node: state,
-                        card,
-                        matched: matched.as_deref(),
-                        stickers: &stickers,
-                        stack: *stack,
-                    },
-                    board,
-                    window,
-                    cx,
-                )
+                let view = self.node_view(&id, renderers, cx);
+                let changed = view.update(cx, |v, _| {
+                    v.set_card(
+                        CardNode {
+                            node: state,
+                            card,
+                            matched: matched.as_deref(),
+                            stickers: &stickers,
+                            stack: *stack,
+                        },
+                        board,
+                        cache.visible,
+                    )
+                });
+                node_view::element(&view, changed || !cache.partial)
             }
             NodeKind::Shape { index } => {
                 let shape = &snapshot.shapes[*index];
@@ -349,6 +374,22 @@ impl BoardCanvas {
             }
             None => wrapper,
         }
+    }
+
+    /// A node's cached view (`node_view`), made the first frame it's drawn.
+    fn node_view(
+        &mut self,
+        id: &str,
+        renderers: &Rc<dyn NodeRenderers>,
+        cx: &mut Context<'_, Self>,
+    ) -> Entity<NodeView> {
+        let view = self
+            .node_views
+            .entry(id.to_owned())
+            .or_insert_with(|| cx.new(|_| NodeView::default()))
+            .clone();
+        view.update(cx, |v, _| v.set_renderers(renderers));
+        view
     }
 
     /// The pointer handlers every node's box (or section header) carries.
@@ -503,6 +544,17 @@ impl BoardCanvas {
 
 /// Past this many cards the board draws only what's in view.
 const VISIBLE_ONLY_ABOVE: usize = 150;
+
+/// Part of a Bézier is on the canvas (its control points hold the curve).
+fn on_canvas(pts: &[Point; 4], w: f64, h: f64) -> bool {
+    let (x0, x1) = pts
+        .iter()
+        .fold((f64::MAX, f64::MIN), |(a, b), p| (a.min(p.x), b.max(p.x)));
+    let (y0, y1) = pts
+        .iter()
+        .fold((f64::MAX, f64::MIN), |(a, b), p| (a.min(p.y), b.max(p.y)));
+    x1 >= 0.0 && y1 >= 0.0 && x0 <= w && y0 <= h
+}
 
 /// Two rects share some area (React Flow's partial overlap).
 fn overlaps(a: Rect, b: Rect) -> bool {
@@ -691,10 +743,20 @@ impl Render for BoardCanvas {
         // INKUI-025: ink goes over every node but the open archive panel's.
         let mut raised = Vec::new();
         let mut gliding = false;
+        // Lent to the nodes for this loop rather than cloned for each one.
+        let Some(snapshot) = self.board.take() else {
+            return div().size_full().bg(t.bg_canvas).into_any_element();
+        };
+        let node_views: HashSet<EntityId> = self.node_views.values().map(Entity::entity_id).collect();
+        let partial = node_view::partial_frame(&node_views, window, cx);
         for node in &nodes {
             let (drawn, moving) = self.drawn(node, now, cx);
             gliding |= moving;
-            let el = self.render_node(node, drawn, &board_cx, &renderers, window, cx);
+            let cache = NodeCache {
+                partial,
+                visible: overlaps(drawn, view),
+            };
+            let el = self.render_node(node, drawn, &snapshot, &board_cx, &renderers, cache, window, cx);
             if node.z_drawn() < 0 {
                 below.push(el);
             } else if node.z_drawn() >= super::overlays::INK_Z_BELOW {
@@ -703,16 +765,20 @@ impl Render for BoardCanvas {
                 above.push(el);
             }
         }
+        self.board = Some(snapshot);
         if gliding {
             window.request_animation_frame();
         }
         self.glides.retain(|id, _| nodes.iter().any(|n| &n.id == id));
+        self.node_views.retain(|id, _| nodes.iter().any(|n| &n.id == id));
 
         let edge_paths = self.edge_paths(&t);
         let frozen = crate::parity::frozen(cx);
-        let animated_edges = edge_paths.iter().any(|e| e.dash.is_some());
-        if animated_edges && !frozen {
-            window.request_animation_frame();
+        // Marching dashes move on the ambient clock, while one is in view.
+        let (cw, ch) = self.canvas_size();
+        let marching = edge_paths.iter().any(|e| e.dash.is_some() && on_canvas(&e.pts, cw, ch));
+        if marching && !frozen {
+            crate::components::ambient::request_frame(window, cx);
         }
         let elapsed = self.clock.elapsed().as_secs_f64() * 1000.0;
 

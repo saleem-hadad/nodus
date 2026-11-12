@@ -269,8 +269,10 @@ impl Element for TerminalElement {
                 color,
             ))
         });
-        if scrollbar.is_some() && self.host.read(cx).scrollbar.grab.is_none() {
-            // Keep fading.
+        // Keep fading; hovered or held, it stays put until that changes,
+        // which notifies the host.
+        let bar = &self.host.read(cx).scrollbar;
+        if scrollbar.is_some() && !bar.hovered && bar.grab.is_none() {
             window.request_animation_frame();
         }
 

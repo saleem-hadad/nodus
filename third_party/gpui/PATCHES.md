@@ -210,6 +210,17 @@ The board painted its dotted background as a quad per dot, every frame: 3,000 at
 
 Checked by capturing both ways with `render_to_image` (a 900×560 window at 2×, dots at 40% alpha). Zooms of 0.27, 0.3, 0.45, 0.68, 1 and 2.5 at assorted fractional pans, and a group at 50% opacity, came out pixel-identical. At 1.7 and a pan of (5.25, 3.75), one column of dots lands exactly on half a device pixel. Float error then rounds it the other way, one pixel over, as a pan of a millionth of a pixel would. Painting the dots took 0.106 → 0.000 ms a frame at 1:1 and 0.619 → 0.000 ms at 0.3, and a whole frame drawn by hand took 0.125 → 0.012 and 0.729 → 0.004 ms. The WGSL validates with naga 30.0.1 in all three variants (storage, WebGL, subpixel). fxc hasn't compiled the HLSL here; CI's Windows release build compiles it.
 
+### 21. What a frame was drawn for (Nodus)
+
+The board is one view, and each card and note in it is a cached child view (`nodus-ui`'s `board::node_view`), so that a frame drawn for one card's breathing dot or one terminal's output reuses every other node's drawing. A node may read more than the canvas hands it (the app's state, a terminal), so the canvas reuses a node only when it knows nothing else changed. Two accessors tell it:
+
+- `Window::notified_entities()`: the entities notified since the last frame, views and models alike, as `draw` took them from the invalidator (before `mark_view_dirty` widens views to their ancestors and drops models).
+- `Window::view_ancestors(entity)`: the views `entity` was drawn inside in the last frame (the dispatch tree's `view_path_reversed`), so a terminal notified inside a card counts as that card's.
+
+Nothing in GPUI reads them; `window.rs` is one of the six files copied into `gpui-pre-apple/vendor/gpui/src/`.
+
+Measured on the parity world's storefront board with one new session (`bench.py` in the idle-redraw PR; release build, M4, 60 Hz): working and expanded with a spinner line every 100 ms, 111% CPU at 57 frames/s → about 28% at 27 frames/s; collapsed and working or waiting, 101–102% at 49 frames/s → about 15–25% at 20 frames/s (the ambient clock, `components::ambient`). Screenshots of four seeded boards with every node forced through its cache matched the unpatched build pixel for pixel.
+
 ## Verification
 
 - `crates/nodus-ui/examples/effects.rs` (see `git show 85fc86a:migration/tracks/gpui-fork.md`): frosted panels at blur 30/saturate 1.8 and 20/1.6 over moving cards, a note rotated 3–7° with CoreText-rendered text, a 3° sticker, the pad's sheet turning about its top edge, `group_opacity` beside `.opacity`, hit testing through the rotation (synthetic mouse moves; the window never takes focus), and a capture written to PNG. `EFFECTS_STRICT=1` exits 1 if a check fails; CI runs it on macOS and Windows.

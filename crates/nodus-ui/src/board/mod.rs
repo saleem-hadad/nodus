@@ -22,6 +22,7 @@ mod input;
 pub mod layout;
 mod menus;
 mod naming;
+pub mod node_view;
 pub mod nodes;
 pub mod overlays;
 mod render;

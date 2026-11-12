@@ -130,12 +130,8 @@ pub fn status_dot(
         return dot.into_any_element();
     }
     let period = if working { 1600 } else { 1100 };
-    dot.with_animation(
-        (id, "breathe"),
-        Animation::new(Duration::from_millis(period)).repeat(),
-        move |d, delta| d.shadow(vec![ring_at(delta)]),
-    )
-    .into_any_element()
+    let delta = crate::components::ambient::cycle(window, cx, (id, "breathe"), Duration::from_millis(period));
+    dot.shadow(vec![ring_at(delta)]).into_any_element()
 }
 
 /// A `.card-tool` (28 square): `pressed` holds `--bg-pressed`

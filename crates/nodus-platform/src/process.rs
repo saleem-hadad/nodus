@@ -26,6 +26,10 @@
 //! Dropping a [`Child`], or the future of [`Child::wait`] before it finishes,
 //! stops the process tree: in Rust, dropping a future is how a caller gives up
 //! on it. [`Command::spawn_detached`] starts a process that outlives the app.
+//!
+//! [`started`] counts what this process has started, and [`forbid`] stops it
+//! starting anything: `nodus serve` starts every process through the session
+//! host instead (SRV-005, [`crate::runner`]).
 
 #[cfg(unix)]
 mod unix;
@@ -43,7 +47,7 @@ use std::fs::File;
 use std::io;
 use std::path::PathBuf;
 use std::process::Stdio;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
@@ -59,6 +63,28 @@ pub const NODE_MAX_BUFFER: usize = 1024 * 1024;
 /// process that left the tree (it started its own session) can hold them open
 /// past that; without the grace a timeout could wait on it forever.
 const PIPE_GRACE: Duration = Duration::from_secs(1);
+
+/// How many processes [`Command`] has been asked to start in this process.
+static STARTED: AtomicU64 = AtomicU64::new(0);
+/// Set by [`forbid`]: nothing more starts.
+static FORBIDDEN: AtomicBool = AtomicBool::new(false);
+
+/// How many processes this process has asked [`Command`] to start, refused
+/// ones included. A test reads it to show that a core whose runner is the
+/// session host starts none itself (SRV-005).
+pub fn started() -> u64 {
+    STARTED.load(Ordering::SeqCst)
+}
+
+/// From now on, every process this process asks [`Command`] to start fails
+/// to start (`EPERM`), with [`FORBIDDEN_REASON`]. For `nodus serve`, whose
+/// processes all run as another user through the session host (SRV-005).
+pub fn forbid() {
+    FORBIDDEN.store(true, Ordering::SeqCst);
+}
+
+/// What a start after [`forbid`] fails with.
+pub const FORBIDDEN_REASON: &str = "This process doesn't start other processes; the session host does";
 
 /// A signal, numbered as on macOS and Linux (Node uses the same numbers on
 /// Windows). On Windows every signal stops the process outright.
@@ -401,8 +427,25 @@ impl Command {
         SpawnError::new(self.program.to_string_lossy().into_owned(), source)
     }
 
+    /// Counts a start, and refuses it after [`forbid`].
+    fn may_start(&self) -> Result<(), SpawnError> {
+        STARTED.fetch_add(1, Ordering::SeqCst);
+        if FORBIDDEN.load(Ordering::SeqCst) {
+            #[cfg(unix)]
+            let denied = io::Error::from_raw_os_error(1);
+            #[cfg(windows)]
+            let denied = io::Error::from_raw_os_error(5);
+            return Err(SpawnError {
+                reason: Some(FORBIDDEN_REASON.into()),
+                ..self.spawn_error(denied)
+            });
+        }
+        Ok(())
+    }
+
     /// Starts it. Its output is collected by [`Child::wait`].
     pub fn spawn(self) -> Result<Child, SpawnError> {
+        self.may_start()?;
         let mut command = self.std_command();
         imp::prepare_tree(&mut command, self.new_session);
         command
@@ -453,6 +496,7 @@ impl Command {
     /// though on Unix it's reaped if it ends while the app runs. The timeout,
     /// stdin bytes and captures don't apply. Returns its process id.
     pub fn spawn_detached(self, log: Option<File>) -> Result<u32, SpawnError> {
+        self.may_start()?;
         let mut command = self.std_command();
         imp::prepare_detached(&mut command);
         command.stdin(Stdio::null());
@@ -772,16 +816,20 @@ impl Output {
 }
 
 /// A process that couldn't be started. Its message is Node's, such as
-/// `spawn git ENOENT`, which some errors show the user as it is.
-#[derive(Debug, thiserror::Error)]
-#[error("spawn {program} {code}")]
+/// `spawn git ENOENT`, which some errors show the user as it is, unless it
+/// has a [`reason`](Self::reason) of its own.
+#[derive(Debug)]
 pub struct SpawnError {
     /// The program as it was given.
     pub program: String,
     /// The error's name as libuv gives it: `ENOENT`, `EACCES`…
     pub code: &'static str,
-    #[source]
     pub source: io::Error,
+    /// What to say instead of Node's wording: why a runner couldn't start it
+    /// (Claude Code isn't installed, the session host is gone), or the
+    /// session host's own message for it (SRV-005). None for a process this
+    /// process tried to start.
+    pub reason: Option<String>,
 }
 
 impl SpawnError {
@@ -790,7 +838,39 @@ impl SpawnError {
             program,
             code: error_code(&source),
             source,
+            reason: None,
         }
+    }
+
+    /// A start that failed elsewhere, or never got that far, as `message`
+    /// says. With the OS's error number the code and source are what this
+    /// process would have had (the session host runs on the same machine);
+    /// without one the code is `UNKNOWN`.
+    pub fn reported(program: impl Into<String>, message: impl Into<String>, errno: Option<i32>) -> Self {
+        let message = message.into();
+        let source = match errno {
+            Some(errno) => io::Error::from_raw_os_error(errno),
+            None => io::Error::other(message.clone()),
+        };
+        Self {
+            reason: Some(message),
+            ..Self::new(program.into(), source)
+        }
+    }
+}
+
+impl fmt::Display for SpawnError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.reason {
+            Some(reason) => f.write_str(reason),
+            None => write!(f, "spawn {} {}", self.program, self.code),
+        }
+    }
+}
+
+impl std::error::Error for SpawnError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.source)
     }
 }
 

@@ -5,6 +5,8 @@
 //!   environment, where the `claude` binary is, and the shell a terminal or a
 //!   command runs in. Ports `src/main/env.ts`.
 //! - [`process`]: starting child processes, the one way every crate does it.
+//! - [`runner`]: where the core's child processes run: here, or as another
+//!   user through the session host (SRV-005).
 //! - [`secrets`]: Electron's `safeStorage`, so the xAI key 0.9.4 saved still
 //!   opens (the Keychain on macOS, DPAPI and `Local State` on Windows).
 //! - [`notify`]: notifications and the Dock badge.
@@ -21,6 +23,7 @@ pub mod permissions;
 #[cfg(windows)]
 pub mod pipe;
 pub mod process;
+pub mod runner;
 pub mod secrets;
 pub mod shell;
 pub mod spell;

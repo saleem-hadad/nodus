@@ -16,6 +16,13 @@ use std::sync::OnceLock;
 
 pub use claude::exe_behind_shim;
 
+/// Claude Code's own program on this PATH, as [`Env`] finds it at startup
+/// (claude.exe before an npm shim on Windows). A runner finds `claude` this
+/// way on the side that runs it ([`crate::runner::Program::Claude`]).
+pub fn find_claude(path_var: &str) -> Option<PathBuf> {
+    claude::find(path_var)
+}
+
 /// Environment variables by name.
 pub type EnvMap = BTreeMap<String, String>;
 
@@ -100,10 +107,17 @@ impl Env {
         Self::resolve(base, home).await
     }
 
-    async fn resolve(mut base: EnvMap, home: Option<&Path>) -> Self {
+    /// [`Env::with_vars`] without asking `claude` its version, so nothing is
+    /// started: for `nodus serve`, which starts no process itself (SRV-005).
+    /// The version is unknown.
+    pub fn given(mut base: EnvMap, home: Option<&Path>) -> Self {
         path_search::add_fallback_dirs(&mut base, home);
         let claude_path = claude::find(base.get("PATH").map_or("", String::as_str));
-        let mut env = Self::new(base, claude_path, None);
+        Self::new(base, claude_path, None)
+    }
+
+    async fn resolve(base: EnvMap, home: Option<&Path>) -> Self {
+        let mut env = Self::given(base, home);
         if let Some(claude) = &env.claude_path {
             env.claude_version = claude::read_version(claude, &env.spawn_env()).await;
         }

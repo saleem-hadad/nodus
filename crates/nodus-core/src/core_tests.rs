@@ -379,7 +379,7 @@ async fn upd_079_check_for_updates_opens_settings_then_checks() {
     let world = world();
     let mut events = world.nodus.subscribe();
     world.nodus.menu().check_for_updates().await;
-    assert_eq!(next(&mut events).await, Event::Menu(MenuCommand::Settings));
+    assert_eq!(next(&mut events).await, Event::Menu(MenuCommand::UpdateSettings));
     assert_eq!(world.nodus.updates().status().await.state, UpdateState::Latest);
 }
 

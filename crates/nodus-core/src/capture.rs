@@ -330,14 +330,14 @@ impl CaptureHandlers for CoreCapture {
     }
 
     /// CAP-159: the board window up, re-made if it was closed, then its
-    /// Settings. A window still loading hasn't subscribed to menu commands
+    /// Settings at Capture & Voice, where the voice key goes. A window still loading hasn't subscribed to menu commands
     /// yet, so the command waits until it has (`did-finish-load`).
     fn open_settings(&self) {
         let Some(core) = self.core.upgrade() else { return };
         let reopened = !core.shell.is_open() || core.shell.is_loading();
         core.shell.show();
         if !reopened {
-            let _ = core.events.send(Event::Menu(MenuCommand::Settings));
+            let _ = core.events.send(Event::Menu(MenuCommand::VoiceSettings));
             return;
         }
         let weak = self.core.clone();
@@ -347,7 +347,7 @@ impl CaptureHandlers for CoreCapture {
                 tokio::time::sleep(Duration::from_millis(50)).await;
                 let Some(core) = weak.upgrade() else { return };
                 if core.shell.is_open() && !core.shell.is_loading() {
-                    let _ = core.events.send(Event::Menu(MenuCommand::Settings));
+                    let _ = core.events.send(Event::Menu(MenuCommand::VoiceSettings));
                     return;
                 }
             }

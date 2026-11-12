@@ -1,6 +1,6 @@
 //! The Settings dialog (`SettingsDialog.tsx`, `SettingsDialog.css`;
-//! UI-116…UI-152): Appearance, Board, Focus, Floating capture, Notifications,
-//! Voice prompts and Updates.
+//! UI-116…UI-152): a sidebar of sections (Appearance, Board, Capture &
+//! Voice, Notifications, Updates) beside the one on show.
 //!
 //! The voice key (05) and the update status (06) come from the core; the
 //! capture shortcut state (07) comes with the capture panel track, and until
@@ -10,12 +10,12 @@ pub mod preview;
 
 use std::rc::Rc;
 
-use gpui::component::input::{InputEvent, InputState};
+use gpui::component::input::{IndentInline, InputEvent, InputState, OutdentInline};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Context, Corners, CursorStyle, Entity, FocusHandle, Focusable, FontWeight, ImageSource,
-    InteractiveElement, IntoElement, KeyDownEvent, ParentElement, Render, ScrollHandle, SharedString,
-    StatefulInteractiveElement, Styled, Window, canvas, div, img, px,
+    InteractiveElement, IntoElement, KeyBinding, KeyDownEvent, ParentElement, Render, ScrollHandle, SharedString,
+    StatefulInteractiveElement, Styled, Window, actions, canvas, div, img, point, px,
 };
 use nodus_domain::{
     AppSettings, CaptureShortcut, SettingsPatch, ThemePreference, UpdateState, UpdateStatus, VoiceKeySource,
@@ -23,7 +23,7 @@ use nodus_domain::{
 
 use crate::components::button::button;
 use crate::components::focus_ring::focus_ring;
-use crate::components::icon::Icon;
+use crate::components::icon::{Icon, icon};
 use crate::components::modal::Modal;
 use crate::components::scroll::scroll_area;
 use crate::components::switch::switch;
@@ -36,7 +36,75 @@ use crate::theme::{self, fonts};
 /// Saves a settings change.
 type UpdateSettings = Rc<dyn Fn(SettingsPatch, &mut App)>;
 
+actions!(settings, [NextStop, PreviousStop]);
+
+/// The dialog's key context: its Tab and Shift+Tab outrank the window
+/// root's, which would walk GPUI's own tab order out of the dialog.
+const KEY_CONTEXT: &str = "Settings";
+
+/// Tab and Shift+Tab cycle the dialog's own stops (UI-123).
+pub fn bind_keys(cx: &mut App) {
+    cx.bind_keys([
+        KeyBinding::new("tab", NextStop, Some(KEY_CONTEXT)),
+        KeyBinding::new("shift-tab", PreviousStop, Some(KEY_CONTEXT)),
+    ]);
+}
+
 const RELEASES_URL: &str = "https://github.com/saleem-hadad/nodus/releases/latest";
+
+/// The dialog's size; it's never taller than the window less 48px.
+const PANEL_W: f32 = 680.;
+const PANEL_H: f32 = 540.;
+const SIDEBAR_W: f32 = 188.;
+/// The sidebar's title row and the pane's header.
+const HEADER_H: f32 = 54.;
+
+/// The sections, down the sidebar.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Section {
+    #[default]
+    Appearance,
+    Board,
+    CaptureVoice,
+    Notifications,
+    Updates,
+}
+
+impl Section {
+    pub const ALL: [Self; 5] = [
+        Self::Appearance,
+        Self::Board,
+        Self::CaptureVoice,
+        Self::Notifications,
+        Self::Updates,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Appearance => "Appearance",
+            Self::Board => "Board",
+            Self::CaptureVoice => "Capture & Voice",
+            Self::Notifications => "Notifications",
+            Self::Updates => "Updates",
+        }
+    }
+
+    fn icon(self) -> Icon {
+        match self {
+            Self::Appearance => Icon::SunMoon,
+            Self::Board => Icon::LayoutDashboard,
+            Self::CaptureVoice => Icon::Mic,
+            Self::Notifications => Icon::Bell,
+            Self::Updates => Icon::Download,
+        }
+    }
+
+    /// The section `by` places down the sidebar, stopping at its ends.
+    fn step(self, by: isize) -> Self {
+        let at = Self::ALL.iter().position(|s| *s == self).unwrap_or(0) as isize;
+        Self::ALL[(at + by).clamp(0, Self::ALL.len() as isize - 1) as usize]
+    }
+}
 
 /// The theme tiles, in order.
 const THEMES: [(ThemePreference, &str); 3] = [
@@ -60,11 +128,15 @@ pub struct SettingsDialog {
     key_source: Option<Option<VoiceKeySource>>,
     key_error: Option<String>,
     scroll: ScrollHandle,
+    /// The section drawn last, to scroll a newly shown one to its top.
+    shown: Option<Section>,
     serial: usize,
 }
 
 /// The focusable controls, for Tab (UI-123).
 struct Stops {
+    /// The sidebar's selected section.
+    nav: FocusHandle,
     close: FocusHandle,
     tile: FocusHandle,
     pin: FocusHandle,
@@ -119,6 +191,7 @@ impl SettingsDialog {
         })
         .detach();
         let stops = Stops {
+            nav: cx.focus_handle(),
             close: cx.focus_handle(),
             tile: cx.focus_handle(),
             pin: cx.focus_handle(),
@@ -144,6 +217,7 @@ impl SettingsDialog {
             key_source: None,
             key_error: None,
             scroll: ScrollHandle::new(),
+            shown: None,
             serial: 0,
         }
     }
@@ -208,82 +282,101 @@ impl SettingsDialog {
         self.state.update(cx, AppState::close_settings);
     }
 
-    /// The tab stops now, in document order, counting only the checked
-    /// theme radio and enabled controls (UI-123).
+    /// Shows `section`; the next opening starts there too.
+    fn show(&mut self, section: Section, cx: &mut Context<'_, Self>) {
+        self.state.update(cx, |s, cx| {
+            s.settings_section = section;
+            cx.notify();
+        });
+        cx.notify();
+    }
+
+    /// The tab stops now, in document order: the sidebar's section, Close,
+    /// then the section's enabled controls, counting only the checked theme
+    /// radio (UI-123).
     fn tab_stops(
         &self,
+        section: Section,
         loaded: bool,
         key_source: Option<Option<VoiceKeySource>>,
         update: Option<&UpdateStatus>,
         key_blank: bool,
         cx: &App,
     ) -> Vec<FocusHandle> {
-        let mut stops = vec![self.stops.close.clone()];
-        if loaded {
-            stops.extend([
-                self.stops.tile.clone(),
-                self.stops.pin.clone(),
-                self.stops.wheel.clone(),
-                self.stops.focus.clone(),
-                self.stops.capture.clone(),
-            ]);
-            stops.push(self.stops.notify.clone());
-            if Platform::CURRENT.is_mac() {
-                stops.push(self.stops.dock.clone());
+        let mut stops = vec![self.stops.nav.clone(), self.stops.close.clone()];
+        match section {
+            Section::Appearance if loaded => stops.extend([self.stops.tile.clone(), self.stops.pin.clone()]),
+            Section::Board if loaded => stops.extend([self.stops.wheel.clone(), self.stops.focus.clone()]),
+            Section::CaptureVoice => {
+                if loaded {
+                    stops.push(self.stops.capture.clone());
+                }
+                if key_source.is_some() {
+                    stops.push(self.key_field.read(cx).focus_handle(cx));
+                }
+                if !key_blank {
+                    stops.push(self.stops.save.clone());
+                }
+                if key_source == Some(Some(VoiceKeySource::Settings)) {
+                    stops.push(self.stops.remove.clone());
+                }
             }
-        }
-        if key_source.is_some() {
-            stops.push(self.key_field.read(cx).focus_handle(cx));
-        }
-        if !key_blank {
-            stops.push(self.stops.save.clone());
-        }
-        if key_source == Some(Some(VoiceKeySource::Settings)) {
-            stops.push(self.stops.remove.clone());
-        }
-        let state = update.map(|u| &u.state);
-        let busy = matches!(state, Some(UpdateState::Checking | UpdateState::Downloading { .. }));
-        match state {
-            Some(UpdateState::Off { .. }) => {}
-            Some(UpdateState::Ready { .. }) => stops.push(self.stops.check.clone()),
-            _ if update.is_some() && !busy => stops.push(self.stops.check.clone()),
+            Section::Notifications if loaded => {
+                stops.push(self.stops.notify.clone());
+                if Platform::CURRENT.is_mac() {
+                    stops.push(self.stops.dock.clone());
+                }
+            }
+            Section::Updates => {
+                let state = update.map(|u| &u.state);
+                let busy = matches!(state, Some(UpdateState::Checking | UpdateState::Downloading { .. }));
+                match state {
+                    Some(UpdateState::Off { .. }) => {}
+                    Some(UpdateState::Ready { .. }) => stops.push(self.stops.check.clone()),
+                    _ if update.is_some() && !busy => stops.push(self.stops.check.clone()),
+                    _ => {}
+                }
+                if loaded && !matches!(state, Some(UpdateState::Off { .. })) {
+                    stops.push(self.stops.auto_update.clone());
+                }
+            }
             _ => {}
-        }
-        if loaded && !matches!(state, Some(UpdateState::Off { .. })) {
-            stops.push(self.stops.auto_update.clone());
         }
         stops
     }
 
-    fn on_key_down(
-        &mut self,
-        e: &KeyDownEvent,
-        window: &mut Window,
-        cx: &mut Context<'_, Self>,
-        stops: &[FocusHandle],
-    ) {
+    /// UI-123: Tab cycles inside the dialog, Shift+Tab backwards.
+    fn tab(&mut self, back: bool, window: &mut Window, cx: &mut Context<'_, Self>, stops: &[FocusHandle]) {
+        if stops.is_empty() {
+            return;
+        }
+        let at = stops.iter().position(|f| f.is_focused(window));
+        let next = if back {
+            match at {
+                Some(0) | None => stops.len() - 1,
+                Some(i) => i - 1,
+            }
+        } else {
+            match at {
+                Some(i) if i + 1 < stops.len() => i + 1,
+                _ => 0,
+            }
+        };
+        window.focus(&stops[next], cx);
+    }
+
+    fn on_key_down(&mut self, e: &KeyDownEvent, window: &mut Window, cx: &mut Context<'_, Self>) {
         match e.keystroke.key.as_str() {
             // UI-121
             "escape" => {
                 cx.stop_propagation();
                 self.close(cx);
             }
-            // UI-123: Tab cycles inside the dialog.
-            "tab" if !stops.is_empty() => {
+            // The sidebar's sections, as a list.
+            key @ ("up" | "down") if self.stops.nav.is_focused(window) => {
                 cx.stop_propagation();
-                let at = stops.iter().position(|f| f.is_focused(window));
-                let next = if e.keystroke.modifiers.shift {
-                    match at {
-                        Some(0) | None => stops.len() - 1,
-                        Some(i) => i - 1,
-                    }
-                } else {
-                    match at {
-                        Some(i) if i + 1 < stops.len() => i + 1,
-                        _ => 0,
-                    }
-                };
-                window.focus(&stops[next], cx);
+                let section = self.state.read(cx).settings_section;
+                self.show(section.step(if key == "up" { -1 } else { 1 }), cx);
             }
             _ => {}
         }
@@ -293,44 +386,31 @@ impl SettingsDialog {
 impl Render for SettingsDialog {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let t = theme::tokens(cx);
-        let platform = Platform::CURRENT;
-        let (settings, update_status, nodus) = {
+        let (settings, update_status, section) = {
             let s = self.state.read(cx);
-            (s.settings.clone(), s.update_status.clone(), s.nodus.clone())
+            (s.settings.clone(), s.update_status.clone(), s.settings_section)
         };
+        // A section shown anew, by the sidebar or by whoever opened it, starts at its top.
+        if self.shown != Some(section) {
+            self.shown = Some(section);
+            self.scroll.set_offset(point(px(0.), px(0.)));
+        }
         let loaded = settings.is_some();
         let key_value = self.key_field.read(cx).value().to_string();
         let key_blank = key_value.trim().is_empty();
-        let stops = self.tab_stops(loaded, self.key_source, update_status.as_ref(), key_blank, cx);
-        let keyboard = window.last_input_was_keyboard();
+        let stops = self.tab_stops(section, loaded, self.key_source, update_status.as_ref(), key_blank, cx);
         let state = self.state.clone();
         let update = move |patch: SettingsPatch, cx: &mut App| state.update(cx, |s, cx| s.update_settings(patch, cx));
         let update: UpdateSettings = Rc::new(update);
-        let s = settings.clone().unwrap_or_default();
+        let s = settings.unwrap_or_default();
+        let ctx = Ctx { t, loaded, update };
 
-        // A switch row: clicking anywhere on it toggles (UI-138).
-        let switch_row = |id: &'static str,
-                          title: &str,
-                          hint: Option<String>,
-                          checked: bool,
-                          focus: &FocusHandle,
-                          patch: fn(bool) -> SettingsPatch,
-                          update: UpdateSettings| {
-            let toggle = update.clone();
-            div()
-                .id(SharedString::from(format!("{id}-row")))
-                .flex()
-                .items_center()
-                .justify_between()
-                .gap(px(16.))
-                .when(loaded, |d| d.on_click(move |_, _, cx| toggle(patch(!checked), cx)))
-                .child(row_text(title.to_owned(), hint, t))
-                .child(
-                    switch(id, checked)
-                        .disabled(!loaded)
-                        .focus(focus)
-                        .on_change(move |v, _, cx| update(patch(v), cx)),
-                )
+        let body: Vec<AnyElement> = match section {
+            Section::Appearance => self.appearance(&s, &ctx, window, cx),
+            Section::Board => self.board(&s, &ctx),
+            Section::CaptureVoice => self.capture_voice(&s, &ctx, &key_value, key_blank, window, cx),
+            Section::Notifications => self.notifications(&s, &ctx),
+            Section::Updates => self.updates(&s, &ctx, update_status.as_ref(), cx),
         };
 
         let header = div()
@@ -339,20 +419,12 @@ impl Render for SettingsDialog {
             .items_center()
             .justify_between()
             .gap(px(16.))
-            .pt(px(14.))
+            .h(px(HEADER_H))
             .pr(px(12.))
-            .pb(px(12.))
             .pl(px(22.))
             .border_b(px(0.5))
             .border_color(t.separator)
-            .child(
-                div()
-                    .font_family(fonts::DISPLAY)
-                    .text_size(TEXT_LG)
-                    .line_height(px(21.))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child("Settings"),
-            )
+            .child(title(section.label()))
             .child({
                 let this = cx.entity();
                 button("settings-close")
@@ -365,9 +437,172 @@ impl Render for SettingsDialog {
                     .on_click(move |_, _, cx| this.update(cx, SettingsDialog::close))
             });
 
-        // Appearance: three tiles sharing the body's width, which a
-        // scrollbar beside them narrows.
-        let row_width = window.use_keyed_state("theme-tiles-width", cx, |_, _| px(396.));
+        let close = cx.entity();
+        let height = px(PANEL_H).min(window.viewport_size().height - px(48.));
+        // Tab and Shift+Tab: the dialog's own (bound under its key context),
+        // and the key field's, which would indent.
+        let tab = |back: bool| {
+            let this = cx.entity();
+            let stops = stops.clone();
+            move |window: &mut Window, cx: &mut App| {
+                cx.stop_propagation();
+                this.update(cx, |d, cx| d.tab(back, window, cx, &stops));
+            }
+        };
+        let (next, previous, indent, outdent) = (tab(false), tab(true), tab(false), tab(true));
+        let panel = div()
+            .id("settings-inner")
+            .key_context(KEY_CONTEXT)
+            .track_focus(&self.panel)
+            .flex()
+            .h(height)
+            .min_h_0()
+            .on_action(move |_: &NextStop, window, cx| next(window, cx))
+            .on_action(move |_: &PreviousStop, window, cx| previous(window, cx))
+            .capture_action(move |_: &IndentInline, window, cx| indent(window, cx))
+            .capture_action(move |_: &OutdentInline, window, cx| outdent(window, cx))
+            .on_key_down(cx.listener(Self::on_key_down))
+            .child(self.sidebar(section, update_status.as_ref(), window, cx))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .child(header)
+                    .child(scroll_area(
+                        ("settings-body", section as usize),
+                        &self.scroll,
+                        [20., 22., 24., 22.],
+                        div().flex().flex_col().children(body),
+                        window,
+                        cx,
+                    )),
+            );
+        self.serial = self.serial.max(1);
+        Modal::new(("settings", self.serial), px(PANEL_W), move |_, cx| {
+            close.update(cx, SettingsDialog::close);
+        })
+        .render(panel, window, cx)
+    }
+}
+
+/// What every section's rows draw with.
+struct Ctx {
+    t: Tokens,
+    loaded: bool,
+    update: UpdateSettings,
+}
+
+impl SettingsDialog {
+    /// The sections down the left, the one on show selected; it holds the
+    /// sidebar's tab stop, and ↑/↓ move through them (UI-123).
+    fn sidebar(
+        &self,
+        section: Section,
+        update: Option<&UpdateStatus>,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> gpui::Div {
+        let t = theme::tokens(cx);
+        let keyboard = window.last_input_was_keyboard();
+        // A dot by a section with something waiting there.
+        let waiting = |item: Section| match item {
+            Section::Updates => matches!(update.map(|u| &u.state), Some(UpdateState::Ready { .. })).then_some(t.accent),
+            Section::CaptureVoice => {
+                (self.shortcut == Some(CaptureShortcut::NeedsPermission)).then_some(t.status_waiting)
+            }
+            _ => None,
+        };
+        let rows = Section::ALL.into_iter().map(|item| {
+            let selected = item == section;
+            let focused = selected && keyboard && self.stops.nav.is_focused(window);
+            let this = cx.entity();
+            let nav = self.stops.nav.clone();
+            div()
+                .id(("settings-nav", item as usize))
+                .relative()
+                .flex()
+                .items_center()
+                .gap(px(9.))
+                .h(px(30.))
+                .px(px(9.))
+                .rounded(RADIUS_SM)
+                .cursor(CursorStyle::Arrow)
+                .when(selected, |d| d.bg(t.bg_selected).track_focus(&self.stops.nav))
+                .when(!selected, |d| d.hover(|d| d.bg(t.bg_hover)))
+                .on_click(move |_, window, cx| {
+                    window.focus(&nav, cx);
+                    this.update(cx, |d, cx| d.show(item, cx));
+                })
+                .child(icon(
+                    item.icon(),
+                    15.,
+                    2.,
+                    if selected { t.accent } else { t.text_secondary },
+                ))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .text_size(TEXT_MD)
+                        .text_color(t.text_primary)
+                        .when(selected, |d| d.font_weight(FontWeight::MEDIUM))
+                        .child(item.label()),
+                )
+                .when_some(waiting(item), |d, color| {
+                    d.child(div().flex_none().size(px(7.)).rounded_full().bg(color))
+                })
+                .when(focused, |d| {
+                    d.child(focus_ring(Corners::all(RADIUS_SM), px(0.), t.focus_ring))
+                })
+        });
+        div()
+            .flex_none()
+            .w(px(SIDEBAR_W))
+            .flex()
+            .flex_col()
+            .bg(t.bg_sunken)
+            // The panel's clip is square (overflow_hidden ignores its
+            // rounding), so the sidebar rounds its own outer corners.
+            .rounded_tl(RADIUS_XL)
+            .rounded_bl(RADIUS_XL)
+            .border_r(px(0.5))
+            .border_color(t.separator)
+            .child(
+                div()
+                    .flex()
+                    .flex_none()
+                    .items_center()
+                    .h(px(HEADER_H))
+                    .pl(px(20.))
+                    .child(title("Settings")),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.))
+                    .px(px(10.))
+                    .pt(px(1.))
+                    .children(rows),
+            )
+    }
+
+    /// Appearance: the theme tiles (UI-125…UI-128) and the sidebar (UI-129).
+    fn appearance(
+        &self,
+        s: &AppSettings,
+        ctx: &Ctx,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> Vec<AnyElement> {
+        let t = ctx.t;
+        let loaded = ctx.loaded;
+        let keyboard = window.last_input_was_keyboard();
+        // Three tiles sharing the box's width, which a scrollbar beside the
+        // body narrows.
+        let row_width = window.use_keyed_state("theme-tiles-width", cx, |_, _| px(420.));
         let tile_w = ((f32::from(*row_width.read(cx)) - 32.0) / 3.0).max(1.0);
         let tile_h = tile_w * 10.0 / 16.0;
         let tiles = div().relative().flex().gap(px(16.)).child(
@@ -410,7 +645,7 @@ impl Render for SettingsDialog {
                 v
             };
             let focused = checked && self.stops.tile.is_focused(window) && keyboard;
-            let update = update.clone();
+            let update = ctx.update.clone();
             let tile_focus = self.stops.tile.clone();
             div()
                 .id(("theme-tile", value as usize))
@@ -460,95 +695,117 @@ impl Render for SettingsDialog {
                         .child(label),
                 )
         }));
-        let appearance = group(
-            "Appearance",
-            vec![
-                tiles.into_any_element(),
-                hint(
-                    format!(
-                        "System follows the appearance set in {}.",
-                        if platform.is_mac() { "macOS" } else { "Windows" }
-                    ),
-                    t,
-                )
-                .into_any_element(),
-                switch_row(
-                    "pin-rail",
-                    "Always show the project sidebar",
-                    Some("When off, point at the window’s left edge to slide it in.".into()),
-                    s.pin_project_rail && loaded,
-                    &self.stops.pin,
-                    |v| SettingsPatch {
-                        pin_project_rail: Some(v),
-                        ..SettingsPatch::default()
-                    },
-                    update.clone(),
-                )
-                .mt(px(14.))
-                .into_any_element(),
-            ],
-            true,
-            t,
-        );
+        let os = if Platform::CURRENT.is_mac() { "macOS" } else { "Windows" };
+        vec![
+            group(
+                Some("Theme"),
+                vec![
+                    div()
+                        .p(px(16.))
+                        .child(tiles)
+                        .child(hint(format!("System follows the appearance set in {os}."), t))
+                        .into_any_element(),
+                ],
+                true,
+                t,
+            )
+            .into_any_element(),
+            group(
+                Some("Sidebar"),
+                vec![
+                    switch_row(
+                        "pin-rail",
+                        "Always show the project sidebar",
+                        Some("When off, point at the window’s left edge to slide it in.".into()),
+                        s.pin_project_rail,
+                        &self.stops.pin,
+                        |v| SettingsPatch {
+                            pin_project_rail: Some(v),
+                            ..SettingsPatch::default()
+                        },
+                        ctx,
+                    )
+                    .into_any_element(),
+                ],
+                false,
+                t,
+            )
+            .into_any_element(),
+        ]
+    }
 
-        // BOARD-179: what a mouse's wheel does on the board.
-        let board = group(
-            "Board",
-            vec![
-                switch_row(
-                    "wheel-zoom",
-                    "Zoom with the mouse wheel",
-                    Some(format!(
-                        "Hold {} while scrolling to pan instead. A trackpad still pans with two fingers and zooms with a pinch.",
-                        if platform.is_mac() { "⇧ or ⌘" } else { "Shift or Ctrl" }
-                    )),
-                    s.wheel_zoom && loaded,
-                    &self.stops.wheel,
-                    |v| SettingsPatch {
-                        wheel_zoom: Some(v),
-                        ..SettingsPatch::default()
-                    },
-                    update.clone(),
-                )
-                .into_any_element(),
-            ],
-            false,
-            t,
-        );
+    /// Board: the mouse wheel (UI-306, BOARD-179) and Focus (UI-130).
+    fn board(&self, s: &AppSettings, ctx: &Ctx) -> Vec<AnyElement> {
+        let keys = if Platform::CURRENT.is_mac() {
+            "⇧ or ⌘"
+        } else {
+            "Shift or Ctrl"
+        };
+        vec![
+            group(
+                None,
+                vec![
+                    switch_row(
+                        "wheel-zoom",
+                        "Zoom with the mouse wheel",
+                        Some(format!(
+                            "Hold {keys} while scrolling to pan instead. A trackpad still pans with two fingers and zooms with a pinch."
+                        )),
+                        s.wheel_zoom,
+                        &self.stops.wheel,
+                        |v| SettingsPatch {
+                            wheel_zoom: Some(v),
+                            ..SettingsPatch::default()
+                        },
+                        ctx,
+                    )
+                    .into_any_element(),
+                    switch_row(
+                        "focus-feature",
+                        "Focus mode",
+                        Some("Adds a Focus switch to the title bar that shows only the projects in focus. Right-click a project and choose Add to Focus.".into()),
+                        s.focus_feature,
+                        &self.stops.focus,
+                        |v| SettingsPatch {
+                            focus_feature: Some(v),
+                            ..SettingsPatch::default()
+                        },
+                        ctx,
+                    )
+                    .into_any_element(),
+                ],
+                true,
+                ctx.t,
+            )
+            .into_any_element(),
+        ]
+    }
 
-        let focus = group(
-            "Focus",
-            vec![
-                switch_row(
-                    "focus-feature",
-                    "Focus mode",
-                    Some("Adds a Focus switch to the title bar that shows only the projects in focus. Right-click a project and choose Add to Focus.".into()),
-                    s.focus_feature && loaded,
-                    &self.stops.focus,
-                    |v| SettingsPatch {
-                        focus_feature: Some(v),
-                        ..SettingsPatch::default()
-                    },
-                    update.clone(),
-                )
-                .into_any_element(),
-            ],
-            false,
-            t,
-        );
-
+    /// Capture & Voice: floating capture (UI-131…UI-135) and the voice key
+    /// (UI-139…UI-146).
+    fn capture_voice(
+        &self,
+        s: &AppSettings,
+        ctx: &Ctx,
+        key_value: &str,
+        key_blank: bool,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> Vec<AnyElement> {
+        let t = ctx.t;
+        let platform = Platform::CURRENT;
         let mut capture_rows: Vec<AnyElement> = vec![
             switch_row(
                 "capture",
                 "Double-tap ⇧ in any app to capture",
                 Some("A panel floats up over what you’re doing. Type or say what you want, and Claude works out whether it’s a new session, a note, a view or a reply to a session.".into()),
-                s.capture && loaded,
+                s.capture,
                 &self.stops.capture,
                 |v| SettingsPatch {
                     capture: Some(v),
                     ..SettingsPatch::default()
                 },
-                update.clone(),
+                ctx,
             )
             .into_any_element(),
         ];
@@ -583,7 +840,6 @@ impl Render for SettingsDialog {
                             .into_any_element()
                     }),
                 )
-                .mt(px(14.))
                 .into_any_element(),
             );
         }
@@ -596,11 +852,10 @@ impl Render for SettingsDialog {
                     ),
                     None,
                 )
-                .mt(px(14.))
                 .into_any_element(),
             );
         }
-        if loaded && s.capture {
+        if ctx.loaded && s.capture {
             // UI-135
             let ready = if self.shortcut == Some(CaptureShortcut::Ready) {
                 "Ready. "
@@ -619,53 +874,15 @@ impl Render for SettingsDialog {
                             .into_any_element()
                     }),
                 )
-                .mt(px(14.))
                 .into_any_element(),
             );
         }
-        let capture = group("Floating capture", capture_rows, false, t);
 
-        let mut notify_rows = vec![
-            switch_row(
-                "notify",
-                "Notify me when a session needs me or finishes",
-                Some("Only while Nodus is in the background. Click one to open its card.".into()),
-                s.notify && loaded,
-                &self.stops.notify,
-                |v| SettingsPatch {
-                    notify: Some(v),
-                    ..SettingsPatch::default()
-                },
-                update.clone(),
-            )
-            .into_any_element(),
-        ];
-        // UI-137: only a Mac has a Dock.
-        if platform.is_mac() {
-            notify_rows.push(
-                switch_row(
-                    "dock-badge",
-                    "Count sessions that need me on the Dock icon",
-                    None,
-                    s.dock_badge && loaded,
-                    &self.stops.dock,
-                    |v| SettingsPatch {
-                        dock_badge: Some(v),
-                        ..SettingsPatch::default()
-                    },
-                    update.clone(),
-                )
-                .mt(px(14.))
-                .into_any_element(),
-            );
-        }
-        let notifications = group("Notifications", notify_rows, false, t);
-
-        // Voice prompts (UI-139…UI-146).
+        // The voice key (UI-139…UI-146).
         let source = self.key_source;
         let field_focused = self.key_field.read(cx).focus_handle(cx).is_focused(window);
         let save_view = cx.entity();
-        let save_value = key_value.clone();
+        let save_value = key_value.to_owned();
         let key_form = div()
             .flex()
             .gap(px(8.))
@@ -722,41 +939,95 @@ impl Render for SettingsDialog {
                 .flex()
                 .flex_wrap()
                 .child("Add a key to speak prompts with the mic button. Get one at\u{a0}")
-                .child(link("console", "console.x.ai", Some("https://console.x.ai"), t))
-                .child(".")
+                // The full stop wraps with its link.
+                .child(
+                    div()
+                        .flex()
+                        .child(link("console", "console.x.ai", Some("https://console.x.ai"), t))
+                        .child("."),
+                )
                 .into_any_element(),
         };
-        let mut voice_rows = vec![
-            key_form.into_any_element(),
-            hint_el(key_hint, t).into_any_element(),
-            hint("Recordings are sent to xAI to be turned into text.".into(), t)
-                .mt(px(4.))
-                .into_any_element(),
+        let voice = div()
+            .p(px(14.))
+            .child(key_form)
+            .child(hint_el(key_hint, t).mt(px(10.)))
+            .child(hint("Recordings are sent to xAI to be turned into text.".into(), t).mt(px(4.)))
+            .when_some(self.key_error.clone(), |d, error| {
+                d.child(
+                    div()
+                        .mt(px(8.))
+                        .text_size(TEXT_SM)
+                        .line_height(px(16.8))
+                        .text_color(t.status_waiting)
+                        .child(error),
+                )
+            });
+
+        vec![
+            group(Some("Floating capture"), capture_rows, true, t).into_any_element(),
+            group(Some("Voice prompts"), vec![voice.into_any_element()], false, t).into_any_element(),
+        ]
+    }
+
+    /// Notifications (UI-136, UI-137).
+    fn notifications(&self, s: &AppSettings, ctx: &Ctx) -> Vec<AnyElement> {
+        let mut rows = vec![
+            switch_row(
+                "notify",
+                "Notify me when a session needs me or finishes",
+                Some("Only while Nodus is in the background. Click one to open its card.".into()),
+                s.notify,
+                &self.stops.notify,
+                |v| SettingsPatch {
+                    notify: Some(v),
+                    ..SettingsPatch::default()
+                },
+                ctx,
+            )
+            .into_any_element(),
         ];
-        if let Some(error) = &self.key_error {
-            voice_rows.push(
-                div()
-                    .mt(px(8.))
-                    .text_size(TEXT_SM)
-                    .line_height(px(16.8))
-                    .text_color(t.status_waiting)
-                    .child(error.clone())
-                    .into_any_element(),
+        // UI-137: only a Mac has a Dock.
+        if Platform::CURRENT.is_mac() {
+            rows.push(
+                switch_row(
+                    "dock-badge",
+                    "Count sessions that need me on the Dock icon",
+                    None,
+                    s.dock_badge,
+                    &self.stops.dock,
+                    |v| SettingsPatch {
+                        dock_badge: Some(v),
+                        ..SettingsPatch::default()
+                    },
+                    ctx,
+                )
+                .into_any_element(),
             );
         }
-        let voice = group("Voice prompts", voice_rows, false, t);
+        vec![group(None, rows, true, ctx.t).into_any_element()]
+    }
 
-        // Updates (UI-147…UI-151).
-        let status_state = update_status.as_ref().map(|u| &u.state);
+    /// Updates (UI-147…UI-151).
+    fn updates(
+        &self,
+        s: &AppSettings,
+        ctx: &Ctx,
+        update_status: Option<&UpdateStatus>,
+        cx: &mut Context<'_, Self>,
+    ) -> Vec<AnyElement> {
+        let t = ctx.t;
+        let nodus = self.state.read(cx).nodus.clone();
+        let status_state = update_status.map(|u| &u.state);
         let busy = matches!(
             status_state,
             Some(UpdateState::Checking | UpdateState::Downloading { .. })
         );
-        let title = match &update_status {
+        let title = match update_status {
             Some(u) => format!("Nodus {}", u.current),
             None => "Nodus ".into(),
         };
-        let text = update_status.as_ref().and_then(|u| update_text(&u.state));
+        let text = update_status.and_then(|u| update_text(&u.state));
         let update_button: Option<AnyElement> = match status_state {
             Some(UpdateState::Ready { .. }) => Some(
                 button("update-install")
@@ -785,34 +1056,34 @@ impl Render for SettingsDialog {
                     .into_any_element(),
             ),
         };
-        let mut update_rows = vec![plain_row(row_text(title, text, t), update_button).into_any_element()];
+        let mut rows = vec![plain_row(row_text(title, text, t), update_button).into_any_element()];
         if !matches!(status_state, Some(UpdateState::Off { .. })) {
-            update_rows.push(
+            rows.push(
                 switch_row(
                     "auto-update",
                     "Download updates automatically",
                     Some(
-                        if platform.is_mac() {
+                        if Platform::CURRENT.is_mac() {
                             "They install when you quit Nodus. Sessions keep running."
                         } else {
                             "They install when you choose Restart to Update, which stops the sessions."
                         }
                         .into(),
                     ),
-                    s.auto_update && loaded,
+                    s.auto_update,
                     &self.stops.auto_update,
                     |v| SettingsPatch {
                         auto_update: Some(v),
                         ..SettingsPatch::default()
                     },
-                    update.clone(),
+                    ctx,
                 )
-                .mt(px(14.))
                 .into_any_element(),
             );
         }
+        let mut body = vec![group(None, rows, true, t).into_any_element()];
         if matches!(status_state, Some(UpdateState::Error { .. })) {
-            update_rows.push(
+            body.push(
                 hint_el(
                     div()
                         .flex()
@@ -823,46 +1094,12 @@ impl Render for SettingsDialog {
                         .into_any_element(),
                     t,
                 )
+                .mt(px(10.))
+                .px(px(2.))
                 .into_any_element(),
             );
         }
-        let updates = group("Updates", update_rows, false, t);
-
-        let this = cx.entity();
-        let close = cx.entity();
-        let panel = div()
-            .id("settings-inner")
-            .track_focus(&self.panel)
-            .flex()
-            .flex_col()
-            .min_h_0()
-            .on_key_down(move |e, window, cx| {
-                let stops = stops.clone();
-                this.update(cx, |d, cx| d.on_key_down(e, window, cx, &stops));
-            })
-            .child(header)
-            .child(scroll_area(
-                "settings-body",
-                &self.scroll,
-                [18., 22., 22., 22.],
-                div()
-                    .flex()
-                    .flex_col()
-                    .child(appearance)
-                    .child(board)
-                    .child(focus)
-                    .child(capture)
-                    .child(notifications)
-                    .child(voice)
-                    .child(updates),
-                window,
-                cx,
-            ));
-        self.serial = self.serial.max(1);
-        Modal::new(("settings", self.serial), px(440.), move |_, cx| {
-            close.update(cx, SettingsDialog::close);
-        })
-        .render(panel, window, cx)
+        body
     }
 }
 
@@ -870,20 +1107,81 @@ fn transparent_c() -> gpui::Rgba {
     crate::components::button::transparent()
 }
 
-/// A group: its label, then its rows; 26px above every group but the first.
-fn group(label: &str, rows: Vec<AnyElement>, first: bool, t: Tokens) -> gpui::Div {
+/// The sidebar's and the pane's titles.
+fn title(text: &'static str) -> gpui::Div {
+    div()
+        .font_family(fonts::DISPLAY)
+        .text_size(TEXT_LG)
+        .line_height(px(21.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .child(text)
+}
+
+/// A group: its label, if it has one, over its rows in a box, a hairline
+/// between rows; 24px above every group but the section's first.
+fn group(label: Option<&str>, rows: Vec<AnyElement>, first: bool, t: Tokens) -> gpui::Div {
+    let rows = rows.into_iter().enumerate().flat_map(|(i, row)| {
+        let line = (i > 0).then(|| div().h(px(0.5)).mx(px(14.)).bg(t.separator).into_any_element());
+        line.into_iter().chain([row])
+    });
     div()
         .flex()
         .flex_col()
-        .when(!first, |d| d.mt(px(26.)))
+        .when(!first, |d| d.mt(px(24.)))
+        .when_some(label, |d, label| {
+            d.child(
+                div()
+                    .mb(px(8.))
+                    .px(px(2.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(t.text_primary)
+                    .child(label.to_owned()),
+            )
+        })
         .child(
             div()
-                .mb(px(12.))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(t.text_primary)
-                .child(label.to_owned()),
+                .flex()
+                .flex_col()
+                .rounded(RADIUS_MD)
+                .border(px(0.5))
+                .border_color(t.border)
+                .bg(t.bg_sunken)
+                .children(rows),
         )
-        .children(rows)
+}
+
+/// A switch row: clicking anywhere on it toggles (UI-138); disabled until
+/// the settings are loaded (UI-124).
+#[allow(clippy::too_many_arguments)]
+fn switch_row(
+    id: &'static str,
+    title: &str,
+    hint: Option<String>,
+    checked: bool,
+    focus: &FocusHandle,
+    patch: fn(bool) -> SettingsPatch,
+    ctx: &Ctx,
+) -> gpui::Stateful<gpui::Div> {
+    let loaded = ctx.loaded;
+    let checked = checked && loaded;
+    let toggle = ctx.update.clone();
+    let update = ctx.update.clone();
+    div()
+        .id(SharedString::from(format!("{id}-row")))
+        .flex()
+        .items_center()
+        .justify_between()
+        .gap(px(16.))
+        .px(px(14.))
+        .py(px(11.))
+        .when(loaded, |d| d.on_click(move |_, _, cx| toggle(patch(!checked), cx)))
+        .child(row_text(title.to_owned(), hint, ctx.t))
+        .child(
+            switch(id, checked)
+                .disabled(!loaded)
+                .focus(focus)
+                .on_change(move |v, _, cx| update(patch(v), cx)),
+        )
 }
 
 /// A row's title and hint.
@@ -922,6 +1220,8 @@ fn plain_row(text: gpui::Div, control: Option<AnyElement>) -> gpui::Div {
         .items_center()
         .justify_between()
         .gap(px(16.))
+        .px(px(14.))
+        .py(px(11.))
         .child(text)
         .children(control)
 }
@@ -986,9 +1286,6 @@ pub fn update_text(state: &UpdateState) -> Option<String> {
     }
 }
 
-#[allow(dead_code)]
-fn _settings(_: AppSettings) {}
-
 /// UI-132: while Settings is open, the capture shortcut's state is read at
 /// once and then every 2 s, and again at once when `settings.capture` changes.
 fn poll_shortcut(state: &Entity<AppState>, cx: &mut Context<'_, SettingsDialog>) -> gpui::Task<()> {
@@ -1029,6 +1326,16 @@ fn poll_shortcut(state: &Entity<AppState>, cx: &mut Context<'_, SettingsDialog>)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn steps_through_the_sections_stopping_at_the_ends() {
+        assert_eq!(Section::default(), Section::Appearance);
+        assert_eq!(Section::Appearance.step(-1), Section::Appearance);
+        assert_eq!(Section::Appearance.step(1), Section::Board);
+        assert_eq!(Section::Board.step(1), Section::CaptureVoice);
+        assert_eq!(Section::Updates.step(-1), Section::Notifications);
+        assert_eq!(Section::Updates.step(1), Section::Updates);
+    }
 
     #[test]
     fn words_the_update_status() {

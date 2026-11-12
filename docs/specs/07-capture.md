@@ -228,7 +228,7 @@ The panel is a second window loading the renderer at `#capture`; in Rust it is a
 - **CAP-156** `captures` in `state.json` is read only when it is an array (otherwise absent) and written back as is; records that no longer resolve stay in the file until pushed out by newer ones.
 - **CAP-157** The page keeps, per machine, across panel shows and app restarts: `capture.draft` (the text; removed when empty), `capture.attachments` (the attachment list including image thumbnails; removed when empty), `capture.history` (up to 50 sent texts, newest first), `capture.clipboardDone` (the key of the last clipboard offer seen). They are saved on every change; unreadable or missing values fall back to defaults; write failures are ignored. In 0.9.4 they live in the renderer's `localStorage` as JSON values.
 - **CAP-158** Screenshots and copied images are PNGs named `<UUID v4>.png` in `<userData>/captures/` (`<userData>` honours `NODUS_USER_DATA`), created on demand. Claude gets them by path (CAP-137). They are never deleted on send or removal from the panel; only by the 30-day sweep (CAP-063).
-- **CAP-159** `capture:settings` (voice notice's Settings, missing voice key): hides the panel, brings the board window up (re-creating it if closed) and opens its Settings dialog (menu command `settings`, sent once the window has loaded if it was re-created).
+- **CAP-159** `capture:settings` (voice notice's Settings, missing voice key): hides the panel, brings the board window up (re-creating it if closed) and opens its Settings dialog at Capture & Voice, where the voice key goes (menu command `voice-settings`, sent once the window has loaded if it was re-created).
 - **CAP-160** `capture:hide` (fire-and-forget) hides the panel (CAP-016).
 
 ## Data & formats

@@ -55,10 +55,13 @@ pub enum Icon {
     Shield,
     Bell,
     Globe,
+    SunMoon,
+    Mic,
+    Download,
 }
 
 impl Icon {
-    const ALL: [Self; 45] = [
+    const ALL: [Self; 48] = [
         Self::ChevronLeft,
         Self::ChevronRight,
         Self::ChevronDown,
@@ -104,6 +107,9 @@ impl Icon {
         Self::Shield,
         Self::Bell,
         Self::Globe,
+        Self::SunMoon,
+        Self::Mic,
+        Self::Download,
     ];
 
     pub fn name(self) -> &'static str {
@@ -152,6 +158,9 @@ impl Icon {
             Self::Shield => "shield",
             Self::Bell => "bell",
             Self::Globe => "globe",
+            Self::SunMoon => "sun-moon",
+            Self::Mic => "mic",
+            Self::Download => "download",
             Self::Ungroup => "ungroup",
         }
     }
@@ -265,6 +274,15 @@ impl Icon {
             }
             Self::Bell => {
                 r#"<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>"#
+            }
+            Self::SunMoon => {
+                r#"<path d="M12 8a2.83 2.83 0 0 0 4 4 4 4 0 1 1-4-4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.3 17.7-1.4 1.4"/><path d="m19.1 4.9-1.4 1.4"/>"#
+            }
+            Self::Mic => {
+                r#"<path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/>"#
+            }
+            Self::Download => {
+                r#"<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>"#
             }
         }
     }

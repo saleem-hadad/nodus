@@ -11,13 +11,13 @@ pub struct MenuApi<'a> {
 }
 
 impl MenuApi<'_> {
-    /// `Check for Updates…` (PLAT-046, UPD-079): Settings opens to show how
-    /// the check goes (the `settings` menu command), and a check the user
-    /// asked for starts. Done once the lookup is.
+    /// `Check for Updates…` (PLAT-046, UPD-079): Settings opens at Updates to
+    /// show how the check goes (the `update-settings` menu command), and a
+    /// check the user asked for starts. Done once the lookup is.
     pub async fn check_for_updates(&self) {
         self.nodus
             .on_core(async {
-                self.nodus.emit(Event::Menu(MenuCommand::Settings));
+                self.nodus.emit(Event::Menu(MenuCommand::UpdateSettings));
                 self.nodus.inner.updater.check(true).await;
             })
             .await;

@@ -359,16 +359,19 @@ def run(a):
     a.steps([{"cmd": "capture", "action": "hide"}, W(300)])
 
     print("13. Settings: theme, the voice key field, the update rows")
-    a.steps([{"cmd": "menu", "command": "settings"}, W(600), M("click", 848, 163), W(600)])
+    # Appearance is the first section; the others are picked from the sidebar
+    # (Capture & Voice at 314, Updates at 378) or opened by their menu commands.
+    a.steps([{"cmd": "menu", "command": "settings"}, W(600), M("click", 957, 335), W(600)])
     a.until("Dark is chosen (saved)", lambda: a.state()["settings"].get("theme") == "dark")
     a.drive({"cmd": "screenshot", "path": a.path("e2e-settings-dark.png")})
-    a.steps([M("click", 715, 163), W(600)])
+    a.steps([M("click", 814, 335), W(600)])
     a.until("…and Light again", lambda: a.state()["settings"].get("theme") == "light")
-    a.steps([{"cmd": "scroll", "x": 720, "y": 500, "dx": 0, "dy": -3000}, W(400), M("click", 683, 677), W(200),
+    a.steps([M("click", 440, 314), W(400), M("click", 780, 453), W(200),
              {"cmd": "type", "text": "xai-not-a-real-key"}, W(300)])
     a.drive({"cmd": "screenshot", "path": a.path("e2e-settings-key.png")})
     a.expect("the key field takes typing (shot e2e-settings-key.png); not saved",
              "voiceKey" not in json.dumps(a.state().get("settings", {})), a.state().get("settings"))
+    a.steps([{"cmd": "menu", "command": "update-settings"}, W(400)])
     for status in [{"state": "checking", "current": "1.0.0"},
                    {"state": "downloading", "version": "1.0.1", "percent": 42, "current": "1.0.0"},
                    {"state": "ready", "version": "1.0.1", "current": "1.0.0"},

@@ -34,6 +34,10 @@ string_enum! {
         NewProject = "new-project",
         /// Cmd+,: open the Settings window.
         Settings = "settings",
+        /// Settings, open at Capture & Voice: a voice prompt found no key.
+        VoiceSettings = "voice-settings",
+        /// Settings, open at Updates: Check for Updates… shows the check there.
+        UpdateSettings = "update-settings",
         /// Cmd+K: search the board's sessions.
         Search = "search",
         /// Cmd+Shift+F: flip the title bar's Focus switch (only while focus is offered in Settings).

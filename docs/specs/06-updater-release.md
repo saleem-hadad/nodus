@@ -124,7 +124,7 @@ The migration has a hard handoff constraint. Every installed Electron copy (macO
 - **UPD-076** `updates:status` (`window.api.updates.status()`) returns the current status.
 - **UPD-077** `updates:check` (`window.api.updates.check()`) runs `check(true)` and resolves once the lookup is done.
 - **UPD-078** `updates:install` (`window.api.updates.install()`) runs `restartToUpdate()`.
-- **UPD-079** The menu item `Check for Updates…` (no accelerator) sends the `settings` menu command, which opens Settings, and then runs `check(true)`. On macOS it sits in the app menu right after About. Elsewhere it's in File, right after `Settings…`.
+- **UPD-079** The menu item `Check for Updates…` (no accelerator) sends the `update-settings` menu command, which opens Settings at Updates, and then runs `check(true)`. On macOS it sits in the app menu right after About. Elsewhere it's in File, right after `Settings…`.
 
 ### UI
 
@@ -772,7 +772,7 @@ No macOS test exists in TypeScript. Recommended Rust additions, marked as such s
 - [x] UPD-076 `updates:status` returns the status
 - [x] UPD-077 `updates:check` runs `check(true)`, resolves after the lookup
 - [x] UPD-078 `updates:install` runs `restartToUpdate()`
-- [x] UPD-079 Menu `Check for Updates…` opens Settings then `check(true)`; Mac app menu after About, else File after Settings…
+- [x] UPD-079 Menu `Check for Updates…` opens Settings at Updates then `check(true)`; Mac app menu after About, else File after Settings…
 - [x] UPD-080 `useUpdateStatus` null until the first answer, then follows events
 - [x] UPD-081 Title-bar `Restart to Update` only in `ready`, with the platform tooltip
 - [x] UPD-082 Settings `Updates`: `Nodus <current>` + state hint strings

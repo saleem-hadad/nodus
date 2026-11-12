@@ -168,7 +168,7 @@ It owns the native application menu on macOS, and the same menu as a popup from 
 
 ### Application menu: actions
 
-- **PLAT-046** `Check for Updates…` sends the `settings` menu command (Settings shows how the check goes) and starts a user-asked update check (`check(true)`, 06).
+- **PLAT-046** `Check for Updates…` sends the `update-settings` menu command (Settings opens at Updates and shows how the check goes) and starts a user-asked update check (`check(true)`, 06).
 - **PLAT-047** `Settings…` sends the `settings` command.
 - **PLAT-048** `Capture…` opens the floating capture panel (`openPanel()`, 07). It works with no main window.
 - **PLAT-049** `New Session` sends `new-session`, `New Terminal` sends `new-terminal`, `New Project…` sends `new-project`, `Close` sends `close`, and `Search Sessions…` sends `search`. `Close` never closes the window. What each command does is the UI's business (08, 09).
@@ -190,8 +190,8 @@ It owns the native application menu on macOS, and the same menu as a popup from 
 ### Menu commands and the ☰ popup
 
 - **PLAT-060** `app:show-menu(x, y)` does nothing when there is no main window or x or y is not a finite number. Otherwise it opens the **whole application menu** as a popup in the main window at (`round(x)`, `round(y)`), in window-content logical coordinates. The title bar's ☰ button (Windows only, 08) passes its left edge and its bottom + 4.
-- **PLAT-061** `app:menu-command(command)`. If `command` is one of the seven MenuCommands (PLAT-062), the `menu` event carrying it is sent to the main window. Anything else is silently ignored, and the call resolves either way. The UI uses it for the shortcuts a terminal would otherwise take off a Mac: Ctrl+N/T/W outside terminals (App.tsx) and Ctrl+Shift+W/T inside terminals (12).
-- **PLAT-062** MenuCommand values (exact strings): `close`, `new-session`, `new-terminal`, `new-project`, `settings`, `search`, `toggle-focus`.
+- **PLAT-061** `app:menu-command(command)`. If `command` is one of the MenuCommands (PLAT-062), the `menu` event carrying it is sent to the main window. Anything else is silently ignored, and the call resolves either way. The UI uses it for the shortcuts a terminal would otherwise take off a Mac: Ctrl+N/T/W outside terminals (App.tsx) and Ctrl+Shift+W/T inside terminals (12).
+- **PLAT-062** MenuCommand values (exact strings): `close`, `new-session`, `new-terminal`, `new-project`, `settings`, `voice-settings`, `update-settings`, `search`, `toggle-focus`, `report-problem`. `voice-settings` and `update-settings` open Settings at Capture & Voice and at Updates (UI-307).
 
 ### Settings
 
@@ -958,7 +958,7 @@ Risks and unknowns:
 - [x] PLAT-043 Window menu
 - [x] PLAT-044 Help menu
 - [x] PLAT-045 AppKit-added menu items match 0.9.4
-- [x] PLAT-046 Check for Updates… → settings + check(true)
+- [x] PLAT-046 Check for Updates… → update-settings + check(true)
 - [x] PLAT-047 Settings… → settings
 - [x] PLAT-048 Capture… → openPanel
 - [x] PLAT-049 File/Edit commands → menu commands
@@ -974,7 +974,7 @@ Risks and unknowns:
 - [x] PLAT-059 Native Hide/Show All/Services/Minimize/Zoom/Front
 - [x] PLAT-060 app:show-menu popup at rounded (x,y)
 - [x] PLAT-061 app:menu-command validation + echo
-- [x] PLAT-062 Seven MenuCommand values
+- [x] PLAT-062 MenuCommand values
 - [x] PLAT-063 Settings normalization + key order
 - [x] PLAT-064 settings:get
 - [x] PLAT-065 settings:update merge/apply/save/autoUpdate check

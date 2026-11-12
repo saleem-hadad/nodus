@@ -41,7 +41,7 @@ Rule 4 of the plan applies throughout: the Rust host and client must be **wire-c
 
 ### Host process: startup (host.ts)
 
-- HOST-022 **Arguments.** The host takes two positional arguments, the socket path and the key path; the app always passes both, on every platform (0.9.4: `<Electron binary> <app>/out/main/host.js <socket> <key>` with `ELECTRON_RUN_AS_NODE=1`; Rust: `Nodus host <socket> <key>`).
+- HOST-022 **Arguments.** The host takes two positional arguments, the socket path and the key path; the app always passes both, on every platform (0.9.4: `<Electron binary> <app>/out/main/host.js <socket> <key>` with `ELECTRON_RUN_AS_NODE=1`; Rust: `Nodus host <socket> <key>`). Rust only, not on Windows: `host --socket <path>` runs a host nobody launches (hosted Nodus, SRV-004): it makes the socket's folder when missing (0750), chmods the socket 0660 instead of 0600, fails rather than fall back to the temp folder when the path is too long for a socket, skips HOST-032 and the no-app half of HOST-047, and, after the welcome, stops every session and exits (HOST-064) when a hello has another protocol.
 - HOST-023 **Usage error.** Without a socket path, or on Windows without a key path, the host logs `failed to start` with the error `usage: host <socket path> <key path>` and exits with code 1.
 - HOST-024 **One host per socket.** At startup the host connects to its socket path; if the connection succeeds it closes it without sending anything, logs `another host is running`, and exits with code 0.
 - HOST-025 **Stale socket.** Otherwise it deletes the file at the socket path, ignoring any error.
@@ -377,6 +377,11 @@ Rule 4 of the plan applies throughout: the Rust host and client must be **wire-c
 | `kill` | `sessionId: string` | HOST-062–063 |
 | `shutdown` | — | HOST-064 (also accepted from a greeted non-client) |
 | `mcp-reply` | `id: number` (relay id), `reply?: any` (omitted when the app has no answer) | HOST-086 |
+| `exec` | `id: number`, `argv: string[]`, `cwd?: string`, `env?: {[name]: string}`, `stdin?: string`, `timeoutMs?: number`, `claude?: true` (`argv[0]` is Claude Code's program, found on `env`'s PATH or the installers' folders under the host user's home), `stdout?`/`stderr?: "all"\|"ignore"\|{"first": n}\|{"maxBuffer": n}` (each kept to 32 MiB whatever is asked), `killSignal?: number`, `newSession?: true` | Rust only (SRV-005): runs a process outside any terminal, its tree stopped at the timeout; reply `exec-result` |
+| `exec-cancel` | `id: number` | Rust only: SIGKILLs a running `exec`'s tree; a closing connection does the same to all of its own |
+| `trust` | `id: number`, `path: string` | Rust only (SRV-126): sets `projects[path].hasTrustDialogAccepted` in the host user's `.claude.json` (`$CLAUDE_CONFIG_DIR/.claude.json` when set), keeping the rest; reply `trusted` |
+
+`exec`, `exec-cancel` and `trust` came without a protocol change: a host that doesn't know them ignores them (HOST-040), and only `nodus serve`, whose host is its own binary's, sends them. Like every other message but `shutdown`, they're only acted on from an app client (HOST-039).
 
 Examples (placeholders in `<…>`):
 
@@ -401,6 +406,8 @@ Examples (placeholders in `<…>`):
 | `exit` | `sessionId: string`, `exitCode: number` | to every app client |
 | `hook` | `sessionId: string`, `event: string`, `payload: any` (full JSON body; `{}` if empty or unparseable) | to every app client |
 | `mcp` | `id: number` (relay id), `sessionId: string`, `message: object` (one JSON-RPC request) | to the newest app client |
+| `exec-result` | `id: number`, `code?: number`, `signal?: number`, `stdout: string`, `stderr: string` (UTF-8, bad bytes replaced), `timedOut?: true`, `overflow?: "stdout"\|"stderr"`, `error?: string` (it never started, as `spawn git ENOENT`), `errno?: number` | to the requester (Rust only) |
+| `trusted` | `id: number`, `error?: string` | to the requester (Rust only) |
 
 Older hosts may omit `mcp` (no board tools: the app adds no `--mcp-config`), `hookAuthHeader` (the app writes no curl config and hooks send the token in the URL), `key`, and `statusLine`; readers treat each as absent/false.
 

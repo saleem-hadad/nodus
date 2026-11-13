@@ -4,7 +4,7 @@
 
 use nodus_board::BoxFuture;
 use nodus_board::geometry::{
-    EXPANDED_H, EXPANDED_W, Point, Size, VIEW_H, VIEW_W, card_size, dock_rect, find_free_spot,
+    EXPANDED_W, NEW_CARD_H, Point, Size, VIEW_H, VIEW_W, card_size, dock_rect, find_free_spot,
 };
 use nodus_board::notes::{fit_note, obstacles};
 use nodus_domain::js;
@@ -257,7 +257,7 @@ impl Maker<'_> {
             CaptureKind::Session => {
                 let size = Size {
                     w: EXPANDED_W,
-                    h: EXPANDED_H,
+                    h: NEW_CARD_H,
                 };
                 let at = spot_on_board(&board, size, window);
                 let opts = CreateSessionOptions {

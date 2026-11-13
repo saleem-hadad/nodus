@@ -35,6 +35,8 @@ pub const CARD_SIZE: Size = Size { w: CARD_W, h: CARD_H };
 /// An expanded card starts with room for an 80-column terminal.
 pub const EXPANDED_W: f64 = 720.0;
 pub const EXPANDED_H: f64 = 480.0;
+/// A new card starts twice as tall, with room for its chat or terminal.
+pub const NEW_CARD_H: f64 = EXPANDED_H * 2.0;
 
 /// Height of the archive header strip.
 pub const ARCHIVE_HEADER_H: f64 = 52.0;

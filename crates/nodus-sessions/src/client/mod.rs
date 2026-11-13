@@ -878,7 +878,7 @@ impl Inner {
                     );
                 });
             }
-            HostMessage::Welcome(_) => {}
+            HostMessage::Welcome(_) | HostMessage::Queue { .. } => {}
         }
     }
 

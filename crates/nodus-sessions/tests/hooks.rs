@@ -348,6 +348,22 @@ fn commands(settings: &str) -> Vec<Value> {
     hooks
 }
 
+/// The Stop hook's commands (QUEUE-008): they ask for a reply and print it.
+const STOP_VIA_CONFIG: &str = r#"curl -s -m 2 -X POST -H 'Content-Type: application/json' --data-binary @- -K "$NODUS_HOOK_CONFIG" "http://127.0.0.1:$NODUS_PORT/hook?evt=Stop&sid=$NODUS_SESSION&reply=1" 2>/dev/null; exit 0"#;
+const STOP_VIA_URL: &str = r#"curl -s -m 2 -X POST -H 'Content-Type: application/json' --data-binary @- "http://127.0.0.1:$NODUS_PORT/hook?evt=Stop&sid=$NODUS_SESSION&token=$NODUS_TOKEN&reply=1" 2>/dev/null; exit 0"#;
+const STOP_POWERSHELL: &str = r#"$ProgressPreference = 'SilentlyContinue'; $body = [IO.MemoryStream]::new(); [Console]::OpenStandardInput().CopyTo($body); try { $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 -Method Post -ContentType 'application/json' -Headers @{ Authorization = "Bearer $env:NODUS_TOKEN" } -Body $body.ToArray() -Uri "http://127.0.0.1:$env:NODUS_PORT/hook?evt=Stop&sid=$env:NODUS_SESSION&reply=1"; if ($r.Content) { [Console]::Out.Write($r.Content) } } catch {}; exit 0"#;
+
+/// A fixture's settings as 0.9.4 wrote them, with its Stop command swapped
+/// for `stop` (QUEUE-008); every other byte stays.
+fn with_stop(fixture_name: &str, stop: &str) -> String {
+    let fixture = fixture(fixture_name);
+    let settings: Value = serde_json::from_str(&fixture).unwrap();
+    let old = settings["hooks"]["Stop"][0]["hooks"][0]["command"].as_str().unwrap();
+    let old = serde_json::to_string(old).unwrap();
+    assert_eq!(fixture.matches(&old).count(), 1);
+    fixture.replace(&old, &serde_json::to_string(stop).unwrap())
+}
+
 #[test]
 fn hook_commands_register_every_hook_and_the_status_line_printing_nothing() {
     // HOST-180, HOST-182
@@ -364,13 +380,73 @@ fn hook_commands_register_every_hook_and_the_status_line_printing_nothing() {
         assert!(names.contains(&name), "{name}");
     }
     for command in commands(&endpoint.settings(false)) {
-        assert!(
-            command["command"]
-                .as_str()
-                .unwrap()
-                .ends_with(">/dev/null 2>&1; exit 0")
-        );
+        let command = command["command"].as_str().unwrap();
+        // QUEUE-008: but Stop, which prints the host's answer.
+        if command.contains("evt=Stop&") {
+            assert!(command.ends_with("&reply=1\" 2>/dev/null; exit 0"), "{command}");
+        } else {
+            assert!(command.ends_with(">/dev/null 2>&1; exit 0"), "{command}");
+        }
     }
+}
+
+#[test]
+fn queue_008_the_stop_hook_asks_for_a_reply_and_prints_it() {
+    let endpoint = HookEndpoint::new();
+    let stop = |powershell: bool| {
+        let settings: Value = serde_json::from_str(&endpoint.settings(powershell)).unwrap();
+        settings["hooks"]["Stop"][0]["hooks"][0].clone()
+    };
+    endpoint.set(4000, "secret-token", Some("/tmp/hook.curlrc"));
+    assert_eq!(
+        stop(false),
+        json!({"type": "command", "command": STOP_VIA_CONFIG, "timeout": 5})
+    );
+    assert_eq!(
+        stop(true),
+        json!({"type": "command", "command": STOP_POWERSHELL, "shell": "powershell", "timeout": 5})
+    );
+    endpoint.set(4000, "secret-token", None);
+    assert_eq!(
+        stop(false),
+        json!({"type": "command", "command": STOP_VIA_URL, "timeout": 5})
+    );
+}
+
+#[test]
+fn queue_008_every_other_hook_and_the_status_line_are_as_0_9_4_wrote_them() {
+    let endpoint = HookEndpoint::new();
+    let others = |settings: &str| -> Vec<Value> {
+        let settings: Value = serde_json::from_str(settings).unwrap();
+        let mut others: Vec<Value> = settings["hooks"]
+            .as_object()
+            .unwrap()
+            .iter()
+            .filter(|(name, _)| *name != "Stop")
+            .map(|(_, hook)| hook.clone())
+            .collect();
+        others.push(settings["statusLine"].clone());
+        others
+    };
+    endpoint.set(4000, "synthetic-token", Some("/tmp/example/hook.curlrc"));
+    let config = others(&endpoint.settings(false));
+    assert_eq!(config.len(), 10);
+    assert_eq!(config, others(&fixture("hook-settings-config.json")));
+    assert_eq!(
+        others(&endpoint.settings(true)),
+        others(&fixture("hook-settings-powershell.json"))
+    );
+    endpoint.set(4000, "synthetic-token", None);
+    assert_eq!(
+        others(&endpoint.settings(false)),
+        others(&fixture("hook-settings-url.json"))
+    );
+    // UserPromptSubmit's output goes into Claude's context: it still prints nothing.
+    let settings: Value = serde_json::from_str(&endpoint.settings(false)).unwrap();
+    let prompt = settings["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"]
+        .as_str()
+        .unwrap();
+    assert!(prompt.ends_with(">/dev/null 2>&1; exit 0") && !prompt.contains("reply"));
 }
 
 #[test]
@@ -428,15 +504,28 @@ fn hook_commands_on_windows_without_git_bash_run_in_powershell_with_the_token_fr
 
 #[test]
 fn settings_match_the_typescript_byte_for_byte() {
-    // HOST-177 to HOST-181: the three variants as hooks.ts writes them.
+    // HOST-177 to HOST-181: the three variants as hooks.ts writes them,
+    // but for the Stop hook's command, which asks for a reply (QUEUE-008).
     let endpoint = HookEndpoint::new();
     endpoint.set(4000, "synthetic-token", Some("/tmp/example/hook.curlrc"));
-    assert_eq!(&*endpoint.settings(false), fixture("hook-settings-config.json"));
-    assert_eq!(&*endpoint.settings(true), fixture("hook-settings-powershell.json"));
+    assert_eq!(
+        &*endpoint.settings(false),
+        with_stop("hook-settings-config.json", STOP_VIA_CONFIG)
+    );
+    assert_eq!(
+        &*endpoint.settings(true),
+        with_stop("hook-settings-powershell.json", STOP_POWERSHELL)
+    );
     endpoint.set(4000, "synthetic-token", None);
-    assert_eq!(&*endpoint.settings(false), fixture("hook-settings-url.json"));
+    assert_eq!(
+        &*endpoint.settings(false),
+        with_stop("hook-settings-url.json", STOP_VIA_URL)
+    );
     // PowerShell hooks take the token from the environment whether or not there's a config.
-    assert_eq!(&*endpoint.settings(true), fixture("hook-settings-powershell.json"));
+    assert_eq!(
+        &*endpoint.settings(true),
+        with_stop("hook-settings-powershell.json", STOP_POWERSHELL)
+    );
     // The URL variant is also what spec 02 lists.
     assert!(
         fixture("hook-settings-url.json")
@@ -489,6 +578,11 @@ mod run_by_a_shell {
 
     /// Answers one request with 204, and tells what it was.
     pub(super) fn serve_once() -> (u16, std::thread::JoinHandle<Received>) {
+        serve_once_answering("HTTP/1.1 204 No Content\r\n\r\n".into())
+    }
+
+    /// The same, answering with exactly `answer`.
+    pub(super) fn serve_once_answering(answer: String) -> (u16, std::thread::JoinHandle<Received>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
         let server = std::thread::spawn(move || {
@@ -516,7 +610,7 @@ mod run_by_a_shell {
             let mut body = vec![0; length];
             reader.read_exact(&mut body).unwrap();
             let mut stream = stream;
-            stream.write_all(b"HTTP/1.1 204 No Content\r\n\r\n").unwrap();
+            stream.write_all(answer.as_bytes()).unwrap();
             Received {
                 url,
                 authorization,
@@ -528,8 +622,13 @@ mod run_by_a_shell {
 
     /// Runs the Stop hook's command the way Claude Code does, with the payload on stdin.
     fn run_stop_hook(endpoint: &HookEndpoint, session_id: &str, payload: &str) -> std::process::Output {
+        run_hook(endpoint, "Stop", session_id, payload)
+    }
+
+    /// Runs a hook's command the way Claude Code does, with the payload on stdin.
+    fn run_hook(endpoint: &HookEndpoint, event: &str, session_id: &str, payload: &str) -> std::process::Output {
         let settings: Value = serde_json::from_str(&endpoint.settings(false)).unwrap();
-        let command = settings["hooks"]["Stop"][0]["hooks"][0]["command"]
+        let command = settings["hooks"][event][0]["hooks"][0]["command"]
             .as_str()
             .unwrap()
             .to_owned();
@@ -559,11 +658,49 @@ mod run_by_a_shell {
         assert_eq!(
             server.join().unwrap(),
             Received {
-                url: "/hook?evt=Stop&sid=s1".into(),
+                url: "/hook?evt=Stop&sid=s1&reply=1".into(),
                 authorization: Some("Bearer abc123".into()),
                 body: br#"{"stop":true}"#.to_vec(),
             }
         );
+    }
+
+    /// What the host answers a Stop hook with as it hands over a queued prompt.
+    const DECISION: &str = r#"{"decision":"block","reason":"next: h\u00e9llo\nthere"}"#;
+
+    /// That answer over HTTP.
+    fn decision() -> String {
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{DECISION}",
+            DECISION.len()
+        )
+    }
+
+    #[test]
+    fn queue_008_the_stop_hook_prints_what_the_host_answers() {
+        let (port, server) = serve_once_answering(decision());
+        let endpoint = HookEndpoint::new();
+        endpoint.set(port, "abc123", None);
+        let output = run_stop_hook(&endpoint, "s1", "{}");
+        assert!(output.status.success());
+        assert_eq!(String::from_utf8(output.stdout).unwrap(), DECISION);
+        assert_eq!(server.join().unwrap().url, "/hook?evt=Stop&sid=s1&token=abc123&reply=1");
+    }
+
+    #[test]
+    fn queue_008_every_other_hook_prints_nothing_whatever_the_host_answers() {
+        for event in ["UserPromptSubmit", "Notification", "SessionStart"] {
+            let (port, server) = serve_once_answering(decision());
+            let endpoint = HookEndpoint::new();
+            endpoint.set(port, "abc123", None);
+            let output = run_hook(&endpoint, event, "s1", "{}");
+            assert!(output.status.success());
+            assert!(output.stdout.is_empty(), "{event}: {:?}", output.stdout);
+            assert_eq!(
+                server.join().unwrap().url,
+                format!("/hook?evt={event}&sid=s1&token=abc123")
+            );
+        }
     }
 
     #[test]
@@ -573,7 +710,7 @@ mod run_by_a_shell {
         endpoint.set(port, "abc123", None);
         run_stop_hook(&endpoint, "s1", "{}");
         let received = server.join().unwrap();
-        assert_eq!(received.url, "/hook?evt=Stop&sid=s1&token=abc123");
+        assert_eq!(received.url, "/hook?evt=Stop&sid=s1&token=abc123&reply=1");
         assert_eq!(received.authorization, None);
     }
 
@@ -623,7 +760,7 @@ fn hook_commands_on_windows_without_git_bash_post_what_claude_sends_on_stdin_byt
     child.stdin.take().unwrap().write_all(payload.as_bytes()).unwrap();
     let output = child.wait_with_output().unwrap();
     let received = server.join().unwrap();
-    assert_eq!(received.url, "/hook?evt=Stop&sid=s1");
+    assert_eq!(received.url, "/hook?evt=Stop&sid=s1&reply=1");
     assert_eq!(received.authorization.as_deref(), Some("Bearer abc123"));
     assert_eq!(received.body, payload.as_bytes());
     assert!(output.status.success());

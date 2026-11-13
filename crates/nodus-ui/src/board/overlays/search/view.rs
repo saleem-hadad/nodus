@@ -16,6 +16,7 @@ use crate::board::layout::card_title;
 use crate::board::overlays::{kbd, spinner};
 use crate::components::frosted::frosted;
 use crate::components::icon::{Icon, icon};
+use crate::components::presence::{self, inert};
 use crate::components::status_dot::status_dot;
 use crate::components::tween::enter;
 use crate::platform::keys;
@@ -23,16 +24,38 @@ use crate::theme::tokens::{DUR_MED, RADIUS_MD, RADIUS_SM, RADIUS_XL, TEXT_LG, TE
 use crate::theme::{self, fonts, motion};
 
 impl BoardCanvas {
-    /// SRCH-003, SRCH-004: the modal, over the whole window.
+    /// SRCH-003, SRCH-004: the modal, over the whole window; MOTION-011:
+    /// once closed, it sinks away as it rose, from the state it had.
     pub(crate) fn render_search(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> Option<AnyElement> {
-        if !self.search_open {
-            return None;
+        if self.search_open {
+            self.overlays.search_leaving = None;
+            let field = self.search_field(window, cx);
+            let progress = enter(window, cx, "search-enter", DUR_MED, motion::ease_out);
+            return Some(self.render_search_modal(Some(field), progress, window, cx));
         }
+        let shown = presence::step(&mut self.overlays.search_leaving, window)?.shown();
+        // Its state swapped back in for the frame; its field went as it closed.
+        let mut leaving = self.overlays.search_leaving.take()?;
+        std::mem::swap(&mut self.overlays.search, &mut leaving.what);
+        let modal = self.render_search_modal(None, shown, window, cx);
+        std::mem::swap(&mut self.overlays.search, &mut leaving.what);
+        self.overlays.search_leaving = Some(leaving);
+        Some(modal)
+    }
+
+    /// The modal `progress` of the way in, with its field while it's open;
+    /// without one it's leaving, the query drawn as words, and inert.
+    fn render_search_modal(
+        &mut self,
+        field: Option<gpui::Entity<gpui::component::input::InputState>>,
+        progress: f32,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> AnyElement {
         let t = theme::tokens(cx);
-        let field = self.search_field(window, cx);
+        let live = field.is_some();
         let viewport = window.viewport_size();
         let (vw, vh) = (f32::from(viewport.width), f32::from(viewport.height));
-        let progress = enter(window, cx, "search-enter", DUR_MED, motion::ease_out);
         let rows = self.search_rows();
         let current = self.overlays.search.active.min(rows.len().saturating_sub(1));
         let body = self.render_search_results(&t, &rows, current, cx);
@@ -56,11 +79,13 @@ impl BoardCanvas {
             .scale(0.985 + 0.015 * progress)
             .group_opacity(progress)
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .capture_key_down(cx.listener(|this, e: &gpui::KeyDownEvent, _, cx| {
-                if this.search_key_down(e, cx) {
-                    cx.stop_propagation();
-                }
-            }))
+            .when(live, |d| {
+                d.capture_key_down(cx.listener(|this, e: &gpui::KeyDownEvent, _, cx| {
+                    if this.search_key_down(e, cx) {
+                        cx.stop_propagation();
+                    }
+                }))
+            })
             .child(
                 div()
                     .flex()
@@ -76,15 +101,19 @@ impl BoardCanvas {
                         icon(Icon::Search, 16., 2.2, t.text_tertiary).into_any_element()
                     })
                     .child(
-                        div().flex_1().min_w_0().text_size(TEXT_LG).child(Styled::h(
-                            Input::new(&field)
-                                .appearance(false)
-                                .px(px(2.))
-                                .py(px(1.))
-                                .text_size(TEXT_LG)
-                                .line_height(px(21.)),
-                            px(23.),
-                        )),
+                        div().flex_1().min_w_0().text_size(TEXT_LG).child(match field {
+                            Some(field) => Styled::h(
+                                Input::new(&field)
+                                    .appearance(false)
+                                    .px(px(2.))
+                                    .py(px(1.))
+                                    .text_size(TEXT_LG)
+                                    .line_height(px(21.)),
+                                px(23.),
+                            )
+                            .into_any_element(),
+                            None => self.render_search_query_words(&t),
+                        }),
                     )
                     .child(kbd(&t, "esc")),
             )
@@ -103,11 +132,34 @@ impl BoardCanvas {
                 }
             })
             .child(panel);
-        Some(
-            deferred(anchored().position(point(px(0.), px(0.))).child(backdrop))
-                .with_priority(500)
-                .into_any_element(),
-        )
+        let backdrop = if live {
+            backdrop.into_any_element()
+        } else {
+            inert(backdrop).into_any_element()
+        };
+        deferred(anchored().position(point(px(0.), px(0.))).child(backdrop))
+            .with_priority(500)
+            .into_any_element()
+    }
+
+    /// The query as the field showed it, for the frames the search leaves
+    /// in (the field itself went as it closed, keyboard and all).
+    fn render_search_query_words(&self, t: &Tokens) -> AnyElement {
+        let empty = self.search_query.is_empty();
+        div()
+            .h(px(23.))
+            .px(px(2.))
+            .py(px(1.))
+            .line_height(px(21.))
+            .overflow_hidden()
+            .whitespace_nowrap()
+            .text_color(if empty { t.text_tertiary } else { t.text_primary })
+            .child(if empty {
+                "Search what every session said and did".to_owned()
+            } else {
+                self.search_query.clone()
+            })
+            .into_any_element()
     }
 
     fn render_search_results(

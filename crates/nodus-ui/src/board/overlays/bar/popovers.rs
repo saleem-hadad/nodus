@@ -1,6 +1,7 @@
 //! Above the pill: the slash menu (BAR-014, BAR-015) and the note's colour
 //! picker (BAR-022). Both sit with their left edge at the pill's and their
-//! bottom 8px above its top, and rise in over 120ms.
+//! bottom 8px above its top, rise in over 120ms, and sink away as they rose
+//! once closed (MOTION-011).
 
 use std::rc::Rc;
 
@@ -11,18 +12,21 @@ use gpui::{
 };
 use nodus_board::compose::Target;
 
+use super::Popover;
 use super::view::{note_gradient, view_hue};
 use crate::board::canvas::BoardCanvas;
 use crate::board::hud::rgba_mix;
 use crate::components::color_swatches::color_swatches;
 use crate::components::frosted::frosted;
 use crate::components::icon::{Icon, icon};
+use crate::components::presence::inert;
 use crate::components::tween::enter;
 use crate::theme::tokens::{DUR_FAST, RADIUS_LG, TEXT_SM, Tokens, inset_shadow, rgba};
 use crate::theme::{fonts, motion};
 
 impl BoardCanvas {
-    /// The menu while it's open, else the picker while it's up.
+    /// The menu while it's open, else the picker while it's up; else the
+    /// last of them leaving.
     pub(crate) fn render_bar_popover(
         &mut self,
         t: &Tokens,
@@ -30,53 +34,72 @@ impl BoardCanvas {
         cx: &mut Context<'_, Self>,
     ) -> Option<AnyElement> {
         let commands = self.bar_commands();
-        let (key, body) = if !commands.is_empty() {
-            ("bar-menu", self.render_slash_menu(t, &commands, cx))
+        let open = if !commands.is_empty() {
+            let active = self.overlays.bar.active.min(commands.len() - 1);
+            Some(Popover::Menu(commands, active))
         } else if self.overlays.bar.picking && self.overlays.bar.target == Some(Target::Note) {
-            ("bar-picker", self.render_picker(window, cx))
+            Some(Popover::Picker)
         } else {
-            return None;
+            None
         };
-        let rise = enter(window, cx, key, DUR_FAST, motion::ease_out);
-        Some(
-            div()
-                .absolute()
-                .left_0()
-                .bottom_full()
-                .pb(px(8.))
-                .child(
-                    div()
-                        .id(key)
-                        .occlude()
-                        .rounded(RADIUS_LG)
-                        .map(|d| frosted(d, rgba_mix(t.bg_elevated, 0.96), 24., 1.8))
-                        .shadow(t.lg())
-                        .cursor(CursorStyle::Arrow)
-                        .group_opacity(rise)
-                        .translate(px(0.), px(6. * (1. - rise)))
-                        // Keeps the keyboard in the field.
-                        .on_mouse_down(MouseButton::Left, |_, window, cx| {
-                            window.prevent_default();
-                            cx.stop_propagation();
-                        })
-                        .child(body)
-                        .when(key == "bar-picker", |d| {
-                            d.child(crate::board::overlays::bounds_probe(cx.entity().downgrade(), |c, b| {
-                                c.overlays.bar.picker_area[0] = Some(b);
-                            }))
-                        }),
-                )
-                .into_any_element(),
-        )
+        let (popover, leaving) = self.overlays.bar.popover.frame("bar-popover-drawn", open, window, cx)?;
+        let rise = match (leaving, &popover) {
+            (Some(shown), _) => shown,
+            (None, Popover::Menu(..)) => enter(window, cx, "bar-menu", DUR_FAST, motion::ease_out),
+            (None, Popover::Picker) => enter(window, cx, "bar-picker", DUR_FAST, motion::ease_out),
+        };
+        Some(self.render_popover(t, &popover, rise, leaving.is_none(), window, cx))
+    }
+
+    /// A popover `rise` of the way in; inert unless `live`.
+    fn render_popover(
+        &mut self,
+        t: &Tokens,
+        popover: &Popover,
+        rise: f32,
+        live: bool,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> AnyElement {
+        let (key, body) = match popover {
+            Popover::Menu(commands, active) => ("bar-menu", self.render_slash_menu(t, commands, *active, cx)),
+            Popover::Picker => ("bar-picker", self.render_picker(window, cx)),
+        };
+        let card = div()
+            .id(if live { key } else { "bar-popover-leaving" })
+            .occlude()
+            .rounded(RADIUS_LG)
+            .map(|d| frosted(d, rgba_mix(t.bg_elevated, 0.96), 24., 1.8))
+            .shadow(t.lg())
+            .cursor(CursorStyle::Arrow)
+            .group_opacity(rise)
+            .translate(px(0.), px(6. * (1. - rise)))
+            // Keeps the keyboard in the field.
+            .on_mouse_down(MouseButton::Left, |_, window, cx| {
+                window.prevent_default();
+                cx.stop_propagation();
+            })
+            .child(body)
+            .when(live && key == "bar-picker", |d| {
+                d.child(crate::board::overlays::bounds_probe(cx.entity().downgrade(), |c, b| {
+                    c.overlays.bar.picker_area[0] = Some(b);
+                }))
+            });
+        let popover = div().absolute().left_0().bottom_full().pb(px(8.)).child(card);
+        if live {
+            popover.into_any_element()
+        } else {
+            inert(popover).into_any_element()
+        }
     }
 
     fn render_slash_menu(
         &mut self,
         t: &Tokens,
         commands: &[nodus_board::compose::SlashCommand],
+        highlighted: usize,
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
-        let highlighted = self.overlays.bar.active.min(commands.len() - 1);
         let color = self.overlays.bar.color;
         let (_, ink) = view_hue(t);
         let options = commands.iter().enumerate().map(|(i, c)| {

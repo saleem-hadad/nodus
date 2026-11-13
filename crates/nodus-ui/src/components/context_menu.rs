@@ -13,6 +13,7 @@ use gpui::{
 
 use crate::components::frosted::frosted;
 use crate::components::icon::{Icon, icon};
+use crate::components::presence::{self, Leaving, inert};
 use crate::components::tween::enter;
 use crate::theme::tokens::*;
 use crate::theme::{self, motion};
@@ -107,6 +108,8 @@ impl gpui::Global for MenuOpen {}
 #[derive(Default)]
 pub struct MenuLayer {
     pub menu: Option<Menu>,
+    /// The menu last closed, fading out (MOTION-011).
+    leaving: Option<Leaving<Menu>>,
     serial: u64,
 }
 
@@ -123,11 +126,19 @@ impl MenuLayer {
         self.menu.is_some()
     }
 
-    /// Closes the menu and tells its owner.
+    /// Closes the menu and tells its owner. MOTION-011: it fades out where
+    /// it was, as it faded in, without taking presses meanwhile.
     pub fn close(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         if let Some(menu) = self.menu.take() {
             cx.set_global(MenuOpen(false));
             cx.notify();
+            self.leaving = presence::leave(
+                Menu {
+                    on_close: None,
+                    ..menu.clone()
+                },
+                cx,
+            );
             if let Some(on_close) = menu.on_close {
                 on_close(window, cx);
             }
@@ -137,19 +148,39 @@ impl MenuLayer {
 
 impl Render for MenuLayer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
-        let Some(menu) = self.menu.clone() else {
-            return div().into_any_element();
-        };
+        let leaving = presence::step(&mut self.leaving, window).map(|l| (l.what.clone(), l.shown()));
+        let mut layers = Vec::new();
+        if let Some((menu, shown)) = leaving {
+            layers.push(self.render_menu(&menu, shown, false, window, cx));
+        }
+        if let Some(menu) = self.menu.clone() {
+            // UI-167: fades in over 90ms --ease-out.
+            let opacity = enter(
+                window,
+                cx,
+                ("ctx-menu-in", menu.serial as usize),
+                Duration::from_millis(90),
+                motion::ease_out,
+            );
+            layers.push(self.render_menu(&menu, opacity, true, window, cx));
+        }
+        div().children(layers)
+    }
+}
+
+impl MenuLayer {
+    /// A menu `opacity` of the way in; `live` while it's open, else leaving
+    /// and inert (MOTION-011).
+    fn render_menu(
+        &mut self,
+        menu: &Menu,
+        opacity: f32,
+        live: bool,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> AnyElement {
         let t = theme::tokens(cx);
         let this = cx.entity();
-        // UI-167: fades in over 90ms --ease-out.
-        let opacity = enter(
-            window,
-            cx,
-            ("ctx-menu-in", menu.serial as usize),
-            Duration::from_millis(90),
-            motion::ease_out,
-        );
         let anchor = menu.anchor;
         let rows = menu.items.iter().enumerate().map(|(i, item)| match item {
             MenuItem::Separator => div().h(px(1.)).mx(px(8.)).my(px(4.)).bg(t.separator).into_any_element(),
@@ -225,7 +256,7 @@ impl Render for MenuLayer {
         let close_out = this.clone();
 
         let panel = div()
-            .id("ctx-menu")
+            .id(if live { "ctx-menu" } else { "ctx-menu-leaving" })
             .occlude()
             .flex()
             .flex_col()
@@ -238,18 +269,25 @@ impl Render for MenuLayer {
             .font_weight(FontWeight::NORMAL)
             .scale(0.98 + 0.02 * opacity)
             .group_opacity(opacity)
-            // UI-166: no other menu over a menu.
-            .on_mouse_down(gpui::MouseButton::Right, |_, _, cx| cx.stop_propagation())
-            // UI-160: a press anywhere else closes it; a press on the button
-            // that opened it is left to that button (UI-161).
-            .on_mouse_down_out(move |e, window, cx| {
-                if anchor.is_some_and(|a| a.contains(&e.position)) {
-                    return;
-                }
-                close_out.update(cx, |l, cx| l.close(window, cx));
+            .when(live, |d| {
+                // UI-166: no other menu over a menu.
+                d.on_mouse_down(gpui::MouseButton::Right, |_, _, cx| cx.stop_propagation())
+                    // UI-160: a press anywhere else closes it; a press on the
+                    // button that opened it is left to that button (UI-161).
+                    .on_mouse_down_out(move |e, window, cx| {
+                        if anchor.is_some_and(|a| a.contains(&e.position)) {
+                            return;
+                        }
+                        close_out.update(cx, |l, cx| l.close(window, cx));
+                    })
             })
             .children(rows);
         let _ = layer;
+        let panel = if live {
+            panel.into_any_element()
+        } else {
+            inert(panel).into_any_element()
+        };
 
         deferred(
             anchored()

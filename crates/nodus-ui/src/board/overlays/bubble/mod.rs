@@ -36,6 +36,25 @@ pub(crate) struct Bubble {
     _subscriptions: Vec<Subscription>,
 }
 
+/// What a bubble shows, kept for its exit once it's closed or sent
+/// (MOTION-011).
+#[derive(Clone)]
+pub(crate) struct BubbleLook {
+    pub at: Point,
+    pub key: usize,
+    pub text: String,
+}
+
+impl Bubble {
+    pub fn look(&self) -> BubbleLook {
+        BubbleLook {
+            at: self.at,
+            key: self.key,
+            text: self.text.clone(),
+        }
+    }
+}
+
 /// Something sent from the board, while Claude decides where it goes
 /// (BUBBLE-030).
 pub(crate) struct Asking {
@@ -107,6 +126,7 @@ impl BoardCanvas {
         let Some(bubble) = self.overlays.bubble.take() else {
             return;
         };
+        self.overlays.bubble_leaving = crate::components::presence::leave(bubble.look(), cx);
         if let Some(window) = window
             && bubble.field.read(cx).focus_handle(cx).is_focused(window)
         {
@@ -141,6 +161,7 @@ impl BoardCanvas {
         let Some(bubble) = self.overlays.bubble.take() else {
             return;
         };
+        self.overlays.bubble_leaving = crate::components::presence::leave(bubble.look(), cx);
         // The keyboard goes back to the board, if the bubble still had it.
         let (field, board) = (bubble.field.read(cx).focus_handle(cx), self.focus.clone());
         cx.defer(move |cx| {

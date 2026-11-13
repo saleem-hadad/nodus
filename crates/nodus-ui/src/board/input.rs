@@ -910,7 +910,10 @@ impl BoardCanvas {
                     n.position = home;
                 }
             } else {
+                // MOTION-010: the sheet was in hand all the way.
+                let id = self.draft_id.clone();
                 self.peel_note(node.position, cx);
+                self.moments.hush(&id);
             }
             return;
         }

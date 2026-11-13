@@ -20,6 +20,7 @@ When you change a behavior, change its entry in the same commit, and say what 0.
 | `12-terminal-ui.md` | terminals, the terminal modal, transcript preview, the agent viewer |
 | `13-feedback.md` | Help › Report a Problem…: the dialog, screenshots, the issue it becomes, the feedback server |
 | `14-board-shapes-links.md` | Shapes, stickers, pictures and links on the board, and the dock tools that make them |
+| `15-motion.md` | things arriving and leaving, status changes, and Claude's signature: drawing, working, finishing, building a view, guessing |
 
 ## Compatibility with 0.9.4
 

@@ -15,7 +15,7 @@ use gpui::{
     KeyDownEvent, MouseButton, ObjectFit, ParentElement, PathBuilder, PathStyle, Rgba, StatefulInteractiveElement,
     Styled, StyledImage as _, Subscription, Window, canvas, div, img, point, px,
 };
-use lyon::tessellation::{LineJoin, StrokeOptions};
+use lyon::tessellation::{LineCap, LineJoin, StrokeOptions};
 use nodus_domain::ShapeKind;
 
 use super::note::WithCaret;
@@ -23,7 +23,8 @@ use super::resize::{Handles, resize_zones};
 use super::{BoardEnv, Resized, anim, mix};
 use crate::board::nodes::ShapeNode;
 use crate::board::overlays::ink::{ink_rgba, shape_path};
-use crate::theme::{self, fonts};
+use crate::board::shapes;
+use crate::theme::{self, fonts, motion};
 
 /// The smallest a shape resizes to, in board units.
 pub const SHAPE_MIN: f32 = 16.0;
@@ -43,10 +44,18 @@ pub fn render(env: &Rc<BoardEnv>, node: &ShapeNode<'_>, window: &mut Window, cx:
     let editing = env.renaming.as_deref() == Some(shape.id.as_str()) && shape.kind.has_text();
     let selected = node.node.selected;
 
+    // MOTION-021: Claude drawing it: the outline traced, then the fill and
+    // the words; words on their own typed; a sticker stamped; a picture
+    // coming into focus.
+    let drawing = node.drawing.filter(|_| !editing);
     let body: AnyElement = match shape.kind {
         ShapeKind::Rect | ShapeKind::Ellipse | ShapeKind::Diamond => {
             let kind = shape.kind;
-            let fill = mix(color, 0.14, t.bg_elevated);
+            let share = drawing.map(shapes::drawn_share);
+            let mut fill = mix(color, 0.14, t.bg_elevated);
+            if let Some((_, f, _)) = share {
+                fill.a *= f;
+            }
             let stroke = z.f(2.0);
             let frame = canvas(
                 |_, _, _| {},
@@ -59,10 +68,12 @@ pub fn render(env: &Rc<BoardEnv>, node: &ShapeNode<'_>, window: &mut Window, cx:
                         h: f64::from(f32::from(bounds.size.height)),
                     };
                     let at = |p: [f64; 2]| point(o.x + px(p[0] as f32), o.y + px(p[1] as f32));
-                    let mut body = PathBuilder::fill();
-                    shape_path(&mut body, kind, r, &at);
-                    if let Ok(body) = body.build() {
-                        window.paint_path(body, fill);
+                    if fill.a > 0.0 {
+                        let mut body = PathBuilder::fill();
+                        shape_path(&mut body, kind, r, &at);
+                        if let Ok(body) = body.build() {
+                            window.paint_path(body, fill);
+                        }
                     }
                     // The outline inside the box, so its edge is the box's.
                     let half = f64::from(stroke) / 2.0;
@@ -74,9 +85,21 @@ pub fn render(env: &Rc<BoardEnv>, node: &ShapeNode<'_>, window: &mut Window, cx:
                     };
                     let options = StrokeOptions::default()
                         .with_line_width(stroke)
-                        .with_line_join(LineJoin::Round);
+                        .with_line_join(LineJoin::Round)
+                        .with_line_cap(LineCap::Round);
                     let mut line = PathBuilder::stroke(px(stroke)).with_style(PathStyle::Stroke(options));
-                    shape_path(&mut line, kind, inner, &at);
+                    match share {
+                        Some((traced, _, _)) => {
+                            let (part, _) = shapes::line_part(&shapes::outline_line(kind, inner), f64::from(traced));
+                            let mut points = part.into_iter().map(|p| at([p.x, p.y]));
+                            let Some(first) = points.next() else { return };
+                            line.move_to(first);
+                            for p in points {
+                                line.line_to(p);
+                            }
+                        }
+                        None => shape_path(&mut line, kind, inner, &at),
+                    }
                     if let Ok(line) = line.build() {
                         window.paint_path(line, color);
                     }
@@ -99,6 +122,7 @@ pub fn render(env: &Rc<BoardEnv>, node: &ShapeNode<'_>, window: &mut Window, cx:
                 t.text_primary,
                 (iw, ih),
                 editing,
+                share.map(|(_, _, w)| w),
                 window,
                 cx,
             );
@@ -128,35 +152,64 @@ pub fn render(env: &Rc<BoardEnv>, node: &ShapeNode<'_>, window: &mut Window, cx:
                 color,
                 (w, h),
                 editing,
+                drawing,
                 window,
                 cx,
             );
             div().size_full().flex().items_center().child(words).into_any_element()
         }
-        ShapeKind::Sticker => div()
-            .size_full()
-            .flex()
-            .items_center()
-            .justify_center()
-            .text_size(z.px(w.min(h) * 0.78))
-            .line_height(z.px(h))
-            .child(shape.text.clone())
-            .into_any_element(),
+        ShapeKind::Sticker => {
+            let stamp = div()
+                .size_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .text_size(z.px(w.min(h) * 0.78))
+                .line_height(z.px(h))
+                .child(shape.text.clone());
+            match drawing {
+                // Stamped: in from small and turned, on the spring.
+                Some(p) => {
+                    let e = motion::ease_spring(p);
+                    stamp
+                        .opacity(motion::ease_out((p / 0.3).min(1.0)))
+                        .rotate(gpui::radians((-14.0 * (1.0 - e)).to_radians()))
+                        .scale(0.2 + 0.8 * e)
+                        .into_any_element()
+                }
+                None => stamp.into_any_element(),
+            }
+        }
         ShapeKind::Image => {
             let radius = z.px(8.0);
             match &node.image {
-                Some(path) => div()
-                    .size_full()
-                    .rounded(radius)
-                    .overflow_hidden()
-                    .shadow(t.sm())
-                    .child(
-                        img(path.clone())
-                            .size_full()
-                            .rounded(radius)
-                            .object_fit(ObjectFit::Contain),
-                    )
-                    .into_any_element(),
+                Some(path) => {
+                    let picture = div()
+                        .size_full()
+                        .rounded(radius)
+                        .overflow_hidden()
+                        .shadow(t.sm())
+                        .child(
+                            img(path.clone())
+                                .size_full()
+                                .rounded(radius)
+                                .object_fit(ObjectFit::Contain),
+                        );
+                    match drawing {
+                        // Coming into focus as it fades in.
+                        Some(p) => {
+                            let e = motion::ease_out(p);
+                            let blur = 10.0 * z.0 * (1.0 - e);
+                            let picture = picture.scale(0.96 + 0.04 * e).group_opacity(e);
+                            if blur > 0.05 {
+                                picture.blur(px(blur)).into_any_element()
+                            } else {
+                                picture.into_any_element()
+                            }
+                        }
+                        None => picture.into_any_element(),
+                    }
+                }
                 None => div()
                     .size_full()
                     .rounded(radius)
@@ -223,6 +276,7 @@ fn words(
     color: Rgba,
     (w, h): (f32, f32),
     editing: bool,
+    typed: Option<f32>,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
@@ -232,6 +286,14 @@ fn words(
     if editing {
         return editor(env, node, (size, line), weight, color, (w, h), window, cx);
     }
+    // MOTION-021: Claude typing them.
+    let text: gpui::SharedString = match typed {
+        Some(share) => {
+            let n = (shape.text.chars().count() as f32 * share).ceil() as usize;
+            shape.text.chars().take(n).collect::<String>().into()
+        }
+        None => shape.text.clone().into(),
+    };
     div()
         .w(z.px(w))
         .max_h(z.px(h))
@@ -242,7 +304,7 @@ fn words(
         .line_height(z.px(line))
         .text_color(color)
         .when(!text_only, Styled::text_center)
-        .child(shape.text.clone())
+        .child(text)
         .into_any_element()
 }
 

@@ -71,6 +71,8 @@ pub struct ProjectsView {
     bounds: Rc<RefCell<HashMap<String, Bounds<Pixels>>>>,
     scrolled_to: Option<String>,
     modal_serial: usize,
+    /// The toast, sinking away once gone (MOTION-011).
+    toast: crate::components::presence::Presence<(String, u64)>,
     _pop_timer: Option<Task<()>>,
     _subscriptions: Vec<Subscription>,
 }
@@ -112,6 +114,7 @@ impl ProjectsView {
             scrolled_to: None,
             modal_serial: 0,
             _pop_timer: None,
+            toast: Default::default(),
             _subscriptions: subscriptions,
         }
     }
@@ -1423,28 +1426,32 @@ impl Render for ProjectsView {
 
         let empty = (self.loaded && lists.total == 0).then(|| empty_state(&self.state, window, t));
         let drop_overlay = self.dragging_files.then(|| drop_overlay(window, cx, t));
-        let toast = toast.map(|(message, seq)| {
-            let rise = enter(window, cx, ("pv-toast", seq as usize), DUR_MED, motion::ease_out);
-            div()
-                .absolute()
-                .bottom(px(24.))
-                .translate(px(0.), px(8. * (1. - rise)))
-                .left_0()
-                .right_0()
-                .flex()
-                .justify_center()
-                .child(
-                    div()
-                        .max_w(px(520.).min(window.viewport_size().width - px(48.)))
-                        .px(px(14.))
-                        .py(px(9.))
-                        .rounded(RADIUS_MD)
-                        .bg(t.bg_elevated)
-                        .shadow(t.lg())
-                        .opacity(rise)
-                        .child(message),
-                )
-        });
+        let toast = self
+            .toast
+            .frame("pv-toast-drawn", toast, window, cx)
+            .map(|((message, seq), leaving)| {
+                let rise =
+                    leaving.unwrap_or_else(|| enter(window, cx, ("pv-toast", seq as usize), DUR_MED, motion::ease_out));
+                div()
+                    .absolute()
+                    .bottom(px(24.))
+                    .translate(px(0.), px(8. * (1. - rise)))
+                    .left_0()
+                    .right_0()
+                    .flex()
+                    .justify_center()
+                    .child(
+                        div()
+                            .max_w(px(520.).min(window.viewport_size().width - px(48.)))
+                            .px(px(14.))
+                            .py(px(9.))
+                            .rounded(RADIUS_MD)
+                            .bg(t.bg_elevated)
+                            .shadow(t.lg())
+                            .opacity(rise)
+                            .child(message),
+                    )
+            });
         let remove = self.render_remove(window, cx);
         let picker = self.render_picker(window, cx);
         let _ = groups_known;

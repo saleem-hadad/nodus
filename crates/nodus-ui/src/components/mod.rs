@@ -11,6 +11,7 @@ pub mod folder_icon;
 pub mod frosted;
 pub mod icon;
 pub mod modal;
+pub mod presence;
 pub mod scroll;
 pub mod selectable;
 pub mod spaced_text;

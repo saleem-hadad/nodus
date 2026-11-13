@@ -116,6 +116,8 @@ pub struct ShapeNode<'a> {
     pub node: NodeState,
     pub shape: &'a BoardShape,
     pub image: Option<std::path::PathBuf>,
+    /// Claude is drawing it, 0…1 through (MOTION-021).
+    pub drawing: Option<f32>,
 }
 
 /// The archive frame: the folded stack, or the open panel.

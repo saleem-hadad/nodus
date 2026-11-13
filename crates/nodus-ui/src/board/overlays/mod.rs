@@ -32,6 +32,8 @@ pub struct Overlays {
     pub(crate) ink: ink::Ink,
     pub(crate) bar: bar::Bar,
     pub(crate) bubble: Option<bubble::Bubble>,
+    /// The bubble last closed or sent, fading from its spot (MOTION-011).
+    pub(crate) bubble_leaving: Option<crate::components::presence::Leaving<bubble::BubbleLook>>,
     /// How many bubbles this mount has opened.
     pub(crate) bubble_key: usize,
     /// What was sent from the board, while Claude decides where it goes.
@@ -41,6 +43,11 @@ pub struct Overlays {
     pub(crate) voice: Option<gpui::Entity<crate::voice::Mic>>,
     pub(crate) voice_at: Option<nodus_board::geometry::Point>,
     pub(crate) search: search::Search,
+    /// The toast and the selection bar, sinking away once gone (MOTION-011).
+    pub(crate) toast: crate::components::presence::Presence<(String, u64)>,
+    pub(crate) selection_bar: crate::components::presence::Presence<crate::board::bar::SelectionCounts>,
+    /// The search as it closed, sinking away (MOTION-011).
+    pub(crate) search_leaving: Option<crate::components::presence::Leaving<search::Search>>,
     pub(crate) merge: Option<merge::MergeDialog>,
 }
 

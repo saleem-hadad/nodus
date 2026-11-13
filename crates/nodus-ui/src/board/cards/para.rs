@@ -316,6 +316,9 @@ struct Config {
     /// The board's zoom: the text is laid out at `size / zoom` (its CSS
     /// size) and drawn scaled, as Chromium draws a scaled DOM.
     zoom: f32,
+    /// Claude's light passing through the words (MOTION-030): where in a
+    /// pass it is (0…1), and the colour at its brightest.
+    shimmer: Option<(f64, Hsla)>,
 }
 
 /// One line of text at the board's scale: `size` and `line_height` in CSS
@@ -361,6 +364,7 @@ pub fn para(
             underline: None,
             max_lines_height: false,
             zoom: 1.0,
+            shimmer: None,
         }),
     }
 }
@@ -426,6 +430,12 @@ impl Para {
     }
     pub fn underline(mut self, color: Option<Hsla>) -> Self {
         self.cfg().underline = color;
+        self
+    }
+    /// Claude's light sweeping through the words, `phase` (0…1) into a
+    /// pass, brightening them to `peak` (MOTION-030). Paint only.
+    pub fn shimmer(mut self, phase: f64, peak: impl Into<Hsla>) -> Self {
+        self.cfg().shimmer = Some((phase, peak.into()));
         self
     }
     /// The sizes given are scaled by `zoom`: lay out at the CSS size.
@@ -742,7 +752,7 @@ impl Element for Para {
         let ascent = shaped.ascent * z;
         let half_leading = (lh - ascent - shaped.descent * z) / 2.;
         // The colour of each character, from the marks on its source bytes.
-        let colors: Vec<Hsla> = layout
+        let mut colors: Vec<Hsla> = layout
             .prepared
             .source
             .iter()
@@ -754,6 +764,14 @@ impl Element for Para {
                     .map_or(cfg.color, |(_, c)| *c)
             })
             .collect();
+        if let Some((phase, peak)) = cfg.shimmer {
+            let n = colors.len().max(1) as f64;
+            let peak = peak.to_rgb();
+            for (k, c) in colors.iter_mut().enumerate() {
+                let g = crate::theme::ai::sweep_at((k as f64 + 0.5) / n, phase);
+                *c = crate::theme::ai::sweep(g, c.to_rgb(), peak).into();
+            }
+        }
         let mut char_of_byte = Vec::with_capacity(layout.prepared.text.len() + 1);
         for (k, c) in layout.prepared.chars.iter().enumerate() {
             for _ in 0..c.len_utf8() {

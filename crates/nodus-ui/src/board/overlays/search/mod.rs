@@ -193,8 +193,20 @@ impl BoardCanvas {
 
     /// SRCH-003: closes, dropping its state (the query stays).
     pub(crate) fn search_close(&mut self, cx: &mut Context<'_, Self>) {
-        self.overlays.search = Search::default();
+        self.search_reset(cx);
         self.close_search(cx);
+    }
+
+    /// A fresh state in place of the search's, and the old one kept for its
+    /// exit (MOTION-011). Its field, its subscriptions and the request on
+    /// its way go now, as they always went: nothing that's leaving keeps
+    /// the keyboard or answers.
+    fn search_reset(&mut self, cx: &mut Context<'_, Self>) {
+        let mut was = std::mem::take(&mut self.overlays.search);
+        was.field = None;
+        was.pending = None;
+        was._subscriptions.clear();
+        self.overlays.search_leaving = crate::components::presence::leave(was, cx);
     }
 
     /// SRCH-013…SRCH-015: opens a row, through the board's jump (BOARD-036,
@@ -203,7 +215,7 @@ impl BoardCanvas {
         let find = row_find(&self.search_query, row);
         self.jump_to_card(&row.card.node.session_id, Some(find), cx);
         if !self.search_open {
-            self.overlays.search = Search::default();
+            self.search_reset(cx);
         }
     }
 
@@ -233,7 +245,7 @@ impl BoardCanvas {
         if ids.is_empty() {
             return;
         }
-        self.overlays.search = Search::default();
+        self.search_reset(cx);
         self.search_start(&ids, cx);
     }
 

@@ -90,8 +90,12 @@ pub fn placed(
         let visible = g.document.intersect(&g.clip);
         fr.occluded = !fr.web.offscreen() && covered(&hitbox, visible, window);
         fr.probe = Some(hitbox);
-        fr.want = parity || g.forced || fr.occluded || fr.tooltip || zoom_moving;
-        if fr.want && fr.live && fr.snapshot.is_some() {
+        fr.want = parity || g.forced || g.reveal || fr.occluded || fr.tooltip || zoom_moving;
+        if g.reveal && fr.live && fr.snapshot.is_none() {
+            // MOTION-033: a first page stays hidden until it's pictured.
+            go_snapshot(fr);
+            swapped = true;
+        } else if fr.want && fr.live && fr.snapshot.is_some() {
             // In this frame, under what covers it. The picture may be a
             // little old: a new one replaces it as soon as it's taken.
             go_snapshot(fr);
@@ -169,7 +173,10 @@ fn after_frame(window: &mut Window, cx: &mut App) {
                 && !fr.web.offscreen()
                 && fr.dirty
                 && fr.snapshot_at.is_none_or(|t| now.duration_since(t) >= READY_EVERY);
-            if (needed || ready) && !fr.pending {
+            // MOTION-033: a first page being revealed is pictured once it
+            // has loaded (`page_loaded` draws again then), not blank.
+            let unloaded = g.reveal && !fr.loaded;
+            if (needed || ready) && !fr.pending && !unloaded {
                 let retrying = fr.retry_at.is_some_and(|t| now < t);
                 // A body that just changed size lays its page out again
                 // first; a picture now would be of the old layout.
@@ -333,6 +340,16 @@ pub fn page_changed(frame: u64, cx: &mut App) {
     };
     if let Some(window) = window {
         let _ = window.update(cx, |_, window, _| window.refresh());
+    }
+}
+
+/// The page posted `loaded` (VIEW-046): a first page being revealed can be
+/// pictured now (MOTION-033).
+pub fn page_loaded(frame: u64, cx: &mut App) {
+    let Some(rc) = super::frames::existing(cx) else { return };
+    let mut f = rc.borrow_mut();
+    if let Some(fr) = f.by_id_mut(frame) {
+        fr.loaded = true;
     }
 }
 

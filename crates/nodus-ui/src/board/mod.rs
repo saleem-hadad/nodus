@@ -15,6 +15,7 @@ pub mod cards;
 mod clipboard;
 mod commands;
 pub mod edges;
+mod frames;
 pub mod fuzzy;
 mod hud;
 mod images;
@@ -137,13 +138,13 @@ pub fn title_bar_button(
         title: Some(format!("New session ({})", keys("⌘N")).into()),
         on_click: Rc::new(move |_, cx| {
             if let Some(b) = main.upgrade() {
-                b.update(cx, |b, cx| b.create_session(None, SessionKind::Claude, None, cx));
+                b.update(cx, |b, cx| b.create_session(None, SessionKind::Claude, cx));
             }
         }),
         items: vec![
             MenuItem::item("New terminal", Icon::SquareTerminal, move |_, cx| {
                 if let Some(b) = terminal.upgrade() {
-                    b.update(cx, |b, cx| b.create_session(None, SessionKind::Terminal, None, cx));
+                    b.update(cx, |b, cx| b.create_session(None, SessionKind::Terminal, cx));
                 }
             })
             .hint(keys("⌘T")),

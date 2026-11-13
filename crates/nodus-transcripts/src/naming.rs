@@ -1,7 +1,7 @@
-//! Names a new section from the sessions grouped under it (naming.ts).
+//! Names a new frame from what's in it (naming.ts, and spec 17 since frames).
 //!
-//! A quick headless claude call: each session's title and opening prompt go
-//! in, a few words come out. Thinking, tools and MCP servers are off, and it
+//! A quick headless claude call: each session's title and opening prompt,
+//! each note's, view's and shape's words go in, a few words come out. Thinking, tools and MCP servers are off, and it
 //! runs outside the repo, so it answers in a couple of seconds.
 
 use std::sync::LazyLock;
@@ -17,7 +17,7 @@ pub const TIMEOUT: Duration = Duration::from_millis(30_000);
 const MAX_PROMPT_CHARS: usize = 280;
 const MAX_NAME_CHARS: usize = 48;
 
-pub const SYSTEM_PROMPT: &str = "You name groups of Claude Code sessions on a board. Reply with the group's name only: 1 to 4 words in Title Case that say what the sessions have in common. No quotes, no trailing punctuation, no preamble.";
+pub const SYSTEM_PROMPT: &str = "You name frames on a board where someone works with Claude Code. A frame holds sessions, sticky notes, views and words drawn on the board. Reply with the frame's name only: 1 to 4 words in Title Case that say what the things in it have in common. No quotes, no trailing punctuation, no preamble.";
 
 /// JavaScript's `\s`, for patterns.
 const SPACE: &str = r"[\t\n\x0B\x0C\r \x{A0}\x{1680}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}\x{FEFF}]";
@@ -28,9 +28,32 @@ static MARKS: LazyLock<Regex> = LazyLock::new(|| Regex::new("[*_`#\"“”]").ex
 static QUOTES: LazyLock<Regex> = LazyLock::new(|| Regex::new("^'+|'+$").expect("a valid pattern"));
 static TRAILING: LazyLock<Regex> = LazyLock::new(|| Regex::new("[.!?:;,]+$").expect("a valid pattern"));
 
-/// A session the section is named after.
+/// What a thing the frame is named after is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NamingKind {
+    Session,
+    Note,
+    View,
+    /// Words in a shape on the board.
+    Words,
+}
+
+impl NamingKind {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Session => "Session",
+            Self::Note => "Note",
+            Self::View => "View",
+            Self::Words => "Words",
+        }
+    }
+}
+
+/// A thing in the frame it's named after: a session's title and opening
+/// prompt, a note's or shape's words, a view's title.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NamingSource {
+    pub kind: NamingKind,
     pub title: String,
     pub first_prompt: Option<String>,
 }
@@ -59,6 +82,7 @@ pub fn build_prompt(sources: &[NamingSource]) -> String {
         .enumerate()
         .map(|(i, s)| {
             let n = i + 1;
+            let title = format!("{}: {}", s.kind.label(), clip(&s.title, MAX_PROMPT_CHARS));
             let prompt = s
                 .first_prompt
                 .as_deref()
@@ -66,12 +90,12 @@ pub fn build_prompt(sources: &[NamingSource]) -> String {
                 .map(|p| clip(p, MAX_PROMPT_CHARS))
                 .filter(|p| !p.is_empty() && *p != s.title);
             match prompt {
-                Some(prompt) => format!("{n}. {}\n   Opening prompt: {prompt}", s.title),
-                None => format!("{n}. {}", s.title),
+                Some(prompt) => format!("{n}. {title}\n   Opening prompt: {prompt}"),
+                None => format!("{n}. {title}"),
             }
         })
         .collect();
-    format!("Name this group of sessions:\n\n{}", lines.join("\n"))
+    format!("Name this frame. It holds:\n\n{}", lines.join("\n"))
 }
 
 /// The model's reply as a name: first line, without quotes, markdown or a
@@ -116,7 +140,7 @@ pub fn naming_args(sources: &[NamingSource]) -> Vec<String> {
     .to_vec()
 }
 
-/// Asks `claude` to name a section after `sources`, in the OS temp folder
+/// Asks `claude` to name a frame after `sources`, in the OS temp folder
 /// (SESS-109…113). The caller finds `claude`.
 pub async fn name_section(claude: ClaudeCall<'_>, sources: &[NamingSource]) -> Result<String, NamingError> {
     let args = naming_args(sources);
@@ -139,6 +163,7 @@ mod tests {
 
     fn source(title: &str, first_prompt: Option<&str>) -> NamingSource {
         NamingSource {
+            kind: NamingKind::Session,
             title: title.into(),
             first_prompt: first_prompt.map(Into::into),
         }
@@ -153,10 +178,20 @@ mod tests {
             ),
             source("Write the README", Some("Write the README")),
             source("Tidy", Some("")),
+            NamingSource {
+                kind: NamingKind::Note,
+                title: "Ship it\n  on Friday".into(),
+                first_prompt: None,
+            },
+            NamingSource {
+                kind: NamingKind::View,
+                title: "Build times".into(),
+                first_prompt: None,
+            },
         ]);
         assert_eq!(
             prompt,
-            "Name this group of sessions:\n\n1. Fix login\n   Opening prompt: The login redirect loops. Check the auth middleware please\n2. Write the README\n3. Tidy"
+            "Name this frame. It holds:\n\n1. Session: Fix login\n   Opening prompt: The login redirect loops. Check the auth middleware please\n2. Session: Write the README\n3. Session: Tidy\n4. Note: Ship it on Friday\n5. View: Build times"
         );
     }
 
@@ -209,7 +244,7 @@ mod tests {
                 "json"
             ]
         );
-        assert_eq!(args[13], "Name this group of sessions:\n\n1. T");
+        assert_eq!(args[13], "Name this frame. It holds:\n\n1. Session: T");
     }
 
     #[cfg(unix)]

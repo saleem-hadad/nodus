@@ -19,6 +19,7 @@ pub mod cards;
 pub mod compose;
 mod create;
 pub mod drawing;
+pub mod frames;
 pub mod geometry;
 mod handlers;
 pub mod ink;
@@ -105,7 +106,7 @@ pub enum BoardError {
     /// `Unknown project <id>`.
     #[error(transparent)]
     NotFound(#[from] nodus_store::NotFound),
-    #[error("These sessions have nothing to name the section after yet")]
+    #[error("Nothing in this frame says what to name it yet")]
     NothingToName,
     #[error(transparent)]
     NoClaude(#[from] nodus_platform::ClaudeNotFound),

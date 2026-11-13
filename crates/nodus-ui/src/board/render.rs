@@ -151,10 +151,18 @@ impl BoardCanvas {
                     _ => Motion::Position(420, 0, motion::ease_out),
                 }
             }
-            NodeKind::Section { .. } => Motion::Box(420),
+            // FRAME-013, FRAME-014: a frame follows the pointer as it's
+            // resized, and one inside a frame being dragged goes with it.
+            NodeKind::Section { .. } => {
+                if self.moving_section || self.held.contains_key(&node.id) {
+                    Motion::None
+                } else {
+                    Motion::Box(420)
+                }
+            }
             NodeKind::Archive { .. } => Motion::Size(460),
             NodeKind::Note { .. } => {
-                if self.moving_archive {
+                if self.moving_archive || self.moving_section {
                     Motion::None
                 } else {
                     Motion::Position(420, 0, motion::ease_out)
@@ -162,7 +170,13 @@ impl BoardCanvas {
             }
             NodeKind::Pad | NodeKind::View { .. } => Motion::None,
             // SHAPE-010: as notes, so ⌘Z and a session's moves glide.
-            NodeKind::Shape { .. } => Motion::Position(420, 0, motion::ease_out),
+            NodeKind::Shape { .. } => {
+                if self.moving_section {
+                    Motion::None
+                } else {
+                    Motion::Position(420, 0, motion::ease_out)
+                }
+            }
         }
     }
 
@@ -413,8 +427,14 @@ impl BoardCanvas {
         };
         let content = zoomed(z, content).stepped_glyphs(self.zooming);
 
-        // Sections take the pointer by their header only.
+        // Frames take the pointer by their header, and their edges to
+        // resize (FRAME-013); inside, it's the board's.
         if let NodeKind::Section { .. } = node.kind {
+            let zones = if self.read_only() {
+                Vec::new()
+            } else {
+                self.frame_resize_zones(&id, w, h, cx)
+            };
             let header_id = ElementId::Name(format!("section-header-{id}").into());
             let header = self
                 .node_hit(div().id(header_id), &id, cx)
@@ -437,6 +457,7 @@ impl BoardCanvas {
                 .h(px(h))
                 .child(content)
                 .child(header)
+                .children(zones)
                 .into_any_element();
         }
         // Pile cards under the top one let the pointer through to the archive.
@@ -1041,6 +1062,7 @@ impl Render for BoardCanvas {
         .absolute()
         .size_full();
 
+        let group_outlines = self.render_group_outlines(&t);
         let selection = self.render_selection_rect(&t, cx);
         let marquee = self.render_marquee(&t);
         let pill = self.render_zoom_pill(window, cx);
@@ -1136,6 +1158,7 @@ impl Render for BoardCanvas {
             .child(ink_layer)
             .children(raised)
             .children(pens)
+            .children(group_outlines)
             .children(selection)
             .children(marquee)
             .children(cursors)

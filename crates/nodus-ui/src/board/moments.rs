@@ -579,6 +579,7 @@ mod tests {
             ink: vec![],
             shapes,
             links: vec![],
+            groups: vec![],
             viewport: None,
             offline: false,
         }

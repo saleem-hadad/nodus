@@ -32,7 +32,8 @@ pub enum NodeKind {
         count: usize,
     },
     Pad,
-    /// Index into the board's sections, its member count and status.
+    /// Index into the board's sections (frames), how many things are in it
+    /// and the status of the sessions among them.
     Section {
         index: usize,
         count: usize,
@@ -235,29 +236,44 @@ pub fn build_nodes(input: BuildInput<'_>) -> Vec<FlowNode> {
         clip: None,
     });
 
-    // BOARD-020: sections, oldest first.
+    // BOARD-020, FRAME-001: frames, oldest first.
+    let (free_notes, _) = split_notes(&board.notes, &board.cards);
     for (index, view) in section_views(&board.sections, &board.cards).into_iter().enumerate() {
         let id = view.section.id.clone();
         let p = prev_by_id.get(id.as_str());
+        let live = held.get(&id);
         let held_here = p.is_some_and(|p| p.dragging || busy.contains(&id));
         let status = section_status(view.members.iter().map(|&i| &board.cards[i]));
+        // FRAME-011: everything in it, cards with notes, views and shapes.
+        let inside = |r: Rect| super::layout::holds_centre(view.frame, r);
+        let count = view.members.len()
+            + free_notes
+                .iter()
+                .filter(|n| inside(super::layout::rect_at(Point { x: n.x, y: n.y }, note_size(n))))
+                .count()
+            + board
+                .views
+                .iter()
+                .filter(|v| inside(super::layout::rect_at(Point { x: v.x, y: v.y }, view_size(v))))
+                .count()
+            + board.shapes.iter().filter(|s| inside(s.rect())).count();
         out.push(FlowNode {
-            kind: NodeKind::Section {
-                index,
-                count: view.members.len(),
-                status,
-            },
-            position: match p {
-                Some(p) if held_here => p.position,
+            kind: NodeKind::Section { index, count, status },
+            position: match (live, p) {
+                (Some(r), _) => Point { x: r.x, y: r.y },
+                (None, Some(p)) if held_here => p.position,
                 _ => Point {
                     x: view.frame.x,
                     y: view.frame.y,
                 },
             },
-            size: Size {
-                w: view.frame.w,
-                h: view.frame.h,
-            },
+            size: live.map_or(
+                Size {
+                    w: view.frame.w,
+                    h: view.frame.h,
+                },
+                |r| Size { w: r.w, h: r.h },
+            ),
             hidden: false,
             z: -2,
             draggable: true,
@@ -470,8 +486,7 @@ pub fn build_nodes(input: BuildInput<'_>) -> Vec<FlowNode> {
             clip: None,
         });
     }
-    let (free, _) = split_notes(&board.notes, &board.cards);
-    for note in free {
+    for note in free_notes {
         let index = board.notes.iter().position(|n| std::ptr::eq(n, note));
         let p = prev_by_id.get(note.id.as_str());
         let live = held.get(&note.id);
@@ -599,6 +614,7 @@ mod tests {
             ink: vec![],
             shapes: vec![],
             links: vec![],
+            groups: vec![],
             viewport: None,
             offline: false,
         }
@@ -651,6 +667,8 @@ mod tests {
             color: FolderColor::Blue,
             x: 900.0,
             y: 0.0,
+            w: None,
+            h: None,
             created_at: 0.0,
             extra: Map::new(),
         });

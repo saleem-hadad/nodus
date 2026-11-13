@@ -38,6 +38,7 @@ pub enum Icon {
     Ban,
     Bot,
     Eye,
+    Frame,
     Group,
     LayoutDashboard,
     Loader2,
@@ -62,7 +63,7 @@ pub enum Icon {
 }
 
 impl Icon {
-    const ALL: [Self; 49] = [
+    const ALL: [Self; 50] = [
         Self::ChevronLeft,
         Self::ChevronRight,
         Self::ChevronDown,
@@ -91,6 +92,7 @@ impl Icon {
         Self::Ban,
         Self::Bot,
         Self::Eye,
+        Self::Frame,
         Self::Group,
         Self::LayoutDashboard,
         Self::Loader2,
@@ -144,6 +146,7 @@ impl Icon {
             Self::Ban => "ban",
             Self::Bot => "bot",
             Self::Eye => "eye",
+            Self::Frame => "frame",
             Self::Group => "group",
             Self::LayoutDashboard => "layout-dashboard",
             Self::Loader2 => "loader-circle",
@@ -232,6 +235,9 @@ impl Icon {
             }
             Self::Eye => {
                 r#"<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>"#
+            }
+            Self::Frame => {
+                r#"<line x1="22" x2="2" y1="6" y2="6"/><line x1="22" x2="2" y1="18" y2="18"/><line x1="6" x2="6" y1="2" y2="22"/><line x1="18" x2="18" y1="2" y2="22"/>"#
             }
             Self::Group => {
                 r#"<path d="M3 7V5c0-1.1.9-2 2-2h2"/><path d="M17 3h2c1.1 0 2 .9 2 2v2"/><path d="M21 17v2c0 1.1-.9 2-2 2h-2"/><path d="M7 21H5c-1.1 0-2-.9-2-2v-2"/><rect width="7" height="5" x="7" y="7" rx="1"/><rect width="7" height="5" x="10" y="12" rx="1"/>"#

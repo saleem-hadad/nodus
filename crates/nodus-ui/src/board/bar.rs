@@ -6,15 +6,13 @@
 
 use gpui::{Context, Task};
 use nodus_board::compose::{ContextItem, with_context};
-use nodus_board::geometry::{CARD_SIZE, Point};
-use nodus_domain::{
-    BoardNote, BubbleRoute, CreateSessionOptions, FolderColor, NodePatch, SessionModel, SessionStatus, js,
-};
+use nodus_board::geometry::Point;
+use nodus_domain::{BoardNote, BubbleRoute, CreateSessionOptions, FolderColor, SessionModel, SessionStatus, js};
 
 use super::canvas::BoardCanvas;
 use super::layout::{
-    NEW_CARD_SIZE, NOTE_SIZE, card_obstacles, card_size, card_title, find_free_spot, is_terminal, section_at,
-    section_views, spot_below, spot_for_new_session, truncate,
+    NEW_CARD_SIZE, NOTE_SIZE, card_obstacles, card_size, card_title, find_free_spot, is_terminal, spot_below,
+    spot_for_new_session, truncate,
 };
 
 /// What the prompt bar sends (`Submission`).
@@ -45,15 +43,16 @@ pub struct MergeStart {
     pub parents: Vec<String>,
 }
 
-/// The selection bar's counts (spec 09 § Selection bar wiring): selected
-/// cards, the Claude sessions among them, the active ones, and the ones a
-/// group would take.
+/// The selection bar's counts (spec 09 § Selection bar wiring, spec 17):
+/// the things selected, the Claude sessions among them, the active ones,
+/// and whether they're one group exactly.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct SelectionCounts {
     pub count: usize,
     pub session_count: usize,
     pub active_count: usize,
-    pub group_count: usize,
+    /// GROUP-021: the selection is one group: its button takes it apart.
+    pub one_group: bool,
 }
 
 fn message(err: &nodus_core::CommandError) -> String {
@@ -241,10 +240,6 @@ impl BoardCanvas {
             x: js::round(spot.x),
             y: js::round(spot.y),
         };
-        let joins = self
-            .board
-            .as_ref()
-            .and_then(|b| section_at(pos, &section_views(&b.sections, &b.cards), None, CARD_SIZE));
         let note = BoardNote {
             id: uuid::Uuid::new_v4().to_string(),
             text: text.to_owned(),
@@ -284,16 +279,6 @@ impl BoardCanvas {
                     let id = card.node.session_id.clone();
                     c.state.update(cx, |s, cx| {
                         s.upsert_card(card, cx);
-                        if let Some(joins) = joins {
-                            s.patch_cards(
-                                vec![NodePatch {
-                                    session_id: id.clone(),
-                                    section_id: Some(Some(joins)),
-                                    ..NodePatch::default()
-                                }],
-                                cx,
-                            );
-                        }
                         s.save_note(
                             BoardNote {
                                 session_id: Some(id.clone()),
@@ -373,13 +358,16 @@ impl BoardCanvas {
         })
     }
 
-    /// BOARD-143: the selection bar shows with these counts while a card is
-    /// selected and the merge dialog is closed (`None` otherwise). Its
-    /// buttons call [`Self::start_merge`], `group_cards`, `archive_cards`
-    /// and `clear_selection` with [`Self::selected_cards`].
+    /// BOARD-143, GROUP-021: the selection bar shows with these counts
+    /// while a card, or two or more things, are selected and the merge
+    /// dialog is closed (`None` otherwise). Its buttons call
+    /// [`Self::start_merge`] and `archive_cards` with
+    /// [`Self::selected_cards`], `group_things` (or `ungroup_things`) and
+    /// `frame_things` with `selected_things`, and `clear_selection`.
     pub fn selection_bar(&self) -> Option<SelectionCounts> {
         let selected = self.selected_cards();
-        if selected.is_empty() || self.merge.is_some() {
+        let things = self.selected_things();
+        if (selected.is_empty() && things.len() < 2) || self.merge.is_some() {
             return None;
         }
         let cards: Vec<&nodus_domain::SessionCard> = self
@@ -387,11 +375,12 @@ impl BoardCanvas {
             .iter()
             .filter(|c| selected.contains(&c.node.session_id))
             .collect();
+        let archived = cards.iter().filter(|c| c.node.archived).count();
         Some(SelectionCounts {
-            count: cards.len(),
+            count: things.len() + archived,
             session_count: cards.iter().filter(|c| !is_terminal(c)).count(),
             active_count: cards.iter().filter(|c| !c.node.archived && !is_terminal(c)).count(),
-            group_count: cards.iter().filter(|c| !c.node.archived).count(),
+            one_group: self.exactly_one_group(&things).is_some(),
         })
     }
 

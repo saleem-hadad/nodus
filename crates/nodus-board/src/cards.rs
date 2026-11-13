@@ -1,8 +1,7 @@
 //! Cards as the window and the board tools see them (board.ts's `toCard`,
 //! `sessionList`).
 
-use indexmap::IndexMap;
-use nodus_domain::{BoardNode, BoardSection, SessionCard, SessionKind, SessionStatus};
+use nodus_domain::{BoardNode, BoardSection, Rect, SessionCard, SessionKind, SessionStatus};
 use nodus_transcripts::DiscoveredSession;
 use serde::Serialize;
 
@@ -39,6 +38,7 @@ pub struct SessionListItem {
     /// `archived`, `waiting for the user`, `working` or `done`.
     pub status: String,
     pub running: bool,
+    /// The frame it's in (FRAME-040), by name.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub section: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -59,17 +59,24 @@ pub fn session_list_items(
     self_id: Option<&str>,
     include_archived: bool,
 ) -> Vec<SessionListItem> {
-    let names: IndexMap<&str, &str> = sections
+    let rect = |c: &SessionCard| {
+        let size = crate::geometry::card_size(Some(&c.node));
+        Rect {
+            x: c.node.x,
+            y: c.node.y,
+            w: size.w,
+            h: size.h,
+        }
+    };
+    let frames: Vec<(&BoardSection, Rect)> = sections
         .iter()
         .map(|s| {
-            (
-                s.id.as_str(),
-                if s.name.is_empty() {
-                    "Untitled section"
-                } else {
-                    s.name.as_str()
-                },
-            )
+            let members: Vec<Rect> = cards
+                .iter()
+                .filter(|c| !c.node.archived && c.node.section_id.as_deref() == Some(s.id.as_str()))
+                .map(rect)
+                .collect();
+            (s, crate::frames::frame_rect(s, &members))
         })
         .collect();
     cards
@@ -91,12 +98,16 @@ pub fn session_list_items(
                     c.status.as_str().into()
                 },
                 running: c.live,
-                section: node
-                    .section_id
-                    .as_deref()
-                    .filter(|s| !s.is_empty())
-                    .and_then(|s| names.get(s))
-                    .map(|s| (*s).to_owned()),
+                section: (!node.archived)
+                    .then(|| crate::frames::frame_holding(&frames, rect(c)))
+                    .flatten()
+                    .map(|s| {
+                        if s.name.is_empty() {
+                            "Untitled frame".to_owned()
+                        } else {
+                            s.name.clone()
+                        }
+                    }),
                 action_run: set(node.run_of.as_deref()).then_some(true),
                 branch: meta.and_then(|m| m.git_branch.clone()),
                 last_reply: meta.and_then(|m| m.last_assistant_text.clone()),

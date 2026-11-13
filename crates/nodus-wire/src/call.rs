@@ -11,7 +11,7 @@
 //! server answers it with [`NOT_AVAILABLE`].
 
 use nodus_domain::{
-    BoardLink, BoardNote, BoardSection, BoardShape, CreateSessionOptions, CreateViewOptions, FolderColor,
+    BoardGroup, BoardLink, BoardNote, BoardSection, BoardShape, CreateSessionOptions, CreateViewOptions, FolderColor,
     GitFileChange, GroupPatch, InkStroke, NodePatch, ProjectPatch, Rect, ViewPatch, ViewReport, Viewport,
 };
 use serde_json::{Map, Value};
@@ -114,7 +114,8 @@ calls! {
     BoardSaveSection = "board:save-section" { project_id: String, section: BoardSection },
     /// `null`.
     BoardRemoveSection = "board:remove-section" { project_id: String, section_id: String },
-    /// `string`: the name Claude gave the section.
+    /// `string`: the name Claude gave the frame. `session_ids` holds the
+    /// notes', views' and shapes' ids in it too (FRAME-031).
     BoardNameSection = "board:name-section" { project_id: String, session_ids: Vec<String> },
     /// `null`.
     BoardSaveNote = "board:save-note" { project_id: String, note: BoardNote },
@@ -136,6 +137,10 @@ calls! {
     BoardSaveLinks = "board:save-links" { project_id: String, links: Vec<BoardLink> },
     /// `null`.
     BoardRemoveLinks = "board:remove-links" { project_id: String, ids: Vec<String> },
+    /// `null` (GROUP-030).
+    BoardSaveGroups = "board:save-groups" { project_id: String, groups: Vec<BoardGroup> },
+    /// `null` (GROUP-031).
+    BoardRemoveGroups = "board:remove-groups" { project_id: String, ids: Vec<String> },
 
     // ---- sessions (SESS-114…175)
 

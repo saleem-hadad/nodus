@@ -96,6 +96,14 @@ pub(crate) enum Gesture {
     MinimapPan {
         last: GPoint<Pixels>,
     },
+    /// A frame's edge or corner pressed: it's resized from `rect` as the
+    /// pointer moves from `start` (FRAME-013).
+    FrameResize {
+        id: String,
+        edges: super::cards::present::ResizeEdges,
+        start: GPoint<Pixels>,
+        rect: Rect,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -111,7 +119,8 @@ pub(crate) struct DragState {
     pub pointer: GPoint<Pixels>,
 }
 
-/// The section being dragged by its header, and the cards travelling with it.
+/// The frame being dragged by its header, and what travels with it: what's
+/// in it, and what's glued to that (FRAME-014).
 #[derive(Debug, Clone)]
 pub(crate) struct SectionDrag {
     pub last: Point,
@@ -210,6 +219,9 @@ pub struct BoardCanvas {
     pub(crate) archive_hot: bool,
     pub(crate) hot_section: Option<String>,
     pub(crate) naming: HashMap<String, Option<String>>,
+    /// Frames from before frames had a size, given theirs (FRAME-003): each
+    /// once, so a server that doesn't keep sizes isn't asked again and again.
+    pub(crate) settled_frames: HashSet<String>,
     pub(crate) moving_section: bool,
     pub(crate) moving_archive: bool,
 
@@ -319,6 +331,7 @@ impl BoardCanvas {
             archive_hot: false,
             hot_section: None,
             naming: HashMap::new(),
+            settled_frames: HashSet::new(),
             moving_section: false,
             moving_archive: false,
             merge: None,
@@ -407,7 +420,7 @@ impl BoardCanvas {
                 self.viewport = viewport::initial(board.viewport);
             }
             self.rebuild(cx);
-            self.follow_sections(cx);
+            self.settle_frames(cx);
             self.join_taken_over_runs(cx);
         }
         if in_modal != self.last_in_modal {
@@ -419,31 +432,6 @@ impl BoardCanvas {
             }
         }
         cx.notify();
-    }
-
-    /// BOARD-082: a section's stored corner follows its cards.
-    fn follow_sections(&mut self, cx: &mut Context<'_, Self>) {
-        let Some(board) = &self.board else { return };
-        let moved: Vec<_> = layout::section_views(&board.sections, &board.cards)
-            .into_iter()
-            .filter(|g| !g.members.is_empty() && (g.section.x != g.frame.x || g.section.y != g.frame.y))
-            .map(|g| nodus_domain::BoardSection {
-                x: g.frame.x,
-                y: g.frame.y,
-                ..g.section
-            })
-            .collect();
-        if moved.is_empty() {
-            return;
-        }
-        let state = self.state.clone();
-        cx.defer(move |cx| {
-            state.update(cx, |s, cx| {
-                for section in moved {
-                    s.save_section(section, cx);
-                }
-            });
-        });
     }
 
     /// The stack's results (BOARD-068): every archived card in pile order,

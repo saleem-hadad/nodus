@@ -240,6 +240,8 @@ Connections (`nodesConnectable={false}`), edge selection/focus, React Flow's del
 
 ### Sections
 
+> Sections are now frames (added after 1.0.14), with a size of their own, that hold whatever lies in them, and ⌘G glues things into a group instead (spec 17). What follows is 0.9.4's sections; spec 17 says where frames differ.
+
 - **BOARD-080** A section's members are the active cards whose `sectionId` is that section; archived cards never belong to a section.
 - **BOARD-081** A section's frame wraps its members: left = min x − 24, top = min y − 44, right = max right + 24, bottom = max bottom + 24 (each member's `cardSize`); a section with no members is a 336×284 frame at its stored corner.
 - **BOARD-082** Whenever a section with members has a frame corner different from its stored corner, the stored corner is saved to the frame corner (so an emptied section stays where it last was).

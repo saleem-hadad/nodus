@@ -1,11 +1,11 @@
 //! Placing things on the board: the archive stack's geometry, where new
-//! cards go, sections' frames and grouping, and the note pad (ports of
+//! cards go, frames (stored as sections) and framing, and the note pad (ports of
 //! `components/board/layout.ts`, `sections.ts`, `notes.ts` and `views.ts`).
 //! What the core shares (sizes, the free-spot search) is `nodus_board::geometry`.
 
 use nodus_board::geometry::{
-    self as geo, ARCHIVE_HEADER_H, ARCHIVE_PAD, CARD_H, CARD_SIZE, CARD_W, GAP, NOTE_H, NOTE_W, PAD_HEADER_H, PAD_W,
-    Point, STACK_H, STACK_W, Size,
+    self as geo, ARCHIVE_HEADER_H, ARCHIVE_PAD, CARD_H, CARD_W, GAP, NOTE_H, NOTE_W, PAD_HEADER_H, PAD_W, Point,
+    STACK_H, STACK_W, Size,
 };
 use nodus_domain::{BoardNote, BoardSection, BoardView, Rect, SessionCard, SessionKind, SessionStatus, js};
 
@@ -25,11 +25,13 @@ pub const STACK_DEPTH: usize = 3;
 /// Where the fanned-out results start, relative to the archive's corner.
 pub const STACK_RESULTS_X: f64 = ARCHIVE_PAD + CARD_W + 40.0;
 
-/// A section's header strip, its drag handle.
-pub const SECTION_HEADER_H: f64 = 44.0;
-pub const SECTION_PAD: f64 = 24.0;
-/// Grouping lays cards out at most this many to a row.
+/// A frame's header strip, its drag handle, and the room round what it holds.
+pub const SECTION_HEADER_H: f64 = nodus_board::frames::FRAME_HEADER_H;
+pub const SECTION_PAD: f64 = nodus_board::frames::FRAME_PAD;
+/// Framing tidies things at most this many to a row.
 const GROUP_MAX_COLS: f64 = 4.0;
+
+pub use nodus_board::frames::{frame_around, holds_centre};
 
 /// Notes come off the pad this big, in classic yellow.
 pub const NOTE_SIZE: Size = Size { w: NOTE_W, h: NOTE_H };
@@ -253,57 +255,38 @@ pub fn truncate(text: &str, max: usize) -> String {
     format!("{}…", js::trim_end(&js::slice_utf16(text, 0, max - 1)))
 }
 
-// ---- sections ---------------------------------------------------------------
+// ---- frames ------------------------------------------------------------------
 
-/// A section with its frame and the active cards grouped under it.
+/// A frame (stored as a section) with its box and the active cards in it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SectionView {
     pub section: BoardSection,
     pub frame: Rect,
-    /// Indices into the board's cards.
+    /// Indices into the board's cards: the active ones whose centre is in it.
     pub members: Vec<usize>,
 }
 
-/// `frameAround`: the frame around `cards`, or an empty one-card frame at `corner`.
-pub fn frame_around(corner: Point, cards: &[Rect]) -> Rect {
-    if cards.is_empty() {
-        return Rect {
-            x: corner.x,
-            y: corner.y,
-            w: SECTION_PAD * 2.0 + CARD_W,
-            h: SECTION_HEADER_H + CARD_H + SECTION_PAD,
-        };
-    }
-    let b = bounds_of(cards);
-    Rect {
-        x: b.x - SECTION_PAD,
-        y: b.y - SECTION_HEADER_H,
-        w: b.w + SECTION_PAD * 2.0,
-        h: b.h + SECTION_HEADER_H + SECTION_PAD,
-    }
-}
-
-/// `sectionViews`: every section with its frame and active cards, oldest
-/// first (BOARD-080, BOARD-081).
+/// Every frame with its box and the active cards in it, oldest first
+/// (FRAME-002, FRAME-003, FRAME-010). One saved before frames had a size is
+/// drawn round the cards that name it, as sections were (BOARD-081).
 pub fn section_views(sections: &[BoardSection], cards: &[SessionCard]) -> Vec<SectionView> {
     sections
         .iter()
         .map(|section| {
-            let members: Vec<usize> = cards
+            let named: Vec<Rect> = cards
+                .iter()
+                .filter(|c| !c.node.archived && c.node.section_id.as_deref() == Some(section.id.as_str()))
+                .map(card_rect)
+                .collect();
+            let frame = nodus_board::frames::frame_rect(section, &named);
+            let members = cards
                 .iter()
                 .enumerate()
-                .filter(|(_, c)| !c.node.archived && c.node.section_id.as_deref() == Some(section.id.as_str()))
+                .filter(|(_, c)| !c.node.archived && holds_centre(frame, card_rect(c)))
                 .map(|(i, _)| i)
                 .collect();
-            let rects: Vec<Rect> = members.iter().map(|&i| card_rect(&cards[i])).collect();
             SectionView {
-                frame: frame_around(
-                    Point {
-                        x: section.x,
-                        y: section.y,
-                    },
-                    &rects,
-                ),
+                frame,
                 section: section.clone(),
                 members,
             }
@@ -311,18 +294,18 @@ pub fn section_views(sections: &[BoardSection], cards: &[SessionCard]) -> Vec<Se
         .collect()
 }
 
-/// `sectionAt`: the section whose frame holds the centre of something of
-/// `size` at `position`; where frames overlap, `current` wins, then the
-/// newest (BOARD-084).
-pub fn section_at(position: Point, views: &[SectionView], current: Option<&str>, size: Size) -> Option<String> {
-    let centre = Point {
-        x: position.x + size.w / 2.0,
-        y: position.y + size.h / 2.0,
-    };
-    let hits: Vec<&SectionView> = views.iter().filter(|v| contains_point(v.frame, centre)).collect();
-    hits.iter()
-        .find(|v| Some(v.section.id.as_str()) == current)
-        .or(hits.last())
+/// The frame that holds the centre of something of `size` at `position`:
+/// the smallest, where frames overlap (FRAME-010).
+pub fn section_at(position: Point, views: &[SectionView], size: Size) -> Option<String> {
+    let r = rect_at(position, size);
+    views
+        .iter()
+        .filter(|v| holds_centre(v.frame, r))
+        .min_by(|a, b| {
+            (a.frame.w * a.frame.h)
+                .partial_cmp(&(b.frame.w * b.frame.h))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
         .map(|v| v.section.id.clone())
 }
 
@@ -337,24 +320,45 @@ pub fn section_status<'a>(members: impl IntoIterator<Item = &'a SessionCard> + C
     }
 }
 
-/// `layoutGroup` (BOARD-088): the frame for a new section of `cards`, and
-/// where each one goes when they had to be tidied into a grid.
-pub fn layout_group(cards: &[&SessionCard], others: &[Rect], zones: &[Rect]) -> (Rect, Vec<(String, Point)>) {
-    let rects: Vec<Rect> = cards.iter().map(|c| card_rect(c)).collect();
+/// FRAME-020: the frame for a new frame round `items` (each by id, where it
+/// is), and where each one goes when they had to be tidied: when the frame
+/// round them would cross something else (`others`) or come near a `zone`,
+/// they're packed in rows, in reading order, at the nearest free spot. A
+/// row holds up to four, as `layoutGroup` laid cards out (BOARD-088).
+pub fn layout_frame(items: &[(String, Rect)], others: &[Rect], zones: &[Rect]) -> (Rect, Vec<(String, Point)>) {
+    let rects: Vec<Rect> = items.iter().map(|(_, r)| *r).collect();
     let around = frame_around(Point { x: 0.0, y: 0.0 }, &rects);
     let clear =
         !others.iter().any(|o| intersects(*o, around, 0.0)) && !zones.iter().any(|z| intersects(*z, around, GAP));
-    if clear {
+    if clear || items.is_empty() {
         return (around, Vec::new());
     }
-    let n = cards.len() as f64;
-    let cols = GROUP_MAX_COLS.min(n.sqrt().ceil());
-    let rows = (n / cols).ceil();
-    let cell_w = cards.iter().map(|c| card_size(c).w).fold(f64::NEG_INFINITY, f64::max);
-    let cell_h = cards.iter().map(|c| card_size(c).h).fold(f64::NEG_INFINITY, f64::max);
+    let n = items.len() as f64;
+    let cols = GROUP_MAX_COLS.min(n.sqrt().ceil()) as usize;
+    let tallest = rects.iter().map(|r| r.h).fold(f64::NEG_INFINITY, f64::max);
+    // Reading order: rows top to bottom, then left to right (a stable sort).
+    let row = |r: &Rect| js::round(r.y / (tallest + GAP));
+    let mut sorted: Vec<&(String, Rect)> = items.iter().collect();
+    sorted.sort_by(|(_, a), (_, b)| {
+        let d = row(a) - row(b);
+        let d = if d != 0.0 { d } else { a.x - b.x };
+        d.partial_cmp(&0.0).unwrap_or(std::cmp::Ordering::Equal)
+    });
+    // Each row as wide as its things and as tall as its tallest.
+    let mut offsets: Vec<(String, Point)> = Vec::new();
+    let (mut y, mut width) = (0.0f64, 0.0f64);
+    for chunk in sorted.chunks(cols) {
+        let mut x = 0.0;
+        for (id, r) in chunk {
+            offsets.push((id.clone(), Point { x, y }));
+            x += r.w + GAP;
+        }
+        width = width.max(x - GAP);
+        y += chunk.iter().map(|(_, r)| r.h).fold(0.0, f64::max) + GAP;
+    }
     let size = Size {
-        w: SECTION_PAD * 2.0 + cols * cell_w + (cols - 1.0) * GAP,
-        h: SECTION_HEADER_H + rows * cell_h + (rows - 1.0) * GAP + SECTION_PAD,
+        w: SECTION_PAD * 2.0 + width,
+        h: SECTION_HEADER_H + (y - GAP) + SECTION_PAD,
     };
     let mut obstacles = others.to_vec();
     obstacles.extend_from_slice(zones);
@@ -367,24 +371,14 @@ pub fn layout_group(cards: &[&SessionCard], others: &[Rect], zones: &[Rect]) -> 
         None,
         size,
     );
-    // Reading order: rows top to bottom, then left to right (a stable sort).
-    let row = |c: &SessionCard| js::round(c.node.y / (cell_h + GAP));
-    let mut sorted: Vec<&SessionCard> = cards.to_vec();
-    sorted.sort_by(|a, b| {
-        let d = row(a) - row(b);
-        let d = if d != 0.0 { d } else { a.node.x - b.node.x };
-        d.partial_cmp(&0.0).unwrap_or(std::cmp::Ordering::Equal)
-    });
-    let cols_n = cols as usize;
-    let positions = sorted
-        .iter()
-        .enumerate()
-        .map(|(i, c)| {
+    let positions = offsets
+        .into_iter()
+        .map(|(id, o)| {
             (
-                c.node.session_id.clone(),
+                id,
                 Point {
-                    x: js::round(corner.x + SECTION_PAD + (i % cols_n) as f64 * (cell_w + GAP)),
-                    y: js::round(corner.y + SECTION_HEADER_H + (i / cols_n) as f64 * (cell_h + GAP)),
+                    x: js::round(corner.x + SECTION_PAD + o.x),
+                    y: js::round(corner.y + SECTION_HEADER_H + o.y),
                 },
             )
         })
@@ -400,61 +394,40 @@ pub fn layout_group(cards: &[&SessionCard], others: &[Rect], zones: &[Rect]) -> 
     )
 }
 
-/// `spotInSection` (BOARD-097): a free card slot inside the frame, or just
-/// right of it when it's full.
-pub fn spot_in_section(frame: Rect, obstacles: &[Rect]) -> Point {
-    let step_x = CARD_W + GAP;
-    let step_y = CARD_H + GAP;
+/// `spotInSection` (BOARD-097, FRAME-024): where something of `size` goes in
+/// a frame: the first free slot of a grid from its top-left corner, rows on
+/// past its bottom when it's full (the frame then grows to hold it). Free
+/// is as `findFreeSpot` has it, so a card started there stays there.
+pub fn spot_in_section(frame: Rect, obstacles: &[Rect], avoid: Option<Rect>, size: Size) -> Point {
+    let step_x = size.w + GAP;
+    let step_y = size.h + GAP;
     let cols = 1f64.max(((frame.w - SECTION_PAD * 2.0 + GAP) / step_x).floor()) as usize;
-    let rows = 1f64.max(((frame.h - SECTION_HEADER_H - SECTION_PAD + GAP) / step_y).floor()) as usize;
-    for row in 0..rows {
-        for col in 0..cols {
-            let p = Point {
-                x: frame.x + SECTION_PAD + col as f64 * step_x,
-                y: frame.y + SECTION_HEADER_H + row as f64 * step_y,
-            };
-            if !obstacles
-                .iter()
-                .any(|o| intersects(rect_at(p, CARD_SIZE), *o, GAP / 2.0 - 1.0))
-            {
-                return p;
-            }
-        }
-    }
-    find_free_spot(
-        Point {
-            x: frame.x + frame.w - SECTION_PAD + GAP,
-            y: frame.y + SECTION_HEADER_H,
-        },
-        obstacles,
-        None,
-        CARD_SIZE,
-    )
+    let at = |row: usize, col: usize| Point {
+        x: frame.x + SECTION_PAD + col as f64 * step_x,
+        y: frame.y + SECTION_HEADER_H + row as f64 * step_y,
+    };
+    let blocked = |p: Point| {
+        let r = rect_at(p, size);
+        avoid.is_some_and(|a| intersects(r, a, GAP)) || obstacles.iter().any(|o| intersects(r, *o, GAP / 2.0))
+    };
+    (0..40)
+        .flat_map(|row| (0..cols).map(move |col| (row, col)))
+        .map(|(row, col)| at(row, col))
+        .find(|p| !blocked(*p))
+        .unwrap_or_else(|| at(40, 0))
 }
 
-/// `createSectionAt`'s spot for an empty section with its header at `p`
-/// (BOARD-092). 0.9.4 passes the empty frame, a rect carrying `p` as its x
-/// and y, as the size to `findFreeSpot`, whose `{...p, ...size}` then tests
-/// every candidate at `p` itself: either the preferred corner is clear and
-/// taken, or every candidate is blocked and the search gives up 40 rows down.
-pub fn new_section_corner(p: Point, obstacles: &[Rect]) -> Point {
+/// `createSectionAt`'s spot for a new empty frame of `size` with its header
+/// at `p` (BOARD-092, FRAME-005): there when it's clear, else the nearest
+/// free spot. (0.9.4 sent a section it couldn't place there 40 rows down;
+/// that was a small section that grew round its cards, but a frame keeps
+/// its size, so it goes where it can be seen.)
+pub fn new_section_corner(p: Point, obstacles: &[Rect], size: Size) -> Point {
     let preferred = Point {
         x: p.x - SECTION_PAD,
         y: p.y - SECTION_HEADER_H / 2.0,
     };
-    let empty = frame_around(p, &[]);
-    let at_p = Rect {
-        x: p.x,
-        y: p.y,
-        ..empty
-    };
-    if !obstacles.iter().any(|o| intersects(at_p, *o, GAP / 2.0)) {
-        return preferred;
-    }
-    Point {
-        x: preferred.x,
-        y: preferred.y + 40.0 * (CARD_H + GAP),
-    }
+    find_free_spot(preferred, obstacles, None, size)
 }
 
 // ---- notes and views ----------------------------------------------------------
@@ -515,6 +488,7 @@ pub fn is_on_pad(position: Point, pad: Rect, size: Size) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nodus_board::geometry::CARD_SIZE;
     use nodus_domain::{BoardNode, FolderColor, SessionMeta};
     use serde_json::Map;
 
@@ -557,6 +531,8 @@ mod tests {
             color: FolderColor::Blue,
             x,
             y,
+            w: None,
+            h: None,
             created_at: 0.0,
             extra: Map::new(),
         }
@@ -714,8 +690,10 @@ mod tests {
         let mut stray = card("d", 0.0, 0.0);
         stray.node.section_id = Some("gone".into());
         cards.push(stray);
+        // A frame from before frames had a size wraps the cards naming it;
+        // what's in it is what lies in it, the stray's centre included.
         let views = section_views(&[section("s", 0.0, 0.0)], &cards);
-        assert_eq!(views[0].members, [0, 1]);
+        assert_eq!(views[0].members, [0, 1, 3]);
         assert_eq!(
             views[0].frame,
             Rect {
@@ -725,6 +703,13 @@ mod tests {
                 h: 384.0
             }
         );
+        // FRAME-010: one with a size holds whatever's centre is in it.
+        let mut sized = section("t", 0.0, 0.0);
+        sized.w = Some(450.0);
+        sized.h = Some(450.0);
+        let views = section_views(&[sized], &cards);
+        assert_eq!(views[0].members, [0, 3]);
+        assert_eq!(views[0].frame.w, 450.0);
     }
 
     #[test]
@@ -752,13 +737,28 @@ mod tests {
             },
         ];
         let at = Point { x: 50.0, y: 50.0 };
-        assert_eq!(section_at(at, &views, None, CARD_SIZE).as_deref(), Some("new"));
-        assert_eq!(section_at(at, &views, Some("old"), CARD_SIZE).as_deref(), Some("old"));
+        assert_eq!(section_at(at, &views, CARD_SIZE).as_deref(), Some("old"));
         assert_eq!(
-            section_at(at, &views, None, Size { w: 10.0, h: 10.0 }).as_deref(),
+            section_at(at, &views, Size { w: 10.0, h: 10.0 }).as_deref(),
             Some("old")
         );
-        assert_eq!(section_at(Point { x: 900.0, y: 0.0 }, &views, None, CARD_SIZE), None);
+        let right = Point { x: 300.0, y: 50.0 };
+        assert_eq!(section_at(right, &views, CARD_SIZE).as_deref(), Some("new"));
+        assert_eq!(section_at(Point { x: 900.0, y: 0.0 }, &views, CARD_SIZE), None);
+        // The smaller wins where they overlap.
+        let mut small = views[1].clone();
+        small.section.id = "small".into();
+        small.frame = Rect {
+            x: 100.0,
+            y: 0.0,
+            w: 300.0,
+            h: 300.0,
+        };
+        let views = vec![views[0].clone(), small];
+        assert_eq!(
+            section_at(Point { x: 150.0, y: 50.0 }, &views, Size { w: 10.0, h: 10.0 }).as_deref(),
+            Some("small")
+        );
     }
 
     #[test]
@@ -772,11 +772,17 @@ mod tests {
         assert_eq!(section_status([&a, &b]), Some(SessionStatus::Waiting));
     }
 
+    fn items(cards: &[SessionCard]) -> Vec<(String, Rect)> {
+        cards
+            .iter()
+            .map(|c| (c.node.session_id.clone(), card_rect(c)))
+            .collect()
+    }
+
     #[test]
-    fn groups_cards_where_they_are_when_clear() {
-        let a = card("a", 1000.0, 1000.0);
-        let b = card("b", 1320.0, 1000.0);
-        let (frame, moves) = layout_group(&[&a, &b], &[], &[ARCHIVE]);
+    fn frames_things_where_they_are_when_clear() {
+        let cards = [card("a", 1000.0, 1000.0), card("b", 1320.0, 1000.0)];
+        let (frame, moves) = layout_frame(&items(&cards), &[], &[ARCHIVE]);
         assert!(moves.is_empty());
         assert_eq!(
             frame,
@@ -790,20 +796,66 @@ mod tests {
     }
 
     #[test]
-    fn tidies_a_blocked_group_into_a_grid_in_reading_order() {
+    fn packs_things_of_different_sizes_row_by_row() {
+        let things = vec![
+            (
+                "view".to_owned(),
+                Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 480.0,
+                    h: 360.0,
+                },
+            ),
+            (
+                "sticker".to_owned(),
+                Rect {
+                    x: 600.0,
+                    y: 0.0,
+                    w: 64.0,
+                    h: 64.0,
+                },
+            ),
+            (
+                "note".to_owned(),
+                Rect {
+                    x: 0.0,
+                    y: 500.0,
+                    w: 216.0,
+                    h: 216.0,
+                },
+            ),
+        ];
+        let blocker = Rect {
+            x: 300.0,
+            y: 400.0,
+            w: 10.0,
+            h: 10.0,
+        };
+        let (frame, moves) = layout_frame(&things, &[blocker], &[]);
+        // Two to a row: the view and the sticker, then the note.
+        assert_eq!(
+            (frame.w, frame.h),
+            (24.0 * 2.0 + 480.0 + 32.0 + 64.0, 44.0 + 360.0 + 32.0 + 216.0 + 24.0)
+        );
+        assert_eq!(moves[1].1.x - moves[0].1.x, 480.0 + 32.0);
+        assert_eq!(moves[2].1.y - moves[0].1.y, 360.0 + 32.0);
+    }
+
+    #[test]
+    fn tidies_a_blocked_frame_into_rows_in_reading_order() {
         let cards = [
             card("c", 1320.0, 1300.0),
             card("a", 1000.0, 1000.0),
             card("b", 1320.0, 1000.0),
         ];
-        let refs: Vec<&SessionCard> = cards.iter().collect();
         let blocker = Rect {
             x: 1200.0,
             y: 1200.0,
             w: 10.0,
             h: 10.0,
         };
-        let (frame, moves) = layout_group(&refs, &[blocker], &[]);
+        let (frame, moves) = layout_frame(&items(&cards), &[blocker], &[]);
         // 2 columns, 2 rows of 288×216 cells.
         assert_eq!((frame.w, frame.h), (656.0, 532.0));
         let ids: Vec<&str> = moves.iter().map(|(id, _)| id.as_str()).collect();
@@ -825,39 +877,39 @@ mod tests {
     }
 
     #[test]
-    fn finds_a_slot_in_a_section_or_beside_it() {
+    fn finds_a_slot_in_a_frame_or_below_its_bottom() {
         let frame = Rect {
             x: 0.0,
             y: 0.0,
             w: 656.0,
             h: 284.0,
         };
-        assert_eq!(spot_in_section(frame, &[]), Point { x: 24.0, y: 44.0 });
+        let spot = |obstacles: &[Rect]| spot_in_section(frame, obstacles, None, CARD_SIZE);
+        assert_eq!(spot(&[]), Point { x: 24.0, y: 44.0 });
         let first = rect_at(Point { x: 24.0, y: 44.0 }, CARD_SIZE);
-        assert_eq!(spot_in_section(frame, &[first]), Point { x: 344.0, y: 44.0 });
+        assert_eq!(spot(&[first]), Point { x: 344.0, y: 44.0 });
         let second = rect_at(Point { x: 344.0, y: 44.0 }, CARD_SIZE);
-        assert_eq!(spot_in_section(frame, &[first, second]), Point { x: 664.0, y: 44.0 });
+        // Full: the next row, past the frame's bottom.
+        assert_eq!(spot(&[first, second]), Point { x: 24.0, y: 292.0 });
+        // An expanded card takes a whole row of this frame.
+        let big = spot_in_section(frame, &[first], None, NEW_CARD_SIZE);
+        assert_eq!(big, Point { x: 24.0, y: 556.0 });
     }
 
     #[test]
-    fn places_a_new_section_where_0_9_4_does() {
-        // BOARD-092: clear at the click point → the preferred corner.
+    fn places_a_new_frame_by_the_click_or_the_nearest_free_spot() {
         let p = Point { x: 1000.0, y: 1000.0 };
-        assert_eq!(new_section_corner(p, &[]), Point { x: 976.0, y: 978.0 });
-        // Anything near the click point → 40 rows down.
+        let size = Size { w: 768.0, h: 548.0 };
+        assert_eq!(new_section_corner(p, &[], size), Point { x: 976.0, y: 978.0 });
         let near = Rect {
             x: 1100.0,
             y: 1100.0,
             w: 10.0,
             h: 10.0,
         };
-        assert_eq!(
-            new_section_corner(p, &[near]),
-            Point {
-                x: 976.0,
-                y: 978.0 + 9920.0
-            }
-        );
+        let moved = new_section_corner(p, &[near], size);
+        assert!(!intersects(rect_at(moved, size), near, GAP / 2.0));
+        assert!((moved.y - 978.0).abs() < 2000.0, "{moved:?}");
     }
 
     #[test]

@@ -105,9 +105,12 @@ impl BoardNode {
     }
 }
 
-/// A named frame grouping active cards on the board. The frame is drawn around
-/// its cards, so it grows and shrinks with them; x/y is its top-left corner,
-/// which is where it stays while it has no cards.
+/// A frame on the board (spec 17): a named, tinted box. Whatever lies in it
+/// moves with it; it keeps its size as they move. x/y is its top-left corner.
+///
+/// Stored as a section, its name before frames: a section saved before then
+/// has no size, and is drawn around the cards that name it in `sectionId`
+/// (BOARD-081) until the board gives it the size it has there (FRAME-003).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BoardSection {
@@ -117,6 +120,24 @@ pub struct BoardSection {
     pub color: FolderColor,
     pub x: f64,
     pub y: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub w: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub h: Option<f64>,
+    pub created_at: f64,
+    /// Fields this version doesn't know, written back as they were read.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+/// Things on the board glued together (spec 17): they're selected, and
+/// move, as one. Unlike a frame it isn't drawn.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BoardGroup {
+    pub id: String,
+    /// What's in it: cards by session id, and notes, views and shapes by id.
+    pub members: Vec<String>,
     pub created_at: f64,
     /// Fields this version doesn't know, written back as they were read.
     #[serde(flatten)]
@@ -336,6 +357,9 @@ pub struct BoardSnapshot {
     /// Links, oldest first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub links: Vec<BoardLink>,
+    /// Groups, oldest first (spec 17).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub groups: Vec<BoardGroup>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub viewport: Option<Viewport>,
     /// A server board's last snapshot, given while the server can't be

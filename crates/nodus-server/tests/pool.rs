@@ -801,8 +801,9 @@ async fn only_a_session_itself_can_report_its_usage_or_failures() {
     // SRV-103: Claude turning the account down fails it, once, and every
     // member hears of it.
     let mut other = server.connect().await;
+    // Its sessions move off the failed account (SRV-104), which can stop
+    // this one before it says so: wait for the account, not the output.
     app.type_line(&one, "authfail").await;
-    app.printed(&one, "turned down", 1).await;
     let failed = app
         .until("Alpha fails", async |app| {
             let a = app.account("Alpha").await;

@@ -20,7 +20,7 @@ use nodus_core::domain::{BoardSnapshot, CreateSessionOptions, Event, NodePatch, 
 use nodus_core::{EnvSource, HostLauncher, Nodus, NodusConfig, SafeStorage};
 use nodus_host_proto::HostPaths;
 use nodus_wire::Request;
-use nodus_wire::client::Client;
+use nodus_wire::client::{Client, hello};
 use serde_json::json;
 use tokio::sync::broadcast;
 
@@ -365,6 +365,10 @@ async fn a_server_project_opens_and_runs_like_a_local_one() {
         .unwrap_err();
     assert_eq!(err.message, nodus_remote::TOKEN_REFUSED);
     assert!(within(app.servers().list()).await.is_empty());
+
+    // SRV-060: a fresh server still needs setting up, which the dev token
+    // gets past on loopback.
+    assert!(within(hello(&world.url())).await.unwrap().needs_setup);
 
     // Added, it's kept with its token sealed, and connects.
     let added = within(app.servers().add(&format!("127.0.0.1:{}/", world.port), TOKEN))

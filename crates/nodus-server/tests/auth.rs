@@ -22,7 +22,9 @@ use http_body_util::{BodyExt, Full};
 use hyper::body::{Bytes, Incoming};
 use hyper::{Request as HttpRequest, Response};
 use hyper_util::rt::TokioIo;
-use nodus_wire::client::{Client, ConnectError, Events, claim_setup, github_nonce, hello, poll_sign_in, start_sign_in};
+use nodus_wire::client::{
+    Client, ConnectError, Events, claim_setup, download, github_nonce, hello, poll_sign_in, start_sign_in, upload,
+};
 use nodus_wire::{
     AuditLine, DEVICE_SIGNED_IN, Device, GithubApp, Installation, Member, NonceRequest, Request, ServerInfo,
     SetupStatus, SetupStep, SignInPoll,
@@ -1096,6 +1098,41 @@ async fn a_dev_token_is_only_for_loopback() {
     let members: Vec<Member> = call(&app, Request::MembersList {}).await;
     assert!(members.is_empty());
     assert!(Client::connect(&server.url, "another").await.is_err());
+}
+
+/// SRV-163: the files' routes take a token as `/api/ws` does, but never a
+/// setup token, and a revoked device's no more.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn files_take_a_devices_token_but_never_a_setup_token() {
+    let world = World::new().await;
+    let server = world.serve(&[]);
+    let github = &world.github;
+
+    // SRV-060: a setup token that holds, for the wizard, is no good here.
+    let setup = claim_setup(&server.url, &world.setup_code()).await.unwrap().token;
+    let (wizard, _) = server.connect(&setup).await;
+    let _: SetupStatus = call(&wizard, Request::SetupStatus {}).await;
+    let refused = upload(&server.url, &setup, "a.txt", b"x").await.unwrap_err();
+    assert!(matches!(refused, ConnectError::Refused(403)), "{refused:?}");
+    assert_eq!(download(&server.url, &setup, "a.txt").await.unwrap().status, 403);
+    drop(wizard);
+
+    // A device's token keeps a file and gets it back.
+    let token = world.set_up(&server).await;
+    let kept = upload(&server.url, &token, "notes.txt", b"the bytes").await.unwrap();
+    let back = download(&server.url, &token, &kept.id).await.unwrap();
+    assert_eq!((back.status, back.body.as_slice()), (200, &b"the bytes"[..]));
+
+    // Revoked, a device's token gets nothing; nor does one never given.
+    let (laptop_token, _, laptop) = signed_in(github, &server, None, "Laptop", OCTO).await;
+    let back = download(&server.url, &laptop_token, &kept.id).await.unwrap();
+    assert_eq!(back.status, 200);
+    let (studio, _) = server.connect(&token).await;
+    let () = call(&studio, Request::DevicesRevoke { id: laptop.id }).await;
+    let gone = download(&server.url, &laptop_token, &kept.id).await.unwrap();
+    assert_eq!(gone.status, 401);
+    let refused = upload(&server.url, "not-a-token", "a.txt", b"x").await.unwrap_err();
+    assert!(matches!(refused, ConnectError::Refused(401)), "{refused:?}");
 }
 
 fn hex_sha256(text: &str) -> String {

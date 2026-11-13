@@ -47,9 +47,19 @@ You need [Claude Code](https://code.claude.com/docs/en/overview) installed, with
 - Sticky notes, action buttons and spoken prompts
 - Double-tap ⇧ in any app to start a session, jot a note or reply to one
 
+## 🖥️ Run a server
+
+Put your team's projects on a Linux server you run. They show in everyone's grid beside their own, sessions keep going while laptops sleep, and each card works on a branch of its own. Members sign in with GitHub, and pushes go through the server's own GitHub App.
+
+```sh
+curl -fsSL https://github.com/saleem-hadad/nodus/releases/latest/download/install-server.sh | sudo bash -s -- --tailscale
+```
+
+Then choose **Connect to Server…** in the app. [Running a server](docs/server.md) covers setup and the security rules.
+
 ## 🔒 Private by design
 
-Everything stays on your machine. Nodus reads transcripts where Claude Code keeps them and saves only the board layout. Spoken prompts use xAI's speech to text with your own key. Floating capture asks Claude where each capture goes, so what you type there reaches Anthropic as you type it.
+Everything stays on your machine. With a server, its projects and sessions live on that server, which you run. Nodus reads transcripts where Claude Code keeps them and saves only the board layout. Spoken prompts use xAI's speech to text with your own key. Floating capture asks Claude where each capture goes, so what you type there reaches Anthropic as you type it.
 
 ## 📖 Learn more
 

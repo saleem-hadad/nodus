@@ -22,6 +22,7 @@ When you change a behavior, change its entry in the same commit, and say what 0.
 | `14-board-shapes-links.md` | Shapes, stickers, pictures and links on the board, and the dock tools that make them |
 | `15-motion.md` | things arriving and leaving, status changes, and Claude's signature: drawing, working, finishing, building a view, guessing |
 | `16-rich-sessions.md` | Claude cards as a chat: the transcript drawn as messages, charts, forms and pages from Claude, and the prompt queue the Stop hook hands over |
+| `18-hosted.md` | hosted Nodus: the Linux server, its install, the wire, members and sign-in, GitHub, Claude accounts, worktrees, working together, updates, the security model |
 
 ## Compatibility with 0.9.4
 
@@ -50,13 +51,13 @@ A crate depends only on crates in lower layers. When a crate needs something fro
 | Layer | Crates |
 | --- | --- |
 | L0 | `nodus-domain` (types, events, JSON as JavaScript writes it, UTF-16 helpers) |
-| L1 | `nodus-store`, `nodus-platform`, `nodus-host-proto`, `nodus-terminal` |
+| L1 | `nodus-store`, `nodus-platform`, `nodus-host-proto`, `nodus-terminal`, `nodus-wire` |
 | L2 | `nodus-transcripts`, `nodus-git`, `nodus-host` |
 | L3 | `nodus-sessions`, `nodus-board` |
 | L4 | `nodus-views`, `nodus-tools`, `nodus-actions`, `nodus-voice`, `nodus-capture`, `nodus-updater`, `nodus-feedback`, `nodus-remote` |
 | L5 | `nodus-core` |
 | L6 | `nodus-ui` |
-| L7 | `nodus` (the binary) |
+| L7 | `nodus` (the app's binary), `nodus-server` (the server's binary) |
 
 ## What replaced Chromium
 

@@ -302,11 +302,11 @@ impl Auth {
         Ok(self.setup_status())
     }
 
-    /// `setup:done`: a step after step 2, finished or skipped: members, or
-    /// Claude accounts (SRV-061). Step 5 comes with what sets it up.
+    /// `setup:done`: a step after step 2, finished or skipped: members,
+    /// Claude accounts, or the first project (SRV-061).
     pub(crate) fn setup_done(&self, step: SetupStep) -> Result<SetupStatus, String> {
-        if !matches!(step, SetupStep::Members | SetupStep::Accounts) {
-            return Err("Only the members and Claude accounts steps can be marked done for now".to_owned());
+        if !matches!(step, SetupStep::Members | SetupStep::Accounts | SetupStep::Project) {
+            return Err("Only the members, Claude accounts and first project steps can be marked done".to_owned());
         }
         {
             let mut people = self.lock();

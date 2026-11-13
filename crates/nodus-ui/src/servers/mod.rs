@@ -229,8 +229,15 @@ impl ServersDialog {
             .detach();
         }
         let search = new_input("", "Search repositories", false, window, cx);
-        cx.subscribe_in(&search, window, |_, _, _: &InputEvent, _, cx| cx.notify())
-            .detach();
+        cx.subscribe_in(&search, window, |this, _, e: &InputEvent, window, cx| {
+            // The wizard's step 5 adds the one match on Enter (UI-335).
+            let wizard = matches!(this.state.read(cx).server_dialog, Some(ServerDialog::Connect));
+            if wizard && let InputEvent::PressEnter { .. } = e {
+                this.primary(window, cx);
+            }
+            cx.notify();
+        })
+        .detach();
         match state.read(cx).server_dialog {
             Some(ServerDialog::Connect) => focus_all(&address, window, cx),
             Some(ServerDialog::Github { .. }) => focus_all(&search, window, cx),
@@ -728,75 +735,7 @@ impl ServersDialog {
             .iter()
             .find(|s| s.id == server_id)
             .map_or_else(|| "the server".to_owned(), |s| s.name.clone());
-        let query = self.search.read(cx).value().trim().to_owned();
-        let linked: HashSet<String> = self
-            .state
-            .read(cx)
-            .projects
-            .iter()
-            .filter(|p| p.server.as_deref() == Some(server_id))
-            .map(|p| p.name.to_lowercase())
-            .collect();
-        let body: AnyElement = match self.repos.get(server_id) {
-            None | Some(Repos::Loading) => note("Loading its repositories…", t).into_any_element(),
-            Some(Repos::Failed(error)) => div()
-                .id("github-repos-error")
-                .text_color(t.status_waiting)
-                .child(error.clone())
-                .into_any_element(),
-            Some(Repos::Loaded(repos)) => {
-                let shown: Vec<&GithubRepo> = repos.iter().filter(|r| repo_matches(&r.full_name, &query)).collect();
-                if repos.is_empty() {
-                    note("The App isn’t installed on any repository yet.", t).into_any_element()
-                } else if shown.is_empty() {
-                    note("No repository matches.", t).into_any_element()
-                } else {
-                    let rows = shown.into_iter().map(|repo| {
-                        let this = cx.entity();
-                        let (server, full_name) = (server_id.to_owned(), repo.full_name.clone());
-                        let adding = self.adding.as_deref() == Some(repo.full_name.as_str());
-                        let name = repo
-                            .full_name
-                            .rsplit('/')
-                            .next()
-                            .unwrap_or(&repo.full_name)
-                            .to_lowercase();
-                        let added = linked.contains(&name);
-                        div()
-                            .id(SharedString::from(format!("github-repo-{}", repo.full_name)))
-                            .flex()
-                            .items_center()
-                            .gap(px(10.))
-                            .h(px(34.))
-                            .px(px(10.))
-                            .rounded(RADIUS_SM)
-                            .hover(|s| s.bg(t.bg_hover))
-                            .active(|s| s.bg(t.bg_pressed))
-                            .on_click(move |_, _, cx| {
-                                let (server, full_name) = (server.clone(), full_name.clone());
-                                this.update(cx, |d, cx| d.add_repo(server, full_name, cx));
-                            })
-                            .child(icon(Icon::FolderPlus, 15., 2., t.text_secondary))
-                            .child(div().flex_1().min_w_0().truncate().child(repo.full_name.clone()))
-                            .when(repo.private, |d| {
-                                d.child(div().text_size(TEXT_SM).text_color(t.text_tertiary).child("Private"))
-                            })
-                            .when(added && !adding, |d| {
-                                d.child(
-                                    div()
-                                        .text_size(TEXT_SM)
-                                        .text_color(t.text_tertiary)
-                                        .child("In your grid"),
-                                )
-                            })
-                            .when(adding, |d| {
-                                d.child(div().text_size(TEXT_SM).text_color(t.text_secondary).child("Cloning…"))
-                            })
-                    });
-                    div().flex().flex_col().gap(px(1.)).children(rows).into_any_element()
-                }
-            }
-        };
+        let body = self.repo_list(server_id, t, cx);
         let install = self.install_url.get(server_id).cloned();
         let cancel = cx.entity();
         div()
@@ -855,6 +794,92 @@ impl ServersDialog {
                     ),
             )
             .into_any_element()
+    }
+
+    /// The repositories a server's App reaches, as Add from GitHub and the
+    /// wizard's step 5 list them (UI-329, UI-335): each a row that adds it.
+    fn repo_list(&mut self, server_id: &str, t: Tokens, cx: &mut Context<'_, Self>) -> AnyElement {
+        let query = self.search.read(cx).value().trim().to_owned();
+        let linked: HashSet<String> = self
+            .state
+            .read(cx)
+            .projects
+            .iter()
+            .filter(|p| p.server.as_deref() == Some(server_id))
+            .map(|p| p.name.to_lowercase())
+            .collect();
+        match self.repos.get(server_id) {
+            None | Some(Repos::Loading) => note("Loading its repositories…", t).into_any_element(),
+            Some(Repos::Failed(error)) => div()
+                .id("github-repos-error")
+                .text_color(t.status_waiting)
+                .child(error.clone())
+                .into_any_element(),
+            Some(Repos::Loaded(repos)) => {
+                let shown: Vec<&GithubRepo> = repos.iter().filter(|r| repo_matches(&r.full_name, &query)).collect();
+                if repos.is_empty() {
+                    note("The App isn’t installed on any repository yet.", t).into_any_element()
+                } else if shown.is_empty() {
+                    note("No repository matches.", t).into_any_element()
+                } else {
+                    let rows = shown.into_iter().map(|repo| {
+                        let this = cx.entity();
+                        let (server, full_name) = (server_id.to_owned(), repo.full_name.clone());
+                        let adding = self.adding.as_deref() == Some(repo.full_name.as_str());
+                        let name = repo
+                            .full_name
+                            .rsplit('/')
+                            .next()
+                            .unwrap_or(&repo.full_name)
+                            .to_lowercase();
+                        let added = linked.contains(&name);
+                        div()
+                            .id(SharedString::from(format!("github-repo-{}", repo.full_name)))
+                            .flex()
+                            .items_center()
+                            .gap(px(10.))
+                            .h(px(34.))
+                            .px(px(10.))
+                            .rounded(RADIUS_SM)
+                            .hover(|s| s.bg(t.bg_hover))
+                            .active(|s| s.bg(t.bg_pressed))
+                            .on_click(move |_, window, cx| {
+                                let (server, full_name) = (server.clone(), full_name.clone());
+                                this.update(cx, |d, cx| d.pick_repo(server, full_name, window, cx));
+                            })
+                            .child(icon(Icon::FolderPlus, 15., 2., t.text_secondary))
+                            .child(div().flex_1().min_w_0().truncate().child(repo.full_name.clone()))
+                            .when(repo.private, |d| {
+                                d.child(div().text_size(TEXT_SM).text_color(t.text_tertiary).child("Private"))
+                            })
+                            .when(added && !adding, |d| {
+                                d.child(
+                                    div()
+                                        .text_size(TEXT_SM)
+                                        .text_color(t.text_tertiary)
+                                        .child("In your grid"),
+                                )
+                            })
+                            .when(adding, |d| {
+                                d.child(div().text_size(TEXT_SM).text_color(t.text_secondary).child("Cloning…"))
+                            })
+                    });
+                    div().flex().flex_col().gap(px(1.)).children(rows).into_any_element()
+                }
+            }
+        }
+    }
+
+    /// A repository's row was clicked: the wizard's first project, or Add
+    /// from GitHub's.
+    fn pick_repo(&mut self, server_id: String, full_name: String, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let wizard = matches!(self.step, Step::Project { .. })
+            && matches!(self.state.read(cx).server_dialog, Some(ServerDialog::Connect));
+        if wizard {
+            self.add_first_project(full_name, window, cx);
+        } else {
+            self.add_repo(server_id, full_name, cx);
+        }
     }
 
     /// One server's projects, each with its checkbox.

@@ -823,6 +823,19 @@ async fn the_wizard_claims_the_code_makes_the_app_and_its_first_member() {
     )
     .await;
     assert_eq!(status.step, SetupStep::Accounts);
+    // SRV-061: steps 4 and 5, then nothing's left.
+    for (step, next) in [
+        (SetupStep::Accounts, SetupStep::Project),
+        (SetupStep::Project, SetupStep::Done),
+    ] {
+        let status: SetupStatus = call(&app, Request::SetupDone { step }).await;
+        assert_eq!(status.step, next);
+    }
+    let err = app
+        .call(&Request::SetupDone { step: SetupStep::Name })
+        .await
+        .unwrap_err();
+    assert!(err.message.starts_with("Only the members"), "{}", err.message);
     let devices = world.file("devices.json");
     assert!(!devices.contains(&token), "{devices}");
     assert!(devices.contains(&hex_sha256(&token)), "{devices}");

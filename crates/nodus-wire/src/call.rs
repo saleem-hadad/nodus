@@ -254,8 +254,8 @@ calls! {
     SetupStatus = "setup:status" {},
     /// `SetupStatus`: names the server, which is step 1. With a setup token too.
     SetupName = "setup:name" { name: String },
-    /// `SetupStatus`: a step after step 2 is finished or skipped. Only
-    /// `members` for now; the steps after it come with what they set up.
+    /// `SetupStatus`: a step after step 2 is finished or skipped:
+    /// `members`, `accounts` or `project`.
     SetupDone = "setup:done" { step: crate::SetupStep },
     /// `Member[]`, in the order they were added.
     MembersList = "members:list" {},

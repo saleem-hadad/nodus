@@ -293,3 +293,58 @@ async fn reopens_a_ready_session_from_its_replay() {
     registry.reopen("s1", "p1").await.unwrap();
     assert_eq!(sessions.opens.lock().unwrap().len(), 2);
 }
+
+/// SRV-144: a server session's terminal takes the size the server gives it,
+/// whoever's it is, and from then on its container's size is only asked for.
+#[tokio::test]
+async fn takes_a_size_it_didnt_ask_for_from_the_server() {
+    let log: Log = Arc::default();
+    let sessions = Arc::new(FakeSessions {
+        log: log.clone(),
+        opens: Mutex::new(Vec::new()),
+    });
+    let registry = Registry::new(sessions.clone(), Platform::Mac, tokio::runtime::Handle::current());
+    let size = |registry: &Registry| registry.with_terminal("s1", |t| (t.cols(), t.rows())).unwrap();
+    let resizes = || -> Vec<Vec<String>> {
+        log.lock()
+            .unwrap()
+            .iter()
+            .filter(|e| e[0] == "resize")
+            .cloned()
+            .collect()
+    };
+
+    let attach = {
+        let registry = registry.clone();
+        tokio::spawn(async move {
+            registry
+                .attach("s1", "p1", ContainerId(1), SessionKind::Claude, Some((80, 24)))
+                .await
+        })
+    };
+    settle().await;
+    // Someone else typed last: the server says the session is wider.
+    assert!(registry.pty_size("s1", 120, 40));
+    assert_eq!(size(&registry), (120, 40));
+    let reply = sessions.opens.lock().unwrap()[0].take().unwrap();
+    reply.send(Ok("replay".to_owned())).unwrap();
+    attach.await.unwrap().unwrap();
+    // It asks for its own size once ready, and keeps the server's.
+    assert_eq!(resizes().last().unwrap()[2..], ["80".to_owned(), "24".to_owned()]);
+    assert_eq!(size(&registry), (120, 40));
+
+    // Its container grows: asked for, not taken.
+    registry.refit("s1", ContainerId(1), Some((100, 30)));
+    assert_eq!(resizes().last().unwrap()[2..], ["100".to_owned(), "30".to_owned()]);
+    assert_eq!(size(&registry), (120, 40));
+    // The same size again isn't asked twice.
+    let asked = resizes().len();
+    registry.refit("s1", ContainerId(1), Some((100, 30)));
+    assert_eq!(resizes().len(), asked);
+    // This window typed: the server gives it its size.
+    assert!(registry.pty_size("s1", 100, 30));
+    assert_eq!(size(&registry), (100, 30));
+    assert!(!registry.pty_size("s1", 100, 30));
+    // Nothing for a session it has no terminal for.
+    assert!(!registry.pty_size("nope", 10, 10));
+}

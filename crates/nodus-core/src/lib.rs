@@ -101,6 +101,8 @@ pub use nodus_capture as capture_service;
 pub use nodus_platform::secrets::SafeStorage;
 /// A repository a server's GitHub App reaches (SRV-120).
 pub use nodus_remote::GithubRepo;
+/// How often an app may say where it is on a server board (SRV-180).
+pub use nodus_remote::PRESENCE_EVERY;
 /// What a mic implements and runs, for the window's mics (`VoiceApi::backend`).
 pub use nodus_voice::controller::{VoiceBackend, VoiceController};
 pub use notifications::Notifications;

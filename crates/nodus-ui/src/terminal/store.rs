@@ -451,6 +451,14 @@ impl Pump {
     }
 
     fn event(&mut self, event: Event, touched: &mut Touched) {
+        // SRV-144: a size isn't output; it applies at once, so a replay
+        // still to come is written into the grid the size it was made at.
+        if let Event::PtySize { session_id, cols, rows } = event {
+            if self.registry.pty_size(&session_id, cols as usize, rows as usize) {
+                touched.changed(session_id);
+            }
+            return;
+        }
         let session = match &event {
             Event::PtyData { session_id, .. } | Event::PtyExit { session_id, .. } => session_id.clone(),
             // SRV-104: a server session whose terminal here shows it exited

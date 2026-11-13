@@ -262,6 +262,8 @@ impl BoardCanvas {
     /// Every pointer move over the window.
     pub(crate) fn pointer_move(&mut self, e: &MouseMoveEvent, cx: &mut Context<'_, Self>) {
         self.pointer = Some(e.position);
+        // SRV-180: where the pointer is, for the others on a server board.
+        self.share_presence(cx);
         // BOARD-074: hovering the stack, with no button down.
         if e.pressed_button.is_none() {
             if self.bounds.contains(&e.position) {
@@ -282,10 +284,12 @@ impl BoardCanvas {
         match self.gesture.clone() {
             Gesture::Idle => {}
             Gesture::MinimapPan { last } => {
+                self.stop_following(cx);
                 self.minimap_drag(last, e.position, cx);
                 self.gesture = Gesture::MinimapPan { last: e.position };
             }
             Gesture::Pan { last } => {
+                self.stop_following(cx);
                 let dx = f64::from(f32::from(e.position.x - last.x));
                 let dy = f64::from(f32::from(e.position.y - last.y));
                 self.viewport.x += dx;
@@ -651,6 +655,7 @@ impl BoardCanvas {
         if dx == 0.0 && dy == 0.0 {
             return false;
         }
+        self.stop_following(cx);
         self.viewport.x += dx;
         self.viewport.y += dy;
         match self.gesture.clone() {
@@ -1291,6 +1296,10 @@ impl BoardCanvas {
         match key.as_str() {
             // BOARD-160.
             "escape" => {
+                // SRV-182: Esc stops following first.
+                if self.stop_following(cx) {
+                    return true;
+                }
                 // INKUI-023: the ink puts its tool down or lets go of its stroke first.
                 if self.ink_escape(cx) {
                     return false;

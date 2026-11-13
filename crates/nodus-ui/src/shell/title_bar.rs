@@ -307,12 +307,16 @@ pub fn title_bar(state: &Entity<AppState>, actions: Vec<AnyElement>, window: &mu
             })
     });
 
+    // SRV-181: who else is on a server board.
+    let people = crate::board::presence::title_bar_people(state, cx);
+
     let right = no_drag(
         div()
             .flex()
             .items_center()
             .gap(px(8.))
             .flex_none()
+            .children(people)
             .children(running)
             .children(focus_switch)
             .children(update_button)

@@ -596,7 +596,10 @@ impl AppState {
     /// Whether a project's server is away (SRV-028): it isn't connected, or
     /// isn't known yet. False for a local project.
     pub fn server_away(&self, project: &Project) -> bool {
-        project.server.is_some() && self.server_of(project).is_none_or(|s| s.state != ServerState::Connected)
+        project.server.is_some()
+            && self
+                .server_of(project)
+                .is_none_or(|s| s.state != ServerState::Connected)
     }
 
     /// SRV-163: there's no folder here to reveal for a server project.

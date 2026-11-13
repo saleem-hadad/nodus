@@ -592,7 +592,9 @@ impl ProjectsView {
         let focus_feature = s.focus_feature();
         // SRV-162: a server project's badge names its server.
         let server = project.server.as_ref().map(|server_id| ServerBadge {
-            name: s.server_of(project).map_or_else(|| server_id.clone(), |server| server.name.clone()),
+            name: s
+                .server_of(project)
+                .map_or_else(|| server_id.clone(), |server| server.name.clone()),
             away: s.server_away(project),
         });
         let id = SharedString::from(format!("folder-{}", project.id));
@@ -643,7 +645,9 @@ impl ProjectsView {
         }
         .render(&id.clone().into(), &hovered, window, cx);
         // UI-232: the folder's path; a server project has none here.
-        let tip = server.as_ref().map_or_else(|| project.repo_path.clone(), ServerBadge::tooltip);
+        let tip = server
+            .as_ref()
+            .map_or_else(|| project.repo_path.clone(), ServerBadge::tooltip);
 
         let state = self.state.clone();
         let select_id = project.id.clone();

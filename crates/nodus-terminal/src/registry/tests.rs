@@ -258,7 +258,11 @@ async fn reopens_a_ready_session_from_its_replay() {
 
     let attach = {
         let registry = registry.clone();
-        tokio::spawn(async move { registry.attach("s1", "p1", ContainerId(1), SessionKind::Claude, Some((80, 24))).await })
+        tokio::spawn(async move {
+            registry
+                .attach("s1", "p1", ContainerId(1), SessionKind::Claude, Some((80, 24)))
+                .await
+        })
     };
     settle().await;
     answer(0, "before");
@@ -276,7 +280,10 @@ async fn reopens_a_ready_session_from_its_replay() {
     answer(1, "after");
     reopen.await.unwrap().unwrap();
     let text = screen(&registry);
-    assert!(text.contains("after") && !text.contains("before") && !text.contains("lost"), "{text}");
+    assert!(
+        text.contains("after") && !text.contains("before") && !text.contains("lost"),
+        "{text}"
+    );
     let opens: Vec<_> = log.lock().unwrap().iter().filter(|e| e[0] == "open").cloned().collect();
     assert_eq!(opens.len(), 2);
     assert_eq!(opens[1][1..3], ["p1".to_owned(), "s1".to_owned()]);

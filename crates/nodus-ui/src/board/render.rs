@@ -853,7 +853,8 @@ impl Render for BoardCanvas {
         let marquee = self.render_marquee(&t);
         let pill = self.render_zoom_pill(window, cx);
         let minimap = self.render_minimap(cx);
-        let hint = empty.then(|| self.render_hint(window, cx));
+        // Its keys and bar aren't there on a read-only board (SRV-028).
+        let hint = (empty && !self.read_only()).then(|| self.render_hint(window, cx));
         // BOARD-138: the toast is stacked above the prompt bar (spec 11).
         // SRV-028: nothing to add to a read-only board.
         let read_only = self.read_only();
@@ -883,7 +884,11 @@ impl Render for BoardCanvas {
                 this.add_images(paths.paths().to_vec(), at, cx);
             }));
         let ink_dock = (!read_only).then(|| self.render_ink_dock(window, cx));
-        let bubble = if read_only { Vec::new() } else { self.render_bubble(window, cx) };
+        let bubble = if read_only {
+            Vec::new()
+        } else {
+            self.render_bubble(window, cx)
+        };
         let read_only_cover = self.render_read_only_cover(cx);
         let reconnecting = self.render_reconnecting(cx);
         // Spec 04: views' webviews kept in step, their large window and the New view dialog.

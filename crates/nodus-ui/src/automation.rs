@@ -726,7 +726,11 @@ async fn connect(nodus: &nodus_core::Nodus, command: &Value, cx: &mut AsyncApp) 
         .map_err(|e| e.message)?;
     // Its projects can be asked for once it's connected.
     for _ in 0..150 {
-        if nodus.servers().status(&server.id).is_some_and(|s| s.state == nodus_domain::ServerState::Connected) {
+        if nodus
+            .servers()
+            .status(&server.id)
+            .is_some_and(|s| s.state == nodus_domain::ServerState::Connected)
+        {
             break;
         }
         cx.background_executor().timer(Duration::from_millis(100)).await;

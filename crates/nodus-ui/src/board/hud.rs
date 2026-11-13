@@ -151,7 +151,8 @@ impl BoardCanvas {
     }
 
     /// SRV-028: while a server board's server is away, a `Reconnecting…`
-    /// pill at the board's top, over everything on it.
+    /// pill at the bottom's middle, where the prompt bar is when the board
+    /// isn't read-only, in line with the zoom controls.
     pub(crate) fn render_reconnecting(&self, cx: &mut Context<'_, Self>) -> Option<AnyElement> {
         let away = {
             let s = self.state.read(cx);
@@ -177,7 +178,7 @@ impl BoardCanvas {
         Some(
             div()
                 .absolute()
-                .top(px(14.))
+                .bottom(px(16.))
                 .left_0()
                 .right_0()
                 .flex()
@@ -189,10 +190,10 @@ impl BoardCanvas {
                         .flex()
                         .items_center()
                         .gap(px(7.))
-                        .h(px(30.))
-                        .pl(px(11.))
-                        .pr(px(13.))
-                        .rounded(px(15.))
+                        .h(px(34.))
+                        .pl(px(12.))
+                        .pr(px(14.))
+                        .rounded(px(11.))
                         .map(|d| frosted(d, rgba_mix(t.bg_elevated, 0.86), 20., 1.6))
                         .shadow(t.md())
                         .font_family(fonts::UI)

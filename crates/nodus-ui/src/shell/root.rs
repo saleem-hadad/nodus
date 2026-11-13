@@ -98,7 +98,12 @@ impl Shell {
     fn sync_views(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         let (route, settings_open, report_open, servers_open) = {
             let s = self.state.read(cx);
-            (s.route.clone(), s.settings_open, s.report_open, s.server_dialog.is_some())
+            (
+                s.route.clone(),
+                s.settings_open,
+                s.report_open,
+                s.server_dialog.is_some(),
+            )
         };
         match &route {
             Route::Projects => {

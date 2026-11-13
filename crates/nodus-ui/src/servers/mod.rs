@@ -12,9 +12,9 @@ use std::collections::{HashMap, HashSet};
 use gpui::component::input::{Escape, IndentInline, InputEvent, InputState, OutdentInline};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, Context, Corners, Entity, FocusHandle, Focusable as _, FontWeight, InteractiveElement, IntoElement,
-    KeyBinding, KeyDownEvent, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Window, actions,
-    div, px,
+    AnyElement, App, Context, Corners, Entity, FocusHandle, Focusable as _, FontWeight, InteractiveElement,
+    IntoElement, KeyBinding, KeyDownEvent, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled,
+    Window, actions, div, px,
 };
 use nodus_domain::{Project, ServerInfo, ServerState};
 
@@ -403,9 +403,13 @@ impl ServersDialog {
                     .gap(px(10.))
                     .text_color(t.text_secondary)
                     .child("You haven’t connected to a server yet.")
-                    .child(button("server-picker-connect").label("Connect to Server…").on_click(
-                        move |_, _, cx| state.update(cx, |s, cx| s.open_server_dialog(ServerDialog::Connect, cx)),
-                    ))
+                    .child(
+                        button("server-picker-connect")
+                            .label("Connect to Server…")
+                            .on_click(move |_, _, cx| {
+                                state.update(cx, |s, cx| s.open_server_dialog(ServerDialog::Connect, cx))
+                            }),
+                    )
                     .into_any_element(),
             );
         }
@@ -419,13 +423,9 @@ impl ServersDialog {
             .px(px(22.))
             .pb(px(18.))
             .child(heading_owned(title))
-            .child(
-                div()
-                    .mt(px(6.))
-                    .mb(px(14.))
-                    .text_color(t.text_secondary)
-                    .child("Tick the projects to show in your grid. Projects other people add stay out of it until you tick them."),
-            )
+            .child(div().mt(px(6.)).mb(px(14.)).text_color(t.text_secondary).child(
+                "Tick the projects to show in your grid. Projects other people add stay out of it until you tick them.",
+            ))
             .child(
                 div()
                     .id("server-projects")
@@ -499,12 +499,7 @@ impl ServersDialog {
                         .child(folder_icon(16., Some(project.color)))
                         .child(div().flex_1().min_w_0().truncate().child(project.name.clone()))
                 });
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(1.))
-                    .children(rows)
-                    .into_any_element()
+                div().flex().flex_col().gap(px(1.)).children(rows).into_any_element()
             }
         };
         div()

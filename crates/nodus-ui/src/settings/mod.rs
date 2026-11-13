@@ -1165,7 +1165,9 @@ impl SettingsDialog {
                             .focus(show_stop)
                             .on_click(move |_, _, cx| {
                                 let server_id = Some(show_id.clone());
-                                show.update(cx, |s, cx| s.open_server_dialog(ServerDialog::Projects { server_id }, cx));
+                                show.update(cx, |s, cx| {
+                                    s.open_server_dialog(ServerDialog::Projects { server_id }, cx)
+                                });
                             })
                             .into_any_element(),
                     ),
@@ -1174,7 +1176,10 @@ impl SettingsDialog {
                 plain_row(
                     row_text(
                         "Disconnect".into(),
-                        Some("Forgets this server and its projects on this device. Nothing changes on the server.".into()),
+                        Some(
+                            "Forgets this server and its projects on this device. Nothing changes on the server."
+                                .into(),
+                        ),
                         t,
                     ),
                     Some(
@@ -1200,7 +1205,10 @@ impl SettingsDialog {
                 "Connect to a Nodus server to show its projects beside your own.",
             )
         } else {
-            ("Another server", "Its projects show beside these servers’ and your own.")
+            (
+                "Another server",
+                "Its projects show beside these servers’ and your own.",
+            )
         };
         body.push(
             group(

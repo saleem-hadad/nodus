@@ -408,9 +408,15 @@ pub fn new_project_button(
     })];
     if !state.read(cx).servers.is_empty() {
         let show = state.clone();
-        items.push(MenuItem::item("Show Server Projects…", Icon::Folders, move |_, cx| {
-            show.update(cx, |s, cx| s.open_server_dialog(ServerDialog::Projects { server_id: None }, cx));
-        }));
+        items.push(MenuItem::item(
+            "Show Server Projects…",
+            Icon::Folders,
+            move |_, cx| {
+                show.update(cx, |s, cx| {
+                    s.open_server_dialog(ServerDialog::Projects { server_id: None }, cx)
+                });
+            },
+        ));
     }
     crate::components::split_button::SplitButton {
         id: "new-project".into(),

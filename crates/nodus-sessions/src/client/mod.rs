@@ -19,12 +19,17 @@
 //! On a server the host isn't the app's to start: it runs on its own as
 //! another user ([`HostClient::standalone`], SRV-004), and runs every other
 //! process the core starts too ([`HostRunner`], SRV-005).
+//!
+//! Each live session's queued prompts are mirrored here
+//! ([`HostClient::queue`], [`HostClient::set_queue`]): a host that keeps
+//! queues hands the first to Claude when its turn ends; with one that
+//! doesn't, the queue lives here and the first is typed in (QUEUE-009–011).
 
 mod connection;
 mod launcher;
 mod runner;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -33,7 +38,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use indexmap::IndexMap;
-use nodus_domain::{Event, EventSink, SessionStatus};
+use nodus_domain::{Event, EventSink, QueuedPrompt, SessionStatus};
 use nodus_host_proto::{
     ClientMessage, ExecResult, HistoryEntry, HostMessage, HostPaths, PROTOCOL, Platform, ReplayBuffer,
     STATUS_LINE_EVENT, SpawnRequest, Welcome, encode, host_paths, trusts_host, write_hook_config,
@@ -61,6 +66,12 @@ const HOST_START_POLL: Duration = Duration::from_millis(100);
 const WELCOME: Duration = Duration::from_millis(5000);
 /// How often a standalone host is tried until it's up (SRV-004).
 const STANDALONE_RETRY: Duration = Duration::from_secs(1);
+
+/// The hook that ends a turn, when a queued prompt can go (QUEUE-011).
+const STOP_EVENT: &str = "Stop";
+/// How many prompts it typed in a session remembers, so a queue set from a
+/// list that hadn't heard can't put one back (QUEUE-011).
+const TYPED_LIMIT: usize = 100;
 
 const DIDNT_ANSWER: &str = "The session host didn’t answer";
 const UNTRUSTED: &str = "Another program answered as the session host, so Nodus didn’t trust it with your sessions.";
@@ -178,6 +189,8 @@ struct State {
     exit_waiters: HashMap<String, Vec<oneshot::Sender<()>>>,
     host: Option<Conn>,
     relays_mcp: bool,
+    /// The host keeps queued prompts and hands them to Claude (QUEUE-001).
+    keeps_queues: bool,
     connecting: Option<(u64, Shared)>,
     next_request: u64,
     quitting: bool,
@@ -190,6 +203,10 @@ struct Running {
     pending: String,
     /// The flush timer waiting to send `pending`, by its number.
     flush: Option<u64>,
+    /// Prompts waiting for its turn to end, first to go first (QUEUE-009).
+    queue: Vec<QueuedPrompt>,
+    /// The ids of the queued prompts it typed in, newest last (QUEUE-011).
+    typed: VecDeque<String>,
 }
 
 struct PendingSpawn {
@@ -280,6 +297,75 @@ impl HostClient {
     /// Whether the connected host relays the board tools (HOST-107).
     pub fn relays_mcp(&self) -> bool {
         self.inner.lock().relays_mcp
+    }
+
+    /// Whether the connected host keeps queued prompts and hands them to
+    /// Claude itself (QUEUE-001). Without one, the app keeps them and
+    /// types them in (QUEUE-011).
+    pub fn host_keeps_queues(&self) -> bool {
+        self.inner.lock().keeps_queues
+    }
+
+    /// The prompts waiting for a live session's turn to end, first to go
+    /// first; none for a session that isn't live (QUEUE-009).
+    pub fn queue(&self, session_id: &str) -> Vec<QueuedPrompt> {
+        self.inner
+            .lock()
+            .running
+            .get(session_id)
+            .map(|running| running.queue.clone())
+            .unwrap_or_default()
+    }
+
+    /// Replaces a live session's queued prompts, at once here, with
+    /// `Event::Queue` when they changed, and in the host when it keeps
+    /// them, which tells every app what it made of them (QUEUE-010).
+    /// False, and nothing changes, for a session that isn't live.
+    pub fn set_queue(&self, session_id: &str, items: Vec<QueuedPrompt>) -> bool {
+        self.change_queue(session_id, |queue| *queue = items)
+    }
+
+    /// Queues a prompt after a live session's others, as
+    /// [`HostClient::set_queue`] would with it added; in one step, so two
+    /// at once both stay. False for a session that isn't live.
+    pub fn enqueue(&self, session_id: &str, item: QueuedPrompt) -> bool {
+        self.change_queue(session_id, |queue| queue.push(item))
+    }
+
+    /// QUEUE-010: changes a live session's queue here and in a host that
+    /// keeps queues, saying `Event::Queue` when it changed.
+    fn change_queue(&self, session_id: &str, change: impl FnOnce(&mut Vec<QueuedPrompt>)) -> bool {
+        let _order = self.inner.order();
+        let (changed, items) = {
+            let mut state = self.inner.lock();
+            let keeps_queues = state.keeps_queues;
+            let Some(running) = state.running.get_mut(session_id) else {
+                return false;
+            };
+            let before = running.queue.clone();
+            change(&mut running.queue);
+            // QUEUE-011: one already typed in stays gone.
+            let Running { queue, typed, .. } = running;
+            queue.retain(|item| !typed.contains(&item.id));
+            let items = running.queue.clone();
+            if keeps_queues {
+                Inner::send(
+                    &state,
+                    &ClientMessage::QueueSet {
+                        session_id: session_id.to_owned(),
+                        items: items.clone(),
+                    },
+                );
+            }
+            (before != items, items)
+        };
+        if changed {
+            self.inner.emit(Event::Queue {
+                session_id: session_id.to_owned(),
+                items,
+            });
+        }
+        true
     }
 
     /// Connects to the session host and takes on its sessions. With `start`,
@@ -748,7 +834,11 @@ impl Inner {
         };
         let port = welcome.hook_port as u16;
         self.wiring.endpoint.set(port, &welcome.hook_token, config.as_deref());
-        self.lock().relays_mcp = welcome.mcp == Some(true);
+        {
+            let mut state = self.lock();
+            state.relays_mcp = welcome.mcp == Some(true);
+            state.keeps_queues = welcome.queue == Some(true);
+        }
         let status = &self.wiring.status;
         for session in welcome.sessions {
             self.track(
@@ -767,7 +857,73 @@ impl Inner {
             if let Some(line) = &session.status_line {
                 status.hook(STATUS_LINE_EVENT, &session.session_id, &line.payload, line.at);
             }
+            // QUEUE-004, QUEUE-009
+            self.mirror_queue(&session.session_id, session.queue);
         }
+    }
+
+    /// Takes the host's word for a live session's queue, with
+    /// `Event::Queue` when it changed (QUEUE-009). Called with the order
+    /// lock held.
+    fn mirror_queue(&self, session_id: &str, items: Vec<QueuedPrompt>) {
+        {
+            let mut state = self.lock();
+            let Some(running) = state.running.get_mut(session_id) else {
+                return;
+            };
+            if running.queue == items {
+                return;
+            }
+            running.queue.clone_from(&items);
+        }
+        self.emit(Event::Queue {
+            session_id: session_id.to_owned(),
+            items,
+        });
+    }
+
+    /// QUEUE-011: the session's turn ended and the host didn't hand Claude
+    /// its next queued prompt (it doesn't keep queues, the session's hook
+    /// is from an older app, or the queue changed while the hook was on its
+    /// way), so it's typed in, unless something is asking the user. Called
+    /// with the order lock held.
+    fn type_next_queued(&self, session_id: &str) {
+        if self.wiring.status.is_waiting(session_id) {
+            return;
+        }
+        let (next, rest) = {
+            let mut state = self.lock();
+            let keeps_queues = state.keeps_queues;
+            let Some(running) = state.running.get_mut(session_id) else {
+                return;
+            };
+            if running.queue.is_empty() {
+                return;
+            }
+            let next = running.queue.remove(0);
+            running.typed.push_back(next.id.clone());
+            while running.typed.len() > TYPED_LIMIT {
+                running.typed.pop_front();
+            }
+            let rest = running.queue.clone();
+            if keeps_queues {
+                Inner::send(
+                    &state,
+                    &ClientMessage::QueueSet {
+                        session_id: session_id.to_owned(),
+                        items: rest.clone(),
+                    },
+                );
+            }
+            (next, rest)
+        };
+        self.emit(Event::Queue {
+            session_id: session_id.to_owned(),
+            items: rest,
+        });
+        // Typed once the order lock is let go: a write takes it.
+        let (client, session_id) = (HostClient { inner: self.me() }, session_id.to_owned());
+        tokio::spawn(async move { client.send_prompt(&session_id, &next.text) });
     }
 
     /// Tracks a session as live, before any of its output, and starts its
@@ -780,6 +936,8 @@ impl Inner {
                 output: ReplayBuffer::from_text(buffer),
                 pending: String::new(),
                 flush: None,
+                queue: Vec::new(),
+                typed: VecDeque::new(),
             },
         );
         self.wiring.status.process_started(session_id, initial);
@@ -831,7 +989,12 @@ impl Inner {
                 if let Some(server) = &self.wiring.server {
                     server.hook(&session_id, &event, &payload);
                 }
+                // QUEUE-011: the main thread's turn ended.
+                if event == STOP_EVENT && !from_agent(&payload) {
+                    self.type_next_queued(&session_id);
+                }
             }
+            HostMessage::Queue { session_id, items } => self.mirror_queue(&session_id, items),
             HostMessage::Mcp {
                 id,
                 session_id,
@@ -979,15 +1142,22 @@ impl Inner {
         self.flush(session_id);
         let (was_running, waiters) = {
             let mut state = self.lock();
-            let was_running = state.running.shift_remove(session_id).is_some();
+            let was_running = state.running.shift_remove(session_id);
             (was_running, state.exit_waiters.remove(session_id).unwrap_or_default())
         };
-        if was_running {
+        if let Some(running) = was_running {
             self.wiring.status.process_exited(session_id);
             self.emit(Event::PtyExit {
                 session_id: session_id.to_owned(),
                 exit_code,
             });
+            // QUEUE-012: its queue goes with it, as it does in the host.
+            if !running.queue.is_empty() {
+                self.emit(Event::Queue {
+                    session_id: session_id.to_owned(),
+                    items: Vec::new(),
+                });
+            }
         }
         for waiter in waiters {
             let _ = waiter.send(());
@@ -1018,6 +1188,14 @@ impl Inner {
             self.exited(&session_id, -1);
         }
     }
+}
+
+/// A hook from inside a subagent: its payload names the agent (HOST-139).
+fn from_agent(payload: &Value) -> bool {
+    payload
+        .get("agent_id")
+        .and_then(Value::as_str)
+        .is_some_and(|id| !id.is_empty())
 }
 
 /// Tells the host to stop an `exec` the caller gave up on (dropped), so it

@@ -179,13 +179,17 @@ pub fn body(
     }
     head = head.child(tools(env, node, agents, handles, resumable, window, cx));
 
-    // The body (XCARD-018…XCARD-024).
-    let term = if enabled {
+    // The body (XCARD-018…XCARD-024). CHAT-029: a Claude card's body is its
+    // chat, there whatever the terminal is doing; the terminal docks in it.
+    let chat = !shell && env.server_host.is_none();
+    let term = if enabled || chat {
         host.as_ref().and_then(|h| h.element(&id, window, cx))
     } else {
         None
     };
-    let overlay = if !started {
+    let overlay = if chat {
+        None
+    } else if !started {
         Some(blocking(start_button(env, &id, shell, window, cx)))
     } else if enabled && phase == Phase::Loading {
         Some(loading_pill(env, &id, loading_label, window, cx))
@@ -201,15 +205,21 @@ pub fn body(
         .relative()
         .flex_1()
         .min_h_0()
-        .pt(z.px(8.))
-        .pr(z.px(4.))
-        .pb(z.px(8.))
-        .pl(z.px(12.))
-        .bg(t.term_bg)
-        .cursor(CursorStyle::IBeam)
+        .when(!chat, |d| {
+            d.pt(z.px(8.))
+                .pr(z.px(4.))
+                .pb(z.px(8.))
+                .pl(z.px(12.))
+                .bg(t.term_bg)
+                .cursor(CursorStyle::IBeam)
+        })
+        .when(chat, |d| d.bg(t.bg_elevated))
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             cx.stop_propagation();
-            if enabled && let Some(h) = &focusing {
+            if enabled
+                && !chat
+                && let Some(h) = &focusing
+            {
                 h.focus(&focus_id, window, cx);
             }
         })
@@ -218,7 +228,7 @@ pub fn body(
         // it, not the board (the terminal asks the same in its own content
         // box, through its wheel gate); a disabled one never claims.
         .on_scroll(move |e: &ScrollEvent, _, cx| {
-            if enabled
+            if (enabled || chat)
                 && cx
                     .default_global::<Wheel>()
                     .0
@@ -227,7 +237,7 @@ pub fn body(
                 cx.stop_propagation();
             }
         })
-        .when(enabled, |d| {
+        .when(enabled || chat, |d| {
             // The window sees every wheel event before anything under the
             // pointer does, and marks where gestures begin.
             d.child(

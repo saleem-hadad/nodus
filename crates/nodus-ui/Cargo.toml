@@ -22,6 +22,8 @@ nodus-platform.workspace = true
 nodus-sessions.workspace = true
 nodus-terminal.workspace = true
 nodus-transcripts.workspace = true
+# The chat's charts, stats, tables and forms (spec 16): parsed and laid out there, drawn here.
+nodus-visual.workspace = true
 # The capture panel's mic (07 CAP-103): 05's voice controller.
 nodus-voice.workspace = true
 resvg.workspace = true

@@ -99,4 +99,9 @@ pub trait ViewHost: Send + Sync {
     fn open_url(&self, url: &str) {
         nodus_platform::shell::open_external(url);
     }
+    /// CHAT-031: `text` to a session as the user's next message: typed when
+    /// it's idle, queued while it works, resuming it when it isn't running.
+    fn deliver(&self, _project_id: &str, _session_id: &str, _text: &str) -> BoxFuture<'_, Result<(), String>> {
+        Box::pin(async { Err("Answers can’t be sent from here".to_owned()) })
+    }
 }

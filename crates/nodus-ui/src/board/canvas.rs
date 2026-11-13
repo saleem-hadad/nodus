@@ -277,6 +277,7 @@ impl BoardCanvas {
                 StateEvent::RunFinished(run) => this.run_finished(run, cx),
                 StateEvent::Toast(message) => this.show_toast(message.clone(), cx),
                 StateEvent::SettingsChanged => {}
+                StateEvent::ShowNode(id) => this.show_node(id, cx),
             }),
         ];
         let mut canvas = Self {
@@ -583,6 +584,18 @@ impl BoardCanvas {
         if state.read(cx).selection != ids {
             cx.defer(move |cx| state.update(cx, |s, cx| s.set_selection(ids, cx)));
         }
+    }
+
+    /// CHAT-028: only this node selected, panned into view.
+    pub(crate) fn show_node(&mut self, id: &str, cx: &mut Context<'_, Self>) {
+        let Some((position, size)) = self.node(id).map(|n| (n.position, n.size)) else {
+            return;
+        };
+        for node in &mut self.nodes {
+            node.selected = node.id == id;
+        }
+        self.ensure_visible(position, size, cx);
+        cx.notify();
     }
 
     pub(crate) fn node(&self, id: &str) -> Option<&FlowNode> {

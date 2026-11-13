@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    ActionRunResult, CaptureContext, CaptureShortcut, ClipboardOffer, MenuCommand, OpenCardRequest, ServerState,
-    SessionStatus, SessionUsage, SummarizeProgress, TabAttachment, UpdateStatus, ViewEvent,
+    ActionRunResult, CaptureContext, CaptureShortcut, ClipboardOffer, MenuCommand, OpenCardRequest, QueuedPrompt,
+    ServerState, SessionStatus, SessionUsage, SummarizeProgress, TabAttachment, UpdateStatus, ViewEvent,
 };
 
 /// One event, named after its channel.
@@ -42,6 +42,12 @@ pub enum Event {
         session_id: String,
         agent_id: String,
         status: SessionStatus,
+    },
+    /// `ev:queue`: the prompts waiting for a session's turn to end changed
+    /// (queued, edited, removed, or one handed to Claude).
+    Queue {
+        session_id: String,
+        items: Vec<QueuedPrompt>,
     },
     /// `ev:usage`: a session's model, context, running time or cost changed.
     Usage { session_id: String, usage: SessionUsage },

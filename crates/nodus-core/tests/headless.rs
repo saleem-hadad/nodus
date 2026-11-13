@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use nodus_core::domain::{
-    CreateSessionOptions, CreateViewOptions, Event, Project, SessionKind, SessionStatus, ViewEvent,
+    CreateSessionOptions, CreateViewOptions, Event, Project, QueuedPrompt, SessionKind, SessionStatus, ViewEvent,
 };
 use nodus_core::{AppShell, BoxFuture, EnvSource, HostLauncher, Nodus, NodusConfig, ReplaceChoice};
 use nodus_host_proto::HostPaths;
@@ -788,6 +788,97 @@ async fn a_view_starts_its_brain_and_a_relaunch_adopts_the_host() {
         .await;
     let board = nodus.board().load(&project.id).await.unwrap();
     assert!(board.views.is_empty() && board.cards.is_empty());
+
+    world.stop(nodus).await;
+}
+
+/// QUEUE-013: prompts queued for a running session through the core reach
+/// the window as `Event::Queue`, and go to Claude when its turn ends: from
+/// the host, as the Stop hook's answer, or typed in for a hook that doesn't
+/// ask for one.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn queued_prompts_go_to_claude_when_its_turn_ends() {
+    let world = World::new().await;
+    let nodus = world.start().await;
+    let repo = world.repo("queue").await;
+    let project = nodus
+        .projects()
+        .add(Some(repo.to_string_lossy().into_owned()))
+        .await
+        .unwrap()
+        .unwrap();
+    let mut events = Events::new(&nodus);
+    let card = nodus
+        .sessions()
+        .create(&project.id, &CreateSessionOptions::default())
+        .await
+        .unwrap();
+    let id = card.node.session_id.clone();
+    events.printed(&id, "stand-in ready").await;
+    let (port, token) = hook_target(&world.env_of(&id));
+    let queue_event = |items: &[QueuedPrompt]| Event::Queue {
+        session_id: id.clone(),
+        items: items.to_vec(),
+    };
+
+    let sessions = nodus.sessions();
+    assert!(sessions.queue(&id).is_empty());
+    let before = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as f64;
+    let first = sessions.enqueue(&id, "  run the tests\n").unwrap();
+    let second = sessions.enqueue(&id, "then commit").unwrap();
+    assert_eq!(
+        (first.text.as_str(), second.text.as_str()),
+        ("run the tests", "then commit")
+    );
+    assert!(first.id != second.id && first.at >= before && second.at >= first.at);
+    assert_eq!(sessions.queue(&id), vec![first.clone(), second.clone()]);
+    events.until(|e| *e == queue_event(std::slice::from_ref(&first))).await;
+    events
+        .until(|e| *e == queue_event(&[first.clone(), second.clone()]))
+        .await;
+
+    // The turn ends: the host answers the Stop hook with the first, and the
+    // card carries on working.
+    let (status, body) = post(
+        port,
+        &format!("/hook?evt=Stop&sid={id}&reply=1"),
+        &[("Authorization", &format!("Bearer {token}"))],
+        "{}",
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        serde_json::from_str::<Value>(&body).unwrap(),
+        json!({ "decision": "block", "reason": nodus_core::domain::queued_reason("run the tests") })
+    );
+    events.status(&id, SessionStatus::Working, true).await;
+    events.until(|e| *e == queue_event(std::slice::from_ref(&second))).await;
+    assert_eq!(sessions.queue(&id), vec![second.clone()]);
+
+    // Edited away, then one more, for a hook that doesn't ask: it's typed in.
+    sessions.set_queue(&id, vec![]).unwrap();
+    events.until(|e| *e == queue_event(&[])).await;
+    let third = sessions.enqueue(&id, "and push").unwrap();
+    events.until(|e| *e == queue_event(std::slice::from_ref(&third))).await;
+    hook(port, &token, &id, "Stop", &json!({})).await;
+    events.until(|e| *e == queue_event(&[])).await;
+    events.printed(&id, "and push\x1b[201~").await;
+    assert!(sessions.queue(&id).is_empty());
+
+    let err = sessions.enqueue(&id, " \n ").unwrap_err();
+    assert_eq!(err.message(), "There’s nothing to queue");
+    // Not for a session that isn't running.
+    let err = sessions.enqueue("nobody", "hello").unwrap_err();
+    assert_eq!(
+        err.ipc_message(),
+        "Error invoking remote method 'session:enqueue': Error: That session isn’t running"
+    );
+    let err = sessions.set_queue("nobody", vec![]).unwrap_err();
+    assert_eq!(err.channel, "session:set-queue");
+    assert!(sessions.queue("nobody").is_empty());
 
     world.stop(nodus).await;
 }

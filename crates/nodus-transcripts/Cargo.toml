@@ -13,6 +13,7 @@ publish.workspace = true
 indexmap.workspace = true
 nodus-domain.workspace = true
 nodus-platform.workspace = true
+nodus-visual.workspace = true
 notify.workspace = true
 regex.workspace = true
 serde_json.workspace = true

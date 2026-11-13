@@ -1,0 +1,18 @@
+[package]
+name = "nodus-visual"
+description = "Charts, stats, tables and question forms Claude writes into a chat: parsing, layout and answers, with no UI"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+# Tables built from row objects take their columns in the order Claude wrote
+# the keys.
+serde_json = { workspace = true, features = ["preserve_order"] }
+
+[lints]
+workspace = true

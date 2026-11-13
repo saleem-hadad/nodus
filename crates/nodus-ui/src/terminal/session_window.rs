@@ -21,6 +21,7 @@ use super::element::{TERM_BG, rgb};
 use super::host::{HostConfig, HostEvent, TerminalHost};
 use super::icons::{TermIcon, term_icon};
 use super::overlays::{error_overlay, loading_pill};
+use crate::chat::ChatView;
 use crate::components::icon::Icon;
 use crate::components::modal::Modal;
 use crate::components::tooltip::native_tooltip;
@@ -74,6 +75,8 @@ pub struct SessionWindow {
     project_id: String,
     kind: SessionKind,
     pub host: Entity<TerminalHost>,
+    /// CHAT-029: a Claude session's chat, with the terminal docked in it.
+    pub chat: Option<Entity<ChatView>>,
     /// MODAL-010: the loading label is decided when the window opens.
     started_live: bool,
     copied: bool,
@@ -113,12 +116,25 @@ impl SessionWindow {
             cx.subscribe(&host, |_, _, _: &HostEvent, cx| cx.notify()),
             cx.observe(&state, |_, _, cx| cx.notify()),
         ];
+        // CHAT-029: a session on a server board keeps its terminal: its
+        // transcript isn't on this computer.
+        let on_server = state.read(cx).nodus.sessions().on_server(&session_id);
+        let chat = (kind == SessionKind::Claude && !on_server).then(|| {
+            let (state, session_id, project_id, host) =
+                (state.clone(), session_id.clone(), project_id.clone(), host.clone());
+            cx.new(|cx| {
+                let chat = ChatView::new(state, session_id, project_id, host, false, window, cx);
+                chat.focus_composer(window, cx);
+                chat
+            })
+        });
         Self {
             state,
             session_id,
             project_id,
             kind,
             host,
+            chat,
             started_live: card.is_some_and(|c| c.live),
             copied: false,
             copied_timer: None,
@@ -141,12 +157,21 @@ impl SessionWindow {
     fn resume(&mut self, cx: &mut Context<'_, Self>) {
         self.started_live = false;
         self.host.update(cx, TerminalHost::reattach);
+        // CHAT-029: the terminal attaches where it's drawn, so it docks.
+        if let Some(chat) = &self.chat {
+            chat.update(cx, |c, cx| c.set_dock(true, cx));
+        }
         cx.notify();
     }
 
     /// MODAL-019: what's said waits at the prompt; a session that isn't
     /// running resumes to take it.
     pub fn type_in(&mut self, text: &str, window: &mut Window, cx: &mut Context<'_, Self>) {
+        // CHAT-030: into the chat's composer.
+        if let Some(chat) = &self.chat {
+            chat.update(cx, |c, cx| c.insert_text(text, window, cx));
+            return;
+        }
         let card = card(self.state.read(cx), &self.session_id);
         let live = card.as_ref().is_some_and(|c| c.live);
         self.host.read(cx).type_in(text, !live);
@@ -480,6 +505,16 @@ impl SessionWindow {
     }
 
     fn body(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> AnyElement {
+        if let Some(chat) = &self.chat {
+            return div()
+                .id("chat-body")
+                .flex_1()
+                .min_h_0()
+                .rounded_b(RADIUS_XL)
+                .overflow_hidden()
+                .child(chat.clone())
+                .into_any_element();
+        }
         let shell = self.shell();
         let phase = self.host.read(cx).phase.clone();
         let this = cx.entity();

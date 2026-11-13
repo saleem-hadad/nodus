@@ -76,7 +76,8 @@
     startSession: function (prompt, options) {
       return call('startSession', { prompt: prompt, title: options && options.title });
     },
-    openUrl: function (url) { return call('openUrl', { url: url }); }
+    openUrl: function (url) { return call('openUrl', { url: url }); },
+    submit: function (answers) { return call('submit', { answers: answers }); }
   };
   window.nodus = nodus;
   window.addEventListener('error', function (e) { report(e.error || e.message); });

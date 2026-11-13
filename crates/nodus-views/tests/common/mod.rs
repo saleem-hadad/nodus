@@ -103,9 +103,18 @@ impl BrainLauncher for FakeBrains {
 #[derive(Default)]
 pub struct FakeHost {
     pub opened: Mutex<Vec<String>>,
+    /// What pages sent to sessions: (project, session, text).
+    pub delivered: Mutex<Vec<(String, String, String)>>,
 }
 
 impl ViewHost for FakeHost {
+    fn deliver(&self, project_id: &str, session_id: &str, text: &str) -> BoxFuture<'_, Result<(), String>> {
+        self.delivered
+            .lock()
+            .unwrap()
+            .push((project_id.into(), session_id.into(), text.into()));
+        Box::pin(async { Ok(()) })
+    }
     fn git_status(&self, _repo_path: &str) -> BoxFuture<'_, Value> {
         Box::pin(async { Value::Null })
     }

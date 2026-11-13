@@ -6,6 +6,7 @@
 //! {"cmd":"resize","width":1440,"height":900}       the window's content size
 //! {"cmd":"parity","frozen":true,"now":1792508400000} hold infinite animations, freeze "now"
 //! {"cmd":"core","method":"settings.update","args":[{"theme":"dark"}]}
+//! {"cmd":"core","method":"sessions.deliver","args":["<project>","<session>","text"]}   Queued | Sent
 //! {"cmd":"menu","command":"settings"}               a menu command, as the menu sends it
 //! {"cmd":"action","name":"nodus::ZoomIn"}            a GPUI action by name (a menu item's)
 //! {"cmd":"key","keystroke":"cmd-o"}                 a keystroke through GPUI
@@ -833,6 +834,15 @@ async fn core(nodus: &nodus_core::Nodus, command: &Value) -> Result<Value, Strin
             nodus.sessions().kill(&text(0)).await;
             Ok(Value::Null)
         }
+        "sessions.deliver" => {
+            let delivery = nodus
+                .sessions()
+                .deliver(&text(0), &text(1), &text(2))
+                .await
+                .map_err(err)?;
+            Ok(Value::String(format!("{delivery:?}")))
+        }
+        "sessions.queue" => serde_json::to_value(nodus.sessions().queue(&text(0))).map_err(|e| e.to_string()),
         "updates.status" => serde_json::to_value(nodus.updates().status().await).map_err(|e| e.to_string()),
         "voice.keySource" => serde_json::to_value(nodus.voice().key_source().await).map_err(|e| e.to_string()),
         "servers.list" => serde_json::to_value(nodus.servers().list().await).map_err(|e| e.to_string()),

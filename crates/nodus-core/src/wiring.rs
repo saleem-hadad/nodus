@@ -217,6 +217,23 @@ impl nodus_views::BrainLauncher for CoreBrains {
 pub(crate) struct CoreViewHost(pub(crate) Weak<Inner>);
 
 impl nodus_views::ViewHost for CoreViewHost {
+    /// CHAT-031: a page's answers, as the user's next message.
+    fn deliver(&self, project_id: &str, session_id: &str, text: &str) -> BoxFuture<'_, Result<(), String>> {
+        let (project_id, session_id, text) = (project_id.to_owned(), session_id.to_owned(), text.to_owned());
+        Box::pin(async move {
+            let Some(inner) = self.0.upgrade() else {
+                return Err("Nodus has stopped".to_owned());
+            };
+            let nodus = Nodus { inner };
+            nodus
+                .sessions()
+                .deliver(&project_id, &session_id, &text)
+                .await
+                .map(|_| ())
+                .map_err(|err| err.ipc_message())
+        })
+    }
+
     /// `nodus.git()` (VIEW-066): `gitStatus(repoPath)` as the window gets it,
     /// `null` outside a repository or when git can't run.
     fn git_status(&self, repo_path: &str) -> BoxFuture<'_, Value> {

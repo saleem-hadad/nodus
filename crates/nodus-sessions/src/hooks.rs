@@ -440,6 +440,12 @@ pub trait SessionInput: Send + Sync {
     fn hook(&self, event: &str, session_id: &str, payload: &Value, at: Option<f64>);
     /// A write to a session, before it's sent, or an `input` replayed from a welcome with its recorded time.
     fn user_input(&self, session_id: &str, data: &str, at: Option<f64>);
+    /// Whether the session reads `waiting` (HOST-133): something asks the
+    /// user, so no queued prompt is typed into it (QUEUE-011). Never, for
+    /// one that doesn't keep status.
+    fn is_waiting(&self, _session_id: &str) -> bool {
+        false
+    }
 }
 
 impl SessionInput for StatusMachine {
@@ -457,6 +463,10 @@ impl SessionInput for StatusMachine {
 
     fn user_input(&self, session_id: &str, data: &str, at: Option<f64>) {
         self.note_user_input(session_id, data, at);
+    }
+
+    fn is_waiting(&self, session_id: &str) -> bool {
+        self.status(session_id) == SessionStatus::Waiting
     }
 }
 
@@ -772,30 +782,55 @@ pub fn uses_powershell(env: &Env) -> bool {
     cfg!(windows) && env.git_bash().is_none()
 }
 
+/// The one hook whose output Nodus uses: its answer can hand Claude the
+/// session's next queued prompt (QUEUE-008).
+const REPLY_EVENT: &str = "Stop";
+
 /// HOST-177, HOST-178, HOST-182: a command posting its stdin to the host
 /// under `event`, and printing nothing. curl reads the token from the config
 /// file, as anything on its command line shows up in process listings. An
 /// older host only takes it in the URL.
+///
+/// QUEUE-008: the Stop hook alone asks for a reply (`reply=1`) and prints
+/// what the host answers, which is nothing unless it hands over a queued
+/// prompt; only its errors are thrown away. A host from before the queue
+/// answers it with nothing, as it answers every hook.
 fn post_command(event: &str, via_config: bool) -> String {
+    let reply = event == REPLY_EVENT;
+    let query = if reply { "&reply=1" } else { "" };
     let target = if via_config {
-        format!(r#"-K "$NODUS_HOOK_CONFIG" "http://127.0.0.1:$NODUS_PORT/hook?evt={event}&sid=$NODUS_SESSION" "#)
+        format!(r#"-K "$NODUS_HOOK_CONFIG" "http://127.0.0.1:$NODUS_PORT/hook?evt={event}&sid=$NODUS_SESSION{query}" "#)
     } else {
-        format!(r#""http://127.0.0.1:$NODUS_PORT/hook?evt={event}&sid=$NODUS_SESSION&token=$NODUS_TOKEN" "#)
+        format!(r#""http://127.0.0.1:$NODUS_PORT/hook?evt={event}&sid=$NODUS_SESSION&token=$NODUS_TOKEN{query}" "#)
     };
-    format!("curl -s -m 2 -X POST -H 'Content-Type: application/json' --data-binary @- {target}>/dev/null 2>&1; exit 0")
+    let output = if reply { "2>/dev/null" } else { ">/dev/null 2>&1" };
+    format!("curl -s -m 2 -X POST -H 'Content-Type: application/json' --data-binary @- {target}{output}; exit 0")
 }
 
 /// HOST-179: the same in PowerShell, which Claude Code runs hooks in on
 /// Windows when Git Bash isn't there. The token comes from the environment,
 /// which no process listing shows, and stdin is sent as it came, so nothing
 /// re-encodes it. Only hosts that take the token in a header run on Windows.
+///
+/// QUEUE-008: the Stop hook writes the host's answer, when there is one.
+/// The host answers in ASCII, so the console's code page can't garble it.
 fn powershell_post_command(event: &str) -> String {
+    let reply = event == REPLY_EVENT;
+    let (query, keep, print) = if reply {
+        (
+            "&reply=1",
+            "$r",
+            "; if ($r.Content) { [Console]::Out.Write($r.Content) }",
+        )
+    } else {
+        ("", "$null", "")
+    };
     format!(
         "$ProgressPreference = 'SilentlyContinue'; $body = [IO.MemoryStream]::new(); \
          [Console]::OpenStandardInput().CopyTo($body); \
-         try {{ $null = Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 -Method Post -ContentType 'application/json' \
+         try {{ {keep} = Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 -Method Post -ContentType 'application/json' \
          -Headers @{{ Authorization = \"Bearer $env:NODUS_TOKEN\" }} -Body $body.ToArray() \
-         -Uri \"http://127.0.0.1:$env:NODUS_PORT/hook?evt={event}&sid=$env:NODUS_SESSION\" }} catch {{}}; exit 0"
+         -Uri \"http://127.0.0.1:$env:NODUS_PORT/hook?evt={event}&sid=$env:NODUS_SESSION{query}\"{print} }} catch {{}}; exit 0"
     )
 }
 
@@ -817,7 +852,7 @@ fn hook_settings(via_config: bool, powershell: bool, server: bool) -> String {
     let mut hooks = serde_json::Map::new();
     let server_events: &[&str] = if server { &[STOP_FAILURE_EVENT] } else { &[] };
     for &event in HOOK_EVENTS.iter().chain(server_events) {
-        // Output must stay empty: UserPromptSubmit stdout is injected into Claude's context.
+        // Output must stay empty but Stop's (QUEUE-008): UserPromptSubmit stdout is injected into Claude's context.
         hooks.insert(
             event.into(),
             json!([{ "hooks": [command(event, ("timeout", json!(5)))] }]),

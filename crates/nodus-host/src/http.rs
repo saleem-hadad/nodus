@@ -114,8 +114,40 @@ async fn route(host: &Host, req: Request<Incoming>) -> Reply {
     } else {
         nodus_domain::json::from_str(&text).unwrap_or_else(|_| json!({}))
     };
-    host.hook(event, session_id, payload);
-    empty(StatusCode::NO_CONTENT)
+    // QUEUE-008: only a Stop hook that prints its answer asks for one. One
+    // from a process an older app started throws it away, so it never gets
+    // a queued prompt (QUEUE-007).
+    let reply = first(&query, "reply") == Some("1");
+    match host.hook(event, session_id, payload, reply) {
+        // QUEUE-005
+        Some(answer) => ascii_json_reply(&answer),
+        None => empty(StatusCode::NO_CONTENT),
+    }
+}
+
+/// `200 application/json` with the JSON written in ASCII, every other
+/// character as a `\u` escape, so it reaches Claude intact whatever the
+/// hook command's shell decodes and prints it as (a PowerShell console's
+/// code page, a missing charset). (QUEUE-005)
+fn ascii_json_reply(value: &Value) -> Reply {
+    let text = nodus_domain::json::to_string(value).expect("a reply is always JSON");
+    let mut body = String::with_capacity(text.len());
+    let mut units = [0u16; 2];
+    for c in text.chars() {
+        if c.is_ascii() {
+            body.push(c);
+        } else {
+            // Only inside strings: JSON's own syntax is all ASCII.
+            for unit in c.encode_utf16(&mut units) {
+                body.push_str(&format!("\\u{unit:04x}"));
+            }
+        }
+    }
+    let mut reply = Response::new(Full::new(Bytes::from(body)));
+    reply
+        .headers_mut()
+        .insert("Content-Type", HeaderValue::from_static("application/json"));
+    reply
 }
 
 /// The MCP streamable HTTP transport, answering every request on its POST:
@@ -437,6 +469,22 @@ mod tests {
                 .unwrap(),
             r#"{"jsonrpc":"2.0","id":"a","error":{"code":-32603,"message":"Nodus isn’t open, so the board can’t be reached right now."}}"#
         );
+    }
+
+    #[tokio::test]
+    async fn queue_005_answers_in_ascii_json_that_reads_back_the_same() {
+        let answer = json!({"decision": "block", "reason": "héllo \"you\"\n🎉 ✓"});
+        let reply = ascii_json_reply(&answer);
+        assert_eq!(reply.status(), StatusCode::OK);
+        assert_eq!(reply.headers()["content-type"], "application/json");
+        let body = reply.into_body().collect().await.unwrap().to_bytes();
+        let body = String::from_utf8(body.to_vec()).unwrap();
+        assert_eq!(
+            body,
+            r#"{"decision":"block","reason":"h\u00e9llo \"you\"\n\ud83c\udf89 \u2713"}"#
+        );
+        assert!(body.is_ascii());
+        assert_eq!(nodus_domain::json::from_str::<Value>(&body).unwrap(), answer);
     }
 
     #[test]

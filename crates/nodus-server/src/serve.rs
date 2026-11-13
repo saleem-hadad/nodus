@@ -144,10 +144,11 @@ async fn run(options: ServeOptions, log: &Logger) -> Result<(), String> {
 
 /// SRV-002: the core with the server's own environment instead of a login
 /// shell's (SRV-141); no window or dialogs; no notifications, since a
-/// session's status reaches the apps as events whatever the notifier does
-/// (SRV-185 comes later); the voice key nowhere to be kept, and the app's
-/// updater off. Then the sessions a running host has are adopted, without
-/// starting one.
+/// session's status reaches the apps as events, and each app tells only the
+/// card's starter (SRV-185); the voice key nowhere to be kept, and the app's
+/// updater off; and the server's own part (`hosting`): sessions' tokens,
+/// git through the App and a worktree per card. Then the sessions a running
+/// host has are adopted, without starting one.
 async fn start_core(
     data: &Path,
     env: ServerEnv,

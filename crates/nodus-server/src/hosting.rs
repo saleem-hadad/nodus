@@ -24,6 +24,9 @@ const TOKEN_LIFE: Duration = Duration::from_secs(50 * 60);
 /// The file holding the key sessions' tokens are made with, 0600.
 const SESSION_KEY_FILE: &str = "session-key";
 
+/// A minted token's installation, repository (lower case) and use.
+type TokenKey = (u64, String, TokenScope);
+
 /// The server's side of [`Hosting`].
 pub(crate) struct ServerHosting {
     auth: Arc<Auth>,
@@ -33,7 +36,7 @@ pub(crate) struct ServerHosting {
     /// `nodus` itself, which git runs as its credential helper (SRV-084).
     exe: PathBuf,
     /// Tokens minted, by installation, repository and what they're for.
-    tokens: Mutex<HashMap<(u64, String, TokenScope), (String, Instant)>>,
+    tokens: Mutex<HashMap<TokenKey, (String, Instant)>>,
     /// The App's bot, once looked up, by App id.
     bot: Mutex<Option<(u64, GitIdentity)>>,
 }

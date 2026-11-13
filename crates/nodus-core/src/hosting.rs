@@ -596,8 +596,7 @@ impl Inner {
                 GIT_TIMEOUT,
             )
             .await
-            .map(|n| n.trim().parse::<u64>().unwrap_or(0))
-            .unwrap_or(0);
+            .map_or(0, |n| n.trim().parse::<u64>().unwrap_or(0));
         if !dirty && unpushed == 0 {
             return Ok(());
         }

@@ -166,7 +166,9 @@ impl BoardApi<'_> {
                 let ids = [section.id.as_str()];
                 let before = self.creators(project_id, &ids, |b, id| b.sections.get(id).map(|s| s.created_by()));
                 self.nodus.inner.board.save_section(project_id, &to_json(section));
-                self.attribute(project_id, &ids, before, |b, id| b.sections.get_mut(id).map(as_created));
+                self.attribute(project_id, &ids, &before, |b, id| {
+                    b.sections.get_mut(id).map(as_created)
+                });
             })
             .await;
     }
@@ -221,7 +223,7 @@ impl BoardApi<'_> {
                 let ids = [note.id.as_str()];
                 let before = self.creators(project_id, &ids, |b, id| b.notes.get(id).map(|n| n.created_by()));
                 self.nodus.inner.board.save_note(project_id, &to_json(note));
-                self.attribute(project_id, &ids, before, |b, id| b.notes.get_mut(id).map(as_created));
+                self.attribute(project_id, &ids, &before, |b, id| b.notes.get_mut(id).map(as_created));
             })
             .await;
     }
@@ -255,7 +257,7 @@ impl BoardApi<'_> {
                 });
                 let strokes = nodus_board::ink::clean_ink(&to_json(&strokes));
                 self.nodus.inner.board.save_ink(project_id, strokes);
-                self.attribute(project_id, &ids, before, |b, id| {
+                self.attribute(project_id, &ids, &before, |b, id| {
                     b.ink.as_mut()?.iter_mut().find(|s| s.id == id).map(as_created)
                 });
             })
@@ -273,7 +275,7 @@ impl BoardApi<'_> {
                 let ids: Vec<&str> = shapes.iter().map(|s| s.id.as_str()).collect();
                 let before = self.creators(project_id, &ids, |b, id| b.shapes.get(id).map(|s| s.created_by()));
                 self.nodus.inner.board.save_shapes(project_id, shapes);
-                self.attribute(project_id, &ids, before, |b, id| b.shapes.get_mut(id).map(as_created));
+                self.attribute(project_id, &ids, &before, |b, id| b.shapes.get_mut(id).map(as_created));
             })
             .await;
     }
@@ -302,7 +304,7 @@ impl BoardApi<'_> {
                 let ids: Vec<&str> = links.iter().map(|l| l.id.as_str()).collect();
                 let before = self.creators(project_id, &ids, |b, id| b.links.get(id).map(|l| l.created_by()));
                 self.nodus.inner.board.save_links(project_id, links);
-                self.attribute(project_id, &ids, before, |b, id| b.links.get_mut(id).map(as_created));
+                self.attribute(project_id, &ids, &before, |b, id| b.links.get_mut(id).map(as_created));
             })
             .await;
     }
@@ -367,7 +369,7 @@ impl BoardApi<'_> {
         &self,
         project_id: &str,
         ids: &[&str],
-        before: HashMap<String, Option<String>>,
+        before: &HashMap<String, Option<String>>,
         mut find: impl for<'b> FnMut(&'b mut BoardState, &str) -> Option<&'b mut dyn CreatedBy>,
     ) {
         if self.by.is_none() && before.values().all(Option::is_none) {

@@ -358,6 +358,7 @@ fn env(zoom: f32, stack: StackView, renaming: Option<&str>, archive_hot: bool) -
         zoom,
         project_id: "storefront".into(),
         repo_path: Some("/Users/example/nodus-parity/repos/storefront".into()),
+        server_host: None,
         renaming: renaming.map(str::to_owned),
         archive_hot,
         stack,

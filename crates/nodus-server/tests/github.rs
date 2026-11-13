@@ -533,11 +533,13 @@ while IFS= read -r line; do echo "got: $line"; done
     }
 
     /// The session host, on its own, as `nodus-host.service` runs it.
-    fn host(&self) -> Child {
-        self.command(&["host", "--socket", &self.socket()])
-            .stdout(Stdio::null())
-            .spawn()
-            .unwrap()
+    fn host(&self) -> Host {
+        Host(
+            self.command(&["host", "--socket", &self.socket()])
+                .stdout(Stdio::null())
+                .spawn()
+                .unwrap(),
+        )
     }
 
     /// `serve`, connected to that host, once it's listening.
@@ -638,6 +640,16 @@ fn sha256_hex(text: &str) -> String {
         .iter()
         .map(|b| format!("{b:02x}"))
         .collect()
+}
+
+/// The session host, stopped when the test ends.
+struct Host(Child);
+
+impl Drop for Host {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
 }
 
 struct Server {

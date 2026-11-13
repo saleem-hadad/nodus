@@ -891,9 +891,15 @@ mod tests {
         let second = rect_at(Point { x: 344.0, y: 44.0 }, CARD_SIZE);
         // Full: the next row, past the frame's bottom.
         assert_eq!(spot(&[first, second]), Point { x: 24.0, y: 292.0 });
-        // An expanded card takes a whole row of this frame.
+        // A new card takes a whole row of this frame.
         let big = spot_in_section(frame, &[first], None, NEW_CARD_SIZE);
-        assert_eq!(big, Point { x: 24.0, y: 556.0 });
+        assert_eq!(
+            big,
+            Point {
+                x: 24.0,
+                y: 44.0 + NEW_CARD_SIZE.h + 32.0
+            }
+        );
     }
 
     #[test]

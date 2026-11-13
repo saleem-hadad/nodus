@@ -8,7 +8,7 @@ use gpui::{
     Point as GPoint, Styled, Window, div, px,
 };
 use nodus_board::frames::{FRAME_MIN_H, FRAME_MIN_W};
-use nodus_board::geometry::{EXPANDED_H, EXPANDED_W, Point, Size};
+use nodus_board::geometry::{EXPANDED_W, NEW_CARD_H, Point, Size};
 use nodus_domain::{BoardGroup, BoardNote, BoardSection, BoardSnapshot, NodePatch, Rect, ViewPatch, js};
 
 use super::canvas::{BoardCanvas, Gesture};
@@ -18,10 +18,10 @@ use super::layout::{SECTION_HEADER_H, SECTION_PAD, holds_centre, is_terminal, se
 use super::scene::{FlowNode, NodeKind};
 use crate::theme::tokens::Tokens;
 
-/// FRAME-005: a new empty frame holds one session, expanded.
+/// FRAME-005: a new empty frame holds one new session's card.
 pub const NEW_FRAME_SIZE: Size = Size {
     w: EXPANDED_W + 2.0 * SECTION_PAD,
-    h: EXPANDED_H + SECTION_HEADER_H + SECTION_PAD,
+    h: NEW_CARD_H + SECTION_HEADER_H + SECTION_PAD,
 };
 /// How far round its things a selected group's outline runs, in board units.
 const GROUP_OUTLINE_PAD: f64 = 8.0;

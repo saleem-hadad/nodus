@@ -5,7 +5,7 @@
 
 use std::rc::Rc;
 
-use gpui::{AnyElement, App, Bounds, IntoElement, Window, point, px, size};
+use gpui::{AnyElement, App, Bounds, IntoElement, ScrollEvent, Window, point, px, size};
 use nodus_domain::{BoardNote, NodePatch, OpenCardRequest, Rect};
 
 use super::present::{Phase, StackLook};
@@ -92,6 +92,9 @@ impl CardActions for CanvasActions {
     }
     fn focus_board(&self, window: &mut Window, cx: &mut App) {
         self.0.focus_board(window, cx);
+    }
+    fn wheel(&self, e: &ScrollEvent, cx: &mut App) {
+        self.0.wheel(e, cx);
     }
     fn open_session(&self, session_id: &str, cx: &mut App) {
         self.0.open_session(session_id, cx);

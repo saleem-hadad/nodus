@@ -45,7 +45,8 @@ use std::rc::Rc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, Global, IntoElement, ParentElement, Point, SharedString, Size, Styled, WeakEntity, Window, div,
+    AnyElement, App, Global, IntoElement, ParentElement, Point, ScrollEvent, SharedString, Size, Styled, WeakEntity,
+    Window, div,
 };
 use nodus_domain::{BoardNote, BoardShape, BoardView, NodePatch, Rect, SessionCard, ViewPatch};
 
@@ -284,6 +285,12 @@ impl BoardActions {
             let focus = canvas.read(cx).focus.clone();
             window.focus(&focus, cx);
         }
+    }
+
+    /// A wheel event for the board, as over its pane.
+    pub fn wheel(&self, e: &ScrollEvent, cx: &mut App) {
+        let e = e.clone();
+        self.with(cx, move |c, cx| c.wheel(&e, cx));
     }
 
     /// A shape resized (SHAPE-011).

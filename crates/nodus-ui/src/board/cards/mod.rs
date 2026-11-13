@@ -41,7 +41,7 @@ pub mod sticker;
 
 use std::rc::Rc;
 
-use gpui::{AnyElement, App, Bounds, BoxShadow, Hsla, Pixels, Rgba, Window, point, px};
+use gpui::{AnyElement, App, Bounds, BoxShadow, Hsla, Pixels, Rgba, ScrollEvent, Window, point, px};
 use nodus_domain::BoardNote;
 
 use crate::components::tween::Mix;
@@ -408,6 +408,8 @@ pub trait CardActions {
     fn edit_shape(&self, shape_id: &str, text: &str, cx: &mut App);
     /// Gives the keyboard back to the board.
     fn focus_board(&self, window: &mut Window, cx: &mut App);
+    /// A wheel event of the board's gesture that crossed a card (XCARD-027).
+    fn wheel(&self, e: &ScrollEvent, cx: &mut App);
     /// Opens a card's session as clicking the card does.
     fn open_session(&self, session_id: &str, cx: &mut App);
     /// Switches to a project and shows a session's card (`showCard`).

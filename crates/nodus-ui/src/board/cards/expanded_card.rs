@@ -10,8 +10,9 @@ use std::time::{Duration, Instant};
 use gpui::base::TextSelection;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, CursorStyle, DispatchPhase, FontWeight, Global, InteractiveElement, IntoElement, MouseButton,
-    ParentElement, Rgba, ScrollEvent, StatefulInteractiveElement, Styled, Window, canvas, div, radians, svg,
+    AnyElement, App, CursorStyle, DispatchPhase, FontWeight, Global, HitboxBehavior, InteractiveElement, IntoElement,
+    MouseButton, ParentElement, Rgba, ScrollEvent, StatefulInteractiveElement, Styled, Window, canvas, div, radians,
+    svg,
 };
 use nodus_domain::{AgentInfo, SessionUsage};
 
@@ -243,26 +244,38 @@ pub fn body(
                 cx.stop_propagation();
             }
         })
+        .when_some(term, |d, el| d.child(div().size_full().child(el)))
+        .when_some(overlay, ParentElement::child)
         .when(enabled || chat, |d| {
             // The window sees every wheel event before anything under the
-            // pointer does, and marks where gestures begin.
+            // pointer does, and marks where gestures begin. Painted over the
+            // body, this hears its wheel before anything in it does: the
+            // board's gesture crossing the card pans on, and the chat under
+            // it never scrolls (it doesn't ask the arbiter).
+            let actions = env.actions.clone();
             d.child(
                 canvas(
-                    |_, _, _| {},
-                    |_, _, window, _| {
-                        window.on_mouse_event(|_: &ScrollEvent, phase, _, cx| {
+                    |bounds, window, _| window.insert_hitbox(bounds, HitboxBehavior::Normal),
+                    move |_, hitbox, window, _| {
+                        window.on_mouse_event(move |e: &ScrollEvent, phase, window, cx| {
+                            let now = Instant::now();
                             if phase == DispatchPhase::Capture {
-                                cx.default_global::<Wheel>().0.saw(Instant::now());
+                                cx.default_global::<Wheel>().0.saw(now);
+                            } else if hitbox.should_handle_scroll(window)
+                                && !cx.default_global::<Wheel>().0.claims(now, e.modifiers.control)
+                            {
+                                cx.stop_propagation();
+                                actions.wheel(e, cx);
                             }
                         });
                     },
                 )
                 .absolute()
-                .size_0(),
+                .top_0()
+                .left_0()
+                .size_full(),
             )
-        })
-        .when_some(term, |d, el| d.child(div().size_full().child(el)))
-        .when_some(overlay, ParentElement::child);
+        });
 
     let hs = hover.clone();
     let parts = handles.clone();

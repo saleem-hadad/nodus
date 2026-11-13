@@ -33,6 +33,9 @@ Three things that let Claude sessions work on the board they run from, plus ink 
 
 In Rust the frame becomes a `wry` webview embedded in the GPUI board (see Rust mapping); everything the page can observe (CSP, sandbox, bridge, messages, timings) must stay identical.
 
+
+> **Since 1.0.14 (spec 16):** every session also has `show_visual`, `ask` and `show_page` (TOOLCHAT-001…TOOLCHAT-004), after the view tools in `tools/list` and `--allowedTools`; the instructions end with a paragraph on them; and a view's page has `nodus.submit(answers)` (CHAT-031).
+
 ## Behaviors
 
 ### Board tools: endpoint and relay

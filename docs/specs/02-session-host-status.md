@@ -10,6 +10,9 @@ On the app side, `pty.ts` connects to (or starts, or asks to replace) the host, 
 
 Rule 4 of the plan applies throughout: the Rust host and client must be **wire-compatible with 0.9.4**: a Rust app must adopt a running 0.9.4 Node host, and a 0.9.4 app must adopt a Rust host. Everything in "Data & formats" is normative.
 
+
+> **Since 1.0.14 (spec 16):** the session host also keeps each session's queued prompts and answers the Stop hook with the first (QUEUE-001…QUEUE-013): `queue` in the welcome and its sessions, the `queue-set` and `queue` messages, and the Stop hook's command with `&reply=1`, which prints the host's answer.
+
 ## Behaviors
 
 ### Host folder and private files (hostProtocol.ts)

@@ -29,6 +29,7 @@ nodus-git = { path = "crates/nodus-git" }
 nodus-host = { path = "crates/nodus-host" }
 nodus-host-proto = { path = "crates/nodus-host-proto" }
 nodus-platform = { path = "crates/nodus-platform" }
+nodus-remote = { path = "crates/nodus-remote" }
 nodus-sessions = { path = "crates/nodus-sessions" }
 nodus-store = { path = "crates/nodus-store" }
 nodus-terminal = { path = "crates/nodus-terminal" }

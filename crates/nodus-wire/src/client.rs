@@ -4,8 +4,11 @@
 //! reconnecting on top (SRV-028).
 
 use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::task::{Context, Poll};
 
 use futures_util::{SinkExt, StreamExt};
 use nodus_domain::Event;
@@ -61,6 +64,37 @@ impl Events {
     /// been answered, every event the server sent before the answer is here.
     pub fn try_next(&mut self) -> Option<Event> {
         self.0.try_recv().ok()
+    }
+}
+
+/// A call's answer to come, from [`Client::begin`]: await it. Fails with
+/// [`DISCONNECTED`] when the connection goes first.
+pub struct Pending {
+    call: String,
+    /// None when the call never left.
+    answer: Option<oneshot::Receiver<Result<Value, CallError>>>,
+}
+
+impl Pending {
+    fn failed(call: &str) -> Self {
+        Self {
+            call: call.to_owned(),
+            answer: None,
+        }
+    }
+}
+
+impl Future for Pending {
+    type Output = Result<Value, CallError>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
+        let Some(answer) = this.answer.as_mut() else {
+            return Poll::Ready(Err(CallError::new(this.call.as_str(), DISCONNECTED)));
+        };
+        Pin::new(answer)
+            .poll(cx)
+            .map(|answer| answer.unwrap_or_else(|_| Err(CallError::new(this.call.as_str(), DISCONNECTED))))
     }
 }
 
@@ -159,12 +193,25 @@ impl Client {
     /// Makes a call by any name, with any arguments, as a client that
     /// doesn't know the server's calls would.
     pub async fn call_named(&self, call: &str, args: Value) -> Result<Value, CallError> {
+        self.begin_named(call, args).await
+    }
+
+    /// Sends a call now, after every call sent before it and before any
+    /// sent after, and gives its answer to come. Keys typed into a session
+    /// go this way, so they reach it in order without waiting on each
+    /// other. Dropping the answer leaves the call made.
+    pub fn begin(&self, request: &Request) -> Pending {
+        self.begin_named(request.name(), request.args())
+    }
+
+    /// [`Client::begin`] by any name, with any arguments.
+    pub fn begin_named(&self, call: &str, args: Value) -> Pending {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let (answered, answer) = oneshot::channel();
         {
             let mut waiting = lock(&self.waiting);
             if !waiting.open {
-                return Err(CallError::new(call, DISCONNECTED));
+                return Pending::failed(call);
             }
             waiting.calls.insert(id, (call.to_owned(), answered));
         }
@@ -175,9 +222,12 @@ impl Client {
         });
         if !self.send_text(frame.to_text()) {
             lock(&self.waiting).calls.remove(&id);
-            return Err(CallError::new(call, DISCONNECTED));
+            return Pending::failed(call);
         }
-        answer.await.unwrap_or_else(|_| Err(CallError::new(call, DISCONNECTED)))
+        Pending {
+            call: call.to_owned(),
+            answer: Some(answer),
+        }
     }
 
     /// Sends a text frame as it is; false once the connection has gone.

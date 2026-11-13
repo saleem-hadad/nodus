@@ -1,0 +1,25 @@
+[package]
+name = "nodus-remote"
+description = "The app's client for one Nodus server: its protocol checked, calls with timeouts, its events, and reconnecting"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+nodus-domain.workspace = true
+nodus-wire = { workspace = true, features = ["client"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt", "sync", "time"] }
+tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt", "rt-multi-thread"] }
+
+[lints]
+workspace = true

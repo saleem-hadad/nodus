@@ -165,6 +165,12 @@ mod tests {
         let err = lock(dir.path()).unwrap_err();
         assert!(err.starts_with("Another nodus-server serve is using"), "{err}");
         drop(held);
-        lock(dir.path()).unwrap();
+        // A process another test starts at that moment holds a copy of the
+        // lock's file until it has started, so give it a moment.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while let Err(err) = lock(dir.path()) {
+            assert!(std::time::Instant::now() < deadline, "{err}");
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
     }
 }

@@ -33,6 +33,9 @@ pub struct FolderItem<'a> {
     pub pressed: bool,
     /// A server project's badge (SRV-162); none for a local one.
     pub server: Option<ServerBadge>,
+    /// Update server, under the subtitle, while its server runs an older
+    /// Nodus than the app (SRV-200).
+    pub update: Option<AnyElement>,
 }
 
 /// The badge on a server project's folder: its server's name for the
@@ -250,6 +253,7 @@ impl FolderItem<'_> {
                     .whitespace_nowrap()
                     .child(subtitle(self.stats)),
             )
+            .children(self.update)
     }
 }
 

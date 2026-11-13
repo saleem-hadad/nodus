@@ -19,8 +19,8 @@ use gpui::{
     Styled, StyledImage as _, Window, actions, div, img, px,
 };
 use nodus_core::GithubRepo;
-use nodus_core::hosted::Member;
-use nodus_domain::{Project, ServerInfo, ServerState};
+use nodus_core::hosted::{Member, ServerVersion, server_version};
+use nodus_domain::{Project, ServerInfo, ServerState, ServerUpdateStatus};
 
 use connect::Step;
 
@@ -47,19 +47,69 @@ pub fn bind_keys(cx: &mut App) {
     ]);
 }
 
+/// What a server newer than the app says (SRV-200).
+pub const UPDATE_APP: &str = "This server runs a newer Nodus. Update the app.";
+
 /// How a server's status reads in Settings and the picker.
 pub fn status_text(server: &ServerInfo) -> String {
+    let newer = server_version(server) == ServerVersion::Newer;
     match server.state {
         ServerState::Connecting => "Connecting…".into(),
+        ServerState::Connected if newer => format!("Connected · {UPDATE_APP}"),
         ServerState::Connected => "Connected".into(),
         ServerState::Offline => match &server.error {
             Some(error) => format!("Offline: {error}"),
             None => "Offline".into(),
         },
+        ServerState::ProtocolMismatch if newer => UPDATE_APP.into(),
         ServerState::ProtocolMismatch => format!(
             "This server runs Nodus {}. Update it in Settings → Servers.",
             server.version.as_deref().unwrap_or("of another version")
         ),
+    }
+}
+
+/// SRV-200: whether an update of the server is under way.
+pub fn updating(status: Option<&ServerUpdateStatus>) -> bool {
+    matches!(
+        status,
+        Some(
+            ServerUpdateStatus::Checking
+                | ServerUpdateStatus::Downloading { .. }
+                | ServerUpdateStatus::Restarting { .. }
+        )
+    )
+}
+
+/// SRV-200: how updating the server reads, in the app's updater's words
+/// where they fit (UI-148).
+pub fn update_text(status: &ServerUpdateStatus) -> String {
+    match status {
+        ServerUpdateStatus::Checking => "Checking for updates…".into(),
+        ServerUpdateStatus::Latest { version } => {
+            format!("It runs the newest release, Nodus {version}.")
+        }
+        ServerUpdateStatus::Downloading { version, percent } => {
+            format!("Downloading version {version}… {percent}%")
+        }
+        ServerUpdateStatus::Restarting { version } => format!("Restarting on version {version}…"),
+        ServerUpdateStatus::Error { message } => message.clone(),
+    }
+}
+
+/// SRV-200: whether a server shows **Update server**: it runs an older
+/// Nodus than the app, or an update of it was pressed and isn't over.
+pub fn offers_update(server: &ServerInfo, status: Option<&ServerUpdateStatus>) -> bool {
+    server_version(server) == ServerVersion::Older || status.is_some()
+}
+
+/// What Update server's button says on a server's tiles.
+pub fn tile_update_label(status: Option<&ServerUpdateStatus>) -> String {
+    match status {
+        Some(ServerUpdateStatus::Checking) => "Updating…".into(),
+        Some(ServerUpdateStatus::Downloading { percent, .. }) => format!("Updating… {percent}%"),
+        Some(ServerUpdateStatus::Restarting { .. }) => "Restarting…".into(),
+        _ => "Update Server".into(),
     }
 }
 
@@ -1030,8 +1080,61 @@ mod tests {
             "Offline: connection refused"
         );
         assert_eq!(
-            status_text(&server(ServerState::ProtocolMismatch, None, Some("2.0.0"))),
-            "This server runs Nodus 2.0.0. Update it in Settings → Servers."
+            status_text(&server(ServerState::ProtocolMismatch, None, Some("0.1.0"))),
+            "This server runs Nodus 0.1.0. Update it in Settings → Servers."
         );
+        // SRV-200: one newer than the app.
+        assert_eq!(
+            status_text(&server(ServerState::ProtocolMismatch, None, Some("999.0.0"))),
+            "This server runs a newer Nodus. Update the app."
+        );
+        assert_eq!(
+            status_text(&server(ServerState::Connected, None, Some("999.0.0"))),
+            "Connected · This server runs a newer Nodus. Update the app."
+        );
+    }
+
+    /// SRV-200
+    #[test]
+    fn offers_update_server_to_a_server_older_than_the_app() {
+        let older = server(ServerState::Connected, None, Some("0.1.0"));
+        let same = server(ServerState::Connected, None, Some(nodus_core::VERSION));
+        let newer = server(ServerState::ProtocolMismatch, None, Some("999.0.0"));
+        assert!(offers_update(&older, None));
+        assert!(!offers_update(&same, None));
+        assert!(!offers_update(&newer, None));
+        assert!(!offers_update(&server(ServerState::Connecting, None, None), None));
+        // Still shown while its update is under way, on the old version.
+        let restarting = ServerUpdateStatus::Restarting {
+            version: "1.2.0".into(),
+        };
+        assert!(offers_update(&same, Some(&restarting)));
+        assert!(updating(Some(&restarting)));
+        assert!(!updating(Some(&ServerUpdateStatus::Error { message: "x".into() })));
+        assert!(!updating(None));
+    }
+
+    #[test]
+    fn words_an_update_as_the_apps_updater_does() {
+        let downloading = ServerUpdateStatus::Downloading {
+            version: "1.2.0".into(),
+            percent: 42,
+        };
+        assert_eq!(update_text(&ServerUpdateStatus::Checking), "Checking for updates…");
+        assert_eq!(update_text(&downloading), "Downloading version 1.2.0… 42%");
+        assert_eq!(
+            update_text(&ServerUpdateStatus::Restarting {
+                version: "1.2.0".into()
+            }),
+            "Restarting on version 1.2.0…"
+        );
+        assert_eq!(
+            update_text(&ServerUpdateStatus::Latest {
+                version: "1.1.0".into()
+            }),
+            "It runs the newest release, Nodus 1.1.0."
+        );
+        assert_eq!(tile_update_label(None), "Update Server");
+        assert_eq!(tile_update_label(Some(&downloading)), "Updating… 42%");
     }
 }

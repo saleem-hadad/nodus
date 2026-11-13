@@ -113,7 +113,7 @@ pub use servers::{ServersApi, SetupSession, SignIn};
 /// hands it out (SRV-040…063, SRV-210): setting it up, signing in, its
 /// members, devices, audit and GitHub App.
 pub mod hosted {
-    pub use crate::servers::{SETUP_EXPIRED, install_url};
+    pub use crate::servers::{SETUP_EXPIRED, ServerVersion, install_url, server_version};
     pub use nodus_remote::wire::{
         ACCOUNT_FAILED, AccountState, AuditDevice, AuditLine, AuditMember, ClaudeAccount, DEVICE_SIGNED_IN, Device,
         GithubApp, Hello, Installation, Member, Nonce, ServerInfo as ServerDetails, SetupStatus, SetupStep,

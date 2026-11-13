@@ -58,6 +58,27 @@ const PAGE_HEADERS: [&str; 4] = [
 /// What a server whose saved token won't open says.
 const TOKEN_UNREADABLE: &str = "The saved token can’t be read on this device. Add the server again.";
 
+/// How a server's version stands against this app's (SRV-200).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ServerVersion {
+    /// The same, or not known yet.
+    Same,
+    /// Older than the app: **Update server**.
+    Older,
+    /// Newer than the app: the app is the one to update.
+    Newer,
+}
+
+/// SRV-200: whether `server` runs an older Nodus than this app, or a newer
+/// one, by major.minor.patch as the updater compares them (UPD-025).
+pub fn server_version(server: &ServerInfo) -> ServerVersion {
+    match server.version.as_deref() {
+        Some(theirs) if nodus_updater::is_newer(crate::VERSION, theirs) => ServerVersion::Older,
+        Some(theirs) if nodus_updater::is_newer(theirs, crate::VERSION) => ServerVersion::Newer,
+        _ => ServerVersion::Same,
+    }
+}
+
 /// `nodus.servers()`.
 pub struct ServersApi<'a> {
     pub(crate) nodus: &'a Nodus,

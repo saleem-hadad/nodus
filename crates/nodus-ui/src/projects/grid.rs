@@ -581,6 +581,57 @@ impl ProjectsView {
         self.open_menu(at, items, cx);
     }
 
+    /// SRV-200: Update server on a server project's tile, while its server
+    /// runs an older Nodus than the app, then how the update is going. A
+    /// press updates the server, not the project: it doesn't select, drag
+    /// or open the folder.
+    fn update_server_button(&self, project: &Project, cx: &App) -> Option<AnyElement> {
+        let s = self.state.read(cx);
+        let server = s.server_of(project)?;
+        let status = s.server_updates.get(&server.id);
+        if !crate::servers::offers_update(server, status) {
+            return None;
+        }
+        let busy = crate::servers::updating(status);
+        let tip = status.map_or_else(
+            || {
+                format!(
+                    "{} runs Nodus {}. Update it to {}.",
+                    server.name,
+                    server.version.as_deref().unwrap_or("of another version"),
+                    nodus_core::VERSION
+                )
+            },
+            crate::servers::update_text,
+        );
+        let t = theme::tokens(cx);
+        let (state, server_id) = (self.state.clone(), server.id.clone());
+        Some(
+            div()
+                .id(SharedString::from(format!("server-update-{}", project.id)))
+                .mt(px(3.))
+                .px(px(7.))
+                .py(px(1.))
+                .rounded(px(5.))
+                .text_size(TEXT_XS)
+                .line_height(px(15.4))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(if busy { t.text_secondary } else { t.accent })
+                .font_features(fonts::tabular())
+                .whitespace_nowrap()
+                .when(!busy, |d| d.hover(|s| s.bg(t.bg_hover)).active(|s| s.bg(t.bg_pressed)))
+                .tooltip(native_tooltip(tip.into()))
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .on_click(move |_, _, cx| {
+                    cx.stop_propagation();
+                    let id = server_id.clone();
+                    state.update(cx, |s, cx| s.update_server(id, cx));
+                })
+                .child(crate::servers::tile_update_label(status))
+                .into_any_element(),
+        )
+    }
+
     /// One folder, with its pointer handling.
     fn folder(
         &mut self,
@@ -645,6 +696,7 @@ impl ProjectsView {
             rename,
             pop,
             server: server.clone(),
+            update: self.update_server_button(project, cx),
         }
         .render(&id.clone().into(), &hovered, window, cx);
         // UI-232: the folder's path; a server project has none here.

@@ -115,7 +115,7 @@ impl SessionsApi<'_> {
     pub fn write(&self, session_id: &str, data: &str) {
         if let Some(route) = self.nodus.route_session(session_id) {
             let (session_id, data) = (session_id.to_owned(), data.to_owned());
-            return route.send(Request::SessionWrite { session_id, data });
+            return route.send(&Request::SessionWrite { session_id, data });
         }
         let inner = &self.nodus.inner;
         // Before the write: an interrupt would otherwise end the run's turn and remove it.
@@ -159,7 +159,7 @@ impl SessionsApi<'_> {
     pub fn resize(&self, session_id: &str, cols: f64, rows: f64) {
         if let Some(route) = self.nodus.route_session(session_id) {
             let session_id = session_id.to_owned();
-            return route.send(Request::SessionResize { session_id, cols, rows });
+            return route.send(&Request::SessionResize { session_id, cols, rows });
         }
         self.nodus.inner.host.resize(session_id, cols, rows);
     }
@@ -170,7 +170,7 @@ impl SessionsApi<'_> {
     pub fn close(&self, session_id: &str) {
         if let Some(route) = self.nodus.route_session(session_id) {
             let session_id = session_id.to_owned();
-            route.send(Request::SessionClose { session_id });
+            route.send(&Request::SessionClose { session_id });
         }
     }
 

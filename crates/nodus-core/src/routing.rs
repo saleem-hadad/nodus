@@ -94,9 +94,9 @@ impl Route {
 
     /// A call sent without waiting, in order with the others (keys typed,
     /// resizes, a view's reports).
-    pub(crate) fn send(&self, request: Request) {
+    pub(crate) fn send(&self, request: &Request) {
         let channel = request.name();
-        if !self.remote.as_ref().is_some_and(|remote| remote.send(&request)) {
+        if !self.remote.as_ref().is_some_and(|remote| remote.send(request)) {
             tracing::warn!("[remote] {channel} not sent: {OFFLINE}");
         }
     }

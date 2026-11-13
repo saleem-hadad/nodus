@@ -91,7 +91,7 @@ impl ViewsApi<'_> {
     /// is ignored.
     pub fn report(&self, project_id: &str, view_id: &str, report: &ViewReport) {
         if let Some(route) = self.nodus.route_project(project_id) {
-            return route.send(Request::ViewsReport {
+            return route.send(&Request::ViewsReport {
                 project_id: project_id.to_owned(),
                 view_id: view_id.to_owned(),
                 report: report.clone(),

@@ -16,6 +16,9 @@ use crate::{CommandResult, Nodus};
 /// `window.api.sessions`.
 pub struct SessionsApi<'a> {
     pub(crate) nodus: &'a Nodus,
+    /// The member a server makes these calls for: the cards they start are
+    /// theirs (SRV-183, [`Nodus::by`]).
+    pub(crate) by: Option<&'a str>,
 }
 
 impl SessionsApi<'_> {
@@ -35,7 +38,7 @@ impl SessionsApi<'_> {
                 self.nodus
                     .inner
                     .board
-                    .create_session(project_id, opts, &launcher)
+                    .create_session(project_id, opts, self.by, &launcher)
                     .await
                     .on(CHANNEL)
             })
@@ -344,10 +347,9 @@ impl SessionsApi<'_> {
                     .store
                     .read(|state| state.project(project_id).cloned())
                     .on("session:agents")?;
-                let files = inner
-                    .board
-                    .transcripts()
-                    .list_agent_files(&project.repo_path, session_id);
+                // SRV-125: a card in a worktree keeps its agents there.
+                let folder = inner.board.session_folder(&project, session_id);
+                let files = inner.board.transcripts().list_agent_files(&folder, session_id);
                 Ok(inner.agents.read_agents(&inner.status, session_id, &files))
             })
             .await

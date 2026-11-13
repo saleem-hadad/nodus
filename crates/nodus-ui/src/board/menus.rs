@@ -30,6 +30,28 @@ fn item(
     })
 }
 
+/// CARD-054: `Started by <login>`, a line that does nothing, at the
+/// bottom of a server card's menu.
+fn started_by(card: &SessionCard) -> Option<MenuItem> {
+    let label = crate::board::cards::present::started_by(card)?;
+    Some(MenuItem::Item {
+        label: label.into(),
+        icon: None,
+        hint: None,
+        danger: false,
+        disabled: true,
+        on_select: Rc::new(|_, _| {}),
+    })
+}
+
+/// CARD-056: Open preview, while something listens on the card's port.
+fn open_preview(card: &SessionCard, server_host: Option<&str>) -> Option<MenuItem> {
+    let url = crate::board::cards::present::preview_url(card, server_host)?;
+    Some(MenuItem::item("Open preview", Icon::Globe, move |_, _| {
+        nodus_platform::shell::open_external(&url);
+    }))
+}
+
 fn disabled(mut item: MenuItem, off: bool) -> MenuItem {
     if let MenuItem::Item { disabled, .. } = &mut item {
         *disabled = off;
@@ -130,6 +152,8 @@ impl BoardCanvas {
         let Some(node) = self.node(id).cloned() else { return };
         let Some(board) = self.board.clone() else { return };
         let me = cx.entity().downgrade();
+        let host = self.server_host(cx);
+        let host = host.as_deref();
         let items = match &node.kind {
             NodeKind::Pad | NodeKind::Note { index: None } => {
                 vec![item(&me, "New note", Icon::StickyNote, BoardCanvas::note_beside_pad)]
@@ -140,7 +164,7 @@ impl BoardCanvas {
             NodeKind::Card { index, stack, .. } => {
                 let card = &board.cards[*index];
                 if is_terminal(card) {
-                    self.terminal_menu(card, &me)
+                    self.terminal_menu(card, &me, host)
                 } else {
                     let stickers = split_notes(&board.notes, &board.cards)
                         .1
@@ -149,7 +173,7 @@ impl BoardCanvas {
                         .map(|(_, notes)| notes.iter().map(|n| n.id.clone()).collect())
                         .unwrap_or_default();
                     let _ = stack;
-                    self.card_menu(card, stickers, &me)
+                    self.card_menu(card, stickers, &me, host)
                 }
             }
             NodeKind::Shape { index } => self.shape_menu(&board.shapes[*index], &me),
@@ -282,10 +306,11 @@ impl BoardCanvas {
     }
 
     /// The terminal card's menu.
-    fn terminal_menu(&self, card: &SessionCard, me: &WeakEntity<BoardCanvas>) -> Vec<MenuItem> {
+    fn terminal_menu(&self, card: &SessionCard, me: &WeakEntity<BoardCanvas>, host: Option<&str>) -> Vec<MenuItem> {
         let id = card.node.session_id.clone();
         let rename = id.clone();
         let mut items = self.card_open_items(card, me);
+        items.extend(open_preview(card, host));
         items.push(item(me, "Rename", Icon::PencilLine, move |c, cx| {
             c.set_renaming(Some(rename.clone()), cx);
         }));
@@ -297,12 +322,22 @@ impl BoardCanvas {
             })
             .danger(),
         );
+        if let Some(by) = started_by(card) {
+            items.push(MenuItem::Separator);
+            items.push(by);
+        }
         items
     }
 
     /// The card menu (BOARD-175: the whole selection minus terminals when
     /// the card is part of a multi-selection).
-    fn card_menu(&self, card: &SessionCard, stickers: Vec<String>, me: &WeakEntity<BoardCanvas>) -> Vec<MenuItem> {
+    fn card_menu(
+        &self,
+        card: &SessionCard,
+        stickers: Vec<String>,
+        me: &WeakEntity<BoardCanvas>,
+        host: Option<&str>,
+    ) -> Vec<MenuItem> {
         let Some(board) = &self.board else { return Vec::new() };
         let id = card.node.session_id.clone();
         let sel = self.selected_cards();
@@ -340,6 +375,7 @@ impl BoardCanvas {
             );
         } else {
             items.extend(self.card_open_items(card, me));
+            items.extend(open_preview(card, host));
         }
         if let Some(count) = card.agent_count.filter(|n| *n > 0) {
             let agents = id.clone();
@@ -401,7 +437,27 @@ impl BoardCanvas {
             })
             .danger(),
         );
+        if let Some(by) = started_by(card) {
+            items.push(MenuItem::Separator);
+            items.push(by);
+        }
         items
+    }
+
+    /// The server a server project's board is on, by host, for its cards'
+    /// previews (CARD-056).
+    fn server_host(&self, cx: &gpui::App) -> Option<String> {
+        let state = self.state.read(cx);
+        let board = self.board.as_ref()?;
+        let server_id = state
+            .projects
+            .iter()
+            .find(|p| p.id == board.project.id)?
+            .server
+            .clone()?;
+        let url = state.servers.iter().find(|s| s.id == server_id)?.url.clone();
+        let rest = url.trim_start_matches("http://").trim_end_matches('/').to_owned();
+        Some(rest.rsplit_once(':').map_or(rest.clone(), |(host, _)| host.to_owned()))
     }
 
     /// The section menu.

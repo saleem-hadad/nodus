@@ -82,6 +82,12 @@ pub struct SpawnRequest {
     /// Not rounded: the app sends `Math.max(20, cols ?? 120)`.
     pub cols: f64,
     pub rows: f64,
+    /// The session's own token, on a server (SRV-143): its hooks, status
+    /// line, board tools and credential helper must send this one, never
+    /// the host's shared token. Its hook commands find it in a curl config
+    /// of their own. Left out by the app, whose sessions share the token.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_token: Option<String>,
 }
 
 /// An environment: names to values, in the order they were given, as the
@@ -178,7 +184,14 @@ pub struct ExecResult {
 #[serde(tag = "type")]
 pub enum ClientMessage {
     #[serde(rename = "hello")]
-    Hello { protocol: f64 },
+    Hello {
+        protocol: f64,
+        /// A server asks for sessions' own tokens and credential relays
+        /// (SRV-143, SRV-084); the app leaves it out, and its welcome is
+        /// as it was.
+        #[serde(rename = "sessionTokens", default, skip_serializing_if = "Option::is_none")]
+        session_tokens: Option<bool>,
+    },
     #[serde(rename = "spawn")]
     Spawn(SpawnRequest),
     #[serde(rename = "write", rename_all = "camelCase")]
@@ -208,6 +221,14 @@ pub enum ClientMessage {
     /// answered by `trusted`. Not in 0.9.4, like `exec`.
     #[serde(rename = "trust")]
     Trust { id: f64, path: String },
+    /// The answer to a `credential` request (SRV-084): what the helper
+    /// prints, or none when it's refused.
+    #[serde(rename = "credential-reply")]
+    CredentialReply {
+        id: f64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reply: Option<Value>,
+    },
 }
 
 /// The host's `welcome`, the first thing it says to a connection that said hello.
@@ -233,6 +254,10 @@ pub struct Welcome {
     /// ([`crate::trusts_host`]), as anyone on the PC can make a pipe with that name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
+    /// The host gives sessions their own tokens and relays credential
+    /// requests (SRV-143, SRV-084). A server takes no host without it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_tokens: Option<bool>,
 }
 
 /// Host → app (`HostMessage`).
@@ -264,6 +289,10 @@ pub enum HostMessage {
         session_id: String,
         event: String,
         payload: Value,
+        /// The token it came with, when the session has one of its own
+        /// (SRV-143), for the server to check as well.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        token: Option<String>,
     },
     /// A JSON-RPC request a session's claude process sent to the board tools,
     /// for the app to answer.
@@ -272,6 +301,20 @@ pub enum HostMessage {
         id: f64,
         session_id: String,
         message: Value,
+        /// The token it came with, when the session has one of its own (SRV-143).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        token: Option<String>,
+    },
+    /// A git credential a session's helper asked for (SRV-084), with the
+    /// token it sent and the session it named, if any: the server checks
+    /// both, and answers with `credential-reply`.
+    #[serde(rename = "credential", rename_all = "camelCase")]
+    Credential {
+        id: f64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session_id: Option<String>,
+        token: String,
+        request: Value,
     },
     /// How an `exec` ended, to the connection that sent it.
     #[serde(rename = "exec-result")]
@@ -309,7 +352,10 @@ mod tests {
         env.insert("NODUS_SESSION".into(), json!("s1"));
         let cases = [
             (
-                ClientMessage::Hello { protocol: 1.0 },
+                ClientMessage::Hello {
+                    protocol: 1.0,
+                    session_tokens: None,
+                },
                 r#"{"type":"hello","protocol":1}"#,
             ),
             (
@@ -324,6 +370,7 @@ mod tests {
                     cwd: "/tmp/repo".into(),
                     cols: 120.0,
                     rows: 36.5,
+                    session_token: None,
                 }),
                 r#"{"type":"spawn","id":1,"sessionId":"s1","projectId":"p1","initial":"done","file":"/usr/local/bin/claude","args":["--session-id","s1"],"env":{"PATH":"/usr/bin:/bin","NODUS_SESSION":"s1"},"cwd":"/tmp/repo","cols":120,"rows":36.5}"#,
             ),
@@ -398,6 +445,7 @@ mod tests {
             mcp: Some(true),
             hook_auth_header: Some(true),
             key: None,
+            session_tokens: None,
         });
         let cases = [
             (
@@ -437,6 +485,7 @@ mod tests {
                     session_id: "s1".into(),
                     event: "PreToolUse".into(),
                     payload: json!({"tool_name":"Bash","tool_input":{"command":"ls"}}),
+                    token: None,
                 },
                 r#"{"type":"hook","sessionId":"s1","event":"PreToolUse","payload":{"tool_name":"Bash","tool_input":{"command":"ls"}}}"#,
             ),
@@ -445,8 +494,28 @@ mod tests {
                     id: 1.0,
                     session_id: "s1".into(),
                     message: json!({"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"list_notes","arguments":{}}}),
+                    token: None,
                 },
                 r#"{"type":"mcp","id":1,"sessionId":"s1","message":{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"list_notes","arguments":{}}}}"#,
+            ),
+            // SRV-143, SRV-084: what a server's host adds.
+            (
+                HostMessage::Hook {
+                    session_id: "s1".into(),
+                    event: "Stop".into(),
+                    payload: json!({}),
+                    token: Some("t1".into()),
+                },
+                r#"{"type":"hook","sessionId":"s1","event":"Stop","payload":{},"token":"t1"}"#,
+            ),
+            (
+                HostMessage::Credential {
+                    id: 2.0,
+                    session_id: Some("s1".into()),
+                    token: "t1".into(),
+                    request: json!({"protocol":"https","host":"github.com","path":"acme/shop.git"}),
+                },
+                r#"{"type":"credential","id":2,"sessionId":"s1","token":"t1","request":{"protocol":"https","host":"github.com","path":"acme/shop.git"}}"#,
             ),
         ];
         for (msg, wire) in cases {
@@ -567,6 +636,7 @@ mod tests {
             mcp: Some(true),
             hook_auth_header: Some(true),
             key: Some("k".repeat(64)),
+            session_tokens: None,
         };
         assert_eq!(
             encode(&HostMessage::Welcome(welcome)),

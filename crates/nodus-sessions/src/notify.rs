@@ -134,11 +134,14 @@ struct Shown {
 }
 
 /// The card a notification about a session would open, and what to say about it.
-struct About {
-    project_id: String,
-    project_name: String,
-    title: String,
-    last_reply: Option<String>,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct About {
+    pub project_id: String,
+    pub project_name: String,
+    /// The card's title, else the transcript's, else `New session`.
+    pub title: String,
+    /// Claude's last reply, for a finished turn.
+    pub last_reply: Option<String>,
 }
 
 impl Notify {
@@ -170,6 +173,18 @@ impl Notify {
 
     /// Every change of a session's status passes through here (HOST-220).
     pub fn status_changed(&self, session_id: &str, status: SessionStatus, live: bool) {
+        self.changed(session_id, status, live, || self.describe(session_id));
+    }
+
+    /// A session on a server board changed status (SRV-185). The board
+    /// still shows it to everyone; only the card's starter is told, so the
+    /// core gives `about` for the cards this person started, and none for
+    /// the rest.
+    pub fn server_status_changed(&self, session_id: &str, status: SessionStatus, live: bool, about: Option<About>) {
+        self.changed(session_id, status, live, || about);
+    }
+
+    fn changed(&self, session_id: &str, status: SessionStatus, live: bool, about: impl FnOnce() -> Option<About>) {
         let (previous, withdrawn, armed) = {
             let mut state = self.lock();
             let previous = if live {
@@ -197,8 +212,12 @@ impl Notify {
         let Some(notice) = notice_for(previous, status, live) else {
             return;
         };
-        if armed && self.store.read(|state| state.settings.notify) && self.in_background() {
-            self.show(session_id, notice);
+        if armed
+            && self.store.read(|state| state.settings.notify)
+            && self.in_background()
+            && let Some(about) = about()
+        {
+            self.show(session_id, notice, about);
         }
     }
 
@@ -269,9 +288,11 @@ impl Notify {
         let Some((session_id, project_id)) = found else {
             return;
         };
-        let on_board = self
-            .store
-            .read(|state| state.project_id_for_session(&session_id) == Some(project_id.as_str()));
+        // A server board's cards are on its server, which the board asks.
+        let on_board = self.store.read(|state| {
+            state.project_id_for_session(&session_id) == Some(project_id.as_str())
+                || state.project_server(&project_id).is_some()
+        });
         self.open_card(OpenCardRequest {
             project_id,
             session_id: on_board.then_some(session_id),
@@ -316,10 +337,7 @@ impl Notify {
     }
 
     /// HOST-208, HOST-209
-    fn show(&self, session_id: &str, notice: Notice) {
-        let Some(about) = self.describe(session_id) else {
-            return;
-        };
+    fn show(&self, session_id: &str, notice: Notice, about: About) {
         if !self.notifier.is_supported() {
             return;
         }

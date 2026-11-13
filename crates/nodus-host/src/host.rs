@@ -54,6 +54,13 @@ struct Session {
     history: VecDeque<HistoryEntry>,
     status_line: Option<StatusLine>,
     kill_timer: Option<tokio::task::JoinHandle<()>>,
+    /// Its own token, on a server (SRV-143): the only one its hooks, status
+    /// line and board tools may send. None for the app's sessions, which
+    /// send the host's.
+    token: Option<String>,
+    /// The curl config giving its hook commands that token, removed when
+    /// it exits.
+    hook_config: Option<std::path::PathBuf>,
 }
 
 struct Relay {
@@ -95,6 +102,9 @@ pub(crate) struct Host {
     /// gone, and leaves when an app on another protocol says hello.
     pub(crate) standalone: bool,
     pub(crate) hook_port: AtomicU64,
+    /// Where sessions with their own token get their hook commands' curl
+    /// config (SRV-143): `hooks` beside the socket. None in tests.
+    hook_configs: Option<std::path::PathBuf>,
     next_id: AtomicU64,
     /// Lines handed to a connection and not yet written, so an exiting host
     /// can let them out first, as Node's synchronous socket writes do.
@@ -103,7 +113,13 @@ pub(crate) struct Host {
 }
 
 impl Host {
-    pub(crate) fn new(log: Logger, hook_token: String, host_key: Option<String>, standalone: bool) -> Arc<Self> {
+    pub(crate) fn new(
+        log: Logger,
+        hook_token: String,
+        host_key: Option<String>,
+        standalone: bool,
+        hook_configs: Option<std::path::PathBuf>,
+    ) -> Arc<Self> {
         Arc::new_cyclic(|me| Self {
             me: me.clone(),
             state: Mutex::new(State {
@@ -115,6 +131,7 @@ impl Host {
             host_key,
             standalone,
             hook_port: AtomicU64::new(0),
+            hook_configs,
             next_id: AtomicU64::new(1),
             unwritten: Arc::new(AtomicUsize::new(0)),
             exit: watch::channel(None).0,
@@ -281,7 +298,8 @@ impl Host {
                 return false;
             }
             *greeted = true;
-            let welcome = self.welcome(&state);
+            let asked_tokens = msg.get("sessionTokens").and_then(Value::as_bool) == Some(true);
+            let welcome = self.welcome(&state, asked_tokens);
             self.send_to(writer, &welcome);
             let protocol = msg.get("protocol");
             // HOST-038: an app on another protocol may only ask us to stop.
@@ -309,7 +327,9 @@ impl Host {
 
     /// HOST-037: every live session, in spawn order, with its output,
     /// history and status line.
-    fn welcome(&self, state: &State) -> HostMessage {
+    /// A server that asked (`sessionTokens` in its hello) also hears that
+    /// this host gives sessions their own tokens (SRV-143).
+    fn welcome(&self, state: &State, asked_tokens: bool) -> HostMessage {
         let sessions = state
             .sessions
             .iter()
@@ -330,6 +350,7 @@ impl Host {
             mcp: Some(true),
             hook_auth_header: Some(true),
             key: self.host_key.clone(),
+            session_tokens: asked_tokens.then_some(true),
         })
     }
 
@@ -422,7 +443,7 @@ impl Host {
                 }
             }
             Some("shutdown") => self.shutdown(state),
-            Some("mcp-reply") => {
+            Some("mcp-reply" | "credential-reply") => {
                 let relay = msg.get("id").and_then(Value::as_f64).and_then(relay_id);
                 if let Some(relay) = relay.and_then(|relay| state.relays.remove(&relay)) {
                     let _ = relay.settle.send(msg.get("reply").cloned());
@@ -452,13 +473,36 @@ impl Host {
         if session_id.is_some_and(|id| state.sessions.contains_key(id)) {
             return None;
         }
-        let request = match SpawnFields::read(msg) {
+        let mut request = match SpawnFields::read(msg) {
             Ok(request) => request,
             Err(err) => return Some(err),
         };
+        // SRV-143: a session with a token of its own gets its own curl config.
+        let token = msg
+            .get("sessionToken")
+            .and_then(Value::as_str)
+            .filter(|token| !token.is_empty())
+            .map(str::to_owned);
+        let hook_config = match &token {
+            Some(token) => match self.write_hook_config(&request.session_id, token) {
+                Ok(file) => {
+                    let file_text = file.to_string_lossy().into_owned();
+                    request.options.env.retain(|(name, _)| name != "NODUS_HOOK_CONFIG");
+                    request.options.env.push(("NODUS_HOOK_CONFIG".into(), file_text));
+                    Some(file)
+                }
+                Err(err) => return Some(err),
+            },
+            None => None,
+        };
         let (pty, events) = match Pty::spawn(&request.options, TERMINAL_NAME) {
             Ok(spawned) => spawned,
-            Err(err) => return Some(err),
+            Err(err) => {
+                if let Some(file) = &hook_config {
+                    let _ = std::fs::remove_file(file);
+                }
+                return Some(err);
+            }
         };
         let session_id = request.session_id;
         let generation = self.next_id();
@@ -473,12 +517,55 @@ impl Host {
                 history: VecDeque::new(),
                 status_line: None,
                 kill_timer: None,
+                token,
+                hook_config,
             },
         );
         self.log.log(&["spawned", &session_id, &request.file_as_given]);
         let host = self.arc();
         tokio::spawn(async move { host.follow(session_id, generation, events).await });
         None
+    }
+
+    /// Writes a session's own hook token where only this user reads it
+    /// (SRV-143), as the app writes the shared one (HOST-177).
+    fn write_hook_config(&self, session_id: &str, token: &str) -> Result<std::path::PathBuf, String> {
+        let safe = |text: &str| {
+            !text.is_empty()
+                && text
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+        };
+        if !safe(session_id) || !safe(token) {
+            return Err("A session token must be letters, digits, _ and -".into());
+        }
+        let dir = self
+            .hook_configs
+            .as_ref()
+            .ok_or_else(|| "This host has nowhere to keep a session's token".to_owned())?;
+        let file = dir.join(format!("{session_id}.curlrc"));
+        nodus_host_proto::write_private_file(&file, &format!("header = \"Authorization: Bearer {token}\"\n"))
+            .map_err(|err| format!("Can't keep the session's token: {err}"))?;
+        Ok(file)
+    }
+
+    /// Whether a live session has a token of its own (SRV-143).
+    pub(crate) fn has_own_token(&self, session_id: &str) -> bool {
+        self.lock().sessions.get(session_id).is_some_and(|s| s.token.is_some())
+    }
+
+    /// Whether a request for a session carries the token it must: the
+    /// session's own when it has one, with no falling back to the host's
+    /// (SRV-143); the host's otherwise. False for a session that isn't live.
+    pub(crate) fn takes_token(&self, session_id: &str, token: Option<&str>) -> bool {
+        let state = self.lock();
+        let Some(session) = state.sessions.get(session_id) else {
+            return false;
+        };
+        match &session.token {
+            Some(own) => same_token(token, own),
+            None => self.is_hook_token(token),
+        }
     }
 
     /// The host, for a task to hold.
@@ -517,7 +604,11 @@ impl Host {
                     if let Some(timer) = s.kill_timer.take() {
                         timer.abort();
                     }
-                    state.sessions.shift_remove(&session_id);
+                    if let Some(gone) = state.sessions.shift_remove(&session_id)
+                        && let Some(file) = gone.hook_config
+                    {
+                        let _ = std::fs::remove_file(file);
+                    }
                     self.log.log(&["exited", &session_id, &code.to_string()]);
                     self.broadcast(
                         &state,
@@ -660,6 +751,8 @@ impl Host {
         let Some(s) = state.sessions.get_mut(session_id) else {
             return;
         };
+        // SRV-143: the server checks it too.
+        let token = s.token.clone();
         if event == nodus_host_proto::STATUS_LINE_EVENT {
             s.status_line = Some(StatusLine {
                 payload: payload.clone(),
@@ -687,6 +780,7 @@ impl Host {
                 session_id: session_id.to_owned(),
                 event: event.to_owned(),
                 payload,
+                token,
             },
         );
     }
@@ -694,6 +788,33 @@ impl Host {
     /// Passes a board tools request to the newest app, at once, so a batch's
     /// requests reach it in order; None when no app is connected. (HOST-085, HOST-087)
     pub(crate) fn start_relay(&self, session_id: &str, message: Value) -> Option<PendingRelay> {
+        let token = self.lock().sessions.get(session_id).and_then(|s| s.token.clone());
+        self.relay(|id| HostMessage::Mcp {
+            id,
+            session_id: session_id.to_owned(),
+            message,
+            token,
+        })
+    }
+
+    /// Passes a credential helper's request to the newest app (SRV-084),
+    /// with the token it sent and the session it named, for the server to
+    /// check; None when no app is connected.
+    pub(crate) fn start_credential(
+        &self,
+        session_id: Option<String>,
+        token: String,
+        request: Value,
+    ) -> Option<PendingRelay> {
+        self.relay(|id| HostMessage::Credential {
+            id,
+            session_id,
+            token,
+            request,
+        })
+    }
+
+    fn relay(&self, message: impl FnOnce(f64) -> HostMessage) -> Option<PendingRelay> {
         let mut state = self.lock();
         // There's only ever one app; the newest connection is the live one.
         let (&client, writer) = state.clients.last()?;
@@ -702,14 +823,7 @@ impl Host {
         state.next_relay += 1;
         let (settle, answer) = oneshot::channel();
         state.relays.insert(relay, Relay { client, settle });
-        self.send_to(
-            &writer,
-            &HostMessage::Mcp {
-                id: relay as f64,
-                session_id: session_id.to_owned(),
-                message,
-            },
-        );
+        self.send_to(&writer, &message(relay as f64));
         Some(PendingRelay {
             relay,
             answer,
@@ -754,6 +868,18 @@ impl Signal {
             Self::Kill => libc::SIGKILL,
         }
     }
+}
+
+/// Compared in constant time, so a token can't be worked out from how long
+/// a check takes (HOST-070).
+pub(crate) fn same_token(given: Option<&str>, expected: &str) -> bool {
+    let given = given.unwrap_or("").as_bytes();
+    let expected = expected.as_bytes();
+    if given.len() != expected.len() {
+        return false;
+    }
+    let difference = given.iter().zip(expected).fold(0u8, |acc, (a, b)| acc | (a ^ b));
+    std::hint::black_box(difference) == 0
 }
 
 /// A relay id from a JSON number: only whole, positive ones can match.
@@ -1022,7 +1148,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn host_086_each_relay_gives_up_20_seconds_after_it_was_sent() {
         let (log, _lines) = Logger::memory();
-        let host = Host::new(log, "token".into(), None, false);
+        let host = Host::new(log, "token".into(), None, false, None);
         // An app that never answers.
         let (app, mut heard) = mpsc::unbounded_channel::<Line>();
         host.lock().clients.insert(1, app);
@@ -1063,7 +1189,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn host_064_exits_4_seconds_after_shutdown_whatever_is_left() {
         let (log, lines) = Logger::memory();
-        let host = Host::new(log, "token".into(), None, false);
+        let host = Host::new(log, "token".into(), None, false, None);
         // A session that ignores SIGTERM and SIGHUP, whose exit the host never
         // hears of (nothing follows its events), so it's still there when the
         // time is up: as a process that outlived SIGKILL would be.
@@ -1098,6 +1224,8 @@ mod tests {
                 history: VecDeque::new(),
                 status_line: None,
                 kill_timer: None,
+                token: None,
+                hook_config: None,
             },
         );
         host.shutdown(&mut host.lock());

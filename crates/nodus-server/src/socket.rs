@@ -197,7 +197,8 @@ async fn receive(
             let mut answering: Answering = if request.is_server_call() {
                 Box::pin(calls::answer(Arc::clone(server), who.clone(), request))
             } else {
-                Box::pin(dispatch::answer(server.nodus.clone(), request))
+                let member = server.auth.login_of(who);
+                Box::pin(dispatch::answer(server.nodus.clone(), member, request))
             };
             match poll_once(&mut answering) {
                 Some(result) => answer(outbox, id, result).await,
@@ -342,7 +343,7 @@ impl Forwarder {
             cols,
             rows,
         };
-        let mut opening: Answering = Box::pin(dispatch::answer(self.server.nodus.clone(), request));
+        let mut opening: Answering = Box::pin(dispatch::answer(self.server.nodus.clone(), None, request));
         match poll_once(&mut opening) {
             // A live session answers at once, and its replay holds all it
             // sent before (HOST-119): its output already waiting here was

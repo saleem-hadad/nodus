@@ -3,9 +3,12 @@
 //! the library.
 
 fn main() {
-    let args: Vec<String> = std::env::args_os()
-        .skip(1)
-        .map(|arg| arg.to_string_lossy().into_owned())
-        .collect();
-    std::process::exit(nodus_server::main(&args));
+    let mut args = std::env::args_os().map(|arg| arg.to_string_lossy().into_owned());
+    let program = args.next().unwrap_or_default();
+    let name = std::path::Path::new(&program)
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let args: Vec<String> = args.collect();
+    std::process::exit(nodus_server::run(&name, &args));
 }

@@ -45,7 +45,7 @@ pub use paths::{
 pub use preview::{ReadError, read_transcript};
 pub use search::{SearchIndex, SearchTarget, match_ranges, query_terms, terms_pattern};
 pub use summarize::{SummarizeTarget, summarize_sessions};
-pub use watch::Watcher;
+pub use watch::{OnChange, Watcher};
 
 /// What the app has read of the transcripts under one home folder.
 pub struct Transcripts {

@@ -59,6 +59,7 @@ fn client(user_data: &std::path::Path) -> HostClient {
             board_tools: Arc::new(Quiet),
             prompt: Arc::new(Quiet),
             launcher: Arc::new(Quiet),
+            server: None,
         },
     )
 }

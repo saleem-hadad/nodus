@@ -153,6 +153,8 @@ impl DiffModal {
         let file = file.clone();
         let project = self.project_id.clone();
         let nodus = self.git.read(cx).state.read(cx).nodus.clone();
+        // SRV-128: the selected card's worktree, on a server board.
+        let card = self.git.read(cx).card.clone();
         let git = self.git.clone();
         self.read_loop = Some(cx.spawn(async move |this, cx| {
             let mut first = true;
@@ -165,7 +167,7 @@ impl DiffModal {
                     }
                 }
                 first = false;
-                let result = nodus.git().diff(&project, &file).await;
+                let result = nodus.git_for(card.as_deref()).diff(&project, &file).await;
                 let alive = this.update(cx, |m, cx| {
                     m.store(&key, &file, result.map_err(|e| e.ipc_message()), cx);
                 });

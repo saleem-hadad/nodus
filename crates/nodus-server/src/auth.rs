@@ -159,6 +159,38 @@ impl Auth {
         }
     }
 
+    /// The GitHub login of the member a device belongs to: who made what
+    /// they add (SRV-183). None for the dev and setup tokens.
+    pub(crate) fn login_of(&self, who: &Who) -> Option<String> {
+        let Who::Device { github_id, .. } = who else {
+            return None;
+        };
+        self.member(*github_id).map(|member| member.login)
+    }
+
+    /// The GitHub App, once there is one.
+    pub(crate) fn app(&self) -> Option<AppConfig> {
+        self.lock().config.github.clone()
+    }
+
+    /// A member by their GitHub id.
+    pub(crate) fn member(&self, github_id: u64) -> Option<Member> {
+        self.lock()
+            .members
+            .iter()
+            .find(|member| member.github_id == github_id)
+            .cloned()
+    }
+
+    /// A member by their login, as a card records its starter (SRV-082).
+    pub(crate) fn member_by_login(&self, login: &str) -> Option<Member> {
+        self.lock()
+            .members
+            .iter()
+            .find(|member| member.login.eq_ignore_ascii_case(login))
+            .cloned()
+    }
+
     /// Who did it, for the audit log.
     fn actor(&self, who: &Who) -> (Option<AuditMember>, Option<AuditDevice>) {
         let Who::Device { id, github_id } = who else {
@@ -375,7 +407,7 @@ impl Auth {
     }
 
     /// The App's key and id, to speak as it.
-    fn app_key(&self) -> Result<(AppKey, u64), String> {
+    pub(crate) fn app_key(&self) -> Result<(AppKey, u64), String> {
         let app_id = self
             .lock()
             .config

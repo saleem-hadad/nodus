@@ -3,9 +3,12 @@
 
 use std::path::{Path, PathBuf};
 
+use std::collections::HashMap;
+
 use nodus_domain::{
-    BoardLink, BoardNote, BoardSection, BoardShape, BoardSnapshot, InkStroke, NodePatch, Rect, Viewport,
+    BoardLink, BoardNote, BoardSection, BoardShape, BoardSnapshot, CreatedBy, InkStroke, NodePatch, Rect, Viewport,
 };
+use nodus_store::BoardState;
 use serde_json::Value;
 
 use nodus_remote::Request;
@@ -16,6 +19,9 @@ use crate::{CommandResult, Nodus};
 /// `window.api.board`.
 pub struct BoardApi<'a> {
     pub(crate) nodus: &'a Nodus,
+    /// The member a server makes these calls for ([`Nodus::by`]): what
+    /// they add records them as `createdBy` (SRV-183). None in the app.
+    pub(crate) by: Option<&'a str>,
 }
 
 impl BoardApi<'_> {
@@ -51,13 +57,59 @@ impl BoardApi<'_> {
         }
         self.nodus
             .on_core(async {
-                self.nodus
+                let ids: Vec<&str> = patches.iter().map(|p| p.session_id.as_str()).collect();
+                let worktrees = self.worktree_cards(project_id, &ids);
+                let saved = self
+                    .nodus
                     .inner
                     .board
                     .save_nodes(project_id, patches)
-                    .on("board:save-nodes")
+                    .on("board:save-nodes");
+                // SESS-091: a card nothing was said in is removed rather
+                // than archived, and its worktree goes with it (SRV-124).
+                self.retire_gone(project_id, worktrees).await;
+                saved
             })
             .await
+    }
+
+    /// The cards among `ids` that have worktrees (SRV-122), on a server.
+    fn worktree_cards(&self, project_id: &str, ids: &[&str]) -> Vec<nodus_domain::BoardNode> {
+        if self.nodus.inner.hosted().is_none() {
+            return Vec::new();
+        }
+        self.nodus.inner.store.read(|state| {
+            let Some(board) = state.board(project_id) else {
+                return Vec::new();
+            };
+            ids.iter()
+                .filter_map(|id| board.nodes.get(*id))
+                .filter(|node| node.worktree().is_some())
+                .cloned()
+                .collect()
+        })
+    }
+
+    /// SRV-124: the worktrees of those cards that have left the board go,
+    /// with their unpushed work saved first. Archived cards keep theirs.
+    async fn retire_gone(&self, project_id: &str, cards: Vec<nodus_domain::BoardNode>) {
+        if cards.is_empty() {
+            return;
+        }
+        let inner = &self.nodus.inner;
+        let Ok(project) = inner.store.read(|state| state.project(project_id).cloned()) else {
+            return;
+        };
+        for node in cards {
+            let gone = inner.store.read(|state| {
+                state
+                    .board(project_id)
+                    .is_none_or(|board| !board.nodes.contains_key(&node.session_id))
+            });
+            if gone {
+                inner.retire_worktree(&project, &node).await;
+            }
+        }
     }
 
     /// `board:save-archive` (SESS-106).
@@ -96,7 +148,9 @@ impl BoardApi<'_> {
         }
         self.nodus
             .on_core(async {
+                let worktrees = self.worktree_cards(project_id, &[session_id]);
                 self.nodus.inner.board.remove_node(project_id, session_id).await;
+                self.retire_gone(project_id, worktrees).await;
             })
             .await;
     }
@@ -109,7 +163,12 @@ impl BoardApi<'_> {
         }
         self.nodus
             .on_core(async {
+                let ids = [section.id.as_str()];
+                let before = self.creators(project_id, &ids, |b, id| b.sections.get(id).map(|s| s.created_by()));
                 self.nodus.inner.board.save_section(project_id, &to_json(section));
+                self.attribute(project_id, &ids, &before, |b, id| {
+                    b.sections.get_mut(id).map(as_created)
+                });
             })
             .await;
     }
@@ -161,7 +220,10 @@ impl BoardApi<'_> {
         }
         self.nodus
             .on_core(async {
+                let ids = [note.id.as_str()];
+                let before = self.creators(project_id, &ids, |b, id| b.notes.get(id).map(|n| n.created_by()));
                 self.nodus.inner.board.save_note(project_id, &to_json(note));
+                self.attribute(project_id, &ids, &before, |b, id| b.notes.get_mut(id).map(as_created));
             })
             .await;
     }
@@ -188,8 +250,16 @@ impl BoardApi<'_> {
         }
         self.nodus
             .on_core(async {
+                let ids: Vec<&str> = strokes.iter().map(|s| s.id.as_str()).collect();
+                let before = self.creators(project_id, &ids, |b, id| {
+                    let ink = b.ink.as_deref().unwrap_or_default();
+                    ink.iter().find(|s| s.id == id).map(|s| s.created_by())
+                });
                 let strokes = nodus_board::ink::clean_ink(&to_json(&strokes));
                 self.nodus.inner.board.save_ink(project_id, strokes);
+                self.attribute(project_id, &ids, &before, |b, id| {
+                    b.ink.as_mut()?.iter_mut().find(|s| s.id == id).map(as_created)
+                });
             })
             .await;
     }
@@ -202,7 +272,10 @@ impl BoardApi<'_> {
         }
         self.nodus
             .on_core(async {
+                let ids: Vec<&str> = shapes.iter().map(|s| s.id.as_str()).collect();
+                let before = self.creators(project_id, &ids, |b, id| b.shapes.get(id).map(|s| s.created_by()));
                 self.nodus.inner.board.save_shapes(project_id, shapes);
+                self.attribute(project_id, &ids, &before, |b, id| b.shapes.get_mut(id).map(as_created));
             })
             .await;
     }
@@ -228,7 +301,10 @@ impl BoardApi<'_> {
         }
         self.nodus
             .on_core(async {
+                let ids: Vec<&str> = links.iter().map(|l| l.id.as_str()).collect();
+                let before = self.creators(project_id, &ids, |b, id| b.links.get(id).map(|l| l.created_by()));
                 self.nodus.inner.board.save_links(project_id, links);
+                self.attribute(project_id, &ids, &before, |b, id| b.links.get_mut(id).map(as_created));
             })
             .await;
     }
@@ -265,6 +341,52 @@ impl BoardApi<'_> {
                 .session_home(session_id)
                 .map(|home| home.project_id)
         })
+    }
+
+    /// Who made each of these before a save: the ones already on the board,
+    /// by id, with their `createdBy` (SRV-183).
+    fn creators(
+        &self,
+        project_id: &str,
+        ids: &[&str],
+        read: impl for<'b> Fn(&'b BoardState, &str) -> Option<Option<&'b str>>,
+    ) -> HashMap<String, Option<String>> {
+        self.nodus.inner.store.read(|state| {
+            let Some(board) = state.board(project_id) else {
+                return HashMap::new();
+            };
+            ids.iter()
+                .filter_map(|&id| read(board, id).map(|by| (id.to_owned(), by.map(str::to_owned))))
+                .collect()
+        })
+    }
+
+    /// SRV-183: once saved, each keeps who made it, and a new one is the
+    /// member's who saved it. Saves rebuild what they're given, so this puts
+    /// `createdBy` back. Nothing changes where nobody made anything: a local
+    /// board, or one from before attribution.
+    fn attribute(
+        &self,
+        project_id: &str,
+        ids: &[&str],
+        before: &HashMap<String, Option<String>>,
+        mut find: impl for<'b> FnMut(&'b mut BoardState, &str) -> Option<&'b mut dyn CreatedBy>,
+    ) {
+        if self.by.is_none() && before.values().all(Option::is_none) {
+            return;
+        }
+        self.nodus.inner.store.update(|state| {
+            let board = state.board_mut(project_id);
+            for &id in ids {
+                let by = match before.get(id) {
+                    Some(made) => made.as_deref(),
+                    None => self.by,
+                };
+                if let Some(item) = find(board, id) {
+                    item.set_created_by(by);
+                }
+            }
+        });
     }
 
     /// Where the board's pictures are kept: `board-images` in the data folder.
@@ -331,6 +453,11 @@ fn clean_ext(ext: &str) -> String {
     } else {
         "png".to_owned()
     }
+}
+
+/// Anything that records who made it, as one.
+fn as_created<T: CreatedBy>(item: &mut T) -> &mut dyn CreatedBy {
+    item
 }
 
 /// What the window sent, as the JSON the handlers check.

@@ -60,6 +60,45 @@ pub(crate) fn server_env(file: &Path, run_home: Option<&Path>) -> Result<ServerE
     Ok(ServerEnv { vars, home })
 }
 
+/// Where the `gh` shim is (SRV-083): `NODUS_SHIMS`, else `/opt/nodus/bin/shims`.
+pub(crate) fn shims_dir() -> PathBuf {
+    std::env::var_os("NODUS_SHIMS")
+        .filter(|dir| !dir.is_empty())
+        .map_or_else(|| PathBuf::from("/opt/nodus/bin/shims"), PathBuf::from)
+}
+
+/// What `serve` adds to the sessions' environment itself (SRV-141): the
+/// shims folder first on the `PATH`, so `gh` gets a token for the session's
+/// repository (SRV-083), when it's there; and on Linux, the run home's
+/// owner's rootless Docker as `DOCKER_HOST` (SRV-129), unless the env file
+/// says otherwise. The host's unit sets that for itself, but sessions take
+/// this environment, not the host's.
+pub(crate) fn add_session_env(env: &mut ServerEnv) {
+    let shims = shims_dir();
+    if shims.is_dir() {
+        let path = env.vars.get("PATH").cloned().unwrap_or_default();
+        let shims = shims.to_string_lossy().into_owned();
+        if !path.split(':').any(|dir| dir == shims) {
+            let path = if path.is_empty() {
+                shims
+            } else {
+                format!("{shims}:{path}")
+            };
+            env.vars.insert("PATH".into(), path);
+        }
+    }
+    #[cfg(target_os = "linux")]
+    if env.vars.get("DOCKER_HOST").is_none_or(String::is_empty) {
+        use std::os::unix::fs::MetadataExt;
+        if let Ok(meta) = std::fs::metadata(&env.home) {
+            env.vars.insert(
+                "DOCKER_HOST".into(),
+                format!("unix:///run/user/{}/docker.sock", meta.uid()),
+            );
+        }
+    }
+}
+
 /// Holds `<data>/serve.lock` for as long as it's kept, so a second `serve`
 /// can't share the data folder: two cores writing one state.json would
 /// each undo what the other saved.

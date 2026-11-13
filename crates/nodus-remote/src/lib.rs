@@ -30,7 +30,9 @@ use tokio::task::AbortHandle;
 /// SRV-060…063) outside a [`Remote`]: its routes, their helpers and types.
 pub use nodus_wire as wire;
 pub use nodus_wire::client::{DISCONNECTED, FileBody};
-pub use nodus_wire::{CallError, Hello, MAX_UPLOAD, NOT_AVAILABLE, Notice, PROTOCOL, Request, Upload};
+pub use nodus_wire::{
+    CallError, Device, GithubRepo, Hello, MAX_UPLOAD, NOT_AVAILABLE, Notice, PROTOCOL, Request, Upload,
+};
 
 /// What a call fails with while the server isn't connected.
 pub const OFFLINE: &str = "Not connected to the server";
@@ -60,9 +62,11 @@ const MAX_BACKOFF: Duration = Duration::from_secs(30);
 /// draft) take minutes; views may run commands; the rest are quick.
 pub fn timeout_for(request: &Request) -> Duration {
     match request {
-        Request::BoardNameSection { .. } | Request::SessionSummarize { .. } | Request::ActionsDraft { .. } => {
-            Duration::from_secs(600)
-        }
+        // A clone takes as long as the repository's size (SRV-120).
+        Request::BoardNameSection { .. }
+        | Request::SessionSummarize { .. }
+        | Request::ActionsDraft { .. }
+        | Request::ProjectsAddGithub { .. } => Duration::from_secs(600),
         Request::ViewsCreate { .. }
         | Request::ViewsCall { .. }
         | Request::ViewsRefresh { .. }

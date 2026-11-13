@@ -6,7 +6,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use indexmap::IndexMap;
-use nodus_domain::{BoardSnapshot, Event, EventSink, Project, ProjectStats, RunningCounts, SessionCard, SessionStatus};
+use nodus_domain::{
+    BoardNode, BoardSnapshot, Event, EventSink, Project, ProjectStats, RunningCounts, SessionCard, SessionStatus,
+};
 use nodus_store::{BoardState, State, Store};
 use nodus_transcripts::{DiscoveredSession, Transcripts, Watcher};
 
@@ -135,23 +137,65 @@ impl Board {
             self.finish_run(&id);
         }
         let snapshot = self.load_board(project_id)?;
-        let events = Arc::clone(&self.events);
-        let id = project_id.to_owned();
+        let changed = |events: Arc<dyn EventSink>, id: String| -> nodus_transcripts::OnChange {
+            Arc::new(move || {
+                events.emit(Event::BoardChanged { project_id: id.clone() });
+            })
+        };
         self.watcher.watch_project(
             project_id,
             &project.repo_path,
-            Arc::new(move || {
-                events.emit(Event::BoardChanged { project_id: id.clone() });
-            }),
+            changed(Arc::clone(&self.events), project_id.to_owned()),
         );
+        // SRV-125: a card in a worktree of its own writes its transcript
+        // under that folder, watched as well.
+        for card in &snapshot.cards {
+            if let Some(worktree) = card.node.worktree() {
+                self.watcher.watch_project(
+                    &format!("{project_id}/{}", card.node.session_id),
+                    &worktree.path,
+                    changed(Arc::clone(&self.events), project_id.to_owned()),
+                );
+            }
+        }
         Ok(snapshot)
+    }
+
+    /// The folder a session runs in, whose transcripts are its: its card's
+    /// worktree on a server project from GitHub (SRV-125), else the project's.
+    pub fn session_folder(&self, project: &Project, session_id: &str) -> String {
+        let worktree = self.read_board(&project.id, |_, board| {
+            board.nodes.get(session_id).and_then(BoardNode::worktree)
+        });
+        worktree.map_or_else(|| project.repo_path.clone(), |w| w.path)
+    }
+
+    /// The sessions on disk for a board: those in the project's folder,
+    /// which may be imported (SESS-073), and those its cards' worktrees hold
+    /// (SRV-125).
+    pub fn scan_board(&self, project: &Project) -> IndexMap<String, DiscoveredSession> {
+        let mut disk = self.transcripts.scan_repo(&project.repo_path);
+        let worktrees: Vec<(String, String)> = self.read_board(&project.id, |_, board| {
+            board
+                .nodes
+                .values()
+                .filter_map(|n| n.worktree().map(|w| (n.session_id.clone(), w.path)))
+                .collect()
+        });
+        for (session_id, folder) in worktrees {
+            if let Some(found) = self.transcripts.session(&folder, &session_id) {
+                disk.insert(session_id, found);
+            }
+        }
+        disk
     }
 
     /// `loadBoard`: the board merged with the sessions on disk, saved, as cards
     /// (SESS-072…081).
     pub fn load_board(&self, project_id: &str) -> Result<BoardSnapshot, BoardError> {
-        let repo_path = self.project(project_id)?.repo_path;
-        let disk = self.transcripts.scan_repo(&repo_path);
+        let project = self.project(project_id)?;
+        let repo_path = project.repo_path.clone();
+        let disk = self.scan_board(&project);
         let folder_exists = self.transcripts.transcript_dir(&repo_path).exists();
         let now = self.now();
         let snapshot = self.store.update(|state| {
@@ -189,8 +233,9 @@ impl Board {
             .map(|node| {
                 let found = disk.get(&node.session_id);
                 let mut card = to_card(node, found, self.sessions.as_ref());
+                let folder = node.worktree().map_or_else(|| repo_path.clone(), |w| w.path);
                 self.sessions
-                    .attach_agents(&mut card, &repo_path, found.and_then(|f| f.last_prompt_at));
+                    .attach_agents(&mut card, &folder, found.and_then(|f| f.last_prompt_at));
                 card
             })
             .collect();
@@ -217,7 +262,7 @@ impl Board {
 
     /// What the projects grid shows for a project (SESS-160).
     pub fn project_stats(&self, project: &Project) -> ProjectStats {
-        let disk = self.transcripts.scan_repo(&project.repo_path);
+        let disk = self.scan_board(project);
         self.read_board(&project.id, |_, board| stats(board, &disk, self.sessions.as_ref()))
     }
 
@@ -232,11 +277,12 @@ impl Board {
 
     /// Whether the session has a transcript yet (SESS-161).
     pub fn has_transcript(&self, project: &Project, session_id: &str) -> bool {
-        self.transcripts.has_transcript(&project.repo_path, session_id)
+        let folder = self.session_folder(project, session_id);
+        self.transcripts.has_transcript(&folder, session_id)
     }
 
     /// A card for a node, as `toCard` without what's on disk (a new card).
-    pub fn card(&self, node: &nodus_domain::BoardNode) -> SessionCard {
+    pub fn card(&self, node: &BoardNode) -> SessionCard {
         to_card(node, None, self.sessions.as_ref())
     }
 }

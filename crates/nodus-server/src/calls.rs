@@ -28,6 +28,12 @@ pub(crate) async fn answer(server: Arc<Server>, who: Who, request: Request) -> R
         Request::ServerInfo {} => give(auth.info().await),
         Request::GithubInstallations {} => auth.installations().await.and_then(give),
         Request::GithubReplaceKey { pem } => auth.replace_key(&who, &pem).await.and_then(give),
+        Request::GithubRepos {} => server.hosting.repos().await.and_then(give),
+        Request::ProjectsAddGithub { full_name, name, color } => {
+            crate::hosting::add_github(&server, &full_name, name, color)
+                .await
+                .and_then(give)
+        }
         _ => Err(nodus_wire::NOT_AVAILABLE.to_owned()),
     };
     answered.map_err(|message| CallError::new(channel, message))

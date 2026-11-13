@@ -29,6 +29,7 @@
 #               touches repo content: claude, git, terminals, rootless Docker.
 #               Owns /home/nodus-run (0750).
 #   /opt/nodus/bin/nodus           the server binary, owned by nodus, 0755
+#   /opt/nodus/bin/shims/gh        a link to it: sessions' gh (SRV-083)
 #   /srv/nodus/uploads             2770 nodus:nodus-run
 #   /etc/nodus/nftables.nft        the firewall, loaded by nodus-firewall.service
 
@@ -43,6 +44,7 @@ main() {
 	readonly SERVE_USER="nodus" RUN_USER="nodus-run"
 	readonly SERVE_HOME="/home/nodus" RUN_HOME="/home/nodus-run"
 	readonly BIN_DIR="/opt/nodus/bin" BIN="/opt/nodus/bin/nodus"
+	readonly SHIMS="/opt/nodus/bin/shims"
 	readonly UPLOADS="/srv/nodus/uploads"
 	readonly HOST_SOCKET="/run/nodus/host.sock"
 	readonly UNIT_DIR="/etc/systemd/system"
@@ -284,6 +286,8 @@ create_users() {
 	install -d -o root -g root -m 0755 /opt/nodus
 	# nodus can replace the binary (updates, SRV-200); nodus-run can only run it.
 	install -d -o "$SERVE_USER" -g "$SERVE_USER" -m 0755 "$BIN_DIR"
+	# The server puts this first on sessions' PATH when it's there (SRV-083).
+	install -d -o "$SERVE_USER" -g "$SERVE_USER" -m 0755 "$SHIMS"
 	note "$SERVE_USER (uid $(id -u "$SERVE_USER")), $RUN_USER (uid $(id -u "$RUN_USER")), $SERVE_USER in group $RUN_USER"
 }
 
@@ -458,6 +462,20 @@ install_binary() {
 		mv -f "$BIN.new" "$BIN"
 		note "Installed $BIN"
 	fi
+	link_gh_shim
+}
+
+# SRV-083: `gh` in a session is the server binary under that name, which
+# runs the real gh with a token for the session's repository.
+link_gh_shim() {
+	local link="$SHIMS/gh"
+	if [ -L "$link" ] && [ "$(readlink "$link")" = "$BIN" ]; then
+		return
+	fi
+	rm -f "$link"
+	ln -s "$BIN" "$link"
+	chown -h "$SERVE_USER:$SERVE_USER" "$link"
+	note "Linked $link to $BIN"
 }
 
 download_binary() {
@@ -794,9 +812,9 @@ uninstall() {
 	fi
 	run systemctl daemon-reload
 	run systemctl reset-failed nodus.service nodus-host.service || true
-	say "Removing $BIN"
-	rm -f "$BIN" "$BIN.new"
-	rmdir "$BIN_DIR" /opt/nodus 2>/dev/null || true
+	say "Removing $BIN and the gh shim"
+	rm -f "$BIN" "$BIN.new" "$SHIMS/gh"
+	rmdir "$SHIMS" "$BIN_DIR" /opt/nodus 2>/dev/null || true
 
 	if [ "$PURGE" = 0 ]; then
 		printf '\nNodus server removed. Kept: the data (%s, %s, %s), the users %s and %s,\n' \

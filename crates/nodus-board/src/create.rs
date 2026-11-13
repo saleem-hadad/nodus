@@ -5,7 +5,8 @@
 
 use nodus_domain::js;
 use nodus_domain::{
-    BoardNode, CreateSessionOptions, Project, ProjectAction, SessionCard, SessionKind, SessionModel, SessionStatus,
+    BoardNode, CreateSessionOptions, CreatedBy, Project, ProjectAction, SessionCard, SessionKind, SessionModel,
+    SessionStatus,
 };
 use nodus_store::BoardState;
 
@@ -111,11 +112,13 @@ pub fn new_session(
 impl Board {
     /// `session:create`, once the login-shell environment is ready: a new card
     /// on the board, its process started. The card is on the board before the
-    /// process starts, and taken off again if it can't (SESS-114…120).
+    /// process starts, and taken off again if it can't (SESS-114…120). On a
+    /// server, `created_by` is the member who started it (SRV-183).
     pub async fn create_session(
         &self,
         project_id: &str,
         opts: &CreateSessionOptions,
+        created_by: Option<&str>,
         launcher: &dyn Launcher,
     ) -> Result<SessionCard, BoardError> {
         let project = self.project(project_id)?;
@@ -125,7 +128,8 @@ impl Board {
         let NewSession { node, action } = self.store.update(|state| {
             let globals = state.actions.clone();
             let board = state.board_mut(project_id);
-            let new = new_session(board, &project, globals.as_deref(), opts, &session_id, now)?;
+            let mut new = new_session(board, &project, globals.as_deref(), opts, &session_id, now)?;
+            new.node.set_created_by(created_by);
             // SESS-118
             board.nodes.insert(session_id.clone(), new.node.clone());
             Ok::<_, BoardError>(new)
@@ -143,6 +147,10 @@ impl Board {
         }
         // SESS-120
         self.store.save();
+        // As it is now: on a server, starting it gave it a worktree (SRV-122).
+        let node = self
+            .read_board(project_id, |_, board| board.nodes.get(&session_id).cloned())
+            .unwrap_or(node);
         Ok(self.card(&node))
     }
 

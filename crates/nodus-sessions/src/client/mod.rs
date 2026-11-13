@@ -106,6 +106,17 @@ pub trait BoardTools: Send + Sync {
     fn answer(&self, session_id: &str, message: Value) -> BoxFuture<Result<Option<Value>, String>>;
 }
 
+/// What a server adds to its sessions (SRV-143, SRV-084): it checks each
+/// one's own token on what the host relays, and answers their git
+/// credential helpers. The app has none.
+pub trait ServerSessions: Send + Sync {
+    /// Whether a relayed hook, status line or board tools request carries
+    /// the session's own token. A refused one is dropped.
+    fn accepts(&self, session_id: &str, token: Option<&str>) -> bool;
+    /// What a credential helper gets: its credential, or `{ "error": … }`.
+    fn credential(&self, session_id: Option<String>, token: String, request: Value) -> BoxFuture<Value>;
+}
+
 /// What the client needs from the rest of the app.
 #[derive(Clone)]
 pub struct Wiring {
@@ -119,6 +130,8 @@ pub struct Wiring {
     pub prompt: Arc<dyn HostPrompt>,
     /// How a host is started when there's none.
     pub launcher: Arc<dyn HostLauncher>,
+    /// On a server, its own checks and credentials; none in the app.
+    pub server: Option<Arc<dyn ServerSessions>>,
 }
 
 /// What a command builder learns from the connected host.
@@ -403,6 +416,7 @@ impl HostClient {
                 cwd: opts.cwd.clone(),
                 cols,
                 rows,
+                session_token: opts.session_token.clone(),
             };
             Inner::send(&state, &ClientMessage::Spawn(request));
         }
@@ -669,6 +683,8 @@ impl Inner {
         let conn = connection::open(self.next_id(), stream, reader, greeted, WELCOME);
         conn.write(encode(&ClientMessage::Hello {
             protocol: f64::from(PROTOCOL),
+            // SRV-143: a server asks for sessions' own tokens.
+            session_tokens: self.wiring.server.is_some().then_some(true),
         }));
         match greeting.await {
             Ok(Ok(adopted)) => Ok((adopted, conn)),
@@ -800,14 +816,24 @@ impl Inner {
                 session_id,
                 event,
                 payload,
+                token,
             } => {
+                // SRV-143: on a server, only with the session's own token.
+                if !self.accepts(&session_id, token.as_deref()) {
+                    return;
+                }
                 self.wiring.status.hook(&event, &session_id, &payload, None);
             }
             HostMessage::Mcp {
                 id,
                 session_id,
                 message,
+                token,
             } => {
+                if !self.accepts(&session_id, token.as_deref()) {
+                    Inner::send(&self.lock(), &ClientMessage::McpReply { id, reply: None });
+                    return;
+                }
                 // Some tools answer once they're done. No reply tells the host the app couldn't answer.
                 let inner = self.me();
                 tokio::spawn(async move {
@@ -832,8 +858,42 @@ impl Inner {
                     let _ = pending.send(error);
                 }
             }
+            HostMessage::Credential {
+                id,
+                session_id,
+                token,
+                request,
+            } => {
+                // SRV-084: only a server answers; the app has no credentials to give.
+                let Some(server) = self.wiring.server.clone() else {
+                    Inner::send(&self.lock(), &ClientMessage::CredentialReply { id, reply: None });
+                    return;
+                };
+                let inner = self.me();
+                tokio::spawn(async move {
+                    let reply = server.credential(session_id, token, request).await;
+                    Inner::send(
+                        &inner.lock(),
+                        &ClientMessage::CredentialReply { id, reply: Some(reply) },
+                    );
+                });
+            }
             HostMessage::Welcome(_) => {}
         }
+    }
+
+    /// Whether what the host relayed for a session may be taken: always in
+    /// the app; on a server, only with that session's own token (SRV-143).
+    fn accepts(&self, session_id: &str, token: Option<&str>) -> bool {
+        let accepted = self
+            .wiring
+            .server
+            .as_ref()
+            .is_none_or(|server| server.accepts(session_id, token));
+        if !accepted {
+            tracing::warn!("[host] refused a request for {session_id} without its own token");
+        }
+        accepted
     }
 
     fn append(&self, session_id: &str, data: String) {
@@ -985,7 +1045,12 @@ impl Reader for Inner {
             let _ = greeting.send(Err(UNTRUSTED.into()));
             return false;
         }
-        if !welcome || msg.get("protocol").and_then(Value::as_f64) != Some(f64::from(PROTOCOL)) {
+        // A server takes only a host that gives sessions their own tokens
+        // (SRV-143): one from before is treated as another protocol's, so
+        // it's stopped and started again from the new binary (SRV-004).
+        let tokens = msg.get("sessionTokens").and_then(Value::as_bool) == Some(true);
+        let old_for_a_server = self.wiring.server.is_some() && !tokens;
+        if !welcome || msg.get("protocol").and_then(Value::as_f64) != Some(f64::from(PROTOCOL)) || old_for_a_server {
             let _ = greeting.send(Ok(false));
             return true;
         }

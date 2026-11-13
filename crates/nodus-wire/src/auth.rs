@@ -145,6 +145,18 @@ pub struct Installation {
     pub html_url: String,
 }
 
+/// A repository one of the App's installations reaches, which a server
+/// project can be added from (SRV-120).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubRepo {
+    /// `owner/name`.
+    pub full_name: String,
+    pub private: bool,
+    pub default_branch: String,
+    pub installation_id: u64,
+}
+
 // ---- signing in (SRV-041)
 
 /// Starts a sign-in. While the server has no members, only a request with

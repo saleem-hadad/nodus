@@ -65,6 +65,9 @@ pub struct SpawnOptions {
     pub extra_args: Option<Vec<String>>,
     pub cols: Option<f64>,
     pub rows: Option<f64>,
+    /// Its own token, on a server (SRV-143), which the host makes its hook
+    /// commands send. None in the app.
+    pub session_token: Option<String>,
 }
 
 /// What a process is started as: a program, its arguments and its whole
@@ -248,6 +251,7 @@ pub fn for_create(
         extra_args: action.map(|a| a.args),
         cols: None,
         rows: None,
+        session_token: None,
     }
 }
 

@@ -159,19 +159,25 @@ impl World {
         bare
     }
 
-    /// `project add` against a running server, and what it printed.
-    fn add_project(&self, server: &Server, target: &str) -> String {
-        let added = self
-            .command(&["project", "add", target, "--server", &server.url, "--token", TOKEN])
-            .output()
+    /// A folder on the server added with `projects:add`: a clone of `bare`
+    /// when one is given. Projects from GitHub are tests/github.rs's.
+    async fn add_project(&self, server: &Server, folder: &Path, bare: Option<&Path>) -> Project {
+        if let Some(bare) = bare {
+            git(
+                &self.root(),
+                &["clone", "-q", &bare.to_string_lossy(), &folder.to_string_lossy()],
+            );
+        }
+        let (client, _events) = Client::connect(&server.url, TOKEN).await.unwrap();
+        let added = client
+            .call_as(&Request::ProjectsAdd {
+                repo_path: folder.to_string_lossy().into_owned(),
+                name: bare.map(|_| "shop".to_owned()),
+            })
+            .await
             .unwrap();
-        let out = String::from_utf8_lossy(&added.stdout).into_owned();
-        assert!(
-            added.status.success(),
-            "{out}{}",
-            String::from_utf8_lossy(&added.stderr)
-        );
-        out
+        client.close();
+        added
     }
 }
 
@@ -366,7 +372,8 @@ async fn with_a_host_of_its_own_the_server_runs_everything_there() {
         .unwrap();
     let server = world.serve_with(&["--host-socket", &socket]);
     let bare = world.bare_repo("shop");
-    world.add_project(&server, &format!("file://{}", bare.display()));
+    let clone = world.root().join("projects/shop/main");
+    world.add_project(&server, &clone, Some(&bare)).await;
 
     let (app, mut events) = server.connect().await;
     let projects: Vec<Project> = app.call_as(&Request::ProjectsList {}).await.unwrap();
@@ -382,6 +389,7 @@ async fn with_a_host_of_its_own_the_server_runs_everything_there() {
     let git: Value = app
         .call_as(&Request::GitStatus {
             project_id: project.id.clone(),
+            session_id: None,
         })
         .await
         .unwrap();
@@ -424,12 +432,11 @@ async fn a_session_runs_on_the_server_and_streams_to_the_app() {
     // No member has signed in: a dev token gets in all the same (SRV-060).
     assert!(said.needs_setup && !said.name.is_empty());
 
-    // A repository added by its URL is cloned into the data folder.
+    // A folder on the server, added by its path.
     let bare = world.bare_repo("shop");
-    let printed = world.add_project(&server, &format!("file://{}", bare.display()));
-    assert!(printed.starts_with("Added shop ("), "{printed}");
-    let clone = world.data().join("projects/shop/main");
-    assert!(clone.join("README.md").exists());
+    let clone = world.root().join("projects/shop/main");
+    let added = world.add_project(&server, &clone, Some(&bare)).await;
+    assert_eq!(added.name, "shop");
 
     let (app, mut events) = server.connect().await;
     // Another app, watching nothing.
@@ -437,7 +444,7 @@ async fn a_session_runs_on_the_server_and_streams_to_the_app() {
     let projects: Vec<Project> = app.call_as(&Request::ProjectsList {}).await.unwrap();
     assert_eq!(projects.len(), 1);
     let project = projects[0].clone();
-    assert_eq!(project.name, "shop");
+    assert_eq!(project, added);
     assert_eq!(Path::new(&project.repo_path), clone.canonicalize().unwrap());
 
     // SRV-026: the project's events from now on.
@@ -609,8 +616,8 @@ async fn a_folder_on_the_server_is_added_as_it_is() {
     let server = world.serve();
     let folder = world.root().join("docs");
     std::fs::create_dir_all(&folder).unwrap();
-    let printed = world.add_project(&server, &folder.to_string_lossy());
-    assert!(printed.starts_with("Added docs ("), "{printed}");
+    let added = world.add_project(&server, &folder, None).await;
+    assert_eq!(added.name, "docs");
     // One server to a data folder.
     let second = world.serve_command(&[]).output().unwrap();
     assert_eq!(second.status.code(), Some(1));

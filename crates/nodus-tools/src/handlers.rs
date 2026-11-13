@@ -9,7 +9,7 @@ use nodus_board::archive::{archive_node, drop_node, is_empty};
 use nodus_board::cards::session_list_items;
 use nodus_board::notes::{self, AwayAuthor, NotePatch};
 use nodus_board::{Board, BoardSessions, Clock, Effects, to_card};
-use nodus_domain::{Event, EventSink, Project, SessionCard, SessionKind, SessionStatus, js};
+use nodus_domain::{CreatedBy, Event, EventSink, Project, SessionCard, SessionKind, SessionStatus, js};
 use nodus_store::{BoardState, Store};
 use serde_json::{Value, json};
 
@@ -357,7 +357,16 @@ impl BoardToolHandlers for StoreHandlers {
         let now = (self.clock)();
         let created = self
             .store
-            .update(|state| notes::create_note(state.board_mut(project_id), self_id, note, away.as_ref(), now))
+            .update(|state| {
+                // SRV-183: on a server, the note is the session's starter's.
+                let starter = state.session_starter(self_id).map(str::to_owned);
+                let board = state.board_mut(project_id);
+                let created = notes::create_note(board, self_id, note, away.as_ref(), now)?;
+                if let Some(note) = board.notes.get_mut(&created.id).filter(|_| starter.is_some()) {
+                    note.set_created_by(starter.as_deref());
+                }
+                Ok::<_, notes::NoteError>(created)
+            })
             .map_err(ToolError::of)?;
         self.board_changed(project_id);
         Ok(json!({ "noteId": created.id }))
@@ -412,7 +421,7 @@ impl BoardToolHandlers for StoreHandlers {
     fn list_board(&self, project_id: &str, self_id: &str) -> Result<Value, ToolError> {
         let project = self.project(project_id)?;
         // Read before the state is held: titles come from the transcripts.
-        let disk = self.board.transcripts().scan_repo(&project.repo_path);
+        let disk = self.board.scan_board(&project);
         Ok(self.store.read(|state| {
             let empty = BoardState::default();
             let board = state.board(project_id).unwrap_or(&empty);
@@ -428,9 +437,11 @@ impl BoardToolHandlers for StoreHandlers {
     fn draw_on_board(&self, project_id: &str, self_id: &str, args: &Value) -> Result<Value, ToolError> {
         self.project(project_id)?;
         let now = (self.clock)();
-        let drawn = self
-            .store
-            .update(|state| drawing::draw(state.board_mut(project_id), self_id, args, now))?;
+        let drawn = self.store.update(|state| {
+            // SRV-183: on a server, what it draws is the session's starter's.
+            let starter = state.session_starter(self_id).map(str::to_owned);
+            drawing::draw(state.board_mut(project_id), self_id, starter.as_deref(), args, now)
+        })?;
         self.board_changed(project_id);
         Ok(drawn)
     }

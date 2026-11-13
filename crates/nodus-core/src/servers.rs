@@ -10,9 +10,10 @@ use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
 use nodus_domain::focus::is_focusing;
-use nodus_domain::{BoardSnapshot, Event, Project, ProjectStats, ServerInfo, ServerState};
+use nodus_domain::{BoardSnapshot, CreatedBy, Event, Project, ProjectStats, ServerInfo, ServerState, SessionKind};
 use nodus_platform::secrets::{decode_base64, encode_base64};
-use nodus_remote::{Remote, RemoteEvent, RemoteEvents, Request};
+use nodus_remote::{GithubRepo, Remote, RemoteEvent, RemoteEvents, Request};
+use nodus_sessions::notify::About;
 use nodus_store::ServerRecord;
 use nodus_views::PageResponse;
 use serde_json::Map;
@@ -223,6 +224,50 @@ impl ServersApi<'_> {
         self.nodus.rewatch(&server_id);
         self.nodus.emit(Event::ProjectsChanged);
         Ok(())
+    }
+
+    /// `github:repos` on a server: the repositories its GitHub App's
+    /// installations reach, for **Add from GitHub on <server>…** (SRV-120).
+    pub async fn github_repos(&self, server_id: &str) -> CommandResult<Vec<GithubRepo>> {
+        const CHANNEL: &str = "github:repos";
+        let remote = self.remote(server_id, CHANNEL)?;
+        self.nodus
+            .on_core(async move { remote.call_as(&Request::GithubRepos {}).await })
+            .await
+            .map_err(|err| CommandError::new(CHANNEL, err.message))
+    }
+
+    /// Where the server's GitHub App is installed on more repositories:
+    /// GitHub's page for a new installation; none while it has no App.
+    pub async fn github_install_url(&self, server_id: &str) -> CommandResult<Option<String>> {
+        Ok(self.info(server_id).await?.github.as_ref().map(install_url))
+    }
+
+    /// `projects:add-github` (SRV-120): clones one of the App's
+    /// repositories on the server, as a project of the server's, and puts
+    /// it in this app's grid. Answered once it's cloned.
+    pub async fn add_from_github(&self, server_id: &str, full_name: &str) -> CommandResult<Project> {
+        const CHANNEL: &str = "projects:add-github";
+        let remote = self.remote(server_id, CHANNEL)?;
+        let request = Request::ProjectsAddGithub {
+            full_name: full_name.to_owned(),
+            name: None,
+            color: None,
+        };
+        let added: Project = self
+            .nodus
+            .on_core(async move { remote.call_as(&request).await })
+            .await
+            .map_err(|err| CommandError::new(CHANNEL, err.message))?;
+        self.link(server_id, &added.id).await
+    }
+
+    fn remote(&self, server_id: &str, channel: &'static str) -> CommandResult<Arc<Remote>> {
+        self.nodus
+            .inner
+            .remotes
+            .get(server_id)
+            .ok_or_else(|| CommandError::new(channel, format!("Unknown server {server_id}")))
     }
 
     /// `servers:status`: one server, with how its connection is doing; none
@@ -701,7 +746,19 @@ async fn pass_on(core: Weak<Inner>, server_id: String, mut events: RemoteEvents)
         };
         match event {
             RemoteEvent::Event(event) => {
+                let status = match &event {
+                    Event::Status {
+                        session_id,
+                        status,
+                        live,
+                    } => Some((session_id.clone(), *status, *live)),
+                    _ => None,
+                };
                 let _ = core.events.send(event);
+                if let Some((session_id, status, live)) = status {
+                    let about = starters_card(&core, &server_id, &session_id);
+                    core.notify.server_status_changed(&session_id, status, live, about);
+                }
             }
             // SRV-042: a server's news for every member, as a toast.
             RemoteEvent::Notice(notice) => {
@@ -721,6 +778,9 @@ async fn pass_on(core: Weak<Inner>, server_id: String, mut events: RemoteEvents)
                     server_id: server_id.clone(),
                     state: status.state,
                 });
+                if status.state == ServerState::Connected {
+                    learn_login(&core, &server_id);
+                }
                 if status.state == ServerState::Connected || was_up {
                     let linked: Vec<String> = core.store.read(|state| {
                         state
@@ -738,6 +798,84 @@ async fn pass_on(core: Weak<Inner>, server_id: String, mut events: RemoteEvents)
             }
         }
     }
+}
+
+/// SRV-185: what to say about a server session whose status changed, when
+/// this person started its card (`createdBy` is the login this device signed
+/// in as); none for everyone else's, and while the login isn't known.
+fn starters_card(core: &Inner, server_id: &str, session_id: &str) -> Option<About> {
+    let login = core
+        .store
+        .read(|state| state.server(server_id).and_then(|s| s.login.clone()))?;
+    let boards = lock(&core.remotes.boards);
+    let (project_id, card) = boards.iter().find_map(|(project_id, board)| {
+        let card = board.cards.iter().find(|card| card.node.session_id == session_id)?;
+        Some((project_id, card))
+    })?;
+    let node = &card.node;
+    let mine = node.created_by().is_some_and(|by| by.eq_ignore_ascii_case(&login));
+    // HOST-207: a view's brain or a terminal never notifies.
+    if !mine || node.view_of.as_deref().is_some_and(|v| !v.is_empty()) || node.kind == Some(SessionKind::Terminal) {
+        return None;
+    }
+    let project_name = core
+        .store
+        .read(|state| {
+            state
+                .projects
+                .iter()
+                .find(|p| p.id == *project_id)
+                .map(|p| p.name.clone())
+        })
+        .unwrap_or_default();
+    let meta = card.meta.as_ref();
+    let title = node
+        .title
+        .clone()
+        .filter(|t| !t.is_empty())
+        .or_else(|| meta.map(|m| m.title.clone()).filter(|t| !t.is_empty()))
+        .unwrap_or_else(|| "New session".into());
+    Some(About {
+        project_id: project_id.clone(),
+        project_name,
+        title,
+        last_reply: meta.and_then(|m| m.last_assistant_text.clone()),
+    })
+}
+
+/// The login this device signed in to a server as, once it's connected,
+/// when sign-in didn't save it (SRV-161): its own device in `devices:list`,
+/// for a device's token added by hand. The dev token is no device, so a
+/// server added with it learns none.
+fn learn_login(core: &Arc<Inner>, server_id: &str) {
+    let known = core
+        .store
+        .read(|state| state.server(server_id).map(|s| s.login.is_some()));
+    if known != Some(false) {
+        return;
+    }
+    let Some(remote) = core.remotes.get(server_id) else {
+        return;
+    };
+    let (core, server_id) = (Arc::downgrade(core), server_id.to_owned());
+    tokio::spawn(async move {
+        let answer = remote.call_within(&Request::DevicesList {}, LIST_TIMEOUT).await;
+        let Ok(Ok(devices)) = answer.map(serde_json::from_value::<Vec<nodus_remote::Device>>) else {
+            return;
+        };
+        let Some(device) = devices.into_iter().find(|d| d.current) else {
+            return;
+        };
+        if let Some(core) = core.upgrade() {
+            core.store.update(|state| {
+                let record = state.servers.iter_mut().find(|s| s.id == server_id);
+                if let Some(record) = record.filter(|record| record.login.is_none()) {
+                    record.login = Some(device.login);
+                    record.github_id = Some(device.github_id);
+                }
+            });
+        }
+    });
 }
 
 #[cfg(test)]

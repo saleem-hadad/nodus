@@ -40,6 +40,9 @@ pub enum ServerDialog {
     Connect,
     /// Show Server Projects…: one server's projects, or every server's.
     Projects { server_id: Option<String> },
+    /// Add from GitHub on <server>…: the repositories its GitHub App
+    /// reaches, to add one as a project (SRV-120).
+    Github { server_id: String },
 }
 
 /// How long a toast stays (UI-251).

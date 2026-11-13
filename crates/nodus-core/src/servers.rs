@@ -751,6 +751,13 @@ async fn pass_on(core: Weak<Inner>, server_id: String, mut events: RemoteEvents)
                     server_id: server_id.clone(),
                 });
             }
+            // SRV-200: which server is updating.
+            RemoteEvent::Event(Event::ServerUpdate { status, .. }) => {
+                let _ = core.events.send(Event::ServerUpdate {
+                    server_id: server_id.clone(),
+                    status,
+                });
+            }
             RemoteEvent::Event(event) => {
                 let status = match &event {
                     Event::Status {

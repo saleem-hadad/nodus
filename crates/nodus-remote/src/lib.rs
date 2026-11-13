@@ -58,16 +58,22 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// The longest wait between two attempts (SRV-028).
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
 
+/// How soon after a server has answered `server:update` the next attempt
+/// to connect comes, whatever the backoff says: it's restarting.
+const RECONNECT_AFTER_UPDATE: Duration = Duration::from_millis(1500);
+
 /// How long a call waits for its answer. The calls that ask Claude
 /// something in the background (a section's name, summaries, an action's
 /// draft) take minutes; views may run commands; the rest are quick.
 pub fn timeout_for(request: &Request) -> Duration {
     match request {
-        // A clone takes as long as the repository's size (SRV-120).
+        // A clone takes as long as the repository's size (SRV-120), and an
+        // update as long as downloading the server (SRV-200).
         Request::BoardNameSection { .. }
         | Request::SessionSummarize { .. }
         | Request::ActionsDraft { .. }
-        | Request::ProjectsAddGithub { .. } => Duration::from_secs(600),
+        | Request::ProjectsAddGithub { .. }
+        | Request::ServerUpdate {} => Duration::from_secs(600),
         Request::ViewsCreate { .. }
         | Request::ViewsCall { .. }
         | Request::ViewsRefresh { .. }
@@ -178,6 +184,8 @@ struct Shared {
     /// Locked before `client` wherever both are.
     watched: Mutex<Vec<String>>,
     events: mpsc::UnboundedSender<RemoteEvent>,
+    /// Cuts the wait before the next attempt short.
+    wake: tokio::sync::Notify,
 }
 
 impl Remote {
@@ -199,6 +207,7 @@ impl Remote {
             status,
             watched: Mutex::new(Vec::new()),
             events,
+            wake: tokio::sync::Notify::new(),
         });
         let task = runtime.spawn(keep_connected(Arc::clone(&shared))).abort_handle();
         (Self { shared, task }, RemoteEvents(received))
@@ -305,6 +314,68 @@ impl Remote {
             Ok(Err(err)) => Err(CallError::new(CHANNEL, err.to_string())),
             Err(_) => Err(CallError::new(CHANNEL, TIMED_OUT)),
         }
+    }
+
+    /// `server:update` (SRV-200): the server installs the newest release
+    /// and restarts. Over the connection when there is one. A server that
+    /// speaks another protocol, which this remote won't otherwise talk to
+    /// (SRV-027), gets it over a connection of its own that makes only this
+    /// call and passes on its `server-update` events. Once the server has
+    /// answered, the next attempt to connect comes soon, not after the
+    /// backoff's wait, so the new version shows as soon as it's up.
+    pub async fn update(&self) -> Result<Value, CallError> {
+        let request = Request::ServerUpdate {};
+        let answer = if self.is_connected() {
+            self.call(&request).await
+        } else if self.status().state == ServerState::ProtocolMismatch {
+            self.update_aside(&request).await
+        } else {
+            Err(CallError::new(request.name(), OFFLINE))
+        };
+        if answer.is_ok() {
+            let shared = Arc::clone(&self.shared);
+            self.shared.runtime.spawn(async move {
+                tokio::time::sleep(RECONNECT_AFTER_UPDATE).await;
+                shared.wake.notify_one();
+            });
+        }
+        answer
+    }
+
+    /// `server:update` on a connection of its own, whatever the server's
+    /// protocol: the call's frame and its answer are the same in every one.
+    async fn update_aside(&self, request: &Request) -> Result<Value, CallError> {
+        let connect = Client::connect(&self.shared.url, &self.shared.token);
+        let (client, mut events) = match tokio::time::timeout(CONNECT_TIMEOUT, connect).await {
+            Ok(Ok(connected)) => connected,
+            Ok(Err(ConnectError::Refused(401))) => return Err(CallError::new(request.name(), TOKEN_REFUSED)),
+            Ok(Err(err)) => return Err(CallError::new(request.name(), err.to_string())),
+            Err(_) => return Err(CallError::new(request.name(), TIMED_OUT)),
+        };
+        let answer = tokio::time::timeout(timeout_for(request), client.begin(request));
+        let pass = |event: Event| {
+            if matches!(event, Event::ServerUpdate { .. }) {
+                let _ = self.shared.events.send(RemoteEvent::Event(event));
+            }
+        };
+        let pass_on = async {
+            while let Some(received) = events.next_received().await {
+                if let Received::Event(event) = received {
+                    pass(event);
+                }
+            }
+            std::future::pending::<()>().await;
+        };
+        let answer = tokio::select! {
+            answer = answer => answer.unwrap_or_else(|_| Err(CallError::new(request.name(), TIMED_OUT))),
+            () = pass_on => unreachable!("passing on never ends"),
+        };
+        // What came before the answer, and wasn't passed on yet.
+        while let Some(event) = events.try_next() {
+            pass(event);
+        }
+        client.close();
+        answer
     }
 
     /// Gets these projects' events from now on, and no others' (SRV-026),
@@ -424,8 +495,11 @@ async fn keep_connected(shared: Arc<Shared>) {
             },
         };
         shared.set(status);
-        tokio::time::sleep(backoff(failures)).await;
-        failures = failures.saturating_add(1);
+        tokio::select! {
+            () = tokio::time::sleep(backoff(failures)) => failures = failures.saturating_add(1),
+            // SRV-200: the server is restarting on a new version.
+            () = shared.wake.notified() => failures = 0,
+        }
     }
 }
 
@@ -550,6 +624,79 @@ mod tests {
         let err = remote.call(&Request::ProjectsList {}).await.unwrap_err();
         assert_eq!((err.channel.as_str(), err.message.as_str()), ("projects:list", OFFLINE));
         assert!(!remote.send(&Request::ProjectsList {}));
+        remote.close();
+    }
+
+    /// A server of another protocol that answers `server:update` on its
+    /// WebSocket, as every protocol does, with a `server-update` event first.
+    async fn old_server_that_updates() -> String {
+        use futures_util::{SinkExt as _, StreamExt as _};
+        use tokio_tungstenite::tungstenite::Message;
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            while let Ok((mut stream, _)) = listener.accept().await {
+                let mut head = [0u8; 64];
+                let n = stream.peek(&mut head).await.unwrap_or(0);
+                if !String::from_utf8_lossy(&head[..n]).starts_with("GET /api/ws") {
+                    let mut request = [0u8; 1024];
+                    let _ = stream.read(&mut request).await;
+                    let body = format!(
+                        r#"{{"name":"old","version":"0.1.0","protocol":{},"needsSetup":false}}"#,
+                        PROTOCOL + 1
+                    );
+                    let answer = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    );
+                    let _ = stream.write_all(answer.as_bytes()).await;
+                    continue;
+                }
+                tokio::spawn(async move {
+                    let mut socket = tokio_tungstenite::accept_async(stream).await.unwrap();
+                    while let Some(Ok(Message::Text(text))) = socket.next().await {
+                        let call: Value = serde_json::from_str(text.as_str()).unwrap();
+                        assert_eq!(call["call"], "server:update");
+                        let event = r#"{"ev":"server-update","p":{"status":{"state":"checking"}}}"#;
+                        socket.send(Message::Text(event.into())).await.unwrap();
+                        let answer = format!(
+                            r#"{{"id":{},"ok":{{"state":"restarting","version":"9.0.0"}}}}"#,
+                            call["id"]
+                        );
+                        socket.send(Message::Text(answer.into())).await.unwrap();
+                    }
+                });
+            }
+        });
+        format!("http://{address}")
+    }
+
+    /// SRV-200, SRV-027: a server the app won't talk to for its protocol
+    /// still takes `server:update`, on a connection of its own.
+    #[tokio::test]
+    async fn updates_a_server_of_another_protocol() {
+        let url = old_server_that_updates().await;
+        let (remote, mut events) = Remote::start(&Handle::current(), &url, "t");
+        let next = tokio::time::timeout(Duration::from_secs(10), events.next())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            matches!(&next, RemoteEvent::Status(s) if s.state == ServerState::ProtocolMismatch),
+            "{next:?}"
+        );
+        let answer = remote.update().await.unwrap();
+        assert_eq!(answer, serde_json::json!({ "state": "restarting", "version": "9.0.0" }));
+        let next = tokio::time::timeout(Duration::from_secs(10), events.next())
+            .await
+            .unwrap()
+            .unwrap();
+        let RemoteEvent::Event(Event::ServerUpdate { status, .. }) = next else {
+            panic!("its event: {next:?}");
+        };
+        assert_eq!(status, nodus_domain::ServerUpdateStatus::Checking);
+        // Still another protocol, so nothing else goes through.
+        assert!(!remote.is_connected());
         remote.close();
     }
 

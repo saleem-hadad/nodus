@@ -44,3 +44,27 @@ pub struct ServerInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub github_id: Option<u64>,
 }
+
+/// How updating a server is going (SRV-200), as `ev:server-update` tells
+/// every member's app, and as `server:update` answers when it's done.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "lowercase")]
+pub enum ServerUpdateStatus {
+    /// Asking GitHub for the newest release.
+    Checking,
+    /// It runs the newest release already, `version`: nothing to do.
+    Latest {
+        version: String,
+    },
+    Downloading {
+        version: String,
+        percent: u8,
+    },
+    /// Installed: the server exits now, and systemd starts `version`.
+    Restarting {
+        version: String,
+    },
+    Error {
+        message: String,
+    },
+}

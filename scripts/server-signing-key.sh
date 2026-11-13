@@ -9,15 +9,17 @@
 #   1. generates the keypair in a private temporary folder;
 #   2. sets the repo secret NODUS_SERVER_SIGNING_KEY to the private key
 #      (gh secret set, from standard input, so it's never on a command line);
-#   3. writes the public key into packaging/server/install-server.sh,
-#      between its SIGNING KEY markers, and prints it, for the script and
-#      for the server binary, which builds it in for updates (SRV-200);
+#   3. writes the public key into packaging/server/signing-key.pub.pem,
+#      which the server binary builds in to check its updates (SRV-200),
+#      and into packaging/server/install-server.sh, between its SIGNING KEY
+#      markers, and prints it. The two always match: a test checks it, and
+#      so does the release's signing step;
 #   4. deletes the private key, unless --backup names a file to keep a copy
 #      in (a password manager is a better home for it than a disk).
 #
 # The private key never goes in the repo or on screen. Commit the changed
-# install-server.sh afterwards: the release refuses to sign when the key in
-# the script isn't the secret's.
+# install-server.sh and signing-key.pub.pem afterwards: the release refuses
+# to sign when either key isn't the secret's.
 #
 # Every installed server trusts this key, so replacing it breaks their
 # updates until they run a new install-server.sh. That's why it refuses
@@ -48,7 +50,9 @@ die() { echo "server-signing-key.sh: $*" >&2; exit 1; }
 
 root=$(git rev-parse --show-toplevel 2>/dev/null) || die "run it from inside the nodus repo"
 script="$root/packaging/server/install-server.sh"
+pem="$root/packaging/server/signing-key.pub.pem"
 [ -f "$script" ] || die "there's no $script"
+[ -f "$pem" ] || die "there's no $pem"
 if ! grep -q '^# BEGIN SIGNING KEY$' "$script" || ! grep -q '^# END SIGNING KEY$' "$script"; then
 	die "$script has no SIGNING KEY markers"
 fi
@@ -104,7 +108,8 @@ awk -v keyfile="$work/public.pem" '
 	!skip { print }
 ' "$script" >"$work/install-server.sh"
 cat "$work/install-server.sh" >"$script"
-echo "Wrote the public key into ${script#"$root"/}: commit it."
+cat "$work/public.pem" >"$pem"
+echo "Wrote the public key into ${pem#"$root"/} and ${script#"$root"/}: commit them."
 
 echo
 echo "The public key, for install-server.sh and the server binary (SRV-200):"

@@ -138,6 +138,11 @@ impl GitHub {
         }
     }
 
+    /// GitHub's API: `https://api.github.com`.
+    pub(crate) fn api(&self) -> &str {
+        &self.api
+    }
+
     /// GitHub's own pages: `https://github.com`.
     pub(crate) fn web(&self) -> &str {
         &self.web

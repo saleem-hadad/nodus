@@ -374,7 +374,8 @@ impl Forwarder {
             Event::BoardChanged { project_id } | Event::View { project_id, .. } => self.watched.contains(project_id),
             Event::RunFinished(run) => self.watched.contains(&run.project_id),
             // SRV-105: the pool is the whole server's, so every member's.
-            Event::ProjectsChanged | Event::AccountsChanged { .. } => true,
+            // SRV-200: so is an update.
+            Event::ProjectsChanged | Event::AccountsChanged { .. } | Event::ServerUpdate { .. } => true,
             Event::Menu(_)
             | Event::UpdateStatus(_)
             | Event::OpenCard(_)

@@ -53,6 +53,8 @@ pub(crate) struct Server {
     pub presences: Arc<Presences>,
     /// Whose size each session's terminal follows (SRV-144).
     pub terminals: Terminals,
+    /// Updating the server from the app (SRV-200).
+    pub updates: crate::update::Updates,
     /// Each session's project, once looked up: a session never moves.
     sessions: Mutex<HashMap<String, String>>,
 }
@@ -134,6 +136,7 @@ async fn run(options: ServeOptions, log: &Logger) -> Result<(), String> {
     // SRV-104: the pool moves sessions and frees accounts from now on.
     tokio::spawn(crate::pool::run(Arc::clone(&hosting.pool), nodus.clone()));
 
+    let updates = crate::update::Updates::new(auth.github.api());
     let server = Arc::new(Server {
         nodus: nodus.clone(),
         data: data.clone(),
@@ -143,6 +146,7 @@ async fn run(options: ServeOptions, log: &Logger) -> Result<(), String> {
         hosts: Hosts::new(&tailscale, address.ip()),
         presences: Presences::start(),
         terminals: Terminals::default(),
+        updates,
         sessions: Mutex::new(HashMap::new()),
     });
     tokio::spawn(follow_exits(Arc::downgrade(&server), nodus.subscribe()));
@@ -158,6 +162,8 @@ async fn run(options: ServeOptions, log: &Logger) -> Result<(), String> {
     tokio::select! {
         () = http::accept(Arc::clone(&server), listener) => {}
         () = stopped() => {}
+        // SRV-200: the new version is in place; systemd starts it.
+        () = server.updates.restart.notified() => log.log(&["restarting", "for the new version"]),
     }
     if let Some(late) = late_tailscale {
         late.abort();

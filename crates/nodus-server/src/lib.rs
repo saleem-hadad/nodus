@@ -20,6 +20,8 @@
 //!   from the GitHub App's repositories (SRV-120), and each card gets a
 //!   worktree of its own (SRV-122). Sessions run on the members' pool of
 //!   Claude accounts, moving off one that hits its limit (SRV-100…105).
+//!   A member updates it from the app: it installs the newest signed
+//!   release and exits, for systemd to start it again (SRV-200).
 //! - `setup-code`: a fresh setup code, while the server has no member yet,
 //!   which cancels every earlier code and setup token (SRV-060).
 //! - `host`: the session host, as the app runs it (`Nodus host …`), or on
@@ -48,6 +50,7 @@ mod setup;
 mod socket;
 mod store;
 mod terminals;
+mod update;
 
 use std::io::Write;
 use std::path::PathBuf;

@@ -257,15 +257,18 @@ impl Inner {
         }
         if project.as_ref().and_then(Project::github).is_some() {
             env.extend(helper_env(&hosting.credential_helper()));
-            if let Some(author) = node
+            let bot = hosting.committer().await;
+            // A card nobody started (a development token) commits as the bot.
+            let author = node
                 .as_ref()
                 .and_then(|n| n.created_by())
                 .and_then(|by| hosting.author(by))
-            {
+                .or_else(|| bot.clone());
+            if let Some(author) = author {
                 env.push(("GIT_AUTHOR_NAME".into(), author.name));
                 env.push(("GIT_AUTHOR_EMAIL".into(), author.email));
             }
-            if let Some(bot) = hosting.committer().await {
+            if let Some(bot) = bot {
                 env.push(("GIT_COMMITTER_NAME".into(), bot.name));
                 env.push(("GIT_COMMITTER_EMAIL".into(), bot.email));
             }

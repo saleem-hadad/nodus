@@ -280,7 +280,8 @@ impl Forwarder {
             Event::PtyExit { session_id, .. } => self.open.contains(session_id) || self.watches_session(session_id),
             Event::Status { session_id, .. }
             | Event::AgentStatus { session_id, .. }
-            | Event::Usage { session_id, .. } => self.watches_session(session_id),
+            | Event::Usage { session_id, .. }
+            | Event::Queue { session_id, .. } => self.watches_session(session_id),
             Event::SummarizeProgress(progress) => self.watches_session(&progress.session_id),
             Event::BoardChanged { project_id } | Event::View { project_id, .. } => self.watched.contains(project_id),
             Event::RunFinished(run) => self.watched.contains(&run.project_id),

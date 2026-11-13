@@ -149,6 +149,8 @@ pub struct ChatView {
     pub(crate) sending: bool,
     /// Words for the composer that came without a window (the card's mic).
     pending_text: Option<String>,
+    /// The queue as last seen, to give back what an ended session didn't take.
+    last_queue: Vec<QueuedPrompt>,
     last_status: Option<SessionStatus>,
     focus: FocusHandle,
     _poll: Option<Task<()>>,
@@ -216,6 +218,7 @@ impl ChatView {
             error: None,
             sending: false,
             pending_text: None,
+            last_queue: Vec::new(),
             last_status: None,
             focus: cx.focus_handle(),
             _poll: None,
@@ -308,6 +311,23 @@ impl ChatView {
         } else if !waiting && was_waiting && self.dock.auto {
             self.dock = Dock::default();
         }
+        // CHAT-032: a session that stopped with prompts still queued (QUEUE-012)
+        // gives them back to the composer.
+        let queue = self.queue(cx);
+        let live = self.card(cx).is_some_and(|c| c.live);
+        if queue.is_empty() && !self.last_queue.is_empty() && !live {
+            let left: Vec<String> = std::mem::take(&mut self.last_queue)
+                .into_iter()
+                .map(|p| p.text)
+                .collect();
+            let pending = self.pending_text.get_or_insert_default();
+            if !pending.is_empty() {
+                pending.push_str("\n\n");
+            }
+            pending.push_str(&left.join("\n\n"));
+            self.error = Some("Claude stopped before your queued messages went out. They’re back in the box.".into());
+        }
+        self.last_queue = queue;
         // CHAT-019: the last row carries the working line, so it's measured again.
         if status != self.last_status && !self.rows.is_empty() {
             let last = self.rows.len() - 1;
@@ -392,19 +412,10 @@ impl ChatView {
     }
 
     pub(crate) fn deliver(&mut self, text: String, now: bool, cx: &mut Context<'_, Self>) {
-        let card = self.card(cx);
-        let busy = card
-            .as_ref()
-            .is_some_and(|c| c.live && matches!(c.status, SessionStatus::Working | SessionStatus::Waiting));
         let nodus = self.state.read(cx).nodus.clone();
         self.error = None;
-        if busy && !now {
-            nodus.sessions().enqueue(&self.session_id, &text);
-            cx.notify();
-            return;
-        }
         // CHAT-025: a slash command may open a picker, which only the terminal shows.
-        if text.starts_with('/') {
+        if text.starts_with('/') && (now || !self.busy(cx)) {
             self.dock = Dock { open: true, auto: true };
             self.wake_terminal(cx);
         }
@@ -412,7 +423,11 @@ impl ChatView {
         cx.notify();
         let (project, session) = (self.project_id.clone(), self.session_id.clone());
         cx.spawn(async move |this, cx| {
-            let result = nodus.sessions().send(&project, &session, &text).await;
+            let result = if now {
+                nodus.sessions().send(&project, &session, &text).await.map(|()| None)
+            } else {
+                nodus.sessions().deliver(&project, &session, &text).await.map(Some)
+            };
             let _ = this.update(cx, |this, cx| {
                 this.sending = false;
                 if let Err(err) = result {
@@ -422,6 +437,12 @@ impl ChatView {
             });
         })
         .detach();
+    }
+
+    /// Claude is running and in a turn (or waiting on the user in one).
+    pub(crate) fn busy(&self, cx: &App) -> bool {
+        self.card(cx)
+            .is_some_and(|c| c.live && matches!(c.status, SessionStatus::Working | SessionStatus::Waiting))
     }
 
     /// CHAT-022: Esc for Claude, as in its terminal.
@@ -447,7 +468,9 @@ impl ChatView {
         let at = items.iter().position(|p| p.id == id)?;
         let item = items.remove(at);
         let nodus = self.state.read(cx).nodus.clone();
-        nodus.sessions().set_queue(&self.session_id, items);
+        if let Err(err) = nodus.sessions().set_queue(&self.session_id, items) {
+            self.error = Some(err.ipc_message());
+        }
         Some(item)
     }
 

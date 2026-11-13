@@ -3,8 +3,8 @@
 //! `src/main/ipc.ts`).
 
 use nodus_domain::{
-    AgentInfo, CreateSessionOptions, OpenSessionResult, QueuedPrompt, SessionCard, SessionSearchHit, SummaryResult,
-    TranscriptMessage,
+    AgentInfo, CreateSessionOptions, OpenSessionResult, QueuedPrompt, SessionCard, SessionSearchHit, SessionStatus,
+    SummaryResult, TranscriptMessage,
 };
 use nodus_remote::Request;
 use nodus_sessions::launch;
@@ -21,6 +21,15 @@ const QUEUE_ON_SERVER: &str = "Prompts can’t be queued for a session on a serv
 const QUEUE_NOT_RUNNING: &str = "That session isn’t running";
 /// A prompt of nothing but spaces (QUEUE-013).
 const QUEUE_NOTHING: &str = "There’s nothing to queue";
+
+/// What [`SessionsApi::deliver`] did with a message.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Delivery {
+    /// Waiting in the session's queue for its turn to end.
+    Queued,
+    /// Typed in, or the session resumed with it.
+    Sent,
+}
 
 /// `window.api.sessions`.
 pub struct SessionsApi<'a> {
@@ -339,6 +348,26 @@ impl SessionsApi<'_> {
                     .on("session:transcript")
             })
             .await
+    }
+
+    /// CHAT-021, CHAT-022, CHAT-031: `text` to a session as the user's next
+    /// message. Queued while a running session works or waits on the user,
+    /// so it goes when the turn ends (QUEUE-005); otherwise sent as
+    /// [`SessionsApi::send`] does: typed in, or resuming the session with it.
+    pub async fn deliver(&self, project_id: &str, session_id: &str, text: &str) -> CommandResult<Delivery> {
+        let inner = &self.nodus.inner;
+        let busy = self.nodus.route_session(session_id).is_none()
+            && inner.host.is_live(session_id)
+            && matches!(
+                inner.status.status(session_id),
+                SessionStatus::Working | SessionStatus::Waiting
+            );
+        if busy {
+            self.enqueue(session_id, text)?;
+            return Ok(Delivery::Queued);
+        }
+        self.send(project_id, session_id, text).await?;
+        Ok(Delivery::Sent)
     }
 
     /// Where a session's transcript is, for the chat view to follow

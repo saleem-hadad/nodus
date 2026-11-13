@@ -29,8 +29,11 @@ const LONG_RUN: Duration = Duration::from_secs(30);
 /// What Claude made this recently is drawn; older (⌘Z bringing it back, a
 /// board opened later) pops like anything else (MOTION-025).
 const FRESH_MS: f64 = 15_000.0;
-/// More than this many things at once land with a pop each (MOTION-025).
+/// More than this many things from Claude at once arrive as the user's do
+/// (MOTION-025), and more than this many arriving at once just appear
+/// (MOTION-010): a paste or ⌘Z of a crowd shouldn't fade in dozens of layers.
 const MAX_DRAWN: usize = 40;
+const MAX_POPS: usize = 40;
 /// A batch drawn in about this long, at most (MOTION-020).
 const BUDGET_MS: f64 = 4000.0;
 /// The quickest a batch is drawn, as a share of its own pace.
@@ -308,14 +311,17 @@ impl Moments {
                     .then((a.what == What::Link).cmp(&(b.what == What::Link)))
             });
             let card = board.cards.iter().find(|c| c.node.session_id == session);
-            let title = card.map(present::title).unwrap_or_else(|| {
-                board
-                    .notes
-                    .iter()
-                    .find(|n| n.from.as_deref() == Some(session.as_str()))
-                    .and_then(|n| n.from_title.clone())
-                    .unwrap_or_else(|| "Claude".to_owned())
-            });
+            let title = card.map_or_else(
+                || {
+                    board
+                        .notes
+                        .iter()
+                        .find(|n| n.from.as_deref() == Some(session.as_str()))
+                        .and_then(|n| n.from_title.clone())
+                        .unwrap_or_else(|| "Claude".to_owned())
+                },
+                present::title,
+            );
             let origin = card
                 .filter(|c| !c.node.archived)
                 .and_then(|c| rect_of(&c.node.session_id))
@@ -325,8 +331,9 @@ impl Moments {
                 });
             self.draw(&session, title, origin, items, now);
         }
+        let crowd = pops.len() > MAX_POPS;
         for id in pops {
-            if !self.hushed.remove(&id) {
+            if !self.hushed.remove(&id) && !crowd {
                 self.pops.insert(id, now);
             }
         }
@@ -632,7 +639,8 @@ mod tests {
         let too_many: Vec<BoardShape> = (0..50).map(|i| shape(&format!("t{i}"), Some("u"), 40.0)).collect();
         m.observe(&board(too_many), now, 40.0, false, &|_| None);
         assert!(m.drawings.iter().all(|d| d.session != "u"));
-        assert_eq!(m.arrival("t0", now), Some(Arrival::Pop(0.0)));
+        // Fifty at once is a crowd: they just appear.
+        assert_eq!(m.arrival("t0", now), None);
     }
 
     #[test]

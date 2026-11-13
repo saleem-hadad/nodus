@@ -563,7 +563,7 @@ fn compact(
         .min_h_0()
         .opacity(content)
         .relative()
-        .when(before.is_some(), |d| d.overflow_hidden())
+        .when(before.is_some(), Styled::overflow_hidden)
         .child(
             div()
                 .when(swap < 1.0, |d| {

@@ -1,0 +1,49 @@
+# 15 · Motion and Claude's signature
+
+Added after 1.0.12; 0.9.4 had none of this. Things on the board arrive and leave rather than appear and vanish, statuses change with a little movement, and whatever Claude does wears one look that nothing the user does shares.
+
+Sources:
+- `crates/nodus-ui/src/theme/ai.rs` (Claude's colours, ring, light through words, sparkle, letters)
+- `crates/nodus-ui/src/board/moments.rs` (what just happened on the board, and when), `pen.rs`, `render.rs` (§ moments), `shapes.rs` (outlines and curves drawn in part), `cards/shape.rs`, `cards/session_card.rs`, `cards/status_dot.rs`, `cards/para.rs`, `overlays/ink/links.rs`
+- `crates/nodus-ui/src/views/building.rs`, `reveal.rs`, `card.rs`, `frames.rs`, `swap.rs`
+- `crates/nodus-ui/src/capture/render.rs`
+- `crates/nodus-ui/src/components/presence.rs` and the overlays that leave
+
+## Claude's signature
+
+- **MOTION-001** Claude's look is the section naming glow's (BOARD-089, BOARD-090): its colours turning round a ring (`#0a84ff #5e5ce6 #bf5af2 #ff375f #ff9f0a #bf5af2` clockwise from the top), a light passing through words (1.8s a pass, faint at rest, full as it passes, tinted with the sparkle at its middle), the twinkling sparkle (`#bf5af2`, 1.6s), and words easing in letter by letter out of a blur. It marks what Claude does: drawing, thinking, finishing, naming, building a view, guessing. Nothing the user does wears it.
+- **MOTION-002** Loops (a light through words, a twinkle, a skeleton's light) move on the ambient clock, 20 frames a second (`components::ambient`). One-off moments run at the display's rate and only while they last, and nothing asks for frames once they're over. Under reduced motion the moments don't play, loops hold still and transitions end at once. Parity shots hold everything still and play no moments.
+
+## Arriving and leaving
+
+- **MOTION-010** A card, note, shape or view that comes onto the board pops in: over 300ms it grows from 90% on `--ease-spring` and fades in on `--ease-out` over the first 60%. Not what was there when the board opened, and not what the user made in place: a shape drawn corner to corner, or a sheet dragged off the pad, was seen as it was made. A view that already has its page doesn't pop (its page is the system's, D3). What ⌘Z brings back pops. More than 40 things arriving at once (a paste, a ⌘Z) just appear. What Claude made is drawn instead (MOTION-020).
+- **MOTION-011** An overlay that rises in also leaves: context menus, ⌘K search, the prompt bar's slash menu and colour picker, the bubble, the selection bar and the board's and projects grid's toasts fade out and sink back the way they came over 130ms (`cubic-bezier(0.4, 0, 1, 1)`), instead of vanishing the frame they close. A menu fades and shrinks to 0.98 where it was, and a new one can open over it meanwhile. While leaving, an overlay is drawn as it last was but takes no input. A press goes to what's under it, and none of its rows, buttons or keys act. Search and the bubble show their words as text, since their fields go as they close, and the keyboard moves as it did before. With reduced motion, and in parity shots, an overlay closes at once.
+- **MOTION-012** A status dot fades from one status's colour to the next over 300ms (`ease`), its breath or pulse following (CARD-011…CARD-015).
+- **MOTION-013** When a session stops to ask (working → waiting), its card raises its hand: up 6 units in the first fifth of 560ms on `--ease-out`, then back down on `--ease-spring`, which dips past rest and settles.
+- **MOTION-014** When a card's preview changes (CARD-026), the new one rises 6 units into place and fades in while the old one rises 6 units out and fades, over 280ms on `--ease-out`. Not in the archive.
+
+## Claude drawing
+
+- **MOTION-020** What a session puts on the board with its tools (shapes and links it drew, `by`; notes it wrote, `from`; views it put up, `from`) is drawn in turn, oldest first, a link after the things it joins. A pen sets off from the session's card, travels to each thing (420ms to the first, 300ms between, eased in and out) and draws it: a rectangle, ellipse or diamond in 680ms, words 40ms a letter (260–720ms), a sticker in 420ms, a picture in 480ms, a link, note or view in 520ms. A batch that would take more than 4s at that pace is sped up to 4s, but never past 18% of it. What comes in while a session is drawing waits its turn after the rest. Until its turn a thing isn't shown and can't be pressed.
+- **MOTION-021** A rectangle, ellipse or diamond is drawn as by hand: its outline traced clockwise over the first 70% (eased in and out), from the end of the top-left corner (a rectangle) or the top; its fill fades in from 45% to 85%; its words are typed from 55% on. Words on their own are typed. A sticker is stamped: from 20% of its size and turned −14° to rest on `--ease-spring`, fading in over the first 30%. A picture comes into focus: from a 10-unit blur and 96% to sharp, fading in, on `--ease-out`.
+- **MOTION-022** A link grows from its start along its curve to its end (eased in and out), its arrowhead at the tip. Its label shows once it's drawn.
+- **MOTION-023** A note or a view is put down: from 14 units up and 108%, a note turned −4°, to rest on `--ease-spring`, fading in over the first 35%.
+- **MOTION-024** The pen is a 6px dot of Claude's colours (turning once every 2.4s) where it draws, in a 14px halo at 25%, the twinkling sparkle (16px) above it to the left, and the session's title (up to 32 characters) above it to the right on a pill from `#5e5ce6` to `#bf5af2`, white, 11px semibold. It fades in over 200ms from the session's card (24 and 20 units in from its corner; from the first thing when the card isn't on the board), follows each outline, curve and line of words as it's drawn, rests 350ms after the last and fades over 300ms. It draws over the board's things and never takes the pointer.
+- **MOTION-025** Only what Claude made in the last 15s is drawn; older things that come in (⌘Z, a board opened later) pop (MOTION-010). More than 40 things at once from one session arrive as the user's do (MOTION-010).
+
+## Claude working and finishing
+
+- **MOTION-030** While a Claude session works, the light passes through its compact card's preview every 1.8s, from the preview's colour to `--text-primary`, tinted with the sparkle at its middle. Not a terminal's card, nor an archived one.
+- **MOTION-031** When a run that lasted at least 30s finishes (working or waiting → done, timed from when the session last left done) on a card that isn't expanded, Claude's colours go once round the card over 1.7s, the turn eased in and out, fading in over the first 15% and out over the last 35%: the naming glow (a ring and its blurred halo, 1.5 units outside the card).
+- **MOTION-035** When a session finishes, a light runs up each of its lineage edges (BOARD-025) to its parent over 900ms, eased in and out, in Claude's colours with a fading tail of eight dots. It goes out at the parent over 350ms, as the parent's edge glows in Claude's colours and fades.
+
+## Views, the capture panel
+
+- **MOTION-032** While a view's brain is working and the view has no page yet (VIEW-137), the empty state shows, in the place of 0.9.4's spinning loader, the page being built: four rounded bars 168 units wide (a title at 46% and lines at 92%, 78% and 60%, 9 and 6 units tall, 6 apart). A light crosses them every 1.7s, each bar 16 units behind the one above, its middle tinted with Claude's colours, and rests off them for the last 28%. Below the bars, `Claude is building this view…` has the twinkling sparkle beside it and the light passing through its words. Both move on the ambient clock and hold still in parity shots and under reduced motion. `Watch it work` and the description follow as before.
+- **MOTION-033** When a view drawn without a page gets its first page (`version` 0 → more), the page stays hidden until it has loaded (`loaded`, VIEW-046) and been pictured. The empty state shows meanwhile. Then the picture sharpens out of a 10px blur from the top down over 860ms, eased in and out, with a 2-unit line of Claude's colours and its glow at the edge, fading in and out at the ends. Then the live page takes its place. A page not pictured within 1.5s shows at once. A view that already had its page when first drawn shows it at once, as do pages in parity shots, under reduced motion, and on Windows, where pages aren't pictured.
+- **MOTION-034** While Claude works out where a capture goes (CAP-086), the header shows the sparkle twinkling and `Working out where this goes…` with the light passing through it. While a new guess is in flight with an older one on screen (CAP-088), the 6px dot twinkles through Claude's colours, a turn every 3.2s, instead of resting in the accent colour. When a guess puts a new route in the header (from the thinking line, or a different route from the last guess), its words ease in out of a blur as one phrase: the kind, `in`/`on` and the project, or `Into “…”`. Each letter takes 460ms on `--ease-out`, rising 3px from 5px of blur, staggered 28ms (the whole phrase within 480ms). The swatch, the icon, the fixed labels and the user's own choice don't move. Both loops run on the ambient clock. Parity shots and reduced motion show the end state.
+
+## Known limits
+
+- A view's live page is a native webview (decision D3): the pen, a pop and a ring are under it where they cross it.
+- Driving the app with the test driver, frames come when the driver draws, so moments seen through it move in steps.

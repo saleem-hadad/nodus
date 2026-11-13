@@ -180,7 +180,7 @@ async fn refuses_an_upload_over_50_mb() {
         err.to_string().contains("413") || err.to_string().contains("reset") || err.to_string().contains("pipe"),
         "{err}"
     );
-    let kept = std::fs::read_dir(world.uploads()).map(|dir| dir.count()).unwrap_or(0);
+    let kept = std::fs::read_dir(world.uploads()).map_or(0, Iterator::count);
     assert_eq!(kept, 0);
 }
 

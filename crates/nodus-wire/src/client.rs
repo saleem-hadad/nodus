@@ -63,6 +63,13 @@ pub struct Events {
     notices: mpsc::UnboundedReceiver<Notice>,
 }
 
+/// One of the things [`Events`] hands out.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Received {
+    Event(Event),
+    Notice(Notice),
+}
+
 impl Events {
     /// The next event; none once the connection has closed and every event
     /// before that has been taken.
@@ -85,6 +92,17 @@ impl Events {
     /// The next notice that has arrived, without waiting.
     pub fn try_next_notice(&mut self) -> Option<Notice> {
         self.notices.try_recv().ok()
+    }
+
+    /// The next event or notice, whichever comes first; none once the
+    /// connection has closed and every one has been taken. Events keep
+    /// their order, and so do notices.
+    pub async fn next_received(&mut self) -> Option<Received> {
+        tokio::select! {
+            Some(event) = self.events.recv() => Some(Received::Event(event)),
+            Some(notice) = self.notices.recv() => Some(Received::Notice(notice)),
+            else => None,
+        }
     }
 }
 

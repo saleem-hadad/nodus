@@ -680,6 +680,8 @@ async fn pass_on(core: Weak<Inner>, server_id: String, mut events: RemoteEvents)
             RemoteEvent::Event(event) => {
                 let _ = core.events.send(event);
             }
+            // SRV-042: a server's notices have nowhere to show in the app yet.
+            RemoteEvent::Notice(_) => {}
             RemoteEvent::Status(status) => {
                 if told == Some(status.state) {
                     continue;

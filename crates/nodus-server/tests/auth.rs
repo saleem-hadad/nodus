@@ -22,6 +22,8 @@ use http_body_util::{BodyExt, Full};
 use hyper::body::{Bytes, Incoming};
 use hyper::{Request as HttpRequest, Response};
 use hyper_util::rt::TokioIo;
+use nodus_core::domain::ServerState;
+use nodus_remote::{Remote, RemoteEvent, RemoteEvents};
 use nodus_wire::client::{
     Client, ConnectError, Events, claim_setup, download, github_nonce, hello, poll_sign_in, start_sign_in, upload,
 };
@@ -554,6 +556,19 @@ async fn signed_in(
     }
 }
 
+/// The first of a remote's events that's `wanted`, skipping the rest.
+async fn remote_heard(events: &mut RemoteEvents, wanted: impl Fn(&RemoteEvent) -> bool) -> RemoteEvent {
+    loop {
+        let event = tokio::time::timeout(WAIT, events.next())
+            .await
+            .expect("the remote's event")
+            .expect("the remote open");
+        if wanted(&event) {
+            return event;
+        }
+    }
+}
+
 async fn call<T: serde::de::DeserializeOwned>(client: &Client, request: Request) -> T {
     client.call_as(&request).await.unwrap()
 }
@@ -925,6 +940,14 @@ async fn devices_are_told_of_new_ones_and_close_when_revoked() {
     let (studio, mut studio_events) = server.connect(&token).await;
     // A socket answers once it's being served, so notices reach it.
     let _: Vec<Member> = call(&studio, Request::MembersList {}).await;
+    // The app's remote too, which hands them out among its events.
+    let (remote, mut remote_events) = Remote::start(&tokio::runtime::Handle::current(), &server.url, &token);
+    remote_heard(
+        &mut remote_events,
+        |event| matches!(event, RemoteEvent::Status(status) if status.state == ServerState::Connected),
+    )
+    .await;
+    remote.call(&Request::MembersList {}).await.unwrap();
 
     // SRV-042: a new device signing in tells every connected member.
     let (laptop_token, _, laptop) = signed_in(github, &server, None, "Laptop", OCTO).await;
@@ -934,6 +957,9 @@ async fn devices_are_told_of_new_ones_and_close_when_revoked() {
         .unwrap();
     assert_eq!(notice.kind, DEVICE_SIGNED_IN);
     assert_eq!(notice.message, "Octo Cat signed in on Laptop");
+    let heard = remote_heard(&mut remote_events, |event| matches!(event, RemoteEvent::Notice(_))).await;
+    assert_eq!(heard, RemoteEvent::Notice(notice));
+    remote.close();
     let (laptop_app, _) = server.connect(&laptop_token).await;
     let devices: Vec<Device> = call(&studio, Request::DevicesList {}).await;
     let names: Vec<(&str, bool)> = devices.iter().map(|d| (d.name.as_str(), d.current)).collect();

@@ -5,9 +5,9 @@
 //! A [`Remote`] keeps itself connected. It checks the server's hello first,
 //! and talks only to one with this app's [`PROTOCOL`]; then it opens the
 //! WebSocket with the device's token, sends `watch` for the projects it was
-//! asked to watch, and hands out the server's events. When the connection
-//! drops it tries again after 1, 2, 4… seconds, at most every 30, and on
-//! reconnecting it sends `watch` again before anything else. Its
+//! asked to watch, and hands out the server's events and notices. When the
+//! connection drops it tries again after 1, 2, 4… seconds, at most every
+//! 30, and on reconnecting it sends `watch` again before anything else. Its
 //! [`Status`] says how that's going, and every change of it arrives in
 //! [`RemoteEvents`] among the events.
 //!
@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use nodus_domain::{Event, ServerState};
-use nodus_wire::client::{Client, ConnectError, Events, hello};
+use nodus_wire::client::{Client, ConnectError, Events, Received, hello};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use tokio::runtime::Handle;
@@ -27,7 +27,7 @@ use tokio::sync::{mpsc, watch};
 use tokio::task::AbortHandle;
 
 pub use nodus_wire::client::{DISCONNECTED, FileBody};
-pub use nodus_wire::{CallError, Hello, MAX_UPLOAD, NOT_AVAILABLE, PROTOCOL, Request, Upload};
+pub use nodus_wire::{CallError, Hello, MAX_UPLOAD, NOT_AVAILABLE, Notice, PROTOCOL, Request, Upload};
 
 /// What a call fails with while the server isn't connected.
 pub const OFFLINE: &str = "Not connected to the server";
@@ -95,6 +95,9 @@ pub enum RemoteEvent {
     Status(Status),
     /// One of the server's events.
     Event(Event),
+    /// The server's news for every member, such as a device signing in
+    /// (SRV-042).
+    Notice(Notice),
 }
 
 /// A [`Remote`]'s events and status changes, across reconnects. None once
@@ -429,8 +432,11 @@ async fn connected(shared: &Shared, said: Hello, client: Client, mut events: Eve
             hello: Some(said),
             error: None,
         });
-        while let Some(event) = events.next().await {
-            let _ = shared.events.send(RemoteEvent::Event(event));
+        while let Some(received) = events.next_received().await {
+            let _ = shared.events.send(match received {
+                Received::Event(event) => RemoteEvent::Event(event),
+                Received::Notice(notice) => RemoteEvent::Notice(notice),
+            });
         }
     }
     let mut current = lock(&shared.client);

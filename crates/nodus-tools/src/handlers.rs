@@ -176,13 +176,15 @@ impl BoardToolHandlers for StoreHandlers {
         })
     }
 
-    /// TOOL-033
+    /// TOOL-033. Server projects aren't this app's to write on: their
+    /// boards are on their servers (SRV-160).
     fn list_projects(&self, own: &str) -> Result<Value, ToolError> {
         Ok(self.store.read(|state| {
             Value::Array(
                 state
                     .projects
                     .iter()
+                    .filter(|p| p.server.is_none())
                     .map(|p| {
                         let mut item = json!({ "id": p.id, "name": p.name, "folder": p.repo_path });
                         if p.archived == Some(true) {
@@ -227,7 +229,10 @@ impl BoardToolHandlers for StoreHandlers {
     }
 
     fn find_project(&self, reference: Option<&Value>) -> Result<String, ToolError> {
-        self.store.read(|state| find_project(&state.projects, reference))
+        self.store.read(|state| {
+            let local: Vec<Project> = state.projects.iter().filter(|p| p.server.is_none()).cloned().collect();
+            find_project(&local, reference)
+        })
     }
 
     /// TOOL-035

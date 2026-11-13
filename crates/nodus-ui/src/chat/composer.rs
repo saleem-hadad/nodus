@@ -24,15 +24,14 @@ const COMPOSER_W: f32 = 780.;
 impl ChatView {
     /// CHAT-020: Return sends (or queues while Claude works), ⌘Return sends
     /// at once, Esc stops Claude; ⇧Return is a new line.
-    fn composer_key(&mut self, e: &KeyDownEvent, window: &mut Window, cx: &mut Context<'_, Self>) {
+    fn composer_key(&mut self, e: &KeyDownEvent, _window: &mut Window, cx: &mut Context<'_, Self>) {
         let k = &e.keystroke;
         let m = k.modifiers;
         let busy = self.card(cx).is_some_and(|c| c.live && c.status != SessionStatus::Done);
         match k.key.as_str() {
-            "enter" if !m.shift && !m.alt => {
-                cx.stop_propagation();
-                self.submit(m.platform || m.control, window, cx);
-            }
+            // The field sends on Return itself (InputEvent::PressEnter); it
+            // goes no further.
+            "enter" if !m.shift && !m.alt => cx.stop_propagation(),
             "escape" if busy => {
                 cx.stop_propagation();
                 self.interrupt(cx);
@@ -242,7 +241,7 @@ impl ChatView {
             .items_center()
             .justify_center()
             .bg(bg)
-            .when(!empty, |d| d.cursor_pointer())
+            .when(!empty, Styled::cursor_pointer)
             .child(glyph)
             .tooltip(native_tooltip(tip.into()))
             .on_click(move |e, window, cx| {
@@ -269,7 +268,7 @@ impl ChatView {
             .child(icon(Icon::Square, 11. * self.scale, 2.6, t.text_secondary))
             .tooltip(native_tooltip("Stop Claude (Esc)".into()))
             .on_click(move |_, _, cx| {
-                let _ = me.update(cx, |this, cx| this.interrupt(cx));
+                let _ = me.update(cx, ChatView::interrupt);
             })
             .into_any_element()
     }

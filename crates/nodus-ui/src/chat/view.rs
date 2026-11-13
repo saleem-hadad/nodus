@@ -201,11 +201,17 @@ impl ChatView {
                 }
                 _ => {}
             }),
-            cx.subscribe_in(&composer, window, |this, _, e: &InputEvent, _, cx| {
-                if matches!(e, InputEvent::Change) && this.error.is_some() {
+            cx.subscribe_in(&composer, window, |this, _, e: &InputEvent, window, cx| match e {
+                InputEvent::Change if this.error.is_some() => {
                     this.error = None;
                     cx.notify();
                 }
+                // CHAT-020: Return sends (or queues), ⌘Return sends at once.
+                InputEvent::PressEnter {
+                    secondary,
+                    shift: false,
+                } => this.submit(*secondary, window, cx),
+                _ => {}
             }),
         ];
         let queue = nodus.sessions().queue(&session_id);

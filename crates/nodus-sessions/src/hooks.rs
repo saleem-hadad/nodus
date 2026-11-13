@@ -434,6 +434,12 @@ pub trait SessionInput: Send + Sync {
     fn hook(&self, event: &str, session_id: &str, payload: &Value, at: Option<f64>);
     /// A write to a session, before it's sent, or an `input` replayed from a welcome with its recorded time.
     fn user_input(&self, session_id: &str, data: &str, at: Option<f64>);
+    /// Whether the session reads `waiting` (HOST-133): something asks the
+    /// user, so no queued prompt is typed into it (QUEUE-011). Never, for
+    /// one that doesn't keep status.
+    fn is_waiting(&self, _session_id: &str) -> bool {
+        false
+    }
 }
 
 impl SessionInput for StatusMachine {
@@ -451,6 +457,10 @@ impl SessionInput for StatusMachine {
 
     fn user_input(&self, session_id: &str, data: &str, at: Option<f64>) {
         self.note_user_input(session_id, data, at);
+    }
+
+    fn is_waiting(&self, session_id: &str) -> bool {
+        self.status(session_id) == SessionStatus::Waiting
     }
 }
 

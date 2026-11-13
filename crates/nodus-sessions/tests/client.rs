@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use nodus_domain::{Event, EventSink, SessionStatus};
+use nodus_domain::{Event, EventSink, QueuedPrompt, SessionStatus};
 use nodus_host_proto::{HostPaths, MessageReader, PROTOCOL, PROTOCOL_0_9_4};
 use nodus_sessions::client::{
     BoardTools, BoxFuture, ClientError, HostClient, HostInfo, HostLauncher, HostPrompt, ProcessLauncher, ReplaceChoice,
@@ -27,15 +27,27 @@ const TIMEOUT: Duration = Duration::from_secs(15);
 // What the client tells the rest of the app, in one ordered record.
 
 #[derive(Default)]
-struct Record(Mutex<Vec<String>>);
+struct Record {
+    lines: Mutex<Vec<String>>,
+    /// The sessions the status machine says are waiting on the user.
+    waiting: Mutex<Vec<String>>,
+}
 
 impl Record {
     fn push(&self, line: String) {
-        self.0.lock().unwrap().push(line);
+        self.lines.lock().unwrap().push(line);
     }
 
     fn lines(&self) -> Vec<String> {
-        self.0.lock().unwrap().clone()
+        self.lines.lock().unwrap().clone()
+    }
+
+    fn set_waiting(&self, session_id: &str, waiting: bool) {
+        let mut sessions = self.waiting.lock().unwrap();
+        sessions.retain(|id| id != session_id);
+        if waiting {
+            sessions.push(session_id.to_owned());
+        }
     }
 
     async fn wait_for(&self, line: &str) {
@@ -62,6 +74,9 @@ impl SessionInput for Status {
     fn user_input(&self, session_id: &str, data: &str, at: Option<f64>) {
         self.0.push(format!("input {session_id} {data:?} {at:?}"));
     }
+    fn is_waiting(&self, session_id: &str) -> bool {
+        self.0.waiting.lock().unwrap().iter().any(|id| id == session_id)
+    }
 }
 
 struct Sink(Arc<Record>);
@@ -71,6 +86,10 @@ impl EventSink for Sink {
         match event {
             Event::PtyData { session_id, data } => self.0.push(format!("data {session_id} {data:?}")),
             Event::PtyExit { session_id, exit_code } => self.0.push(format!("exit {session_id} {exit_code}")),
+            Event::Queue { session_id, items } => {
+                let ids: Vec<&str> = items.iter().map(|item| item.id.as_str()).collect();
+                self.0.push(format!("queue {session_id} [{}]", ids.join(",")));
+            }
             other => self.0.push(format!("{other:?}")),
         }
     }
@@ -1105,4 +1124,262 @@ async fn node_host_a_running_0_9_4_host_is_offered_to_be_stopped() {
     }
     let log = std::fs::read_to_string(&paths.log).unwrap();
     assert!(log.contains("stopping every session"), "{log}");
+}
+
+// ---------------------------------------------------------------------------
+// The prompt queue (QUEUE-001–012)
+
+fn queued(id: &str, text: &str) -> QueuedPrompt {
+    QueuedPrompt {
+        id: id.into(),
+        text: text.into(),
+        at: 1_762_600_000_000.0,
+    }
+}
+
+/// As the wire reads it.
+fn queued_json(id: &str, text: &str) -> Value {
+    json!({"id": id, "text": text, "at": 1_762_600_000_000u64})
+}
+
+/// A client adopted by a fake host that keeps queues, with these sessions.
+async fn adopted_keeping_queues(setup: &Setup, sessions: Value) -> (HostClient, FakeConn) {
+    let host = setup.fake_host();
+    let client = setup.client(Arc::new(Nothing));
+    let connecting = tokio::spawn({
+        let client = client.clone();
+        async move { client.connect_host(false).await }
+    });
+    let mut conn = host.accept().await;
+    let mut welcome = welcome(sessions);
+    welcome["queue"] = json!(true);
+    conn.greet(welcome).await;
+    connecting.await.unwrap().unwrap();
+    (client, conn)
+}
+
+fn paste(text: &str) -> Value {
+    json!({"type": "write", "sessionId": "s1", "data": format!("\u{1b}[200~{text}\u{1b}[201~")})
+}
+
+fn enter() -> Value {
+    json!({"type": "write", "sessionId": "s1", "data": "\r"})
+}
+
+fn stop(payload: &Value) -> Value {
+    json!({"type": "hook", "sessionId": "s1", "event": "Stop", "payload": payload})
+}
+
+#[tokio::test]
+async fn queue_001_004_009_adopts_each_sessions_queue_from_a_host_that_keeps_them() {
+    let setup = Setup::new();
+    let mut s1 = session("s1", "p1", "");
+    s1["history"] = json!([{"hook": "UserPromptSubmit", "payload": {}, "at": 1000}]);
+    s1["queue"] = json!([queued_json("q1", "one"), queued_json("q2", "two")]);
+    let (client, _conn) = adopted_keeping_queues(&setup, json!([s1, session("s2", "p1", "")])).await;
+    assert!(client.host_keeps_queues());
+    assert_eq!(client.queue("s1"), vec![queued("q1", "one"), queued("q2", "two")]);
+    assert_eq!(client.queue("s2"), vec![]);
+    // After its status is brought up to date; none for a session without one.
+    assert_eq!(
+        setup.record.lines(),
+        vec![
+            "started s1 done",
+            "hook s1 UserPromptSubmit {} Some(1000.0)",
+            "queue s1 [q1,q2]",
+            "started s2 done",
+        ]
+    );
+}
+
+#[tokio::test]
+async fn queue_001_an_older_host_doesnt_keep_queues() {
+    let setup = Setup::new();
+    let (client, _conn) = adopted(&setup, json!([session("s1", "p1", "")])).await;
+    assert!(!client.host_keeps_queues());
+}
+
+#[tokio::test]
+async fn queue_009_010_sets_a_queue_here_and_in_a_host_that_keeps_them() {
+    let setup = Setup::new();
+    let (client, mut conn) = adopted_keeping_queues(&setup, json!([session("s1", "p1", "")])).await;
+    assert!(client.set_queue("s1", vec![queued("q1", "one"), queued("q2", "two")]));
+    // At once here, so another can be added straight after.
+    assert_eq!(client.queue("s1"), vec![queued("q1", "one"), queued("q2", "two")]);
+    assert_eq!(
+        conn.recv().await,
+        Some(
+            json!({"type": "queue-set", "sessionId": "s1", "items": [queued_json("q1", "one"), queued_json("q2", "two")]})
+        )
+    );
+    // The host's word on it: the same is no change; then it handed q1 over.
+    conn.send(&[
+        json!({"type": "queue", "sessionId": "s1", "items": [queued_json("q1", "one"), queued_json("q2", "two")]}),
+        json!({"type": "queue", "sessionId": "s1", "items": [queued_json("q2", "two")]}),
+        json!({"type": "queue", "sessionId": "nobody", "items": [queued_json("q9", "x")]}),
+    ])
+    .await;
+    setup.record.wait_for("queue s1 [q2]").await;
+    assert_eq!(client.queue("s1"), vec![queued("q2", "two")]);
+    assert_eq!(
+        setup.record.lines(),
+        vec!["started s1 done", "queue s1 [q1,q2]", "queue s1 [q2]"]
+    );
+    // Not for a session that isn't live; nothing goes to the host.
+    assert!(!client.set_queue("nobody", vec![queued("q3", "three")]));
+    assert_eq!(client.queue("nobody"), vec![]);
+    assert!(client.set_queue("s1", vec![]));
+    assert_eq!(
+        conn.recv().await,
+        Some(json!({"type": "queue-set", "sessionId": "s1", "items": []}))
+    );
+    setup.record.wait_for("queue s1 []").await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn queue_011_without_a_host_that_keeps_queues_the_first_is_typed_when_the_turn_ends() {
+    let setup = Setup::new();
+    let (client, mut conn) = adopted(&setup, json!([session("s1", "p1", "")])).await;
+    assert!(client.set_queue("s1", vec![queued("q1", "fix it"), queued("q2", "then this")]));
+    setup.record.wait_for("queue s1 [q1,q2]").await;
+    // A subagent's stop isn't the turn's end.
+    conn.send(&[stop(&json!({"agent_id": "a1"})), stop(&json!({}))]).await;
+    // Nothing went to the host before the paste: it doesn't know queue-set.
+    assert_eq!(conn.recv().await, Some(paste("fix it")));
+    assert_eq!(conn.recv().await, Some(enter()));
+    assert_eq!(client.queue("s1"), vec![queued("q2", "then this")]);
+    assert_eq!(
+        setup.record.lines(),
+        vec![
+            "started s1 done",
+            "queue s1 [q1,q2]",
+            r#"hook s1 Stop {"agent_id":"a1"} None"#,
+            "hook s1 Stop {} None",
+            "queue s1 [q2]",
+            r#"input s1 "\u{1b}[200~fix it\u{1b}[201~" None"#,
+            r#"input s1 "\r" None"#,
+        ]
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn queue_011_nothing_is_typed_while_the_session_waits_on_the_user() {
+    let setup = Setup::new();
+    let (client, mut conn) = adopted(&setup, json!([session("s1", "p1", "")])).await;
+    client.set_queue("s1", vec![queued("q1", "fix it")]);
+    setup.record.set_waiting("s1", true);
+    conn.send(&[stop(&json!({}))]).await;
+    setup.record.wait_for("hook s1 Stop {} None").await;
+    assert_eq!(client.queue("s1"), vec![queued("q1", "fix it")]);
+    // Its next turn's end, once answered: the first thing written is the paste.
+    setup.record.set_waiting("s1", false);
+    conn.send(&[stop(&json!({}))]).await;
+    assert_eq!(conn.recv().await, Some(paste("fix it")));
+    assert_eq!(conn.recv().await, Some(enter()));
+    assert_eq!(client.queue("s1"), vec![]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn queue_011_with_a_host_that_keeps_queues_what_it_didnt_hand_over_is_typed() {
+    let setup = Setup::new();
+    let mut s1 = session("s1", "p1", "");
+    s1["queue"] = json!([queued_json("q1", "fix it"), queued_json("q2", "then this")]);
+    let (client, mut conn) = adopted_keeping_queues(&setup, json!([s1])).await;
+    // A Stop reaching the app means the host didn't hand one over (a hook
+    // from an older app's process, or the queue changed on the way).
+    conn.send(&[stop(&json!({}))]).await;
+    assert_eq!(
+        conn.recv().await,
+        Some(json!({"type": "queue-set", "sessionId": "s1", "items": [queued_json("q2", "then this")]}))
+    );
+    assert_eq!(conn.recv().await, Some(paste("fix it")));
+    assert_eq!(conn.recv().await, Some(enter()));
+    assert_eq!(client.queue("s1"), vec![queued("q2", "then this")]);
+    setup.record.wait_for("queue s1 [q2]").await;
+}
+
+#[tokio::test]
+async fn queue_012_a_session_that_ends_takes_its_queue_with_it() {
+    let setup = Setup::new();
+    let mut s1 = session("s1", "p1", "");
+    s1["queue"] = json!([queued_json("q1", "one")]);
+    let (client, mut conn) = adopted_keeping_queues(&setup, json!([s1, session("s2", "p1", "")])).await;
+    conn.send(&[
+        json!({"type": "exit", "sessionId": "s1", "exitCode": 0}),
+        json!({"type": "exit", "sessionId": "s2", "exitCode": 0}),
+    ])
+    .await;
+    setup.record.wait_for("exit s2 0").await;
+    assert_eq!(
+        setup.record.lines(),
+        vec![
+            "started s1 done",
+            "queue s1 [q1]",
+            "started s2 done",
+            "ended s1",
+            "exit s1 0",
+            "queue s1 []",
+            "ended s2",
+            "exit s2 0",
+        ]
+    );
+    assert_eq!(client.queue("s1"), vec![]);
+    assert!(!client.set_queue("s1", vec![queued("q2", "two")]));
+}
+
+/// QUEUE-005, QUEUE-006, QUEUE-008 end to end: the app queues a prompt in
+/// the Rust host, and the session's Stop hook command, run as Claude Code
+/// runs it, prints the host's answer handing it over.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn queue_005_008_the_stop_hook_command_gets_the_queued_prompt_from_the_rust_host() {
+    let setup = Setup::new();
+    let (client, _launcher) = in_process(&setup);
+    let go = setup.user_data.with_file_name("go");
+    let endpoint = Arc::clone(&setup.endpoint);
+    let go_path = go.to_string_lossy().into_owned();
+    let command = move |opts: &SpawnOptions, _: HostInfo| {
+        let settings: Value = serde_json::from_str(&endpoint.settings(false)).unwrap();
+        let stop = settings["hooks"]["Stop"][0]["hooks"][0]["command"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let mut env = endpoint.env(&opts.session_id);
+        env.insert("PATH".into(), "/usr/bin:/bin".into());
+        env.insert("GO".into(), go_path);
+        env.insert("STOP".into(), stop);
+        Ok(Command {
+            file: "/bin/sh".into(),
+            args: vec![
+                "-c".into(),
+                r#"while [ ! -e "$GO" ]; do sleep 0.05; done; printf '{"session_id":"s1"}' | sh -c "$STOP"; printf '\n--done--\n'; sleep 30"#.into(),
+            ],
+            env,
+        })
+    };
+    client.spawn_session(&opts("s1"), command).await.unwrap();
+    assert!(client.host_keeps_queues());
+    assert!(client.set_queue("s1", vec![queued("q1", "héllo there")]));
+    // The queue-set reaches the host before the hook does.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    std::fs::write(&go, "").unwrap();
+
+    let deadline = Instant::now() + TIMEOUT;
+    while !client.snapshot("s1").contains("--done--") {
+        assert!(Instant::now() < deadline, "{:?}", client.snapshot("s1"));
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let printed = client.snapshot("s1");
+    let printed = printed.lines().next().unwrap().trim_end();
+    assert_eq!(
+        serde_json::from_str::<Value>(printed).unwrap(),
+        json!({"decision": "block", "reason": nodus_domain::queued_reason("héllo there")})
+    );
+    setup.record.wait_for("queue s1 []").await;
+    let lines = setup.record.lines();
+    assert!(
+        lines.contains(&r#"hook s1 UserPromptSubmit {"prompt":"héllo there","nodusQueued":true} None"#.to_owned()),
+        "{lines:?}"
+    );
+    assert!(!lines.iter().any(|line| line.starts_with("hook s1 Stop")), "{lines:?}");
+    client.stop_all().await;
 }

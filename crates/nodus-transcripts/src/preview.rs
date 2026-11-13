@@ -63,6 +63,7 @@ pub fn read_transcript(file: &Path, agent: bool) -> Result<Vec<TranscriptMessage
                             tools: None,
                             calls: None,
                             notice: Some(true),
+                            by: None,
                         });
                         return;
                     }
@@ -77,6 +78,7 @@ pub fn read_transcript(file: &Path, agent: bool) -> Result<Vec<TranscriptMessage
                         tools: None,
                         calls: None,
                         notice: None,
+                        by: None,
                     });
                 }
                 Some("assistant") => {
@@ -100,6 +102,7 @@ pub fn read_transcript(file: &Path, agent: bool) -> Result<Vec<TranscriptMessage
                             tools: Some(Vec::new()),
                             calls: agent.then(Vec::new),
                             notice: None,
+                            by: None,
                         });
                         messages.len() - 1
                     });

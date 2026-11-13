@@ -506,6 +506,36 @@ impl AppState {
         .detach();
     }
 
+    /// A server board's ink, a stroke at a time (SRV-184): strokes added or
+    /// changed, and strokes gone, on top of the board as the store has it,
+    /// so what someone else drew meanwhile stays. Then saved the same way.
+    pub fn change_ink(&mut self, changed: Vec<nodus_domain::InkStroke>, gone: Vec<String>, cx: &mut Context<'_, Self>) {
+        let Some(board) = self.board.as_mut() else { return };
+        if changed.is_empty() && gone.is_empty() {
+            return;
+        }
+        board.ink = nodus_board::drawing::rebase_ink(&board.ink, &[], &changed)
+            .into_iter()
+            .filter(|s| !gone.contains(&s.id))
+            .collect();
+        let project_id = board.project.id.clone();
+        cx.notify();
+        let nodus = self.nodus.clone();
+        let rt = crate::board::core_rt(cx);
+        cx.spawn(async move |_, _| {
+            crate::board::on_core(&rt, async move {
+                if !gone.is_empty() {
+                    nodus.board().remove_ink(&project_id, &gone).await;
+                }
+                if !changed.is_empty() {
+                    nodus.board().add_ink(&project_id, &changed).await;
+                }
+            })
+            .await;
+        })
+        .detach();
+    }
+
     /// Shapes, new or changed: on the board at once, then saved (SHAPE-030).
     pub fn save_shapes(&mut self, shapes: Vec<nodus_domain::BoardShape>, cx: &mut Context<'_, Self>) {
         let Some(board) = self.board.as_mut() else { return };

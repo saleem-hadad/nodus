@@ -459,6 +459,7 @@ impl AgentViewer {
                             id: ("av-msg", i).into(),
                             message: m,
                             author: Some(agent_author(m, i, &agent.agent_type)),
+                            sender: None,
                             highlight: &[],
                             found: false,
                             found_call: None,

@@ -350,9 +350,18 @@ impl Nodus {
                 move |transcript| pending_work.has_pending_work(transcript),
             );
             let endpoint = Arc::new(HookEndpoint::new());
+            // SRV-142: a server records who sent each prompt as its hook comes.
+            let session_input: Arc<dyn hooks::SessionInput> = if config.hosting.is_some() {
+                Arc::new(crate::prompts::PromptInput {
+                    status: status.clone(),
+                    core: core.clone(),
+                })
+            } else {
+                Arc::new(status.clone())
+            };
             let wiring = Wiring {
                 events: Arc::clone(&sink),
-                status: Arc::new(status.clone()),
+                status: session_input,
                 endpoint: Arc::clone(&endpoint),
                 board_tools: Arc::new(McpRelay(server)),
                 prompt: Arc::new(ShellPrompt(Arc::clone(&shell))),

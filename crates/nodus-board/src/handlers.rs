@@ -305,6 +305,19 @@ impl Board {
             .update(|state| state.board_mut(project_id).ink = Some(strokes));
     }
 
+    /// `board:add-ink`: strokes added or changed by id, on top of the ink
+    /// as it is (SRV-184).
+    pub fn add_ink(&self, project_id: &str, strokes: &Value) {
+        self.store
+            .update(|state| crate::ink::add_ink(state.board_mut(project_id), strokes));
+    }
+
+    /// `board:remove-ink`: strokes gone, by id (SRV-184).
+    pub fn remove_ink(&self, project_id: &str, ids: &[String]) {
+        self.store
+            .update(|state| crate::ink::remove_ink(state.board_mut(project_id), ids));
+    }
+
     /// `board:save-archive`: kept as given (SESS-106).
     pub fn save_archive(&self, project_id: &str, rect: Rect) {
         self.store.update(|state| state.board_mut(project_id).archive = rect);

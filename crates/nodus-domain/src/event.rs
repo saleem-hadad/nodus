@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    ActionRunResult, CaptureContext, CaptureShortcut, ClipboardOffer, MenuCommand, OpenCardRequest, QueuedPrompt,
-    ServerState, SessionStatus, SessionUsage, SummarizeProgress, TabAttachment, UpdateStatus, ViewEvent,
+    ActionRunResult, CaptureContext, CaptureShortcut, ClipboardOffer, MenuCommand, OpenCardRequest, Presence,
+    QueuedPrompt, ServerState, SessionStatus, SessionUsage, SummarizeProgress, TabAttachment, UpdateStatus, ViewEvent,
 };
 
 /// One event, named after its channel.
@@ -95,6 +95,14 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "String::is_empty")]
         server_id: String,
     },
+    /// `ev:presence`: everyone else on a server board (SRV-180). A server
+    /// sends it to each connection on the board, leaving that connection
+    /// out; it never passes through the core's own events there.
+    Presence(Presence),
+    /// `ev:pty-size`: a server session's terminal is this size now (SRV-144).
+    /// It follows whoever typed last, so a viewer's terminal may be given a
+    /// size it didn't ask for.
+    PtySize { session_id: String, cols: f64, rows: f64 },
 }
 
 /// `Partial<CaptureContext>`: the parts of the context that arrived late.
@@ -236,6 +244,23 @@ mod tests {
                     ..CaptureContextPatch::default()
                 }),
                 r#"{"ev":"capture-context","p":{"app":"Safari"}}"#,
+            ),
+            // SRV-180
+            (
+                Event::Presence(Presence {
+                    project: "p1".into(),
+                    peers: Vec::new(),
+                }),
+                r#"{"ev":"presence","p":{"project":"p1","peers":[]}}"#,
+            ),
+            // SRV-144
+            (
+                Event::PtySize {
+                    session_id: "s1".into(),
+                    cols: 120.0,
+                    rows: 40.0,
+                },
+                r#"{"ev":"pty-size","p":{"sessionId":"s1","cols":120,"rows":40}}"#,
             ),
         ];
         for (event, wire) in cases {

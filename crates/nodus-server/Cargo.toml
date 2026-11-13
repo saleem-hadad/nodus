@@ -22,6 +22,7 @@ getrandom.workspace = true
 http-body-util.workspace = true
 hyper = { workspace = true, features = ["http1", "server"] }
 hyper-util.workspace = true
+indexmap.workspace = true
 nodus-core.workspace = true
 nodus-domain.workspace = true
 nodus-host.workspace = true
@@ -51,7 +52,9 @@ reqwest = { workspace = true, features = ["native-tls"] }
 
 [dev-dependencies]
 nodus-remote.workspace = true
+nodus-transcripts.workspace = true
 tempfile.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
 
 [lints]
 workspace = true

@@ -22,7 +22,7 @@ pub enum Frame {
     /// core's events don't carry.
     Notice(Notice),
     /// `{ "presence": {…} }`, from a client: its cursor and viewport on a
-    /// board (SRV-180). Read, but nothing is done with it until slice 6.
+    /// board (SRV-180), as it came; [`crate::PresenceFrame::read`] reads it.
     Presence(Value),
 }
 

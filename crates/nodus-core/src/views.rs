@@ -144,9 +144,35 @@ impl ViewsApi<'_> {
                     .inner
                     .views
                     .approve(project_id, view_id, name, allow)
-                    .on("views:approve")
+                    .on("views:approve")?;
+                // SRV-145: the member who allowed it, on a server.
+                if let Some(by) = self.by {
+                    self.nodus.inner.store.update(|state| {
+                        let command = state
+                            .board_mut(project_id)
+                            .views
+                            .get_mut(view_id)
+                            .and_then(|view| view.commands.as_mut()?.iter_mut().find(|c| c.name == name));
+                        if let Some(command) = command {
+                            command.set_approved_by(allow.then_some(by));
+                        }
+                    });
+                }
+                Ok(())
             })
             .await
+    }
+
+    /// The command line a view's command runs, as the board has it now.
+    pub fn command_line(&self, project_id: &str, view_id: &str, name: &str) -> Option<String> {
+        self.nodus.inner.store.read(|state| {
+            let view = state.board(project_id)?.views.get(view_id)?;
+            view.commands
+                .iter()
+                .flatten()
+                .find(|c| c.name == name)
+                .map(|c| c.run.clone())
+        })
     }
 
     /// `views:refresh` (VIEW-084, VIEW-120): runs the view's commands now, and

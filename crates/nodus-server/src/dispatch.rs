@@ -54,10 +54,13 @@ pub(crate) async fn answer(nodus: Nodus, member: Option<String>, request: Reques
 
         Request::BoardLoad { project_id } => done(channel, nodus.board().load(&project_id).await),
         Request::BoardSaveNodes { project_id, patches } => {
-            done(channel, nodus.board().save_nodes(&project_id, &patches).await)
+            let saved = nodus.board().save_nodes(&project_id, &patches).await;
+            board_changed(&nodus, &project_id);
+            done(channel, saved)
         }
         Request::BoardSaveArchive { project_id, rect } => {
             nodus.board().save_archive(&project_id, rect).await;
+            board_changed(&nodus, &project_id);
             DONE
         }
         Request::BoardSaveViewport { project_id, viewport } => {
@@ -66,14 +69,17 @@ pub(crate) async fn answer(nodus: Nodus, member: Option<String>, request: Reques
         }
         Request::BoardRemoveNode { project_id, session_id } => {
             nodus.board().remove_node(&project_id, &session_id).await;
+            board_changed(&nodus, &project_id);
             DONE
         }
         Request::BoardSaveSection { project_id, section } => {
             by.board().save_section(&project_id, &section).await;
+            board_changed(&nodus, &project_id);
             DONE
         }
         Request::BoardRemoveSection { project_id, section_id } => {
             nodus.board().remove_section(&project_id, &section_id).await;
+            board_changed(&nodus, &project_id);
             DONE
         }
         Request::BoardNameSection {
@@ -82,34 +88,55 @@ pub(crate) async fn answer(nodus: Nodus, member: Option<String>, request: Reques
         } => done(channel, nodus.board().name_section(&project_id, &session_ids).await),
         Request::BoardSaveNote { project_id, note } => {
             by.board().save_note(&project_id, &note).await;
+            board_changed(&nodus, &project_id);
             DONE
         }
         Request::BoardRemoveNotes { project_id, note_ids } => {
             nodus.board().remove_notes(&project_id, &note_ids).await;
+            board_changed(&nodus, &project_id);
             DONE
         }
         Request::BoardSaveInk { project_id, strokes } => {
             by.board().save_ink(&project_id, &strokes).await;
+            board_changed(&nodus, &project_id);
+            DONE
+        }
+        Request::BoardAddInk { project_id, strokes } => {
+            by.board().add_ink(&project_id, &strokes).await;
+            board_changed(&nodus, &project_id);
+            DONE
+        }
+        Request::BoardRemoveInk { project_id, ids } => {
+            nodus.board().remove_ink(&project_id, &ids).await;
+            board_changed(&nodus, &project_id);
             DONE
         }
         Request::BoardSaveShapes { project_id, shapes } => {
             by.board().save_shapes(&project_id, &shapes).await;
+            board_changed(&nodus, &project_id);
             DONE
         }
         Request::BoardRemoveShapes { project_id, ids } => {
             nodus.board().remove_shapes(&project_id, &ids).await;
+            board_changed(&nodus, &project_id);
             DONE
         }
         Request::BoardSaveLinks { project_id, links } => {
             by.board().save_links(&project_id, &links).await;
+            board_changed(&nodus, &project_id);
             DONE
         }
         Request::BoardRemoveLinks { project_id, ids } => {
             nodus.board().remove_links(&project_id, &ids).await;
+            board_changed(&nodus, &project_id);
             DONE
         }
 
-        Request::SessionCreate { project_id, opts } => done(channel, by.sessions().create(&project_id, &opts).await),
+        Request::SessionCreate { project_id, opts } => {
+            let created = by.sessions().create(&project_id, &opts).await;
+            board_changed(&nodus, &project_id);
+            done(channel, created)
+        }
         Request::SessionOpen {
             project_id,
             session_id,
@@ -119,15 +146,16 @@ pub(crate) async fn answer(nodus: Nodus, member: Option<String>, request: Reques
             channel,
             nodus.sessions().open(&project_id, &session_id, cols, rows).await,
         ),
+        // SRV-142: the member writing is whom the next prompt is from.
         Request::SessionWrite { session_id, data } => {
-            nodus.sessions().write(&session_id, &data);
+            by.sessions().write(&session_id, &data);
             DONE
         }
         Request::SessionSend {
             project_id,
             session_id,
             text,
-        } => done(channel, nodus.sessions().send(&project_id, &session_id, &text).await),
+        } => done(channel, by.sessions().send(&project_id, &session_id, &text).await),
         Request::SessionResize { session_id, cols, rows } => {
             nodus.sessions().resize(&session_id, cols, rows);
             DONE
@@ -174,9 +202,15 @@ pub(crate) async fn answer(nodus: Nodus, member: Option<String>, request: Reques
         ),
 
         Request::ViewsCreate { project_id, opts } => done(channel, by.views().create(&project_id, &opts).await),
-        Request::ViewsSave { project_id, patch } => done(channel, nodus.views().save(&project_id, &patch).await),
+        Request::ViewsSave { project_id, patch } => {
+            let saved = nodus.views().save(&project_id, &patch).await;
+            board_changed(&nodus, &project_id);
+            done(channel, saved)
+        }
         Request::ViewsRemove { project_id, view_id } => {
-            done(channel, nodus.views().remove(&project_id, &view_id).await)
+            let removed = nodus.views().remove(&project_id, &view_id).await;
+            board_changed(&nodus, &project_id);
+            done(channel, removed)
         }
         Request::ViewsCall {
             project_id,
@@ -281,6 +315,15 @@ pub(crate) fn done<T: Serialize>(channel: &str, result: CommandResult<T>) -> Res
 /// What a command that can't fail gave, as an answer.
 fn give<T: Serialize>(channel: &str, value: T) -> Result<Value, CallError> {
     serde_json::to_value(value).map_err(|err| CallError::new(channel, err.to_string()))
+}
+
+/// One member changed a board: everyone watching it hears, and loads it
+/// again (SRV-184), since the one who changed it isn't the only one
+/// showing it. The last write to each thing wins.
+fn board_changed(nodus: &Nodus, project_id: &str) {
+    nodus.emit(Event::BoardChanged {
+        project_id: project_id.to_owned(),
+    });
 }
 
 /// The projects or groups changed: every connected app hears of it, since

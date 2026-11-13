@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 
 use nodus_domain::{
-    BoardLink, BoardNote, BoardSection, BoardShape, BoardSnapshot, CreatedBy, InkStroke, NodePatch, Rect, Viewport,
+    BoardLink, BoardNote, BoardPoint, BoardSection, BoardShape, BoardSnapshot, CreatedBy, InkStroke, NodePatch, Rect,
+    Viewport,
 };
 use nodus_store::BoardState;
 use serde_json::Value;
@@ -262,6 +263,70 @@ impl BoardApi<'_> {
                 });
             })
             .await;
+    }
+
+    /// `board:add-ink` (SRV-184): strokes added on top of the board's ink,
+    /// or changed by id, rather than the whole list replaced, so two people
+    /// drawing on a server board at once keep both. A new stroke is the
+    /// member's who drew it (SRV-183).
+    pub async fn add_ink(&self, project_id: &str, strokes: &[InkStroke]) {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, strokes) = (project_id.to_owned(), strokes.to_vec());
+            return route.run(Request::BoardAddInk { project_id, strokes }).await;
+        }
+        self.nodus
+            .on_core(async {
+                let ids: Vec<&str> = strokes.iter().map(|s| s.id.as_str()).collect();
+                let before = self.creators(project_id, &ids, |b, id| {
+                    let ink = b.ink.as_deref().unwrap_or_default();
+                    ink.iter().find(|s| s.id == id).map(|s| s.created_by())
+                });
+                self.nodus.inner.board.add_ink(project_id, &to_json(&strokes));
+                self.attribute(project_id, &ids, &before, |b, id| {
+                    b.ink.as_mut()?.iter_mut().find(|s| s.id == id).map(as_created)
+                });
+            })
+            .await;
+    }
+
+    /// `board:remove-ink` (SRV-184): strokes gone, by id, leaving the rest.
+    pub async fn remove_ink(&self, project_id: &str, ids: &[String]) {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, ids) = (project_id.to_owned(), ids.to_vec());
+            return route.run(Request::BoardRemoveInk { project_id, ids }).await;
+        }
+        self.nodus
+            .on_core(async {
+                self.nodus.inner.board.remove_ink(project_id, ids);
+            })
+            .await;
+    }
+
+    /// SRV-180: where this person is on a server board: their pointer, in
+    /// flow units (none while it's off the board), and what they look at
+    /// (the flow point at the centre of their canvas, and their zoom).
+    /// Sent at once, without waiting; the caller sends at most every
+    /// [`nodus_remote::PRESENCE_EVERY`]. Nothing for a local board.
+    pub fn presence(&self, project_id: &str, cursor: Option<BoardPoint>, view: Option<Viewport>) {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            route.presence(&nodus_remote::PresenceFrame {
+                project: Some(project_id.to_owned()),
+                cursor,
+                viewport: view,
+            });
+        }
+    }
+
+    /// SRV-180: off a server board at once, as it closes. Nothing for a
+    /// local board.
+    pub fn leave(&self, project_id: &str) {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            route.presence(&nodus_remote::PresenceFrame {
+                project: None,
+                cursor: None,
+                viewport: None,
+            });
+        }
     }
 
     /// `board:save-shapes` (added after 0.9.4): creates or updates shapes.

@@ -260,6 +260,8 @@ pub struct BoardCanvas {
     pub(crate) pending_link_label: Option<String>,
     /// The board was read-only when last drawn (SRV-028).
     pub(crate) read_only_seen: bool,
+    /// What this window last told the server of where it is (SRV-180).
+    pub(crate) presence: super::presence::PresenceOut,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -353,6 +355,7 @@ impl BoardCanvas {
             overlays: super::overlays::Overlays::default(),
             pending_link_label: None,
             read_only_seen: false,
+            presence: super::presence::PresenceOut::default(),
             _subscriptions: subscriptions,
         };
         canvas.sync(cx);
@@ -373,6 +376,15 @@ impl BoardCanvas {
     /// the server is back and the board reloads (SRV-028).
     pub fn read_only(&self) -> bool {
         self.board.as_ref().is_some_and(|b| b.offline)
+    }
+
+    /// The board is a server project's (SRV-160): others may be on it.
+    pub(crate) fn on_server(&self, cx: &App) -> bool {
+        self.state
+            .read(cx)
+            .projects
+            .iter()
+            .any(|p| p.id == self.project_id && p.server.is_some())
     }
 
     /// Takes in a new snapshot from the store (BOARD-005, BOARD-003), and what
@@ -654,6 +666,7 @@ impl BoardCanvas {
     /// Sets the viewport at once; a move starts and ends (`onMoveStart`,
     /// `onMoveEnd` after `end_delay`).
     pub(crate) fn set_viewport(&mut self, vp: Viewport, end_delay: Option<u64>, cx: &mut Context<'_, Self>) {
+        self.stop_following(cx);
         self.anim = None;
         self.zooming |= vp.zoom != self.viewport.zoom;
         self.viewport = vp;
@@ -667,6 +680,7 @@ impl BoardCanvas {
     /// Animates the viewport to `to` over `duration_ms`, as d3-zoom's
     /// transition does; 0 is instant.
     pub(crate) fn fly_to(&mut self, to: Viewport, duration_ms: f64, cx: &mut Context<'_, Self>) {
+        self.stop_following(cx);
         if duration_ms <= 0.0 || !duration_ms.is_finite() {
             self.set_viewport(to, Some(0), cx);
             return;

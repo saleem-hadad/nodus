@@ -14,7 +14,7 @@ use gpui::{
 use nodus_domain::{NodePatch, TranscriptMessage};
 
 use super::actions::{self, PreviewFind, card};
-use super::messages::{MessageProps, empty_note, message, skeleton};
+use super::messages::{MessageProps, Sender, empty_note, message, skeleton};
 use super::text::{format_range, found_index, messages_label};
 use crate::components::button;
 use crate::components::icon::Icon;
@@ -103,6 +103,22 @@ impl TranscriptPreview {
                     Ok(messages) => Load::Ready(messages),
                     Err(e) => Load::Error(e.ipc_message()),
                 };
+                // SRV-142: the senders' faces, from the server's members.
+                if let Load::Ready(messages) = &this.load {
+                    let s = this.state.read(cx);
+                    let server = s
+                        .projects
+                        .iter()
+                        .find(|p| p.id == this.project_id)
+                        .and_then(|p| p.server.clone());
+                    let logins: Vec<String> = messages.iter().filter_map(|m| m.by.clone()).collect();
+                    let peers = s.peers.clone();
+                    if let Some(server) = server.filter(|_| !logins.is_empty()) {
+                        peers.update(cx, |p, cx| {
+                            p.want_avatars(&server, logins.iter().map(String::as_str), cx);
+                        });
+                    }
+                }
                 this.found = match (&this.load, &this.find) {
                     (Load::Ready(messages), Some(find)) => found_index(messages, find, &this.terms),
                     _ => None,
@@ -272,6 +288,24 @@ impl TranscriptPreview {
             }
             Load::Ready(messages) if messages.is_empty() => empty_note("No messages in this session.", None, None, cx),
             Load::Ready(messages) => {
+                // SRV-142: who sent each user turn, on a server session.
+                let (me, peers) = {
+                    let s = self.state.read(cx);
+                    let me = s
+                        .projects
+                        .iter()
+                        .find(|p| p.id == self.project_id)
+                        .and_then(|p| s.server_of(p))
+                        .and_then(|server| server.login.clone());
+                    (me, s.peers.clone())
+                };
+                let sender = |m: &TranscriptMessage| {
+                    m.by.as_ref().map(|login| Sender {
+                        login: login.clone(),
+                        avatar: peers.read(cx).avatar(login),
+                        me: me.as_deref().is_some_and(|me| me.eq_ignore_ascii_case(login)),
+                    })
+                };
                 let snippet = self
                     .find
                     .as_ref()
@@ -291,6 +325,7 @@ impl TranscriptPreview {
                                 id: ("tp-msg", i).into(),
                                 message: m,
                                 author: None,
+                                sender: sender(m),
                                 highlight: &self.terms,
                                 found,
                                 found_call: if found { snippet } else { None },

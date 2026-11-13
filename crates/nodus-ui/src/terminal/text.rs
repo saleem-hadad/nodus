@@ -250,6 +250,7 @@ mod tests {
             tools: None,
             calls: None,
             notice: None,
+            by: None,
         }
     }
 

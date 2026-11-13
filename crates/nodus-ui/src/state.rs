@@ -5,7 +5,7 @@
 
 use std::time::Duration;
 
-use gpui::{Context, EventEmitter, Task};
+use gpui::{AppContext as _, Context, Entity, EventEmitter, Task};
 use indexmap::IndexMap;
 use nodus_core::Nodus;
 use nodus_domain::focus::is_focusing;
@@ -87,6 +87,9 @@ pub struct AppState {
     pub accounts_changed: std::collections::HashMap<String, u64>,
     /// The server dialog that's up, if any.
     pub server_dialog: Option<ServerDialog>,
+    /// Who else is on the server board on show (SRV-180). An entity of its
+    /// own, so a pointer moving draws the board without its nodes.
+    pub peers: Entity<crate::board::presence::Peers>,
 
     /// The open board; boards load once the board track's API is in.
     pub board: Option<BoardSnapshot>,
@@ -140,8 +143,10 @@ impl AppState {
                 }
             }
         });
+        let peers = cx.new(|_| crate::board::presence::Peers::new(nodus.clone()));
         let mut state = Self {
             nodus,
+            peers,
             route: Route::Projects,
             projects: Vec::new(),
             groups: Vec::new(),
@@ -216,6 +221,17 @@ impl AppState {
                 *self.accounts_changed.entry(server_id).or_default() += 1;
                 cx.notify();
             }
+            // SRV-180: only the board on show's.
+            Event::Presence(presence) => {
+                if self.route.project_id() == Some(presence.project.as_str()) {
+                    let server = self
+                        .projects
+                        .iter()
+                        .find(|p| p.id == presence.project)
+                        .and_then(|p| p.server.clone());
+                    self.peers.update(cx, |p, cx| p.heard(presence, server.as_deref(), cx));
+                }
+            }
             Event::Menu(command) => self.on_menu(command, cx),
             Event::OpenCard(request) => self.show_card(request, cx),
             Event::RunFinished(run) => cx.emit(StateEvent::RunFinished(run)),
@@ -277,6 +293,11 @@ impl AppState {
     /// UI-031, UI-032: goes to the grid or a board, clearing what belonged to
     /// the old route.
     pub fn navigate(&mut self, route: Route, cx: &mut Context<'_, Self>) {
+        // SRV-180: nobody is on a board left behind.
+        if let Some(left) = self.route.project_id().filter(|id| route.project_id() != Some(*id)) {
+            let left = [left.to_owned()];
+            self.peers.update(cx, |p, cx| p.forget(&left, cx));
+        }
         self.route = route.clone();
         self.board = None;
         self.selection.clear();
@@ -585,6 +606,16 @@ impl AppState {
         }
         cx.notify();
         self.refresh_servers(cx);
+        // SRV-180: away, its boards' people are gone until it's back.
+        if state != ServerState::Connected {
+            let projects: Vec<String> = self
+                .projects
+                .iter()
+                .filter(|p| p.server.as_deref() == Some(server_id))
+                .map(|p| p.id.clone())
+                .collect();
+            self.peers.update(cx, |p, cx| p.forget(&projects, cx));
+        }
         if state == ServerState::Connected && was.is_some_and(|was| was != ServerState::Connected) {
             let projects: Vec<String> = self
                 .projects

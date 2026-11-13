@@ -21,7 +21,9 @@ use futures_util::{SinkExt, StreamExt};
 use hyper::upgrade::Upgraded;
 use hyper_util::rt::TokioIo;
 use nodus_domain::Event;
-use nodus_wire::{Answer, CALLS, CallError, CallFrame, Frame, NOT_AVAILABLE, Notice, Request, SETUP_CALLS};
+use nodus_wire::{
+    Answer, CALLS, CallError, CallFrame, Frame, NOT_AVAILABLE, Notice, PresenceFrame, Request, SETUP_CALLS,
+};
 use serde_json::Value;
 use tokio::sync::broadcast::error::{RecvError, TryRecvError};
 use tokio::sync::{broadcast, mpsc, watch};
@@ -31,7 +33,9 @@ use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::{Error as WsError, Message};
 
 use crate::auth::Who;
+use crate::presence::Identity;
 use crate::serve::Server;
+use crate::terminals::Size;
 use crate::{calls, dispatch};
 
 pub(crate) type Socket = WebSocketStream<TokioIo<Upgraded>>;
@@ -73,6 +77,16 @@ enum Control {
     },
 }
 
+/// One connection, as its frames are read.
+struct Me {
+    who: Who,
+    /// The id the server keeps it by.
+    connection: u64,
+    /// Who it is on a board, from its token (SRV-180); none for a setup
+    /// token, which is on none.
+    identity: Option<Identity>,
+}
+
 /// Serves one connection, made with `who`'s token, until either side
 /// closes it, or the server does: when its device is revoked or its member
 /// removed (SRV-042), or a setup token's setup is over (SRV-060).
@@ -84,17 +98,24 @@ pub(crate) async fn serve(server: Arc<Server>, socket: Socket, who: Who) {
     // The forwarder, and the server, end the connection by sending why here.
     let (stop, mut stopped) = watch::channel(None);
     let connection = server.auth.connected(who.clone(), stop.clone());
+    let me = Me {
+        identity: identity(&server, &who, connection),
+        who,
+        connection,
+    };
     // SRV-042: members hear the server's notices; a setup token doesn't.
-    let notices = (!matches!(who, Who::Setup { .. })).then(|| server.auth.notices());
+    let notices = (!matches!(me.who, Who::Setup { .. })).then(|| server.auth.notices());
+    let presence = me.identity.is_some().then(|| server.presences.connect(connection));
     let forwarder = Forwarder {
         server: Arc::clone(&server),
+        connection,
         outbox: outbox.clone(),
         stop,
         control: control.downgrade(),
         watched: HashSet::new(),
         open: HashSet::new(),
     };
-    let events = tokio::spawn(forwarder.run(server.nodus.subscribe(), controls, notices));
+    let events = tokio::spawn(forwarder.run(server.nodus.subscribe(), controls, notices, presence));
 
     let mut close = None;
     loop {
@@ -107,7 +128,7 @@ pub(crate) async fn serve(server: Arc<Server>, socket: Socket, who: Who) {
         };
         match message {
             Some(Ok(Message::Text(text))) => {
-                if let Some(why) = receive(&server, &who, text.as_str(), &outbox, &control).await {
+                if let Some(why) = receive(&server, &me, text.as_str(), &outbox, &control).await {
                     close = Some(why);
                     break;
                 }
@@ -127,8 +148,11 @@ pub(crate) async fn serve(server: Arc<Server>, socket: Socket, who: Who) {
         }
     }
 
-    // SRV-026: what it opened and watched goes with it.
+    // SRV-026: what it opened and watched goes with it, and it leaves its
+    // board at once (SRV-180).
     server.auth.disconnected(connection);
+    server.presences.disconnect(connection);
+    server.terminals.disconnected(connection);
     events.abort();
     let _ = outbox.try_send(Outgoing::Close(close));
     drop((outbox, control));
@@ -138,18 +162,44 @@ pub(crate) async fn serve(server: Arc<Server>, socket: Socket, who: Who) {
     }
 }
 
-/// One frame from the app. Anything but a call is for the server to ignore:
-/// presence until it's relayed (SRV-180), and frames only an app reads.
-/// Why to close the connection, when it's to close.
+/// Who a connection is on a board (SRV-180): its member's login and its
+/// device, from its token. A development token is `dev`, each connection a
+/// device of its own.
+fn identity(server: &Server, who: &Who, connection: u64) -> Option<Identity> {
+    match who {
+        Who::Device { id, .. } => Some(Identity {
+            login: server.auth.login_of(who)?,
+            device: id.clone(),
+        }),
+        Who::Dev => Some(Identity {
+            login: "dev".into(),
+            device: format!("dev-{connection}"),
+        }),
+        Who::Setup { .. } => None,
+    }
+}
+
+/// One frame from the app: a call, or where it is on a board (SRV-180).
+/// Frames only an app reads are ignored. Why to close the connection, when
+/// it's to close.
 async fn receive(
     server: &Arc<Server>,
-    who: &Who,
+    me: &Me,
     text: &str,
     outbox: &mpsc::Sender<Outgoing>,
     control: &mpsc::UnboundedSender<Control>,
 ) -> Option<CloseFrame> {
-    let Ok(Frame::Call(CallFrame { id, call, args })) = Frame::parse(text) else {
-        return None;
+    let who = &me.who;
+    let (id, call, args) = match Frame::parse(text) {
+        Ok(Frame::Call(CallFrame { id, call, args })) => (id, call, args),
+        Ok(Frame::Presence(value)) => {
+            // Named by its token: a login in the frame is ignored.
+            if let (Some(identity), Some(frame)) = (&me.identity, PresenceFrame::read(&value)) {
+                server.presences.frame(me.connection, identity.clone(), frame);
+            }
+            return None;
+        }
+        _ => return None,
     };
     // SRV-025: what stays on the app isn't answered here.
     if !CALLS.contains(&call.as_str()) {
@@ -192,10 +242,31 @@ async fn receive(
             cols,
             rows,
         }),
-        Request::SessionClose { session_id } => control.send(Control::Close { id, session_id }),
+        Request::SessionClose { session_id } => {
+            server.terminals.closed(me.connection, &session_id);
+            control.send(Control::Close { id, session_id })
+        }
+        // SRV-144: the terminal takes this size only from whoever it follows.
+        Request::SessionResize { session_id, cols, rows } => {
+            if let Some(size) = server.terminals.resized(me.connection, &session_id, (cols, rows)) {
+                resize(server, &session_id, size);
+            }
+            answer(outbox, id, Ok(Value::Null)).await;
+            Ok(())
+        }
         request => {
+            // SRV-144: typing from a terminal of another size resizes the
+            // session's to it first.
+            if let Request::SessionWrite { session_id, .. } | Request::SessionSend { session_id, .. } = &request
+                && let Some(size) = server.terminals.typed(me.connection, session_id)
+            {
+                resize(server, session_id, size);
+            }
             let mut answering: Answering = if request.is_server_call() {
                 Box::pin(calls::answer(Arc::clone(server), who.clone(), request))
+            } else if let Request::ViewsApprove { .. } = request {
+                // SRV-145: recorded as theirs, and in the audit log.
+                Box::pin(calls::approve_view(Arc::clone(server), who.clone(), request))
             } else {
                 let member = server.auth.login_of(who);
                 Box::pin(dispatch::answer(server.nodus.clone(), member, request))
@@ -213,15 +284,27 @@ async fn receive(
     None
 }
 
+/// Resizes a session's terminal, and tells everyone with it open (SRV-144).
+fn resize(server: &Server, session_id: &str, (cols, rows): Size) {
+    server.nodus.sessions().resize(session_id, cols, rows);
+    server.nodus.emit(Event::PtySize {
+        session_id: session_id.to_owned(),
+        cols,
+        rows,
+    });
+}
+
 /// What a setup token's call that isn't the wizard's first steps gets.
 const SIGN_IN_FIRST: &str = "Sign in to do that: a setup token only names the server and sets up GitHub";
 /// What a setup token gets once it has expired or setup is over.
 const SETUP_OVER: &str =
     "The setup token has expired, or setup is done: sign in, or run nodus setup-code for a new code";
 
-/// Passes on the core's events this connection gets (SRV-026).
+/// Passes on the core's events this connection gets (SRV-026), and who
+/// else is on its board (SRV-180).
 struct Forwarder {
     server: Arc<Server>,
+    connection: u64,
     outbox: mpsc::Sender<Outgoing>,
     stop: watch::Sender<Option<CloseFrame>>,
     control: mpsc::WeakUnboundedSender<Control>,
@@ -237,6 +320,7 @@ impl Forwarder {
         mut events: broadcast::Receiver<Event>,
         mut controls: mpsc::UnboundedReceiver<Control>,
         mut notices: Option<broadcast::Receiver<Notice>>,
+        mut presence: Option<watch::Receiver<Option<String>>>,
     ) {
         loop {
             let going = tokio::select! {
@@ -254,6 +338,10 @@ impl Forwarder {
                     let text = Frame::Notice(notice).to_text();
                     self.outbox.send(Outgoing::Text(text)).await.is_ok()
                 }
+                text = next_presence(&mut presence) => match text {
+                    Some(text) => self.outbox.send(Outgoing::Text(text)).await.is_ok(),
+                    None => true,
+                },
             };
             if !going {
                 return;
@@ -276,7 +364,7 @@ impl Forwarder {
     /// Claude accounts changing always. The rest is the app's own (SRV-025).
     fn wants(&self, event: &Event) -> bool {
         match event {
-            Event::PtyData { session_id, .. } => self.open.contains(session_id),
+            Event::PtyData { session_id, .. } | Event::PtySize { session_id, .. } => self.open.contains(session_id),
             Event::PtyExit { session_id, .. } => self.open.contains(session_id) || self.watches_session(session_id),
             Event::Status { session_id, .. }
             | Event::AgentStatus { session_id, .. }
@@ -293,7 +381,9 @@ impl Forwarder {
             | Event::CaptureShown(_)
             | Event::CaptureContext(_)
             | Event::ServerStatus { .. }
-            | Event::ServerNotice { .. } => false,
+            | Event::ServerNotice { .. }
+            // Each connection's own, sent apart (SRV-180).
+            | Event::Presence(_) => false,
         }
     }
 
@@ -330,15 +420,35 @@ impl Forwarder {
         }
     }
 
-    /// `session:open`, with its output from exactly after what it replays.
+    /// `session:open`, with its output from exactly after what it replays,
+    /// at the size the session's terminal follows (SRV-144), which this
+    /// connection is told first.
     async fn open(
         &mut self,
         id: u64,
         project_id: String,
         session_id: String,
-        (cols, rows): (f64, f64),
+        size: (f64, f64),
         events: &mut broadcast::Receiver<Event>,
     ) -> bool {
+        let opened = self.server.terminals.opened(self.connection, &session_id, size);
+        let (cols, rows) = opened.size;
+        if opened.resized {
+            self.server.nodus.emit(Event::PtySize {
+                session_id: session_id.clone(),
+                cols,
+                rows,
+            });
+        }
+        let sized = Frame::Event(Event::PtySize {
+            session_id: session_id.clone(),
+            cols,
+            rows,
+        })
+        .to_text();
+        if self.outbox.send(Outgoing::Text(sized)).await.is_err() {
+            return false;
+        }
         let request = Request::SessionOpen {
             project_id,
             session_id: session_id.clone(),
@@ -420,6 +530,17 @@ async fn next_notice(notices: &mut Option<broadcast::Receiver<Notice>>) -> Notic
                 Err(RecvError::Closed) => break,
             }
         }
+    }
+    std::future::pending().await
+}
+
+/// The newest `ev:presence` frame for this connection, when there's a new
+/// one; never, for a connection on no board.
+async fn next_presence(slot: &mut Option<watch::Receiver<Option<String>>>) -> Option<String> {
+    if let Some(slot) = slot
+        && slot.changed().await.is_ok()
+    {
+        return slot.borrow_and_update().clone();
     }
     std::future::pending().await
 }

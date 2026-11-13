@@ -29,6 +29,8 @@ pub struct MessageProps<'a> {
     pub message: &'a TranscriptMessage,
     /// Who said it, when that isn't you and Claude.
     pub author: Option<String>,
+    /// On a server session, the member who sent a user turn (SRV-142).
+    pub sender: Option<Sender>,
     /// The search's terms to mark (TRANS-010).
     pub highlight: &'a [String],
     /// The message the search led to (TRANS-011).
@@ -43,6 +45,15 @@ pub struct MessageProps<'a> {
     pub on_all_calls: Action,
     /// Told where the message lies, for scrolling it into view.
     pub on_bounds: Option<OnBounds>,
+}
+
+/// Who sent a user turn to a server session (SRV-142).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Sender {
+    pub login: String,
+    pub avatar: Option<std::path::PathBuf>,
+    /// It was this person: shown as `You`, with their avatar.
+    pub me: bool,
 }
 
 /// UTF-16 ranges as byte ranges of `text`.
@@ -183,10 +194,12 @@ pub fn message(p: &MessageProps<'_>, cx: &App) -> AnyElement {
     } else {
         nodus_transcripts::search::match_ranges(&text, p.highlight)
     };
-    let author = p
-        .author
-        .clone()
-        .unwrap_or_else(|| if user { "You".into() } else { "Claude".into() });
+    let sender = p.sender.as_ref().filter(|_| user && !notice);
+    let author = p.author.clone().unwrap_or_else(|| match sender {
+        Some(sender) if !sender.me => format!("@{}", sender.login),
+        _ if user => "You".into(),
+        _ => "Claude".into(),
+    });
     let author_color = if m.role == MessageRole::Assistant {
         t.status_working
     } else {
@@ -202,6 +215,15 @@ pub fn message(p: &MessageProps<'_>, cx: &App) -> AnyElement {
         .mb(px(5.))
         .text_size(TEXT_XS)
         .text_color(t.text_tertiary)
+        // SRV-142: the sender's face beside their turn.
+        .when_some(sender, |d, sender| {
+            d.child(
+                div()
+                    .self_center()
+                    .child(crate::servers::avatar(&sender.login, sender.avatar.clone(), 16., t)),
+            )
+            .gap(px(6.))
+        })
         // `letter-spacing: 0.01em`.
         .child(spaced_text(
             author,

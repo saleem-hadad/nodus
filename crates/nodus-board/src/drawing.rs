@@ -2,7 +2,9 @@
 //! (⌘Z, ⇧⌘Z; INKUI-021, SHAPE-040). Ink goes back as whole lists of
 //! strokes, as 0.9.4's did. Shapes and links go back one by one, each as
 //! it was before and after the change, so a shape a session draws in the
-//! meantime is left alone.
+//! meantime is left alone. On a server board, where others draw at the
+//! same time, a step's ink goes back only as far as that step changed it
+//! (SRV-184): see [`Step::ink_change`] and [`rebase_ink`].
 
 use nodus_domain::{BoardLink, BoardShape, InkStroke};
 
@@ -80,6 +82,10 @@ pub struct Outcome {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Step {
     pub ink: Option<Vec<InkStroke>>,
+    /// On a server board, the ink the step goes from and to, as the step
+    /// itself changed it: apply it to the ink as it is with [`rebase_ink`],
+    /// so strokes others drew meanwhile stay (SRV-184).
+    pub ink_change: Option<(Vec<InkStroke>, Vec<InkStroke>)>,
     pub change: Change,
 }
 
@@ -94,11 +100,24 @@ impl BoardHistory {
     /// A change that can be taken back: the ink as it was (when the change
     /// touched the ink) and the shapes and links it changed. The redo list goes.
     pub fn commit(&mut self, ink_before: Option<Vec<InkStroke>>, change: Change) {
+        self.commit_ink(ink_before, None, change);
+    }
+
+    /// [`BoardHistory::commit`], and on a server board the ink the change
+    /// left, so taking it back undoes only what it did (SRV-184).
+    pub fn commit_ink(
+        &mut self,
+        ink_before: Option<Vec<InkStroke>>,
+        ink_after: Option<Vec<InkStroke>>,
+        change: Change,
+    ) {
         if ink_before.is_none() && change.is_empty() {
             return;
         }
+        let ink_change = ink_before.clone().zip(ink_after);
         self.past.push(Step {
             ink: ink_before,
+            ink_change,
             change,
         });
         if self.past.len() > HISTORY {
@@ -113,10 +132,12 @@ impl BoardHistory {
         let step = self.past.pop()?;
         self.future.push(Step {
             ink: step.ink.as_ref().map(|_| ink.to_vec()),
+            ink_change: step.ink_change.clone(),
             change: step.change.clone(),
         });
         Some(Step {
             ink: step.ink,
+            ink_change: step.ink_change.map(|(before, after)| (after, before)),
             change: step.change.reversed(),
         })
     }
@@ -127,6 +148,7 @@ impl BoardHistory {
         let step = self.future.pop()?;
         self.past.push(Step {
             ink: step.ink.as_ref().map(|_| ink.to_vec()),
+            ink_change: step.ink_change.clone(),
             change: step.change.clone(),
         });
         Some(step)
@@ -144,6 +166,37 @@ impl BoardHistory {
     pub fn can_redo(&self) -> bool {
         !self.future.is_empty()
     }
+}
+
+/// What changed from `from` to `to`, stroke by stroke: the strokes added
+/// or changed, and the ids gone (SRV-184).
+pub fn ink_diff(from: &[InkStroke], to: &[InkStroke]) -> (Vec<InkStroke>, Vec<String>) {
+    let changed = to
+        .iter()
+        .filter(|stroke| !from.iter().any(|s| s == *stroke))
+        .cloned()
+        .collect();
+    let gone = from
+        .iter()
+        .filter(|stroke| !to.iter().any(|s| s.id == stroke.id))
+        .map(|stroke| stroke.id.clone())
+        .collect();
+    (changed, gone)
+}
+
+/// `ink` with the change from `from` to `to` made on it, and nothing else
+/// touched: strokes gone between the two go, those added or changed are put
+/// in, in place by id, or on top (SRV-184).
+pub fn rebase_ink(ink: &[InkStroke], from: &[InkStroke], to: &[InkStroke]) -> Vec<InkStroke> {
+    let (changed, gone) = ink_diff(from, to);
+    let mut out: Vec<InkStroke> = ink.iter().filter(|s| !gone.contains(&s.id)).cloned().collect();
+    for stroke in changed {
+        match out.iter_mut().find(|s| s.id == stroke.id) {
+            Some(existing) => *existing = stroke,
+            None => out.push(stroke),
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -218,6 +271,42 @@ mod tests {
         let again = history.redo(&[pen("p")]).unwrap();
         assert_eq!(again.ink, Some(Vec::new()));
         assert_eq!(again.change.outcome().remove_shapes, vec!["a".to_owned()]);
+    }
+
+    /// SRV-184
+    #[test]
+    fn on_a_server_board_undo_leaves_what_others_drew() {
+        let mut history = BoardHistory::default();
+        // I draw `mine`.
+        history.commit_ink(
+            Some(vec![pen("a")]),
+            Some(vec![pen("a"), pen("mine")]),
+            Change::default(),
+        );
+        // Meanwhile someone draws `theirs`.
+        let now = vec![pen("a"), pen("mine"), pen("theirs")];
+        let back = history.undo(&now).unwrap();
+        let (from, to) = back.ink_change.clone().unwrap();
+        let undone = rebase_ink(&now, &from, &to);
+        assert_eq!(undone, vec![pen("a"), pen("theirs")]);
+        // And back again.
+        let again = history.redo(&undone).unwrap();
+        let (from, to) = again.ink_change.unwrap();
+        assert_eq!(
+            rebase_ink(&undone, &from, &to),
+            vec![pen("a"), pen("theirs"), pen("mine")]
+        );
+
+        let moved = InkStroke {
+            points: vec![9.0, 9.0],
+            ..pen("a")
+        };
+        let (changed, gone) = ink_diff(&[pen("a"), pen("b")], &[moved.clone(), pen("c")]);
+        assert_eq!(changed, vec![moved, pen("c")]);
+        assert_eq!(gone, vec!["b".to_owned()]);
+        // A local board's steps carry none.
+        history.commit(Some(Vec::new()), Change::default());
+        assert_eq!(history.undo(&[]).unwrap().ink_change, None);
     }
 
     #[test]

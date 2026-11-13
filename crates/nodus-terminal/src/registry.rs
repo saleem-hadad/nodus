@@ -90,6 +90,12 @@ struct Entry {
     listeners: Vec<(ListenerId, Listener)>,
     /// Where it is shown; `None` while parked.
     container: Option<ContainerId>,
+    /// The grid its container fits, last it was measured.
+    wanted: Option<(usize, usize)>,
+    /// A server session's terminal is the size the server says (SRV-144):
+    /// whoever typed last's. Then the container's size is only asked for,
+    /// and the grid changes when the server says.
+    given: bool,
     /// Starting sessions waiting to turn on bracketed paste (`onWriteParsed`
     /// listeners), each with its 30 s timer.
     waiters: Vec<(u64, tokio::task::JoinHandle<()>)>,
@@ -139,6 +145,15 @@ enum Next {
         done: watch::Sender<OpenResult>,
     },
     Done,
+}
+
+/// The size to ask the session for: the container's, once the server
+/// gives the grid its size (SRV-144); the grid's otherwise.
+fn asked(entry: &Entry) -> (usize, usize) {
+    entry
+        .wanted
+        .filter(|_| entry.given)
+        .unwrap_or((entry.terminal.cols(), entry.terminal.rows()))
 }
 
 impl Registry {
@@ -214,6 +229,14 @@ impl Registry {
         let Some((cols, rows)) = fit else {
             return;
         };
+        let asked_before = entry.wanted.replace((cols, rows));
+        if entry.given {
+            // SRV-144: asked for; the server resizes when it follows this window.
+            if asked_before != Some((cols, rows)) && entry.state == State::Ready {
+                self.sessions.resize(session_id, cols, rows);
+            }
+            return;
+        }
         if entry.terminal.resize(cols, rows) && entry.state == State::Ready {
             let (cols, rows) = (entry.terminal.cols(), entry.terminal.rows());
             self.sessions.resize(session_id, cols, rows);
@@ -251,6 +274,8 @@ impl Registry {
                         has_output: false,
                         listeners: Vec::new(),
                         container: None,
+                        wanted: None,
+                        given: false,
                         waiters: Vec::new(),
                     },
                 );
@@ -273,15 +298,16 @@ impl Registry {
                 entry.opening = Some(rx);
                 entry.state = State::Opening;
                 entry.exit_pending = false;
+                let (cols, rows) = asked(entry);
                 Next::Open {
                     id: entry.id,
                     project: project_id.to_owned(),
-                    cols: entry.terminal.cols(),
-                    rows: entry.terminal.rows(),
+                    cols,
+                    rows,
                     done,
                 }
             } else {
-                let (cols, rows) = (entry.terminal.cols(), entry.terminal.rows());
+                let (cols, rows) = asked(entry);
                 self.sessions.resize(session_id, cols, rows);
                 Next::Done
             }
@@ -330,7 +356,7 @@ impl Registry {
                             listeners = self.write_output(session_id, entry, &replay);
                             entry.state = State::Ready;
                             // The size may have changed while opening (TERM-018).
-                            let (cols, rows) = (entry.terminal.cols(), entry.terminal.rows());
+                            let (cols, rows) = asked(entry);
                             self.sessions.resize(session_id, cols, rows);
                             if entry.exit_pending {
                                 entry.exit_pending = false;
@@ -406,7 +432,8 @@ impl Registry {
             entry.opening = Some(rx);
             entry.state = State::Opening;
             entry.exit_pending = false;
-            (entry.id, entry.terminal.cols(), entry.terminal.rows(), done)
+            let (cols, rows) = asked(entry);
+            (entry.id, cols, rows, done)
         };
         let result = self.open_process(session_id, project_id, id, cols, rows).await;
         done.send_replace(Some(result.clone()));
@@ -440,6 +467,19 @@ impl Registry {
                 timer.abort();
             }
         }
+    }
+
+    /// SRV-144: a server session's terminal is this size now, whoever's it
+    /// is: the grid takes it, without asking the session for anything, and
+    /// from now on follows what the server says. Whether the grid changed.
+    pub fn pty_size(&self, session_id: &str, cols: usize, rows: usize) -> bool {
+        let mut inner = self.lock();
+        let Some(entry) = inner.entries.get_mut(session_id) else {
+            return false;
+        };
+        entry.given = true;
+        self.trace(&["term-given", session_id, &format!("{cols}x{rows}")]);
+        entry.terminal.resize(cols, rows)
     }
 
     /// Refits to `container`'s new size, if the terminal is shown there (TERM-023).

@@ -885,6 +885,8 @@ impl Render for BoardCanvas {
         if self.board.is_none() {
             return div().size_full().bg(t.bg_canvas).into_any_element();
         }
+        // SRV-182: before the viewport steps, so a fresh move flies this frame.
+        self.follow_step(cx);
         if self.step_animation(cx) {
             window.request_animation_frame();
         }
@@ -897,6 +899,8 @@ impl Render for BoardCanvas {
             window.request_animation_frame();
         }
         self.init_viewport(cx);
+        // SRV-180: the viewport may have moved since the server last heard.
+        self.share_presence(cx);
         self.take_open_request(cx);
         if let Some(id) = self.pending_link_label.take() {
             self.ink_open_link_label(id, window, cx);
@@ -926,7 +930,9 @@ impl Render for BoardCanvas {
             return div().size_full().bg(t.bg_canvas).into_any_element();
         };
         let node_views: HashSet<EntityId> = self.node_views.values().map(Entity::entity_id).collect();
-        let partial = node_view::partial_frame(&node_views, window, cx);
+        // Others' pointers moving draw nothing on the nodes (SRV-181).
+        let peers = self.state.read(cx).peers.entity_id();
+        let partial = node_view::partial_frame(&node_views, &[peers], window, cx);
         for node in &nodes {
             let (drawn, moving) = self.drawn(node, now, cx);
             gliding |= moving;
@@ -1058,6 +1064,9 @@ impl Render for BoardCanvas {
         // MOTION-024: Claude's pens, over what they draw.
         let pens = self.render_pens(Instant::now());
         let ink_hitbox = self.render_ink_hitbox(cx);
+        // SRV-181, SRV-182: others' pointers, and whom this window follows.
+        let cursors = self.render_cursors(window, cx);
+        let following = self.render_following(cx);
         // SHAPE-008: pictures dropped from Finder go up where they land,
         // over the nodes too (which hide the board's own box from a drop).
         let drop_layer = div()
@@ -1129,11 +1138,13 @@ impl Render for BoardCanvas {
             .children(pens)
             .children(selection)
             .children(marquee)
+            .children(cursors)
             .child(ink_hitbox)
             .child(drop_layer)
             .children(hint)
             .children(ink_dock)
             .children(read_only_cover)
+            .children(following)
             .child(pill)
             .child(minimap)
             .children(bar)

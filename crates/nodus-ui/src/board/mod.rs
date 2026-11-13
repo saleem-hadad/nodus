@@ -27,6 +27,7 @@ pub mod node_view;
 pub mod nodes;
 pub mod overlays;
 mod pen;
+pub mod presence;
 mod render;
 pub mod scene;
 mod section;

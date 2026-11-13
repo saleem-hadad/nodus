@@ -121,6 +121,7 @@ All values below are resolved for **light** and **dark**. The theme follows `nat
 - **XCARD-030** Resizing cannot go below 360×240 (no maximum); on release the card's x, y, w, h are saved rounded to integers.
 - **XCARD-031** While the pointer is over the expanded card's node, an 11×11 diagonal grip appears 4px from the bottom-right corner (two white 32% diagonal stripes), fading over 120ms `ease`; it never takes the pointer.
 - **XCARD-032** Expanded cards stack above compact cards (node z-index 1 vs 0; 09); the deck (DECK) and stickers (NOTEUI) render on expanded cards exactly as on compact ones, sized to the expanded node.
+- **XCARD-033** An expanded server card's terminal (hosted Nodus, added after 1.0.12) is the size the session's terminal has, which follows whoever typed into it last (SRV-144, TERM-114), not the card's: a wider one is cut at the card's edge, a narrower or shorter one leaves the terminal's background beside it. Typing into it resizes the session to the card's own size first.
 
 ### Agent deck & fan — DECK
 
@@ -775,6 +776,7 @@ Cross-domain dependencies: 09 (node z-order incl. select elevation +1000, drag/d
 - [x] XCARD-030 min 360×240, save rounded
 - [x] XCARD-031 grip on hover
 - [x] XCARD-032 z above compact; deck & stickers on expanded
+- [x] XCARD-033 a server card's terminal at the size the session follows (hosted)
 - [x] DECK-001 deck existence
 - [x] DECK-002 3 layers by urgency, nearest = most urgent
 - [x] DECK-003 layer surface + 3px status strip

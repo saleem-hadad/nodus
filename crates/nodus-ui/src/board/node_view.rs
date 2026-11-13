@@ -196,16 +196,20 @@ pub fn element(view: &Entity<NodeView>, fresh: bool) -> AnyElement {
 }
 
 /// Whether only the nodes moved since the last frame: everything notified
-/// is a node's own view or drawn inside one (its terminal, its fields), or
-/// was moved on by the ambient clock. Then a node whose props didn't change
-/// can keep its drawing. Nothing notified (a forced draw) counts as more.
-pub fn partial_frame(nodes: &HashSet<EntityId>, window: &Window, cx: &App) -> bool {
+/// is a node's own view or drawn inside one (its terminal, its fields), was
+/// moved on by the ambient clock, or is one of `apart`, which no node draws
+/// from (others' pointers on a server board). Then a node whose props
+/// didn't change can keep its drawing. Nothing notified (a forced draw)
+/// counts as more.
+pub fn partial_frame(nodes: &HashSet<EntityId>, apart: &[EntityId], window: &Window, cx: &App) -> bool {
     let notified = window.notified_entities();
     if notified.is_empty() {
         return false;
     }
     let ticked = ambient::ticked(cx);
-    notified
-        .iter()
-        .all(|e| ticked.is_some_and(|t| t.contains(e)) || window.view_ancestors(*e).any(|v| nodes.contains(&v)))
+    notified.iter().all(|e| {
+        apart.contains(e)
+            || ticked.is_some_and(|t| t.contains(e))
+            || window.view_ancestors(*e).any(|v| nodes.contains(&v))
+    })
 }

@@ -85,6 +85,9 @@ pub struct AppState {
     /// How many times each server's pool of Claude accounts has changed
     /// (`accounts-changed`, SRV-105), for whatever shows it to ask again.
     pub accounts_changed: std::collections::HashMap<String, u64>,
+    /// How many notices each server has sent (SRV-042), for Settings →
+    /// Servers to ask its lists again.
+    pub server_notices: std::collections::HashMap<String, u64>,
     /// How updating each server is going (SRV-200), by its id, from the
     /// first press until it's back on the new version.
     pub server_updates: std::collections::HashMap<String, ServerUpdateStatus>,
@@ -158,6 +161,7 @@ impl AppState {
             projects_loaded: false,
             servers: Vec::new(),
             accounts_changed: std::collections::HashMap::new(),
+            server_notices: std::collections::HashMap::new(),
             server_updates: std::collections::HashMap::new(),
             server_dialog: None,
             board: None,
@@ -220,7 +224,10 @@ impl AppState {
             }
             Event::ProjectsChanged => self.refresh_projects(cx).detach(),
             Event::ServerStatus { server_id, state } => self.server_status(&server_id, state, cx),
-            Event::ServerNotice { message, .. } => self.server_notice(message, cx),
+            Event::ServerNotice { server_id, message, .. } => {
+                *self.server_notices.entry(server_id).or_default() += 1;
+                self.server_notice(message, cx);
+            }
             Event::AccountsChanged { server_id } => {
                 *self.accounts_changed.entry(server_id).or_default() += 1;
                 cx.notify();

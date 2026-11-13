@@ -397,6 +397,27 @@ async fn the_pages_window_nodus_shows_a_page_the_other_views_with_their_data_and
 }
 
 #[tokio::test]
+async fn chat_031_a_page_submits_its_answers_to_the_session_that_put_it_up() {
+    let f = Fixture::new();
+    let id = create_id(&f, json!({ "title": "Mockups", "html": HTML })).await;
+    let answers = json!({ "layout": "tabs" });
+    assert_eq!(
+        f.views
+            .call(P, &id, "submit", &json!({ "answers": answers }))
+            .await
+            .unwrap(),
+        Value::Null
+    );
+    let delivered = f.host.delivered.lock().unwrap().clone();
+    assert_eq!(delivered.len(), 1);
+    let (project, session, text) = &delivered[0];
+    assert_eq!((project.as_str(), session.as_str()), (P, "s1"));
+    let parsed = nodus_domain::Answers::from_message(text).unwrap();
+    assert_eq!((parsed.to.as_str(), parsed.title.as_str()), (id.as_str(), "Mockups"));
+    assert_eq!(parsed.answers, answers);
+}
+
+#[tokio::test]
 async fn the_pages_window_nodus_keeps_a_pages_state_within_bounds() {
     let f = Fixture::new();
     let id = create_id(&f, json!({ "title": "A", "html": HTML })).await;

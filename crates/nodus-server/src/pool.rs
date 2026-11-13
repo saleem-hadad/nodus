@@ -347,8 +347,11 @@ impl Pool {
             let Some(at) = best else {
                 return Err(none_free(&accounts, now));
             };
+            // Strictly after every other use, so picks in the same
+            // millisecond still go round the accounts in turn.
+            let latest = accounts.iter().filter_map(|a| a.last_used_at).fold(0.0, f64::max);
             let account = &mut accounts[at];
-            account.last_used_at = Some(now);
+            account.last_used_at = Some(now.max(latest + 1.0));
             let picked = PoolAccount {
                 id: account.id.clone(),
                 label: account.label.clone(),
@@ -715,7 +718,9 @@ mod tests {
         // Unknown counts as 0, however recently it was used.
         assert_eq!(pool.pick().unwrap().id, "unknown");
         assert_eq!(pool.pick().unwrap().id, "unknown");
-        pool.session_hook("s1", Some("unknown"), "StopFailure", &json!({ "error": "rate_limit" }));
+        // At its limit. Straight to `limit`, not through the hook: the hook
+        // also starts moving the session, whose pick would race these.
+        pool.limit("unknown");
         // A tie at 20% goes to the one used longer ago; each pick is a use.
         let picked = pool.pick().unwrap();
         assert_eq!(

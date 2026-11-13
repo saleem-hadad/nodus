@@ -1248,6 +1248,9 @@ async fn queue_011_without_a_host_that_keeps_queues_the_first_is_typed_when_the_
     assert_eq!(conn.recv().await, Some(paste("fix it")));
     assert_eq!(conn.recv().await, Some(enter()));
     assert_eq!(client.queue("s1"), vec![queued("q2", "then this")]);
+    // A list that hadn't heard can't put it back.
+    assert!(client.set_queue("s1", vec![queued("q1", "fix it"), queued("q2", "then this")]));
+    assert_eq!(client.queue("s1"), vec![queued("q2", "then this")]);
     assert_eq!(
         setup.record.lines(),
         vec![

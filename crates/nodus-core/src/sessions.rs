@@ -19,6 +19,8 @@ use crate::{CommandError, CommandResult, Nodus};
 const QUEUE_ON_SERVER: &str = "Prompts can’t be queued for a session on a server yet";
 /// A session that isn't running has no turn to queue behind (QUEUE-013).
 const QUEUE_NOT_RUNNING: &str = "That session isn’t running";
+/// A prompt of nothing but spaces (QUEUE-013).
+const QUEUE_NOTHING: &str = "There’s nothing to queue";
 
 /// `window.api.sessions`.
 pub struct SessionsApi<'a> {
@@ -190,12 +192,18 @@ impl SessionsApi<'_> {
         Ok(())
     }
 
-    /// Queues a prompt after a running session's others, with a new id and
-    /// now as its time, and gives it back (QUEUE-013); `Event::Queue`
-    /// follows. Fails as [`SessionsApi::set_queue`] does.
+    /// Queues a prompt after a running session's others, trimmed as a
+    /// prompt sent from the board is (SESS-141), with a new id and now as
+    /// its time, and gives it back (QUEUE-013); `Event::Queue` follows.
+    /// Fails with `There’s nothing to queue` for a prompt of only spaces,
+    /// and as [`SessionsApi::set_queue`] does.
     pub fn enqueue(&self, session_id: &str, text: &str) -> CommandResult<QueuedPrompt> {
         const CHANNEL: &str = "session:enqueue";
         self.queueable(CHANNEL, session_id)?;
+        let text = nodus_domain::js::trim(text);
+        if text.is_empty() {
+            return Err(CommandError::new(CHANNEL, QUEUE_NOTHING));
+        }
         let item = QueuedPrompt {
             id: uuid::Uuid::new_v4().to_string(),
             text: text.to_owned(),

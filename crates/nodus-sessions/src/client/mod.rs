@@ -29,7 +29,7 @@ mod connection;
 mod launcher;
 mod runner;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -69,6 +69,9 @@ const STANDALONE_RETRY: Duration = Duration::from_secs(1);
 
 /// The hook that ends a turn, when a queued prompt can go (QUEUE-011).
 const STOP_EVENT: &str = "Stop";
+/// How many prompts it typed in a session remembers, so a queue set from a
+/// list that hadn't heard can't put one back (QUEUE-011).
+const TYPED_LIMIT: usize = 100;
 
 const DIDNT_ANSWER: &str = "The session host didn’t answer";
 const UNTRUSTED: &str = "Another program answered as the session host, so Nodus didn’t trust it with your sessions.";
@@ -197,6 +200,8 @@ struct Running {
     flush: Option<u64>,
     /// Prompts waiting for its turn to end, first to go first (QUEUE-009).
     queue: Vec<QueuedPrompt>,
+    /// The ids of the queued prompts it typed in, newest last (QUEUE-011).
+    typed: VecDeque<String>,
 }
 
 struct PendingSpawn {
@@ -334,6 +339,9 @@ impl HostClient {
             };
             let before = running.queue.clone();
             change(&mut running.queue);
+            // QUEUE-011: one already typed in stays gone.
+            let Running { queue, typed, .. } = running;
+            queue.retain(|item| !typed.contains(&item.id));
             let items = running.queue.clone();
             if keeps_queues {
                 Inner::send(
@@ -888,6 +896,10 @@ impl Inner {
                 return;
             }
             let next = running.queue.remove(0);
+            running.typed.push_back(next.id.clone());
+            while running.typed.len() > TYPED_LIMIT {
+                running.typed.pop_front();
+            }
             let rest = running.queue.clone();
             if keeps_queues {
                 Inner::send(
@@ -920,6 +932,7 @@ impl Inner {
                 pending: String::new(),
                 flush: None,
                 queue: Vec::new(),
+                typed: VecDeque::new(),
             },
         );
         self.wiring.status.process_started(session_id, initial);

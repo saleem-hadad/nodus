@@ -827,7 +827,7 @@ async fn queued_prompts_go_to_claude_when_its_turn_ends() {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_millis() as f64;
-    let first = sessions.enqueue(&id, "run the tests").unwrap();
+    let first = sessions.enqueue(&id, "  run the tests\n").unwrap();
     let second = sessions.enqueue(&id, "then commit").unwrap();
     assert_eq!(
         (first.text.as_str(), second.text.as_str()),
@@ -868,6 +868,8 @@ async fn queued_prompts_go_to_claude_when_its_turn_ends() {
     events.printed(&id, "and push\x1b[201~").await;
     assert!(sessions.queue(&id).is_empty());
 
+    let err = sessions.enqueue(&id, " \n ").unwrap_err();
+    assert_eq!(err.message(), "There’s nothing to queue");
     // Not for a session that isn't running.
     let err = sessions.enqueue("nobody", "hello").unwrap_err();
     assert_eq!(

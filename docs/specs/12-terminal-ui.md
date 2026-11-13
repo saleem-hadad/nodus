@@ -350,7 +350,7 @@ Cursor visibility: the cursor is not drawn until the terminal has been focused o
 - **MODAL-016** If the card has a git branch, the subtitle shows a branch icon and the branch name (monospace, max 280 px, ellipsis).
 - **MODAL-017** For Claude, the subtitle shows the first 8 characters of the session id as a button (tooltip and label `Copy session ID`); clicking copies the full id and shows a check icon and `Copied` for 1400 ms.
 - **MODAL-018** For Claude with a card, the subtitle shows the usage stats (model, context meter `Ctx N%`, running time, cost) as in spec 10's UsageStats; nothing until Claude has reported.
-- **MODAL-019** For Claude, the header has the mic (window variant); spoken words are typed in (`starting` when not live), the session resumes if Resume is available, and the terminal is focused.
+- **MODAL-019** For Claude shown as its terminal, the header has the mic (window variant; a chat's is in its composer, CHAT-030); spoken words are typed in (`starting` when not live), the session resumes if Resume is available, and the terminal is focused.
 - **MODAL-020** When the card isn't live and the terminal isn't loading, the header shows `Restart` (RotateCcw, tooltip `Start a new shell in the project folder`) for a shell or `Resume` (Play) for Claude; pressing it reattaches and sets the loading label to resuming.
 - **MODAL-021** `Stop` (Square icon, tooltip `Stop the session. The card stays, and Resume picks it up.`) shows only for a live Claude session that isn't an action run.
 - **MODAL-022** Stop on a session between turns kills it immediately; on a working or waiting session it first asks with the confirm dialog (MODAL-023) and kills only on confirm.

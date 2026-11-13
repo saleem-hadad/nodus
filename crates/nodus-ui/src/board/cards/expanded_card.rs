@@ -499,7 +499,9 @@ fn tools(
         }
         group = group.child(agent_deck::trigger(b, handles));
     }
-    if !shell {
+    // CHAT-029: a chat card's mic is in its composer (CHAT-030).
+    let chat = !shell && env.server_host.is_none();
+    if !shell && !chat {
         // XCARD-010: the mic is voice's (05); without a host, its idle look.
         let mic = env
             .terminals

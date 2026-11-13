@@ -62,6 +62,7 @@ impl ChatView {
                 .text_color(t.status_waiting)
                 .child(SharedString::from(e))
         });
+        let mic = self.mic(window, cx);
         let send = self.send_button(&t, busy, cx);
         let stop = busy.then(|| self.stop_button(&t, cx));
         let field = Textarea::new(&self.composer)
@@ -83,6 +84,7 @@ impl ChatView {
             .border_color(t.border_strong)
             .bg(t.bg_window)
             .child(div().flex_1().min_w_0().child(field))
+            .child(mic)
             .children(stop)
             .child(send);
         let side = if self.in_card { 10. } else { 24. };
@@ -214,6 +216,28 @@ impl ChatView {
                 )
                 .children(rows)
                 .into_any_element(),
+        )
+    }
+
+    /// CHAT-030, VOICE-041: the mic, right of the field; what's said goes in
+    /// at the caret, not sent.
+    fn mic(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> AnyElement {
+        let me = cx.entity().downgrade();
+        let on_text: crate::voice::OnText = std::rc::Rc::new(move |text: String, cx: &mut gpui::App| {
+            let _ = me.update(cx, |this, cx| this.insert_later(&text, cx));
+        });
+        let place = if self.in_card { "card" } else { "window" };
+        crate::voice::session_mic(
+            SharedString::from(format!("chat-mic-{place}-{}", self.session_id)),
+            crate::voice::SessionMicProps {
+                project_id: self.project_id.clone(),
+                variant: crate::voice::MicVariant::Composer,
+                scale: self.scale,
+                own_field: Some(self.composer_handle(cx)),
+                on_text,
+            },
+            window,
+            cx,
         )
     }
 

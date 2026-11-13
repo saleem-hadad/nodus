@@ -9,9 +9,11 @@
 //!   clock, five-bar meter, or the spinner while transcribing) and the notice
 //!   with its Settings / System Settings / Retry / Dismiss buttons. The prompt
 //!   bar (spec 11) draws its mic with these.
-//! - [`session_mic`]: the mic in an open Claude session's title bar, for the
-//!   session window (`MicVariant::Window`) and the expanded card
-//!   (`MicVariant::Card`); what's said is typed in, not sent (VOICE-041).
+//! - [`session_mic`]: the mic of an open Claude session: in a chat's composer,
+//!   beside the field (`MicVariant::Composer`), or, for a session shown as
+//!   its terminal, in the session window's title bar (`MicVariant::Window`)
+//!   or the expanded card's (`MicVariant::Card`); what's said is typed in,
+//!   not sent (VOICE-041).
 
 use std::f32::consts::TAU;
 use std::rc::Rc;
@@ -563,6 +565,9 @@ pub enum MicVariant {
     Window,
     /// An expanded card's header: a `.card-tool`, drawn at the board's zoom.
     Card,
+    /// A chat composer's pill, right of the field: round like Send, drawn at
+    /// the chat's scale, its notice hanging above it.
+    Composer,
 }
 
 /// What a session mic needs from the title bar it's in.
@@ -573,15 +578,18 @@ pub struct SessionMicProps {
     pub variant: MicVariant,
     /// 1 in the session window; the board's zoom on an expanded card.
     pub scale: f32,
+    /// The field it types into, where Esc cancels the recording too
+    /// (VOICE-033) rather than reaching the field.
+    pub own_field: Option<FocusHandle>,
     /// Types what was said at the session's prompt, without sending it
     /// (12's `registry.typeIn`, which resumes a stopped session).
     pub on_text: OnText,
 }
 
-/// VOICE-041: the mic in an open Claude session's title bar. `id` names it
-/// (one per session and variant, e.g. `("session-mic", session_id)`); its
-/// recording lives while the element is drawn and stops when it isn't
-/// (VOICE-035).
+/// VOICE-041: the mic of an open Claude session, in its chat's composer or a
+/// title bar. `id` names it (one per session and variant, e.g.
+/// `("session-mic", session_id)`); its recording lives while the element is
+/// drawn and stops when it isn't (VOICE-035).
 pub fn session_mic(id: impl Into<ElementId>, props: SessionMicProps, window: &mut Window, cx: &mut App) -> AnyElement {
     let id: ElementId = id.into();
     let nodus = cx.global::<crate::shell::window::Core>().0.clone();
@@ -591,7 +599,10 @@ pub fn session_mic(id: impl Into<ElementId>, props: SessionMicProps, window: &mu
         cx.new(|cx| Mic::new(&nodus, project, on_text, window, cx))
     });
     let mic = mic.read(cx).clone();
-    mic.update(cx, |m, _| m.set_on_text(props.on_text.clone()));
+    mic.update(cx, |m, _| {
+        m.set_on_text(props.on_text.clone());
+        m.set_own_field(props.own_field.clone());
+    });
     let view = window.use_keyed_state((id.clone(), "view"), cx, |_, cx| {
         cx.new(|_| SessionMic {
             id: id.clone(),
@@ -623,6 +634,7 @@ pub fn card_mic(
             project_id: project_id.to_owned(),
             variant: MicVariant::Card,
             scale: zoom,
+            own_field: None,
             on_text: type_in,
         },
         window,
@@ -642,8 +654,11 @@ impl Render for SessionMic {
         let t = theme::tokens(cx);
         let z = Z(match self.props.variant {
             MicVariant::Window => 1.0,
-            MicVariant::Card => self.props.scale,
+            MicVariant::Card | MicVariant::Composer => self.props.scale,
         });
+        let composer = self.props.variant == MicVariant::Composer;
+        // Send's size beside it in the composer; a title bar's tool elsewhere.
+        let side = if composer { 30. } else { 28. };
         let phase = self.mic.read(cx).phase();
         let listening = phase == Phase::Recording;
         let (title, _label, enabled) = session_mic_button(phase);
@@ -678,7 +693,7 @@ impl Render for SessionMic {
         } else {
             let rest = match self.props.variant {
                 MicVariant::Window => t.text_primary,
-                MicVariant::Card => t.text_secondary,
+                MicVariant::Card | MicVariant::Composer => t.text_secondary,
             };
             (hover.then_some(t.bg_hover), if hover { t.text_primary } else { rest })
         };
@@ -694,13 +709,13 @@ impl Render for SessionMic {
             .flex_none()
             .items_center()
             .justify_center()
-            .h(z.px(28.))
+            .h(z.px(side))
             .map(|d| match self.props.variant {
-                MicVariant::Window => d.w(z.px(28.)),
-                MicVariant::Card => d.min_w(z.px(28.)),
+                MicVariant::Window | MicVariant::Composer => d.w(z.px(side)),
+                MicVariant::Card => d.min_w(z.px(side)),
             })
             .map(|d| {
-                if listening {
+                if listening || composer {
                     d.rounded_full()
                 } else {
                     d.rounded(z.px(6.))
@@ -735,7 +750,8 @@ impl Render for SessionMic {
             })
             .child(icon);
 
-        // VOICE-045: the notice hangs 8px below, right edges lined up.
+        // VOICE-045: the notice hangs 8px below, right edges lined up; the
+        // composer's sits 8px above, as nothing is below it.
         let notice = voice_notice(
             (id.clone(), "notice"),
             &self.mic,
@@ -745,8 +761,15 @@ impl Render for SessionMic {
             cx,
         )
         .map(|n| {
-            // Over the terminal under the title bar (z-index 20).
-            gpui::deferred(div().absolute().top(z.px(28. + 8.)).right_0().child(n)).with_priority(20)
+            // Over the terminal under the title bar, or the chat above the
+            // composer (z-index 20).
+            let at = div().absolute().right_0();
+            let at = if composer {
+                at.bottom(z.px(side + 8.))
+            } else {
+                at.top(z.px(side + 8.))
+            };
+            gpui::deferred(at.child(n)).with_priority(20)
         });
 
         div()

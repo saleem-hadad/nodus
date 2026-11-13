@@ -398,9 +398,10 @@ impl SessionWindow {
             .items_center()
             .gap(px(6.))
             .flex_none()
-            .when(!shell, |d| {
+            .when(!shell && self.chat.is_none(), |d| {
                 // MODAL-019, VOICE-041: the mic; what's said is typed in at
                 // the session's prompt (resuming it if it's stopped), not sent.
+                // A chat's mic is in its composer (CHAT-030).
                 let typing_into = this.clone();
                 let handle = window.window_handle();
                 let on_text: crate::voice::OnText = std::rc::Rc::new(move |text: String, cx: &mut gpui::App| {
@@ -415,6 +416,7 @@ impl SessionWindow {
                         project_id: self.project_id.clone(),
                         variant: crate::voice::MicVariant::Window,
                         scale: 1.,
+                        own_field: None,
                         on_text,
                     },
                     window,

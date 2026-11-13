@@ -11,6 +11,7 @@ use serde_json::Map;
 
 use crate::error::OnChannel;
 use crate::realpath::realpath;
+use crate::servers::share;
 use crate::{CommandError, CommandResult, Nodus};
 
 /// `window.api.projects`.
@@ -20,8 +21,11 @@ pub struct ProjectsApi<'a> {
 
 impl ProjectsApi<'_> {
     /// `projects:list`: every project in the order they were added, archived
-    /// ones too (PLAT-067).
+    /// ones too (PLAT-067). Server projects linked into the grid among them,
+    /// with their names, colours and actions fresh from every connected
+    /// server (SRV-160, SRV-161); as last seen while a server is away.
     pub async fn list(&self) -> Vec<Project> {
+        self.nodus.on_core(self.nodus.refresh_linked_projects()).await;
         self.nodus.inner.store.read(|state| state.projects.clone())
     }
 
@@ -100,9 +104,17 @@ impl ProjectsApi<'_> {
     }
 
     /// `projects:update` (PLAT-074): renames, recolours, archives, focuses or
-    /// files a project under a group.
-    pub async fn update(&self, id: &str, patch: ProjectPatch) -> CommandResult<Project> {
+    /// files a project under a group. A server project is renamed and
+    /// recoloured on its server, for everyone on it; the rest is this app's
+    /// own (SRV-161).
+    pub async fn update(&self, id: &str, mut patch: ProjectPatch) -> CommandResult<Project> {
         const CHANNEL: &str = "projects:update";
+        let mut theirs = None;
+        if let Some(route) = self.nodus.route_project(id) {
+            theirs = route.update_project(&patch).await?;
+            patch.name = None;
+            patch.color = None;
+        }
         self.nodus.inner.store.update(|state| {
             let group = match &patch.group_id {
                 Some(Some(group_id)) if !group_id.is_empty() => Some(state.group(group_id).map(|g| g.id.clone())),
@@ -132,6 +144,9 @@ impl ProjectsApi<'_> {
                 (_, Some(found)) => project.group_id = Some(found.on(CHANNEL)?),
                 _ => {}
             }
+            if let Some(theirs) = &theirs {
+                share(project, theirs);
+            }
             Ok(project.clone())
         })
     }
@@ -140,7 +155,14 @@ impl ProjectsApi<'_> {
     /// transcripts no longer watched and its views' folders deleted, then the
     /// project and its board leave state.json. Its groups, captures and
     /// transcripts on disk stay.
+    ///
+    /// A server project only leaves this app's grid: it stays on the server,
+    /// for everyone else (SRV-161).
     pub async fn remove(&self, id: &str) {
+        if self.nodus.route_project(id).is_some() {
+            let _ = self.nodus.servers().unlink(id).await;
+            return;
+        }
         self.nodus.project_removing(id);
         self.nodus.inner.store.update(|state| {
             state.projects.retain(|p| p.id != id);
@@ -152,6 +174,10 @@ impl ProjectsApi<'_> {
     /// Finder or File Explorer.
     pub async fn reveal_in_finder(&self, id: &str) -> CommandResult<()> {
         const CHANNEL: &str = "projects:reveal";
+        // SRV-163: a server project's folder is on the server.
+        if self.nodus.route_project(id).is_some() {
+            return Err(CommandError::new(CHANNEL, nodus_remote::NOT_AVAILABLE));
+        }
         let path = self
             .nodus
             .inner
@@ -164,9 +190,21 @@ impl ProjectsApi<'_> {
 
     /// `projects:stats` (PLAT-077): each project's sessions and what's
     /// running in it, by project id (03 `projectStats`). Until the core
-    /// connects the session host nothing reads as running.
+    /// connects the session host nothing reads as running. A server
+    /// project's come from its server; none while it's away (SRV-160).
     pub async fn stats(&self) -> IndexMap<String, ProjectStats> {
-        self.nodus.inner.board.all_project_stats()
+        let linked = self.nodus.on_core(self.nodus.linked_project_stats()).await;
+        let projects = self.nodus.inner.store.read(|state| state.projects.clone());
+        projects
+            .iter()
+            .map(|project| {
+                let stats = match project.server {
+                    Some(_) => linked.get(&project.id).copied().unwrap_or_default(),
+                    None => self.nodus.inner.board.project_stats(project),
+                };
+                (project.id.clone(), stats)
+            })
+            .collect()
     }
 }
 

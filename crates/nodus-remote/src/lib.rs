@@ -26,7 +26,8 @@ use tokio::runtime::Handle;
 use tokio::sync::{mpsc, watch};
 use tokio::task::AbortHandle;
 
-pub use nodus_wire::{CallError, Hello, PROTOCOL, Request};
+pub use nodus_wire::client::DISCONNECTED;
+pub use nodus_wire::{CallError, Hello, NOT_AVAILABLE, PROTOCOL, Request};
 
 /// What a call fails with while the server isn't connected.
 pub const OFFLINE: &str = "Not connected to the server";
@@ -331,7 +332,7 @@ async fn keep_connected(shared: Arc<Shared>) {
                 Status {
                     state: ServerState::Offline,
                     hello: Some(said),
-                    error: Some(nodus_wire::client::DISCONNECTED.to_owned()),
+                    error: Some(DISCONNECTED.to_owned()),
                 }
             }
             Err(Failed::Mismatch(said)) => Status {

@@ -29,6 +29,7 @@ use tokio::runtime::Handle;
 use tokio::sync::{broadcast, mpsc, watch};
 
 use crate::notifications::{NoNotifier, Notifications, SystemNotifier};
+use crate::servers::Remotes;
 use crate::shell::{AppShell, Headless, ShellPrompt, ShellWindow};
 use crate::wiring::{
     Broadcast, CoreBrains, CoreMetas, CoreProjects, CoreRunner, CoreSessions, CoreUpdaterApp, CoreViewHost,
@@ -219,6 +220,11 @@ pub(crate) struct Inner {
     pub(crate) voice: Voice,
     /// Floating capture (07).
     pub(crate) capture: crate::capture::CaptureCore,
+    /// Where the xAI key and servers' tokens are sealed (0.9.4's safeStorage).
+    pub(crate) secrets: Arc<SafeStorage>,
+    /// The connections to Nodus servers, which server projects' calls go
+    /// through (SRV-160).
+    pub(crate) remotes: Remotes,
     /// `BOARD_TOOL_RULES`, as arguments.
     board_tool_rules: Vec<String>,
 }
@@ -254,6 +260,9 @@ impl Nodus {
             (HostMode::Launch, None) => Arc::new(ProcessLauncher::current_exe()?),
         };
         let shell = config.shell.unwrap_or_else(|| Arc::new(Headless));
+        let secrets = config
+            .secrets
+            .unwrap_or_else(|| Arc::new(SafeStorage::system(&config.user_data)));
         let (changes, status_changes) = mpsc::unbounded_channel();
         let inner = Arc::new_cyclic(|core: &Weak<Inner>| {
             let broadcast = Broadcast(events.clone());
@@ -368,13 +377,10 @@ impl Nodus {
                 notify,
                 updater,
                 actions: Actions::new(Arc::clone(&store)),
-                voice: Voice::new(
-                    Arc::clone(&store),
-                    config
-                        .secrets
-                        .unwrap_or_else(|| Arc::new(SafeStorage::system(&config.user_data))),
-                ),
+                voice: Voice::new(Arc::clone(&store), Arc::clone(&secrets)),
                 capture,
+                secrets,
+                remotes: Remotes::new(&config.user_data),
                 board_tool_rules: nodus_tools::BOARD_TOOL_RULES.iter().map(|&r| r.to_owned()).collect(),
             }
         });
@@ -420,6 +426,8 @@ impl Nodus {
                 Err(ClientError::Failed(err)) => tracing::error!("[host] connect failed {err}"),
             }
             self.inner.notify.arm();
+            // SRV-160: the saved servers, connecting from now on.
+            self.connect_servers().await;
             Ok(())
         })
         .await
@@ -446,6 +454,7 @@ impl Nodus {
     pub fn shutdown(&self) {
         // Step 1: capture's key hook and permission poll (CAP-039).
         self.inner.capture.stop();
+        self.inner.remotes.close_all();
         self.inner.host.disconnect();
         self.inner.board.watcher().unwatch_all();
         self.inner.views.flush();

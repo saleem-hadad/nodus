@@ -342,6 +342,7 @@ It owns the native application menu on macOS, and the same menu as a popup from 
 ### Secrets (`safeStorage`)
 
 - **PLAT-115** The only secret is the xAI key for voice prompts. It is stored as `state.voiceKey`: the standard base64 (with padding) of Electron `safeStorage.encryptString(key.trim())`. It is never sent to the UI. The save, forget and source logic belongs to 05.
+  - After 1.0.12, servers' device tokens are sealed the same way, in `state.servers[].token`. Adding a server when encryption isn't available fails with `The Keychain isn’t available, so the token can’t be saved.` (Windows: `Encrypted storage isn’t available, …`).
 - **PLAT-116** macOS ciphertext = ASCII `v10` + AES-128-CBC(PKCS#7) of the UTF-8 plaintext.
   - Key: PBKDF2-HMAC-SHA1(password = the Keychain password **as its UTF-8 string bytes**, salt = `saltysalt`, iterations = 1003, length = 16 bytes).
   - IV: 16 × 0x20 (space).
@@ -398,6 +399,7 @@ It owns the native application menu on macOS, and the same menu as a popup from 
 | `host/` (`host.sock` or a pipe, `host.log`, `hook.curlrc`, …) | session host files (`hostPaths`) | 02 |
 | `views/<viewId>/` | a view's page, data and runtime | 04 |
 | `captures/` | screenshots and copied images from capture | 07 |
+| `server-boards/<projectId>.json` | each server board's last snapshot, for opening it read-only while its server is away (SRV-028); added after 1.0.12 | 01 |
 | `updates/` | downloaded updates | 06 |
 | `Local State` | Chromium JSON; Windows: `os_crypt.encrypted_key` | 01 (read only) |
 | `Preferences` | Chromium JSON; page zoom, spellcheck dictionaries | 01 (read only) |
@@ -425,6 +427,8 @@ Top level (`State`):
 | `actions` | `ProjectAction[]` | absent | global actions; key deleted when the list empties (05) |
 | `voiceKey` | string | absent | base64 `safeStorage` ciphertext (PLAT-115) |
 | `captures` | `CaptureRecord[]` | absent | newest first, at most 20 (07) |
+| `servers` | `ServerRecord[]` | absent | the Nodus servers this app connects to, add order (SRV-161); added after 1.0.12, absent while empty |
+| `serverBoards` | `{ [projectId]: ServerBoardState }` | absent | what's this person's own on server boards (SRV-164); added after 1.0.12, absent while empty |
 
 `AppSettings`:
 
@@ -454,6 +458,7 @@ Top level (`State`):
 | `groupId` | string | | |
 | `focused` | `true` | | deleted rather than set false |
 | `actions` | `ProjectAction[]` | | the project's own actions, deleted when empty (05) |
+| `server` | string | | added after 1.0.12: the id of the server a linked server project lives on (SRV-161). Its `repoPath` is `''`, and its `name`, `color` and `actions` are the server's, refreshed from it; the rest is this app's own |
 
 `ProjectAction` (05): `id` string, `name` string, `icon` string (one of `ACTION_ICONS`, src/shared/actions.ts), `description` string, `prompt` string, `global?` bool, `createdAt` number.
 
@@ -486,6 +491,10 @@ Top level (`State`):
 `Rect`: `x, y, w, h` numbers. `Viewport`: `x, y, zoom` numbers.
 
 `CaptureRecord` (07): `id`, `kind` `'session'|'into'|'note'|'view'`, `projectId`, `title`, `createdAt`, `sessionId?`, `noteId?`, `viewId?`.
+
+`ServerRecord` (added after 1.0.12): `id` string (uuid v4), `url` (`http://host[:port]`), `name` (the server's hello), `token`: the device token sealed as `voiceKey` is (PLAT-115), never sent to the UI.
+
+`ServerBoardState` (added after 1.0.12): `viewport?` `Viewport`, `expanded?` string[] (the session ids of the cards expanded here). The server's own snapshot of the board never holds either for this app.
 
 Checked against a real 0.9.4 `state.json`, by key names only: the fields listed above occur, and no unknown fields do.
 

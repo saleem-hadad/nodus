@@ -8,6 +8,8 @@ use nodus_domain::{
 };
 use serde_json::Value;
 
+use nodus_remote::Request;
+
 use crate::error::OnChannel;
 use crate::{CommandResult, Nodus};
 
@@ -23,11 +25,19 @@ impl BoardApi<'_> {
     /// there arrives as `Event::BoardChanged`. `Unknown project <id>`.
     ///
     /// Capture is told the board opened first (SESS-071 step 1, CAP-154).
+    ///
+    /// A server project's board comes from its server, with this person's
+    /// own viewport and expanded cards; while the server can't be reached,
+    /// its last snapshot, marked `offline` (SRV-028, SRV-164).
     pub async fn load(&self, project_id: &str) -> CommandResult<BoardSnapshot> {
+        let route = self.nodus.route_project(project_id);
         self.nodus
             .on_core(async {
                 self.nodus.inner.capture.board_opened(project_id);
-                self.nodus.inner.board.load(project_id).on("board:load")
+                match route {
+                    Some(route) => route.load_board().await,
+                    None => self.nodus.inner.board.load(project_id).on("board:load"),
+                }
             })
             .await
     }
@@ -36,6 +46,9 @@ impl BoardApi<'_> {
     /// the process), groups and resizes cards. A card with nothing said in it
     /// is removed rather than archived.
     pub async fn save_nodes(&self, project_id: &str, patches: &[NodePatch]) -> CommandResult<()> {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            return route.save_nodes(patches).await;
+        }
         self.nodus
             .on_core(async {
                 self.nodus
@@ -49,6 +62,10 @@ impl BoardApi<'_> {
 
     /// `board:save-archive` (SESS-106).
     pub async fn save_archive(&self, project_id: &str, rect: Rect) {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let project_id = project_id.to_owned();
+            return route.run(Request::BoardSaveArchive { project_id, rect }).await;
+        }
         self.nodus
             .on_core(async {
                 self.nodus.inner.board.save_archive(project_id, rect);
@@ -56,8 +73,12 @@ impl BoardApi<'_> {
             .await;
     }
 
-    /// `board:save-viewport` (SESS-106).
+    /// `board:save-viewport` (SESS-106). A server board's is this person's
+    /// own, kept here (SRV-164).
     pub async fn save_viewport(&self, project_id: &str, viewport: Viewport) {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            return route.save_viewport(viewport);
+        }
         self.nodus
             .on_core(async {
                 self.nodus.inner.board.save_viewport(project_id, viewport);
@@ -69,6 +90,10 @@ impl BoardApi<'_> {
     /// is hidden for good unless it's a terminal, and this waits for its
     /// process to stop. The transcript stays.
     pub async fn remove_node(&self, project_id: &str, session_id: &str) {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, session_id) = (project_id.to_owned(), session_id.to_owned());
+            return route.run(Request::BoardRemoveNode { project_id, session_id }).await;
+        }
         self.nodus
             .on_core(async {
                 self.nodus.inner.board.remove_node(project_id, session_id).await;
@@ -78,6 +103,10 @@ impl BoardApi<'_> {
 
     /// `board:save-section` (SESS-100): creates or updates a section.
     pub async fn save_section(&self, project_id: &str, section: &BoardSection) {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, section) = (project_id.to_owned(), section.clone());
+            return route.run(Request::BoardSaveSection { project_id, section }).await;
+        }
         self.nodus
             .on_core(async {
                 self.nodus.inner.board.save_section(project_id, &to_json(section));
@@ -87,6 +116,10 @@ impl BoardApi<'_> {
 
     /// `board:remove-section` (SESS-101): its cards stay where they are.
     pub async fn remove_section(&self, project_id: &str, section_id: &str) {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, section_id) = (project_id.to_owned(), section_id.to_owned());
+            return route.run(Request::BoardRemoveSection { project_id, section_id }).await;
+        }
         self.nodus
             .on_core(async {
                 self.nodus.inner.board.remove_section(project_id, section_id);
@@ -98,6 +131,15 @@ impl BoardApi<'_> {
     /// section holding these sessions, once the login shell's environment is
     /// in. `These sessions have nothing to name the section after yet`.
     pub async fn name_section(&self, project_id: &str, session_ids: &[String]) -> CommandResult<String> {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, session_ids) = (project_id.to_owned(), session_ids.to_vec());
+            return route
+                .call(Request::BoardNameSection {
+                    project_id,
+                    session_ids,
+                })
+                .await;
+        }
         self.nodus
             .on_core(async {
                 let env = self.nodus.env().await;
@@ -113,6 +155,10 @@ impl BoardApi<'_> {
 
     /// `board:save-note` (SESS-103): creates or updates a sticky note.
     pub async fn save_note(&self, project_id: &str, note: &BoardNote) {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, note) = (project_id.to_owned(), note.clone());
+            return route.run(Request::BoardSaveNote { project_id, note }).await;
+        }
         self.nodus
             .on_core(async {
                 self.nodus.inner.board.save_note(project_id, &to_json(note));
@@ -122,6 +168,10 @@ impl BoardApi<'_> {
 
     /// `board:remove-notes` (SESS-104).
     pub async fn remove_notes(&self, project_id: &str, note_ids: &[String]) {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, note_ids) = (project_id.to_owned(), note_ids.to_vec());
+            return route.run(Request::BoardRemoveNotes { project_id, note_ids }).await;
+        }
         self.nodus
             .on_core(async {
                 self.nodus.inner.board.remove_notes(project_id, note_ids);
@@ -132,6 +182,10 @@ impl BoardApi<'_> {
     /// `board:save-ink` (SESS-105, INK-012): replaces the board's ink with
     /// these strokes, cleaned as views-tools' `cleanInk` does.
     pub async fn save_ink(&self, project_id: &str, strokes: &[InkStroke]) {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, strokes) = (project_id.to_owned(), strokes.to_vec());
+            return route.run(Request::BoardSaveInk { project_id, strokes }).await;
+        }
         self.nodus
             .on_core(async {
                 let strokes = nodus_board::ink::clean_ink(&to_json(&strokes));
@@ -142,6 +196,10 @@ impl BoardApi<'_> {
 
     /// `board:save-shapes` (added after 0.9.4): creates or updates shapes.
     pub async fn save_shapes(&self, project_id: &str, shapes: &[BoardShape]) {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, shapes) = (project_id.to_owned(), shapes.to_vec());
+            return route.run(Request::BoardSaveShapes { project_id, shapes }).await;
+        }
         self.nodus
             .on_core(async {
                 self.nodus.inner.board.save_shapes(project_id, shapes);
@@ -151,6 +209,10 @@ impl BoardApi<'_> {
 
     /// `board:remove-shapes`: the shapes go, with their links.
     pub async fn remove_shapes(&self, project_id: &str, ids: &[String]) {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, ids) = (project_id.to_owned(), ids.to_vec());
+            return route.run(Request::BoardRemoveShapes { project_id, ids }).await;
+        }
         self.nodus
             .on_core(async {
                 self.nodus.inner.board.remove_shapes(project_id, ids);
@@ -160,6 +222,10 @@ impl BoardApi<'_> {
 
     /// `board:save-links`: creates or updates links.
     pub async fn save_links(&self, project_id: &str, links: &[BoardLink]) {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, links) = (project_id.to_owned(), links.to_vec());
+            return route.run(Request::BoardSaveLinks { project_id, links }).await;
+        }
         self.nodus
             .on_core(async {
                 self.nodus.inner.board.save_links(project_id, links);
@@ -169,6 +235,10 @@ impl BoardApi<'_> {
 
     /// `board:remove-links`.
     pub async fn remove_links(&self, project_id: &str, ids: &[String]) {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, ids) = (project_id.to_owned(), ids.to_vec());
+            return route.run(Request::BoardRemoveLinks { project_id, ids }).await;
+        }
         self.nodus
             .on_core(async {
                 self.nodus.inner.board.remove_links(project_id, ids);
@@ -178,14 +248,22 @@ impl BoardApi<'_> {
 
     /// The project whose board has this session, as a card or a view's
     /// brain; none once it has left every board. A server sends a session's
-    /// events only to the clients watching its project (SRV-026).
+    /// events only to the clients watching its project (SRV-026). A session
+    /// on a server board this app has loaded is found there (SRV-160).
     pub fn session_project(&self, session_id: &str) -> Option<String> {
-        self.nodus.inner.store.read(|state| {
+        let local = self.nodus.inner.store.read(|state| {
             state
                 .boards
                 .iter()
                 .find(|(_, board)| board.nodes.contains_key(session_id))
                 .map(|(project_id, _)| project_id.clone())
+        });
+        local.or_else(|| {
+            self.nodus
+                .inner
+                .remotes
+                .session_home(session_id)
+                .map(|home| home.project_id)
         })
     }
 

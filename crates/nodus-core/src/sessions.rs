@@ -5,9 +5,11 @@
 use nodus_domain::{
     AgentInfo, CreateSessionOptions, OpenSessionResult, SessionCard, SessionSearchHit, SummaryResult, TranscriptMessage,
 };
+use nodus_remote::Request;
 use nodus_sessions::launch;
 
 use crate::error::OnChannel;
+use crate::routing::Route;
 use crate::wiring::CoreLauncher;
 use crate::{CommandResult, Nodus};
 
@@ -22,6 +24,9 @@ impl SessionsApi<'_> {
     /// with `That action no longer exists`, the `claude` not found message,
     /// or the session host's error; the card is taken off again then.
     pub async fn create(&self, project_id: &str, opts: &CreateSessionOptions) -> CommandResult<SessionCard> {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            return route.create_session(opts).await;
+        }
         self.nodus
             .on_core(async {
                 const CHANNEL: &str = "session:create";
@@ -41,6 +46,10 @@ impl SessionsApi<'_> {
     /// resized and gives its buffered output to replay; any other is started
     /// (resumed when it has a transcript) at this size, once the login
     /// shell's environment is in, with nothing to replay.
+    ///
+    /// On a server board, its output arrives as `Event::PtyData` from now
+    /// on, until [`SessionsApi::close`] (SRV-026). After the server comes
+    /// back from being unreachable, open it again for its replay.
     pub async fn open(
         &self,
         project_id: &str,
@@ -48,6 +57,18 @@ impl SessionsApi<'_> {
         cols: f64,
         rows: f64,
     ) -> CommandResult<OpenSessionResult> {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            route.remember(session_id);
+            let (project_id, session_id) = (project_id.to_owned(), session_id.to_owned());
+            return route
+                .call(Request::SessionOpen {
+                    project_id,
+                    session_id,
+                    cols,
+                    rows,
+                })
+                .await;
+        }
         self.nodus
             .on_core(async {
                 const CHANNEL: &str = "session:open";
@@ -92,6 +113,10 @@ impl SessionsApi<'_> {
     /// they type into isn't idle (VIEW-098), then the keys go to the process
     /// (nothing when it isn't live).
     pub fn write(&self, session_id: &str, data: &str) {
+        if let Some(route) = self.nodus.route_session(session_id) {
+            let (session_id, data) = (session_id.to_owned(), data.to_owned());
+            return route.send(Request::SessionWrite { session_id, data });
+        }
         let inner = &self.nodus.inner;
         // Before the write: an interrupt would otherwise end the run's turn and remove it.
         if launch::is_takeover(data, inner.status.status(session_id)) {
@@ -106,6 +131,16 @@ impl SessionsApi<'_> {
     /// Rejects `That session is no longer on the board`, and `It’s waiting
     /// for your answer. Open it to reply.` while it waits on a question.
     pub async fn send(&self, project_id: &str, session_id: &str, text: &str) -> CommandResult<()> {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, session_id, text) = (project_id.to_owned(), session_id.to_owned(), text.to_owned());
+            return route
+                .call(Request::SessionSend {
+                    project_id,
+                    session_id,
+                    text,
+                })
+                .await;
+        }
         self.nodus
             .on_core(async {
                 let launcher = CoreLauncher(std::sync::Arc::downgrade(&self.nodus.inner));
@@ -122,13 +157,31 @@ impl SessionsApi<'_> {
     /// `session:resize` (HOST-224, SESS-147), fire and forget: ignored unless
     /// live and both are finite; floored, at least 20 × 5.
     pub fn resize(&self, session_id: &str, cols: f64, rows: f64) {
+        if let Some(route) = self.nodus.route_session(session_id) {
+            let session_id = session_id.to_owned();
+            return route.send(Request::SessionResize { session_id, cols, rows });
+        }
         self.nodus.inner.host.resize(session_id, cols, rows);
+    }
+
+    /// No more of a server session's output here, until it's opened again
+    /// (`session:close`, SRV-026): for when its terminal closes. A local
+    /// session's output always comes, so for one this does nothing.
+    pub fn close(&self, session_id: &str) {
+        if let Some(route) = self.nodus.route_session(session_id) {
+            let session_id = session_id.to_owned();
+            route.send(Request::SessionClose { session_id });
+        }
     }
 
     /// `session:kill` (HOST-224, SESS-148): asks the host to stop the
     /// process; done when it has exited or after 4 s, at once when it isn't
     /// live. The card stays, and opening it resumes the session.
     pub async fn kill(&self, session_id: &str) {
+        if let Some(route) = self.nodus.route_session(session_id) {
+            let session_id = session_id.to_owned();
+            return route.run(Request::SessionKill { session_id }).await;
+        }
         self.nodus
             .on_core(async {
                 self.nodus.inner.host.kill(session_id).await;
@@ -140,11 +193,31 @@ impl SessionsApi<'_> {
     /// every one killed at once, done once all have exited or timed out. The
     /// window picks them with `nodus_board::stoppable` and asks first with
     /// `nodus_board::stop_confirmation`.
+    /// Sessions on server boards are stopped by their servers, at the same
+    /// time.
     pub async fn stop(&self, session_ids: &[String]) {
+        let mut local = Vec::new();
+        let mut remote: Vec<(Route, Vec<String>)> = Vec::new();
+        for id in session_ids {
+            match self.nodus.route_session(id) {
+                Some(route) => match remote.iter_mut().find(|(r, _)| r.server_id() == route.server_id()) {
+                    Some((_, ids)) => ids.push(id.clone()),
+                    None => remote.push((route, vec![id.clone()])),
+                },
+                None => local.push(id),
+            }
+        }
         self.nodus
             .on_core(async {
                 let host = &self.nodus.inner.host;
-                let kills: Vec<_> = session_ids.iter().map(|id| host.kill(id)).collect();
+                let kills: Vec<_> = local.iter().map(|id| host.kill(id)).collect();
+                let stops: Vec<_> = remote
+                    .into_iter()
+                    .map(|(route, session_ids)| async move { route.run(Request::SessionStop { session_ids }).await })
+                    .collect();
+                for stopped in stops {
+                    stopped.await;
+                }
                 for killed in kills {
                     killed.await;
                 }
@@ -154,6 +227,10 @@ impl SessionsApi<'_> {
 
     /// `session:transcript` (SESS-162): the conversation, for the preview.
     pub async fn transcript(&self, project_id: &str, session_id: &str) -> CommandResult<Vec<TranscriptMessage>> {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, session_id) = (project_id.to_owned(), session_id.to_owned());
+            return route.call(Request::SessionTranscript { project_id, session_id }).await;
+        }
         self.nodus
             .on_core(async {
                 self.nodus
@@ -175,6 +252,16 @@ impl SessionsApi<'_> {
         request_id: &str,
         focus: Option<&str>,
     ) -> CommandResult<Vec<SummaryResult>> {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            return route
+                .call(Request::SessionSummarize {
+                    project_id: project_id.to_owned(),
+                    session_ids: session_ids.to_vec(),
+                    request_id: request_id.to_owned(),
+                    focus: focus.map(str::to_owned),
+                })
+                .await;
+        }
         self.nodus
             .on_core(async {
                 let env = self.nodus.env().await;
@@ -198,6 +285,10 @@ impl SessionsApi<'_> {
     /// `session:search` (SESS-175): the board's sessions whose transcripts
     /// hold every word of the query, best first.
     pub async fn search(&self, project_id: &str, query: &str) -> CommandResult<Vec<SessionSearchHit>> {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, query) = (project_id.to_owned(), query.to_owned());
+            return route.call(Request::SessionSearch { project_id, query }).await;
+        }
         self.nodus
             .on_core(async {
                 self.nodus
@@ -213,6 +304,10 @@ impl SessionsApi<'_> {
     /// `session:agents` (SESS-164, HOST-198): every subagent the session has
     /// started, oldest first.
     pub async fn agents(&self, project_id: &str, session_id: &str) -> CommandResult<Vec<AgentInfo>> {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, session_id) = (project_id.to_owned(), session_id.to_owned());
+            return route.call(Request::SessionAgents { project_id, session_id }).await;
+        }
         self.nodus
             .on_core(async {
                 let inner = &self.nodus.inner;
@@ -237,6 +332,15 @@ impl SessionsApi<'_> {
         session_id: &str,
         agent_id: &str,
     ) -> CommandResult<Vec<TranscriptMessage>> {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            return route
+                .call(Request::SessionAgentTranscript {
+                    project_id: project_id.to_owned(),
+                    session_id: session_id.to_owned(),
+                    agent_id: agent_id.to_owned(),
+                })
+                .await;
+        }
         self.nodus
             .on_core(async {
                 self.nodus

@@ -94,6 +94,7 @@ impl ServersDialog {
         self.copied = false;
         let field = match &step {
             Step::Address => Some(&self.address),
+            Step::Token if self.address.read(cx).value().trim().is_empty() => Some(&self.address),
             Step::Token => Some(&self.token),
             Step::Code { .. } => Some(&self.code),
             Step::Name { .. } => Some(&self.name),

@@ -35,7 +35,8 @@ impl Route {
 /// A server dialog over everything (SRV-060, SRV-161).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ServerDialog {
-    /// Connect to Server…: an address and a token.
+    /// Connect to Server…: the address, then setting the server up or
+    /// signing in (UI-316…UI-322).
     Connect,
     /// Show Server Projects…: one server's projects, or every server's.
     Projects { server_id: Option<String> },
@@ -573,7 +574,7 @@ impl AppState {
         }
     }
 
-    /// SRV-042: a server's notice (`Saleem signed in on Studio`), as the
+    /// SRV-042, UI-328: a server's notice (`Saleem signed in on Studio`), as the
     /// toast of whatever is on show: the grid's (UI-251) or the board's
     /// (BOARD-139).
     fn server_notice(&mut self, message: String, cx: &mut Context<'_, Self>) {

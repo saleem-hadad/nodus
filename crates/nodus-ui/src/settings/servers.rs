@@ -654,7 +654,7 @@ impl ServerManager {
     }
 }
 
-/// SRV-029: the server's machine doesn't carry `tag:nodus`.
+/// SRV-029, UI-327: the server's machine doesn't carry `tag:nodus`.
 fn tailscale_warning(info: &ServerDetails, t: Tokens) -> AnyElement {
     let text = if info.tailscale.running {
         "This server’s machine isn’t tagged tag:nodus on its tailnet, so the access rules don’t keep sessions away from members’ computers. Tag it as the README says."

@@ -366,7 +366,8 @@ pub fn heading(
                 .min_w_0()
                 // `.card-title`: the canvas waits 240ms before opening (BOARD-043).
                 .on_mouse_down(MouseButton::Left, move |_, _, _| actions.press_title())
-                .tooltip(native_tooltip(title.into()))
+                // CARD-049: on a server, who started it too.
+                .tooltip(native_tooltip(present::title_tooltip(card).into()))
                 .child(p)
                 .into_any_element(),
         );
@@ -381,6 +382,26 @@ pub fn heading(
                 .mt(top(3.))
                 .tooltip(native_tooltip("Claude process running".into()))
                 .child(card_icon(CardIcon::SquareTerminal, z.f(13.), 2.0, t.text_tertiary))
+                .into_any_element(),
+        );
+    }
+    // CARD-051: Open preview, while something listens on the card's port.
+    if let Some(url) = present::preview_url(card, env.server_host.as_deref()) {
+        let port = card.node.preview_port().unwrap_or_default();
+        out.push(
+            div()
+                .id(anim::key(id, "open-preview"))
+                .aria_label("Open preview")
+                .flex_none()
+                .flex()
+                .mt(top(3.))
+                .tooltip(native_tooltip(format!("Open preview (port {port})").into()))
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .on_click(move |_, _, cx| {
+                    cx.stop_propagation();
+                    nodus_platform::shell::open_external(&url);
+                })
+                .child(card_icon(CardIcon::AppWindowMac, z.f(13.), 2.0, t.accent))
                 .into_any_element(),
         );
     }
@@ -681,8 +702,8 @@ fn footer(
         .border_color(t.separator)
         .h(z.px(9.0 + 0.5 + 15.4))
         .opacity(content);
-    if let Some(branch) = meta.and_then(|m| m.git_branch.clone()) {
-        // CARD-034
+    if let Some(branch) = present::branch(card) {
+        // CARD-034, CARD-052
         foot = foot.child(
             item()
                 .id(anim::key(&id, "branch"))

@@ -97,6 +97,8 @@ pub use nodus::{
 pub use nodus_capture as capture_service;
 /// Where the xAI key is sealed; tests give a synthetic one.
 pub use nodus_platform::secrets::SafeStorage;
+/// A repository a server's GitHub App reaches (SRV-120).
+pub use nodus_remote::GithubRepo;
 /// What a mic implements and runs, for the window's mics (`VoiceApi::backend`).
 pub use nodus_voice::controller::{VoiceBackend, VoiceController};
 pub use notifications::Notifications;

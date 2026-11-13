@@ -50,6 +50,9 @@ pub struct GitModel {
     pub status: Option<GitStatus>,
     /// The board the status belongs to.
     route_project: Option<String>,
+    /// On a server board, the selected card whose worktree it's of
+    /// (SRV-128); none for the project's own folder.
+    pub card: Option<String>,
     /// GIT-021: the read in flight, shared by calls for the same project.
     reading: Option<(String, u64)>,
     next_read: u64,
@@ -75,6 +78,30 @@ pub struct GitModel {
 }
 
 impl EventEmitter<GitEvent> for GitModel {}
+
+/// SRV-128: on a server board, the one selected card when it has a
+/// worktree, whose git the chip and the Changes window show; none otherwise,
+/// for the project's own folder.
+fn worktree_card(state: &AppState) -> Option<String> {
+    let [selected] = state.selection.as_slice() else {
+        return None;
+    };
+    let board = state.board.as_ref()?;
+    if board.project.server.is_none()
+        && !state
+            .projects
+            .iter()
+            .any(|p| p.id == board.project.id && p.server.is_some())
+    {
+        return None;
+    }
+    board
+        .cards
+        .iter()
+        .find(|card| card.node.session_id == *selected)
+        .filter(|card| card.node.worktree().is_some())
+        .map(|card| card.node.session_id.clone())
+}
 
 /// The window's model.
 struct GitGlobal(Entity<GitModel>);
@@ -130,8 +157,10 @@ impl GitModel {
             // GIT-022, GIT-023: a new route resets it; a board reads it.
             cx.observe(&state, |m, state, cx| {
                 let project = state.read(cx).route.project_id().map(str::to_owned);
-                if project != m.route_project {
+                let card = worktree_card(state.read(cx));
+                if project != m.route_project || card != m.card {
                     m.route_project = project;
+                    m.card = card;
                     m.status = None;
                     m.log_open = false;
                     m.log_timer = None;
@@ -152,10 +181,12 @@ impl GitModel {
             }),
         ];
         let route_project = state.read(cx).route.project_id().map(str::to_owned);
+        let card = worktree_card(state.read(cx));
         let mut model = Self {
             state,
             status: None,
             route_project,
+            card,
             reading: None,
             next_read: 0,
             settled: 0,
@@ -191,14 +222,15 @@ impl GitModel {
         let id = self.next_read;
         self.reading = Some((project.clone(), id));
         let nodus = self.state.read(cx).nodus.clone();
+        let card = self.card.clone();
         cx.spawn(async move |this, cx| {
-            let git = nodus.git().status(&project).await.ok().flatten();
+            let git = nodus.git_for(card.as_deref()).status(&project).await.ok().flatten();
             let _ = this.update(cx, |m, cx| {
                 if m.reading.as_ref().is_some_and(|(_, r)| *r == id) {
                     m.reading = None;
                 }
                 m.settled += 1;
-                if m.route_project.as_deref() == Some(project.as_str()) && m.status != git {
+                if m.route_project.as_deref() == Some(project.as_str()) && m.card == card && m.status != git {
                     m.status = git;
                     m.ensure_log(cx);
                     cx.notify();
@@ -264,8 +296,9 @@ impl GitModel {
         }
         self.log_reading = Some(key.clone());
         let nodus = self.state.read(cx).nodus.clone();
+        let card = self.card.clone();
         cx.spawn(async move |this, cx| {
-            let commits = nodus.git().log(&project, None).await;
+            let commits = nodus.git_for(card.as_deref()).log(&project, None).await;
             let _ = this.update(cx, |m, cx| {
                 if m.log_reading.as_deref() == Some(key.as_str()) {
                     m.log_reading = None;

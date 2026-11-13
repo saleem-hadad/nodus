@@ -12,7 +12,7 @@ use std::time::Duration;
 use nodus_domain::focus::is_focusing;
 use nodus_domain::{BoardSnapshot, CreatedBy, Event, Project, ProjectStats, ServerInfo, ServerState, SessionKind};
 use nodus_platform::secrets::{decode_base64, encode_base64};
-use nodus_remote::{Remote, RemoteEvent, RemoteEvents, Request};
+use nodus_remote::{GithubRepo, Remote, RemoteEvent, RemoteEvents, Request};
 use nodus_sessions::notify::About;
 use nodus_store::ServerRecord;
 use nodus_views::PageResponse;
@@ -224,6 +224,50 @@ impl ServersApi<'_> {
         self.nodus.rewatch(&server_id);
         self.nodus.emit(Event::ProjectsChanged);
         Ok(())
+    }
+
+    /// `github:repos` on a server: the repositories its GitHub App's
+    /// installations reach, for **Add from GitHub on <server>…** (SRV-120).
+    pub async fn github_repos(&self, server_id: &str) -> CommandResult<Vec<GithubRepo>> {
+        const CHANNEL: &str = "github:repos";
+        let remote = self.remote(server_id, CHANNEL)?;
+        self.nodus
+            .on_core(async move { remote.call_as(&Request::GithubRepos {}).await })
+            .await
+            .map_err(|err| CommandError::new(CHANNEL, err.message))
+    }
+
+    /// Where the server's GitHub App is installed on more repositories:
+    /// GitHub's page for a new installation; none while it has no App.
+    pub async fn github_install_url(&self, server_id: &str) -> CommandResult<Option<String>> {
+        Ok(self.info(server_id).await?.github.as_ref().map(install_url))
+    }
+
+    /// `projects:add-github` (SRV-120): clones one of the App's
+    /// repositories on the server, as a project of the server's, and puts
+    /// it in this app's grid. Answered once it's cloned.
+    pub async fn add_from_github(&self, server_id: &str, full_name: &str) -> CommandResult<Project> {
+        const CHANNEL: &str = "projects:add-github";
+        let remote = self.remote(server_id, CHANNEL)?;
+        let request = Request::ProjectsAddGithub {
+            full_name: full_name.to_owned(),
+            name: None,
+            color: None,
+        };
+        let added: Project = self
+            .nodus
+            .on_core(async move { remote.call_as(&request).await })
+            .await
+            .map_err(|err| CommandError::new(CHANNEL, err.message))?;
+        self.link(server_id, &added.id).await
+    }
+
+    fn remote(&self, server_id: &str, channel: &'static str) -> CommandResult<Arc<Remote>> {
+        self.nodus
+            .inner
+            .remotes
+            .get(server_id)
+            .ok_or_else(|| CommandError::new(channel, format!("Unknown server {server_id}")))
     }
 
     /// `servers:status`: one server, with how its connection is doing; none

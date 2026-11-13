@@ -17,7 +17,7 @@ pub const PROTOCOL_VERSION: &str = "2025-06-18";
 
 /// The server's instructions, sent with `initialize` (TOOL-017): 0.9.4's,
 /// and since then the shapes and links (TOOL-110).
-pub const INSTRUCTIONS: &str = "Nodus is the board of Claude Code sessions the user runs this session from. Besides the session cards, it holds sticky notes and views. When the user asks you to put something on the board, or to make notes of it, write it with create_note. Read the notes they have put up with list_notes. Only write notes when the user asks for them. When the user asks for a view, a dashboard, a table, a chart or other custom UI on the board, build it with create_view; list_views, get_view and update_view find and change the views there. To put a note on another project’s board, or read the notes there, pass that project to the note tools; list_projects lists the projects. When the user asks for a new project, add it with create_project. When the user asks you to archive yourself, use archive_self. The board also holds shapes (boxes, ellipses, diamonds, words and emoji stickers) and links, arrows between cards, notes, views and shapes. The user links cards to show how their work relates: list_board shows what is on the board and where, and what this session’s card is linked to. When the user asks for something drawn, laid out, rearranged or linked on the board, use draw_on_board, update_drawing and erase_from_board.";
+pub const INSTRUCTIONS: &str = "Nodus is the board of Claude Code sessions the user runs this session from. Besides the session cards, it holds sticky notes and views. When the user asks you to put something on the board, or to make notes of it, write it with create_note. Read the notes they have put up with list_notes. Only write notes when the user asks for them. When the user asks for a view, a dashboard, a table, a chart or other custom UI on the board, build it with create_view; list_views, get_view and update_view find and change the views there. To put a note on another project’s board, or read the notes there, pass that project to the note tools; list_projects lists the projects. When the user asks for a new project, add it with create_project. When the user asks you to archive yourself, use archive_self. The board also holds shapes (boxes, ellipses, diamonds, words and emoji stickers) and links, arrows between cards, notes, views and shapes. The user links cards to show how their work relates: list_board shows what is on the board and where, and what this session’s card is linked to. When the user asks for something drawn, laid out, rearranged or linked on the board, use draw_on_board, update_drawing and erase_from_board. The user reads this session as a chat, which can show more than text. To show a chart, stats, a table or a text layout, call show_visual (or put the same JSON in a ```visual block in your reply). To ask the user questions with choices, call ask (or use a ```questions block), then end your turn: the answers arrive as their next message. For a mockup, a side-by-side comparison or a small tool that needs HTML, call show_page, which puts a page on the board beside your card. Prefer show_visual and ask, and don't repeat in words what they show.";
 
 /// The `--mcp-config` for every claude process (TOOL-002). Claude Code expands
 /// the `${…}` from the environment `hookEnv` gives it, so the token never
@@ -45,13 +45,16 @@ pub const COMMON_TOOL_NAMES: [&str; 10] = [
 /// Every session's view tools.
 pub const VIEW_TOOL_NAMES: [&str; 4] = ["create_view", "update_view", "get_view", "list_views"];
 
+/// Every session's tools that show something in its chat (spec 16).
+pub const CHAT_TOOL_NAMES: [&str; 3] = ["show_visual", "ask", "show_page"];
+
 /// An action run's tools, on top of the others.
 pub const SESSION_TOOL_NAMES: [&str; 2] = ["list_sessions", "archive_sessions"];
 
 /// Allow rules that let a session use every board tool it has without asking
 /// (TOOL-003): `--allowedTools`, one argument each, in the order the tools
 /// are listed.
-pub const BOARD_TOOL_RULES: [&str; 16] = [
+pub const BOARD_TOOL_RULES: [&str; 19] = [
     "mcp__nodus__create_note",
     "mcp__nodus__update_note",
     "mcp__nodus__list_notes",
@@ -66,6 +69,9 @@ pub const BOARD_TOOL_RULES: [&str; 16] = [
     "mcp__nodus__update_view",
     "mcp__nodus__get_view",
     "mcp__nodus__list_views",
+    "mcp__nodus__show_visual",
+    "mcp__nodus__ask",
+    "mcp__nodus__show_page",
     "mcp__nodus__list_sessions",
     "mcp__nodus__archive_sessions",
 ];
@@ -386,6 +392,82 @@ fn view_tools(view_guide: &str) -> Vec<Value> {
     ]
 }
 
+/// The tools that show something in the session's chat (TOOLCHAT-001…003).
+fn chat_tools() -> Vec<Value> {
+    vec![
+        json!({
+            "name": "show_visual",
+            "description": VISUAL_GUIDE,
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "visual": { "type": "object", "description": "A chart (an object with \"mark\") or a layout (an object with \"rows\"), as described above." }
+                },
+                "required": ["visual"]
+            }
+        }),
+        json!({
+            "name": "ask",
+            "description": ASK_GUIDE,
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "title": { "type": "string", "description": "A short, specific name for what this asks, such as \"Settings redesign: layout\"." },
+                    "submit": { "type": "string", "description": "The send button's label. Defaults to Send answers." },
+                    "questions": {
+                        "type": "array",
+                        "description": "1 to 20 questions, in the order the user should answer them.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "tag": { "type": "string", "description": "A short label to refer to it by, such as Q1." },
+                                "title": { "type": "string", "description": "The question." },
+                                "detail": { "type": "string", "description": "Why it matters, in a sentence or two." },
+                                "name": { "type": "string", "description": "The answer's key. Defaults to the title." },
+                                "multiple": { "type": "boolean", "description": "The user may pick several choices." },
+                                "type": { "type": "string", "enum": ["text"], "description": "A text box instead of choices." },
+                                "placeholder": { "type": "string", "description": "The text box's hint." },
+                                "choices": {
+                                    "type": "array",
+                                    "description": "2 to 26 choices: each its label, or { label, detail, value, recommended }.",
+                                    "items": {}
+                                }
+                            },
+                            "required": ["title"]
+                        }
+                    }
+                },
+                "required": ["title", "questions"]
+            }
+        }),
+        json!({
+            "name": "show_page",
+            "description": PAGE_GUIDE,
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "title": { "type": "string", "description": "A short, specific name for the page." },
+                    "html": { "type": "string", "description": "A whole, self-contained HTML page, as for create_view." },
+                    "description": { "type": "string", "description": "What the page is for." },
+                    "data": { "description": "JSON the page reads as nodus.data." },
+                    "width": { "type": "number", "description": "Width in px; defaults to 480." },
+                    "height": { "type": "number", "description": "Height in px; defaults to 330." }
+                },
+                "required": ["title", "html"]
+            }
+        }),
+    ]
+}
+
+/// `show_visual`'s description: what it's for and the JSON it takes.
+const VISUAL_GUIDE: &str = "Shows a chart, stat tiles, a table or a text layout in the user's chat, drawn natively under your reply. Prefer it to describing numbers in prose, and to ASCII tables. It returns an error naming the problem when the JSON doesn't fit; fix it and call again.\n\nThe visual is one of:\n- A chart: a Vega-Lite subset. \"mark\": bar, line, area, point (circle, square) or arc (pie; {\"type\": \"arc\", \"innerRadius\": 50} for a donut); the object form {\"type\": \"line\", \"point\": true} adds points. \"data\": {\"values\": [rows]} inline only. \"encoding\" channels: x, y, color, theta, tooltip, xOffset (grouped bars). Field definitions: field, type (quantitative, nominal, ordinal, temporal), aggregate (sum, mean, count, min, max, median), title, sort (\"ascending\", \"descending\", null, or an array of values), axis (null, or {\"title\"}), scale ({\"domain\": [min, max], \"zero\": false}), stack (null, true, \"normalize\"). Optional \"title\" and \"height\" (100 to 600). Bars that share an x stack by color unless xOffset groups them. Not supported: layer, facet, repeat, concat, transform, params, bin, data.url and the rule, text, tick and rect marks; compute bins, totals or averages into the rows yourself.\n- A layout: {\"title\"?, \"rows\": [part, …]}, top to bottom, where a part is {\"chart\": chart}, {\"stats\": [{\"label\", \"value\", \"note\"?, \"tone\"?: \"good\" | \"bad\" | \"neutral\"}]}, {\"table\": {\"columns\"?, \"rows\": [[…]] or [{…}]}}, {\"text\": markdown} or {\"columns\": [part, …]} side by side. Any part may have a \"title\".\n\nThe width always fits the chat. Aggregate large data before sending it.";
+
+/// `ask`'s description.
+const ASK_GUIDE: &str = "Asks the user questions as a form in their chat: every question at once, choices picked with a click (lettered for them, with an \"Other\" choice and a note box added), and one Send button. Use it instead of asking in prose or with AskUserQuestion when you need the user's decisions. Give the form a short, specific title, and each choice question 2 or more choices; mark the one you recommend with \"recommended\": true, and link what a question is about (a PR, a file) in its title or detail. After calling it, end your turn: the answers arrive as the user's next message, in a <nodus-answers> block keyed by question (its name, else its title). A question left blank arrives as \"skipped\", a note as \"<key> (note)\".";
+
+/// `show_page`'s description.
+const PAGE_GUIDE: &str = "Puts a page on the user's Nodus board beside this session's card, and a card for it in their chat: for what show_visual and ask can't express, such as a UI mockup, layouts compared side by side, or a small interactive tool. Write one self-contained HTML page as for create_view, styled with the board's CSS variables. A page that asks the user something calls nodus.submit(answers) (any JSON) from its own Send button; the answers arrive as the user's next message, in a <nodus-answers> block. Returns the view's id; change the page with update_view.";
+
 /// An action run's tools, on top of the common ones (`SESSION_TOOLS`).
 fn session_tools() -> Vec<Value> {
     vec![
@@ -426,6 +508,7 @@ impl ToolLists {
         let mut session = common_tools();
         session.extend(drawing_tools());
         session.extend(view_tools(view_guide));
+        session.extend(chat_tools());
         let mut run = session.clone();
         run.extend(session_tools());
         Self {

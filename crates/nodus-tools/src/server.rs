@@ -335,6 +335,14 @@ impl<H: BoardToolHandlers> McpServer<H> {
             "draw_on_board" => handlers.draw_on_board(&project_id, session_id, args),
             "update_drawing" => handlers.update_drawing(&project_id, session_id, args),
             "erase_from_board" => handlers.erase_from_board(&project_id, session_id, args),
+            // TOOLCHAT-001…003: what shows in the session's chat.
+            "show_visual" => crate::chat::show_visual(args),
+            "ask" => crate::chat::ask(args),
+            "show_page" => {
+                let page = crate::chat::page_args(args);
+                let created = handlers.create_view(&project_id, session_id, &page).await?;
+                Ok(crate::chat::page_shown(created))
+            }
             _ => Err(format!("Unknown tool {name}").into()),
         }
     }

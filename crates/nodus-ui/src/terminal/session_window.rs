@@ -116,7 +116,10 @@ impl SessionWindow {
             cx.subscribe(&host, |_, _, _: &HostEvent, cx| cx.notify()),
             cx.observe(&state, |_, _, cx| cx.notify()),
         ];
-        let chat = (kind == SessionKind::Claude).then(|| {
+        // CHAT-029: a session on a server board keeps its terminal: its
+        // transcript isn't on this computer.
+        let on_server = state.read(cx).nodus.sessions().on_server(&session_id);
+        let chat = (kind == SessionKind::Claude && !on_server).then(|| {
             let (state, session_id, project_id, host) =
                 (state.clone(), session_id.clone(), project_id.clone(), host.clone());
             cx.new(|cx| {

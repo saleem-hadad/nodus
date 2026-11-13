@@ -308,6 +308,11 @@ impl ChatView {
         } else if !waiting && was_waiting && self.dock.auto {
             self.dock = Dock::default();
         }
+        // CHAT-019: the last row carries the working line, so it's measured again.
+        if status != self.last_status && !self.rows.is_empty() {
+            let last = self.rows.len() - 1;
+            self.list.splice(last..last + 1, 1);
+        }
         self.last_status = status;
     }
 

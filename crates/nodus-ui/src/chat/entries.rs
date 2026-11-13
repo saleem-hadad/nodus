@@ -53,7 +53,8 @@ impl ChatView {
             .gap(self.px(6.));
         if row.header {
             let at = self.entries.get(entry_index(row.kind)).map_or(0., ChatEntry::at);
-            column = column.child(self.author("Claude", at, t.status_working, &t));
+            let now = crate::parity::now_ms(cx);
+            column = column.child(self.author("Claude", at, now, t.status_working, &t));
         }
         column = column.child(body);
         if last {
@@ -75,8 +76,7 @@ impl ChatView {
             .into_any_element()
     }
 
-    fn author(&self, name: &'static str, at: f64, color: gpui::Rgba, t: &Tokens) -> AnyElement {
-        let now = crate::terminal::host::now_ms();
+    fn author(&self, name: &'static str, at: f64, now: f64, color: gpui::Rgba, t: &Tokens) -> AnyElement {
         div()
             .flex()
             .items_baseline()
@@ -84,10 +84,12 @@ impl ChatView {
             .text_size(self.px(12.))
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(color)
+            .whitespace_nowrap()
             .child(name)
             .when(at > 0., |d| {
                 d.child(
                     div()
+                        .flex_none()
                         .font_weight(FontWeight::NORMAL)
                         .text_color(t.text_tertiary)
                         .child(crate::terminal::text::format_time(at, now)),
@@ -157,21 +159,22 @@ impl ChatView {
                 lines.push(
                     div()
                         .flex()
-                        .gap(self.px(6.))
+                        .flex_col()
                         .child(
                             div()
-                                .flex_none()
+                                .text_size(self.px(11.5))
                                 .text_color(t.text_secondary)
-                                .child(SharedString::from(format!("{key}:"))),
+                                .child(SharedString::from(key.clone())),
                         )
                         .child(div().child(SharedString::from(value))),
                 );
             }
         }
         div()
+            .min_w(self.px(260.))
             .flex()
             .flex_col()
-            .gap(self.px(3.))
+            .gap(self.px(5.))
             .text_size(self.px(12.5))
             .line_height(self.px(18.))
             .child(
@@ -350,6 +353,7 @@ impl ChatView {
                 .hover(|d| d.bg(t.bg_hover))
                 .text_size(self.px(12.))
                 .font_weight(FontWeight::MEDIUM)
+                .whitespace_nowrap()
                 .child("Show on board")
                 .on_click(move |_, _, cx| {
                     let _ = me.update(cx, |this, cx| this.show_on_board(&view, cx));

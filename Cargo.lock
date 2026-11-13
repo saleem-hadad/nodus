@@ -4430,6 +4430,7 @@ dependencies = [
  "nodus-sessions",
  "nodus-store",
  "nodus-transcripts",
+ "nodus-visual",
  "serde_json",
  "tempfile",
  "tokio",

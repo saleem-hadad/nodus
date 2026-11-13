@@ -181,7 +181,7 @@ pub fn body(
 
     // The body (XCARD-018…XCARD-024). CHAT-029: a Claude card's body is its
     // chat, there whatever the terminal is doing; the terminal docks in it.
-    let chat = !shell;
+    let chat = !shell && env.server_host.is_none();
     let term = if enabled || chat {
         host.as_ref().and_then(|h| h.element(&id, window, cx))
     } else {

@@ -692,6 +692,28 @@ impl Views {
                 self.inner.host.open_url(url);
                 Ok(Value::Null)
             }
+            // CHAT-031: a page's answers, to the session that put it up.
+            "submit" => {
+                let Some(session) = view.from.clone().filter(|s| !s.is_empty()) else {
+                    return Err(ViewError::new(
+                        "No session put this view up, so there’s no one to send the answers to",
+                    ));
+                };
+                let answers = arg("answers").cloned().unwrap_or(Value::Null);
+                check_json(Some(&answers), MAX_STATE_CHARS, "The answers")?;
+                let message = nodus_domain::Answers {
+                    to: view.id.clone(),
+                    title: view.title.clone(),
+                    answers,
+                }
+                .to_message();
+                self.inner
+                    .host
+                    .deliver(project_id, &session, &message)
+                    .await
+                    .map_err(ViewError::new)?;
+                Ok(Value::Null)
+            }
             // VIEW-071, VIEW-072: openSession and startSession are the board's.
             _ => Err(ViewError::new(format!("nodus.{method} isn’t something a view can do"))),
         }

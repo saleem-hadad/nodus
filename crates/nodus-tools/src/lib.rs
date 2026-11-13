@@ -23,6 +23,7 @@
 //! `VIEW_GUIDE`. The session host client hands it each relayed request and
 //! sends back what it answers (TOOL-014).
 
+mod chat;
 mod drawing;
 mod handlers;
 mod schema;
@@ -32,7 +33,7 @@ pub use handlers::{
     ProjectAdder, StoreHandlers, StoreHandlersConfig, ViewTools, expand_home, find_project, is_absolute,
 };
 pub use schema::{
-    BOARD_MCP_CONFIG, BOARD_SERVER, BOARD_TOOL_RULES, COMMON_TOOL_NAMES, INSTRUCTIONS, PROTOCOL_VERSION,
-    SESSION_TOOL_NAMES, VIEW_TOOL_NAMES,
+    BOARD_MCP_CONFIG, BOARD_SERVER, BOARD_TOOL_RULES, CHAT_TOOL_NAMES, COMMON_TOOL_NAMES, INSTRUCTIONS,
+    PROTOCOL_VERSION, SESSION_TOOL_NAMES, VIEW_TOOL_NAMES,
 };
 pub use server::{BoardToolHandlers, BoxFuture, McpRelay, McpServer, ToolError};

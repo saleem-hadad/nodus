@@ -328,6 +328,7 @@ Cursor visibility: the cursor is not drawn until the terminal has been focused o
 - **TERM-111** When a server comes back after being away (SRV-028), every terminal of its projects' sessions that was ready is opened again (`session:open` at its size): it starts over from a clean screen with what the open replays, and output that arrives meanwhile is held and written after, as on a first open (TERM-009, TERM-010). Terminals opening or exited wait for their next attach.
 - **TERM-112** Files dropped on a server session's terminal (hosted Nodus, added after 1.0.12) are uploaded to its server first, one by one in the order dropped (`PUT /api/uploads`, at most 50 MB each); what's typed is their paths on the server, quoted as TERM-032 quotes them. Folders and files that can't be read are left out; if an upload fails nothing is typed (SRV-163).
 - **TERM-113** A server session's terminal that shows its process exited starts over by itself when the session is live again without this app having opened it (an `ev:status` with `live: true` after the exit, in the same stream): the server moved it to another Claude account (SRV-104), or someone else resumed it. It's opened again as TERM-111 opens one (a clean screen, the replay, output held meanwhile), so the exit line never stays over a running session. A local session is only ever started by this app, so its terminals don't.
+- **TERM-114** A server session's terminal size (hosted Nodus, added after 1.0.12; SRV-144). The session's terminal follows whoever typed into it last, and the server says its size (`ev:pty-size`) to everyone with it open, first when it's opened, before the replay. Once a terminal has been given a size, its grid takes each size the server gives, applied as it comes, ahead of any output still held (TERM-010), and never the container's: the container's fit (TERM-023) is only asked for, with `session:resize`, once per change, and the server takes it while it follows this window. Typing here (or sending from the prompt bar with the terminal open) has the server resize the session to this window's size first. A grid larger than its container is cut at the container's edge; a smaller one leaves the terminal's background beside it. Local sessions are never given a size and fit their containers as before.
 
 ### Session window (MODAL)
 
@@ -390,6 +391,7 @@ Cursor visibility: the cursor is not drawn until the terminal has been focused o
 - **TRANS-022** The free slot is searched right of the archive panel at its largest (`stackZone(archive, STACK_ROWS × 2)`), filling columns top to bottom: slot i is at x = zone.x + zone.w + 80 + floor(i / rows) × 328 (288 + 40), y = zone.y + (i mod rows) × 256 (216 + 40), with rows = `max(3, floor(zone.h / 256))`, for i < rows × 40; the first slot whose 288×216 box, grown by 40 px, doesn't overlap any other active card (each also treated as 288×216 at its x, y) wins; if none is free it uses x = zone.x + zone.w + 80, y = zone.y + 24 × (number of other active cards).
 - **TRANS-023** Message text, tool details and errors are selectable; the rest of the window isn't.
 - **TRANS-024** ⌘K (Ctrl+K off a Mac) in the preview closes it and opens search (back to the results).
+- **TRANS-025** Who sent each prompt (hosted Nodus, added after 1.0.12; SRV-142). In a server session's preview, a user turn the server names a sender for (`by`) shows that member's 16px avatar (UI-323's, initial without a picture) before the author, which reads `@<login>`, or `You` when it's the login this device signed in as. The server names the member whose client last wrote to the session before Claude's `UserPromptSubmit` hook, else the card's starter, and keeps the last 200 per card (`prompts: [{ at, by }]` on the card); a turn takes the prompt recorded nearest its time within 10 s. Turns with no sender, and every local session's, read `You` as before.
 
 ### Agents viewer (AGV)
 
@@ -737,6 +739,7 @@ No Vitest exists for the registry, the modal, the preview or the viewer. New Rus
 - [x] TERM-111 server terminals open again after a reconnect
 - [x] TERM-112 files dropped on a server terminal are uploaded first
 - [x] TERM-113 an exited server terminal opens again when its session is live again
+- [x] TERM-114 a server terminal takes the size of whoever typed last (hosted)
 - [x] MODAL-001 open condition, one session, rebuild on switch
 - [x] MODAL-002 window/preview/navigation/showCard exclusivity
 - [x] MODAL-003 Esc never closes
@@ -793,6 +796,7 @@ No Vitest exists for the registry, the modal, the preview or the viewer. New Rus
 - [x] TRANS-022 free slot beside archive algorithm
 - [x] TRANS-023 selectable parts
 - [x] TRANS-024 ⌘K back to search
+- [x] TRANS-025 a server turn's sender, avatar and login (hosted)
 - [x] AGV-001 open condition, rebuild per session only
 - [x] AGV-002 blur on open
 - [x] AGV-003 close by Esc/backdrop/⌘W/X

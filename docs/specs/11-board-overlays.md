@@ -177,6 +177,7 @@ The theme follows `nativeTheme.themeSource` (System/Light/Dark, 01/08); the CSS 
 - **INKUI-025** Ink draws above every card (selected and expanded included), note, view, section and edge, and below the open archive panel and its results (RAISED_Z 1500). Within the ink: lines in stored order, then the live stroke, then the selection outline, then labels (labels always above lines), then the label input.
 - **INKUI-026** The selected stroke shows a dashed accent rectangle around its box (INKUI box + `6 × size` padding, corner radius `4 × size` board units), 1.5 screen px wide, dashes 5 / 4 (non-scaling); it follows the stroke while moving.
 - **INKUI-027** Rectangle (added after 0.9.4): from the press point to the current pointer, the two points being opposite corners; holding Shift while dragging makes it a square as wide as the longer side, on the pointer's side of the press. While drawing, before the first move it shows as a dot; on release it is discarded when its diagonal on screen is under 8px, otherwise added (one undoable change). It is drawn as an outline only (no fill), width `3 × size`, round joins, the path starting and ending mid-way along the top edge so every corner is a join. It is hit (pointer tool, eraser) within the usual reach of any of its four sides, not in its hollow inside, so a press inside it goes to the board. Its box is the corners' box padded by half the line width, as a pen's.
+- **INKUI-028** Ink on a server board (hosted Nodus, added after 1.0.12; SRV-184). INKUI-024's saves send only what changed, a stroke at a time: `board:add-ink` with the strokes added, moved, recoloured or relabelled (one with an id already there replaces it in place), and `board:remove-ink` with the ids erased, deleted or cleared, each on top of the board's ink as the server has it, so two people drawing at once keep both. What changed is found against the ink as this window showed it, so strokes another person drew since are never sent as gone. ⌘Z and ⇧⌘Z take back or redo only what that step changed, on top of the ink as it is now (a stroke put back goes on top), so strokes someone else drew meanwhile stay. Each new stroke records its drawer (`createdBy`, SRV-183). Local boards still save the whole list (`board:saveInk`) and undo by whole lists, as before.
 
 ### Asking Claude on the spot — BUBBLE
 
@@ -766,6 +767,7 @@ Risks:
 - [x] INKUI-025 Z-order (above cards, below open archive panel) and paint order
 - [x] INKUI-026 Selection outline (dashed, non-scaling, padded)
 - [x] INKUI-027 Rectangle: R, corner to corner, Shift square, < 8px discarded, outline hit only
+- [x] INKUI-028 Server boards: ink saved and undone a stroke at a time (hosted, added after 1.0.12)
 - [x] BUBBLE-001…003 Bubble tool press opens it; words kept, empty moves; Esc, focus and tool change
 - [x] BUBBLE-004…008 Placement and flips, speech-bubble corner, dock-icon cursors, body and hint, dot, z-order
 - [x] BUBBLE-013, BUBBLE-016 Return sends at once, no model while typing; keys stay out of the board

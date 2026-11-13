@@ -108,7 +108,7 @@ impl Inner {
             state
                 .board(project_id)
                 .and_then(|board| board.nodes.get(session_id))
-                .map(|node| node.prompts())
+                .map(nodus_domain::BoardNode::prompts)
                 .unwrap_or_default()
         });
         attribute_turns(messages, &prompts);

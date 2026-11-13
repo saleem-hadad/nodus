@@ -115,7 +115,7 @@ impl TranscriptPreview {
                     let peers = s.peers.clone();
                     if let Some(server) = server.filter(|_| !logins.is_empty()) {
                         peers.update(cx, |p, cx| {
-                            p.want_avatars(&server, logins.iter().map(String::as_str), cx)
+                            p.want_avatars(&server, logins.iter().map(String::as_str), cx);
                         });
                     }
                 }

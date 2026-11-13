@@ -428,7 +428,7 @@ impl BoardCanvas {
             return false;
         }
         self.presence.followed = None;
-        peers.update(cx, |p, cx| p.unfollow(cx))
+        peers.update(cx, Peers::unfollow)
     }
 
     /// The others' pointers, each in its colour with its login, over the
@@ -504,7 +504,8 @@ impl BoardCanvas {
         )
     }
 
-    /// SRV-182: `Following @login` at the top of the board; a click stops.
+    /// SRV-182: the board framed in the colour of the one followed, and
+    /// `Following @login` at its top right; a click there stops.
     pub(crate) fn render_following(&self, cx: &mut Context<'_, Self>) -> Option<AnyElement> {
         let peers = self.peers(cx);
         let (login, color) = {
@@ -522,14 +523,17 @@ impl BoardCanvas {
         Some(
             div()
                 .absolute()
-                .top(px(14.))
+                .top_0()
                 .left_0()
-                .right_0()
-                .flex()
-                .justify_center()
+                .size_full()
+                .border_2()
+                .border_color(color)
                 .child(
                     div()
                         .id("board-following")
+                        .absolute()
+                        .top(px(12.))
+                        .right(px(14.))
                         .occlude()
                         .flex()
                         .items_center()

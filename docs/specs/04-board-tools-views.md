@@ -133,6 +133,7 @@ In Rust the frame becomes a `wry` webview embedded in the GPUI board (see Rust m
 - **INK-010** `size`: a finite number → `Math.round(min(10, max(0.25, n)) × 100) / 100`; anything else (missing, non-number) → `1`.
 - **INK-011** Output objects are `{id, kind, color, points, size}` plus `text` only for `text` strokes, in that key order, in input order.
 - **INK-012** `board:save-ink(projectId, strokes)` replaces `board.ink` with `cleanInk(strokes)` and saves (the ink UI is 11's).
+- **INK-013** `board:add-ink(projectId, strokes)` and `board:remove-ink(projectId, ids)` (hosted Nodus, added after 1.0.12; SRV-184): a server board's ink a stroke at a time. Adding cleans the strokes as `cleanInk` does, puts each one with an id already there in its place and the rest on top, then keeps the last 2000 (INK_MAX_STROKES); removing drops those ids. Both leave every other stroke as it is, so two people drawing at once keep both. A new stroke records who drew it (`createdBy`, SRV-183). The app sends these for server boards (INKUI-028); local boards keep `board:save-ink`.
 
 ### Views: storage
 
@@ -1530,6 +1531,7 @@ One line per behavior ID, in the order above. Tick only when the Rust build matc
 - [x] INK-010 size: a finite number → Math.round(min(10, max(0.25, n)) × 100) / 100; anything else (missing, non-number) → 1
 - [x] INK-011 Output objects are {id, kind, color, points, size} plus text only for text strokes, in that key order, in input order
 - [x] INK-012 board:save-ink(projectId, strokes) replaces board.ink with cleanInk(strokes) and saves (the ink UI is 11's)
+- [x] INK-013 board:add-ink / board:remove-ink change single strokes, leaving the rest (hosted, added after 1.0.12)
 - [x] VIEW-001 View ids are lowercase UUID v4. Any id that ends up in a path must match ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$, else Not a view id is thrown
 - [x] VIEW-002 A view's files live in <userData>/views/<viewId>/: index.html (the page exactly as Claude sent it, UTF-8) and runtime.json
 - [x] VIEW-003 Reading index.html returns '' on any error (missing file, bad id)

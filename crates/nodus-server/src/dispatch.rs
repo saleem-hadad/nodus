@@ -132,7 +132,11 @@ pub(crate) async fn answer(nodus: Nodus, member: Option<String>, request: Reques
             DONE
         }
 
-        Request::SessionCreate { project_id, opts } => done(channel, by.sessions().create(&project_id, &opts).await),
+        Request::SessionCreate { project_id, opts } => {
+            let created = by.sessions().create(&project_id, &opts).await;
+            board_changed(&nodus, &project_id);
+            done(channel, created)
+        }
         Request::SessionOpen {
             project_id,
             session_id,

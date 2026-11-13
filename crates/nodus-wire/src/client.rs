@@ -21,7 +21,11 @@ use tokio_tungstenite::tungstenite::http::Uri;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::{self, ClientRequestBuilder, Message};
 
-use crate::{CallError, CallFrame, Frame, HELLO_PATH, Hello, MAX_FRAME, PORT, Request, SOCKET_PATH};
+use crate::{
+    CallError, CallFrame, Frame, GITHUB_NONCE_PATH, HELLO_PATH, Hello, HttpError, MAX_FRAME, Nonce, NonceRequest,
+    Notice, PORT, Request, SETUP_CLAIM_PATH, SIGN_IN_PATH, SIGN_IN_POLL_PATH, SOCKET_PATH, SetupClaim, SetupClaimed,
+    SignInPoll, SignInPollRequest, SignInStart, SignInStarted,
+};
 
 /// What a call waiting when the connection goes fails with.
 pub const DISCONNECTED: &str = "The connection to the server closed";
@@ -39,6 +43,9 @@ pub enum ConnectError {
     Refused(u16),
     #[error("{0}")]
     Protocol(String),
+    /// A route answered this HTTP status, saying why.
+    #[error("{message}")]
+    Answered { status: u16, message: String },
 }
 
 /// How the connection ended: the close frame's code and reason, when the
@@ -50,20 +57,34 @@ pub struct Closed {
     pub reason: String,
 }
 
-/// The server's events, in the order it sent them.
-pub struct Events(mpsc::UnboundedReceiver<Event>);
+/// The server's events, in the order it sent them, and its notices.
+pub struct Events {
+    events: mpsc::UnboundedReceiver<Event>,
+    notices: mpsc::UnboundedReceiver<Notice>,
+}
 
 impl Events {
     /// The next event; none once the connection has closed and every event
     /// before that has been taken.
     pub async fn next(&mut self) -> Option<Event> {
-        self.0.recv().await
+        self.events.recv().await
     }
 
     /// The next event that has arrived, without waiting. Once a call has
     /// been answered, every event the server sent before the answer is here.
     pub fn try_next(&mut self) -> Option<Event> {
-        self.0.try_recv().ok()
+        self.events.try_recv().ok()
+    }
+
+    /// The server's next notice for every member (SRV-042); none once the
+    /// connection has closed.
+    pub async fn next_notice(&mut self) -> Option<Notice> {
+        self.notices.recv().await
+    }
+
+    /// The next notice that has arrived, without waiting.
+    pub fn try_next_notice(&mut self) -> Option<Notice> {
+        self.notices.try_recv().ok()
     }
 }
 
@@ -114,23 +135,75 @@ struct Waiting {
 
 /// `GET /api/hello` (SRV-022): the server's name, version and protocol.
 pub async fn hello(address: &str) -> Result<Hello, ConnectError> {
-    let authority = authority(address)?;
-    let mut stream = TcpStream::connect(&authority).await?;
-    let request = format!("GET {HELLO_PATH} HTTP/1.1\r\nHost: {authority}\r\nConnection: close\r\n\r\n");
-    stream.write_all(request.as_bytes()).await?;
-    let mut answer = Vec::new();
-    stream.read_to_end(&mut answer).await?;
-    let answer = String::from_utf8_lossy(&answer);
-    let not_http = || ConnectError::Protocol("The server's answer wasn't HTTP".into());
-    let (head, body) = answer.split_once("\r\n\r\n").ok_or_else(not_http)?;
-    let status: u16 = head.get(9..12).and_then(|s| s.parse().ok()).ok_or_else(not_http)?;
-    if status != 200 {
-        return Err(ConnectError::Refused(status));
+    let answer = http(address, "GET", HELLO_PATH, None, None).await?;
+    if answer.status != 200 {
+        return Err(ConnectError::Refused(answer.status));
     }
-    nodus_domain::json::from_str(body).map_err(|err| ConnectError::Protocol(err.to_string()))
+    nodus_domain::json::from_str(&answer.text()).map_err(|err| ConnectError::Protocol(err.to_string()))
 }
 
-/// What a files route answered: its status, headers and body.
+/// `POST /api/setup/claim` (SRV-060): the setup code for a setup token.
+pub async fn claim_setup(address: &str, code: &str) -> Result<SetupClaimed, ConnectError> {
+    let claim = SetupClaim { code: code.to_owned() };
+    post(address, SETUP_CLAIM_PATH, None, &claim).await
+}
+
+/// `POST /api/github/setup/nonce` (SRV-062), with a setup or device token.
+pub async fn github_nonce(address: &str, token: &str, request: &NonceRequest) -> Result<Nonce, ConnectError> {
+    post(address, GITHUB_NONCE_PATH, Some(token), request).await
+}
+
+/// `POST /api/auth/device` (SRV-041). While the server has no members,
+/// `setup_token` is what lets this sign-in make the first one.
+pub async fn start_sign_in(
+    address: &str,
+    setup_token: Option<&str>,
+    device_name: &str,
+) -> Result<SignInStarted, ConnectError> {
+    let start = SignInStart {
+        device_name: device_name.to_owned(),
+    };
+    post(address, SIGN_IN_PATH, setup_token, &start).await
+}
+
+/// `POST /api/auth/device/poll` (SRV-041): asks once.
+pub async fn poll_sign_in(address: &str, handle: &str) -> Result<SignInPoll, ConnectError> {
+    let poll = SignInPollRequest {
+        handle: handle.to_owned(),
+    };
+    let body = nodus_domain::json::to_string(&poll).map_err(|err| ConnectError::Protocol(err.to_string()))?;
+    let answer = http(address, "POST", SIGN_IN_POLL_PATH, None, Some((JSON, body.as_bytes()))).await?;
+    let body = answer.text();
+    // Refused, denied and expired come with their own statuses, and say so.
+    nodus_domain::json::from_str(&body).map_err(|_| answered(answer.status, &body))
+}
+
+/// `POST path` with a JSON body, read back as `T` when the status is 200.
+async fn post<T: DeserializeOwned>(
+    address: &str,
+    path: &str,
+    token: Option<&str>,
+    body: &impl serde::Serialize,
+) -> Result<T, ConnectError> {
+    let body = nodus_domain::json::to_string(body).map_err(|err| ConnectError::Protocol(err.to_string()))?;
+    let answer = http(address, "POST", path, token, Some((JSON, body.as_bytes()))).await?;
+    let body = answer.text();
+    if answer.status != 200 {
+        return Err(answered(answer.status, &body));
+    }
+    nodus_domain::json::from_str(&body).map_err(|err| ConnectError::Protocol(err.to_string()))
+}
+
+/// A route's failure, in its own words when it gave some.
+fn answered(status: u16, body: &str) -> ConnectError {
+    let message = nodus_domain::json::from_str::<HttpError>(body)
+        .map(|err| err.message)
+        .unwrap_or_else(|_| format!("The server answered {status}"));
+    ConnectError::Answered { status, message }
+}
+
+/// What a route answered: its status, headers and body. The files routes'
+/// answers are handed out as they are.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileBody {
     pub status: u16,
@@ -147,6 +220,11 @@ impl FileBody {
             .find(|(n, _)| n.eq_ignore_ascii_case(name))
             .map(|(_, v)| v.as_str())
     }
+
+    /// The body as text, for the routes that answer JSON.
+    fn text(&self) -> String {
+        String::from_utf8_lossy(&self.body).into_owned()
+    }
 }
 
 /// `PUT /api/uploads` (SRV-163): keeps `bytes` on the server under a name
@@ -154,7 +232,7 @@ impl FileBody {
 /// server answered (413 over [`crate::MAX_UPLOAD`], 401 for the token).
 pub async fn upload(address: &str, token: &str, name: &str, bytes: &[u8]) -> Result<crate::Upload, ConnectError> {
     let target = format!("{}?name={}", crate::UPLOADS_PATH, crate::files::encode_name(name));
-    let answer = http(address, "PUT", &target, token, bytes).await?;
+    let answer = http(address, "PUT", &target, Some(token), Some((OCTET_STREAM, bytes))).await?;
     if answer.status != 200 {
         return Err(ConnectError::Refused(answer.status));
     }
@@ -164,19 +242,40 @@ pub async fn upload(address: &str, token: &str, name: &str, bytes: &[u8]) -> Res
 /// `GET /api/files/<id>` (SRV-163): an upload, a board picture or a view's
 /// page, whatever the status.
 pub async fn download(address: &str, token: &str, id: &str) -> Result<FileBody, ConnectError> {
-    http(address, "GET", &format!("{}{id}", crate::FILES_PATH), token, &[]).await
+    http(address, "GET", &format!("{}{id}", crate::FILES_PATH), Some(token), None).await
 }
 
-/// One HTTP/1.1 request with the token, the connection closed after it.
-async fn http(address: &str, method: &str, target: &str, token: &str, body: &[u8]) -> Result<FileBody, ConnectError> {
+/// What a JSON body is sent as, and an upload's bytes.
+const JSON: &str = "application/json";
+const OCTET_STREAM: &str = "application/octet-stream";
+
+/// One HTTP/1.1 request on its own connection, closed after it: with the
+/// token as `Authorization: Bearer` when there is one, and a body of the
+/// type it's paired with.
+async fn http(
+    address: &str,
+    method: &str,
+    target: &str,
+    token: Option<&str>,
+    body: Option<(&str, &[u8])>,
+) -> Result<FileBody, ConnectError> {
     let authority = authority(address)?;
     let mut stream = TcpStream::connect(&authority).await?;
-    let head = format!(
-        "{method} {target} HTTP/1.1\r\nHost: {authority}\r\nAuthorization: Bearer {token}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        body.len()
-    );
+    let mut head = format!("{method} {target} HTTP/1.1\r\nHost: {authority}\r\nConnection: close\r\n");
+    if let Some(token) = token {
+        head.push_str(&format!("Authorization: Bearer {token}\r\n"));
+    }
+    if let Some((content_type, bytes)) = body {
+        head.push_str(&format!(
+            "Content-Type: {content_type}\r\nContent-Length: {}\r\n",
+            bytes.len()
+        ));
+    }
+    head.push_str("\r\n");
     stream.write_all(head.as_bytes()).await?;
-    stream.write_all(body).await?;
+    if let Some((_, bytes)) = body {
+        stream.write_all(bytes).await?;
+    }
     let mut answer = Vec::new();
     stream.read_to_end(&mut answer).await?;
     let not_http = || ConnectError::Protocol("The server's answer wasn't HTTP".into());
@@ -236,15 +335,22 @@ impl Client {
             open: true,
         }));
         let (events, received) = mpsc::unbounded_channel();
+        let (notices, noticed) = mpsc::unbounded_channel();
         let (ended, closed) = watch::channel(None);
-        tokio::spawn(read(stream, Arc::clone(&waiting), events, ended));
+        tokio::spawn(read(stream, Arc::clone(&waiting), (events, notices), ended));
         let client = Self {
             outbox,
             waiting,
             next_id: AtomicU64::new(1),
             closed,
         };
-        Ok((client, Events(received)))
+        Ok((
+            client,
+            Events {
+                events: received,
+                notices: noticed,
+            },
+        ))
     }
 
     /// Makes a call and waits for its answer.
@@ -330,7 +436,7 @@ impl Drop for Client {
 async fn read(
     mut stream: futures_util::stream::SplitStream<tokio_tungstenite::WebSocketStream<TcpStream>>,
     waiting: Arc<Mutex<Waiting>>,
-    events: mpsc::UnboundedSender<Event>,
+    (events, notices): (mpsc::UnboundedSender<Event>, mpsc::UnboundedSender<Notice>),
     ended: watch::Sender<Option<Closed>>,
 ) {
     let mut closed = Closed::default();
@@ -345,6 +451,9 @@ async fn read(
                 }
                 Ok(Frame::Event(event)) => {
                     let _ = events.send(event);
+                }
+                Ok(Frame::Notice(notice)) => {
+                    let _ = notices.send(notice);
                 }
                 // A newer server's events, and frames only a server reads.
                 _ => {}

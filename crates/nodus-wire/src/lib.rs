@@ -16,9 +16,11 @@
 //! server → client   { "id": 7, "ok": … }
 //!                   { "id": 7, "err": { "channel": "board:load", "message": "Unknown project …" } }
 //! server → client   { "ev": "pty-data", "p": { "sessionId": "…", "data": "…" } }
+//! server → client   { "ev": "server-notice", "p": { "kind": "…", "message": "…" } }
 //! client → server   { "presence": { … } }   (SRV-180, from slice 6)
 //! ```
 
+mod auth;
 mod call;
 #[cfg(feature = "client")]
 pub mod client;
@@ -27,7 +29,8 @@ mod frame;
 
 use serde::{Deserialize, Serialize};
 
-pub use call::{CALLS, NOT_AVAILABLE, Request};
+pub use auth::*;
+pub use call::{CALLS, NOT_AVAILABLE, Request, SETUP_CALLS};
 pub use files::{FILES_PATH, MAX_UPLOAD, UPLOADS_PATH, Upload};
 pub use frame::{Answer, CallError, CallFrame, Frame, FrameError};
 
@@ -44,7 +47,9 @@ pub const MAX_FRAME: usize = 4 * 1024 * 1024;
 /// `GET`: the server's [`Hello`], with no token.
 pub const HELLO_PATH: &str = "/api/hello";
 
-/// `GET`, upgraded: the WebSocket, with the token as `Authorization: Bearer`.
+/// `GET`, upgraded: the WebSocket, with a device token as `Authorization:
+/// Bearer` (SRV-042), or a setup token for the wizard's first steps
+/// ([`SETUP_CALLS`]).
 pub const SOCKET_PATH: &str = "/api/ws";
 
 /// What `GET /api/hello` answers (SRV-022).
@@ -57,6 +62,7 @@ pub struct Hello {
     pub version: String,
     /// Its [`PROTOCOL`].
     pub protocol: u32,
-    /// Whether it waits for its setup code to be claimed (SRV-060).
+    /// Whether it waits to be set up: until the wizard's step 2 has made
+    /// the first member (SRV-060).
     pub needs_setup: bool,
 }

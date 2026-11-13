@@ -217,6 +217,63 @@ calls! {
     /// `null`: this connection gets these projects' events from now on,
     /// and no others' (SRV-026). Each `watch` replaces the last.
     Watch = "watch" { projects: Vec<String> },
+
+    // ---- the server itself (SRV-040…063, SRV-210). Every member may make
+    // every one of these: there are no roles (SRV-040).
+
+    /// `SetupStatus`. With a setup token too.
+    SetupStatus = "setup:status" {},
+    /// `SetupStatus`: names the server, which is step 1. With a setup token too.
+    SetupName = "setup:name" { name: String },
+    /// `SetupStatus`: a step after step 2 is finished or skipped. Only
+    /// `members` for now; the steps after it come with what they set up.
+    SetupDone = "setup:done" { step: crate::SetupStep },
+    /// `Member[]`, in the order they were added.
+    MembersList = "members:list" {},
+    /// `Member`: the GitHub login resolved to its id and added (SRV-044).
+    MembersInvite = "members:invite" { login: String },
+    /// `null`: the member and every device of theirs, whose sockets close.
+    /// The last member can't remove themselves.
+    MembersRemove = "members:remove" { github_id: u64 },
+    /// `Device[]`: every member's, oldest first.
+    DevicesList = "devices:list" {},
+    /// `null`: its socket closes at once (SRV-042).
+    DevicesRevoke = "devices:revoke" { id: String },
+    /// `AuditLine[]`: the last 200 lines of the audit log, oldest first (SRV-210).
+    AuditList = "audit:list" {},
+    /// `ServerInfo`.
+    ServerInfo = "server:info" {},
+    /// `Installation[]`: the App's installations, as GitHub says now. With
+    /// a setup token too, since step 2 waits for one.
+    GithubInstallations = "github:installations" {},
+    /// `GithubApp`: a new private key for the App, checked against GitHub
+    /// before it replaces the old one (SRV-063).
+    GithubReplaceKey = "github:replace-key" { pem: String },
+}
+
+/// The calls a setup token may make: wizard steps 1 and 2 (SRV-060). The
+/// rest need a device token.
+pub const SETUP_CALLS: &[&str] = &["setup:status", "setup:name", "github:installations"];
+
+impl Request {
+    /// Whether the server answers it itself, rather than its core.
+    pub fn is_server_call(&self) -> bool {
+        matches!(
+            self,
+            Self::SetupStatus {}
+                | Self::SetupName { .. }
+                | Self::SetupDone { .. }
+                | Self::MembersList {}
+                | Self::MembersInvite { .. }
+                | Self::MembersRemove { .. }
+                | Self::DevicesList {}
+                | Self::DevicesRevoke { .. }
+                | Self::AuditList {}
+                | Self::ServerInfo {}
+                | Self::GithubInstallations {}
+                | Self::GithubReplaceKey { .. }
+        )
+    }
 }
 
 impl Request {
@@ -268,6 +325,24 @@ mod tests {
         ] {
             assert!(!CALLS.contains(&name), "{name}");
         }
+    }
+
+    #[test]
+    fn a_setup_token_makes_only_the_wizards_first_calls() {
+        for name in SETUP_CALLS {
+            assert!(CALLS.contains(name), "{name}");
+        }
+        assert!(!SETUP_CALLS.contains(&"members:invite"));
+        let remove = Request::from_call("members:remove", json!({ "githubId": 583231 })).unwrap();
+        assert_eq!(remove, Request::MembersRemove { github_id: 583231 });
+        assert!(remove.is_server_call());
+        assert!(!Request::ProjectsList {}.is_server_call());
+        assert_eq!(
+            Request::from_call("setup:done", json!({ "step": "members" })).unwrap(),
+            Request::SetupDone {
+                step: crate::SetupStep::Members
+            }
+        );
     }
 
     #[test]

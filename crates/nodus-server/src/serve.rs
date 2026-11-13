@@ -33,13 +33,20 @@ pub(crate) struct ServeOptions {
     /// `--host-socket`: the session host `nodus-host.service` runs as
     /// `nodus-run`, to connect to instead of starting one (SRV-004).
     pub host_socket: Option<PathBuf>,
+    /// `--uploads`: where uploads are kept (SRV-163), a folder sessions can
+    /// read, which the data folder isn't: `install-server.sh` passes
+    /// `/srv/nodus/uploads` (2770, `nodus:nodus-run`). Without it they go in
+    /// `<data>/uploads`, for development and tests run as one user.
+    pub uploads: Option<PathBuf>,
 }
 
 /// What every connection shares.
 pub(crate) struct Server {
     pub nodus: Nodus,
-    /// The data folder (SRV-003): uploads are kept in it (SRV-163).
+    /// The data folder (SRV-003).
     pub data: PathBuf,
+    /// Where uploads are kept (SRV-163): `--uploads`, else `<data>/uploads`.
+    pub uploads: PathBuf,
     /// Members, devices, tokens, the GitHub App and the audit log.
     pub auth: Arc<Auth>,
     /// Sessions' tokens, commit identities and installation tokens, and
@@ -142,6 +149,7 @@ async fn run(options: ServeOptions, log: &Logger) -> Result<(), String> {
     let updates = crate::update::Updates::new(auth.github.api());
     let server = Arc::new(Server {
         nodus: nodus.clone(),
+        uploads: options.uploads.unwrap_or_else(|| crate::files::uploads_dir(&data)),
         data: data.clone(),
         auth,
         hosting,

@@ -654,7 +654,7 @@ User=$SERVE_USER
 Group=$SERVE_USER
 SupplementaryGroups=$RUN_USER
 WorkingDirectory=$SERVE_HOME
-ExecStart=$BIN serve --host-socket $HOST_SOCKET --run-home $RUN_HOME
+ExecStart=$BIN serve --host-socket $HOST_SOCKET --run-home $RUN_HOME --uploads $UPLOADS
 # Uploads in $UPLOADS are read by sessions; the data folder itself is 0700.
 UMask=0027
 Restart=always

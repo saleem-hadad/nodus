@@ -11,7 +11,7 @@ use nodus_core::Nodus;
 use nodus_domain::focus::is_focusing;
 use nodus_domain::{
     AppSettings, BoardSnapshot, Event, GroupPatch, MenuCommand, OpenCardRequest, Project, ProjectAction, ProjectGroup,
-    ProjectPatch, ProjectStats, SettingsPatch, UpdateStatus,
+    ProjectPatch, ProjectStats, ServerInfo, ServerState, SettingsPatch, UpdateStatus,
 };
 
 use crate::settings::Section as SettingsSection;
@@ -30,6 +30,15 @@ impl Route {
             Self::Board(id) => Some(id),
         }
     }
+}
+
+/// A server dialog over everything (SRV-060, SRV-161).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ServerDialog {
+    /// Connect to Server…: an address and a token.
+    Connect,
+    /// Show Server Projects…: one server's projects, or every server's.
+    Projects { server_id: Option<String> },
 }
 
 /// How long a toast stays (UI-251).
@@ -61,6 +70,11 @@ pub struct AppState {
     pub global_actions: Vec<ProjectAction>,
     /// Whether the first projects refresh has come back.
     pub projects_loaded: bool,
+    /// The Nodus servers this app connects to, with how each is doing
+    /// (SRV-160); empty for local Nodus.
+    pub servers: Vec<ServerInfo>,
+    /// The server dialog that's up, if any.
+    pub server_dialog: Option<ServerDialog>,
 
     /// The open board; boards load once the board track's API is in.
     pub board: Option<BoardSnapshot>,
@@ -119,6 +133,8 @@ impl AppState {
             stats: IndexMap::new(),
             global_actions: Vec::new(),
             projects_loaded: false,
+            servers: Vec::new(),
+            server_dialog: None,
             board: None,
             board_loading: false,
             diff_open: false,
@@ -177,6 +193,7 @@ impl AppState {
                 }
             }
             Event::ProjectsChanged => self.refresh_projects(cx).detach(),
+            Event::ServerStatus { server_id, state } => self.server_status(&server_id, state, cx),
             Event::Menu(command) => self.on_menu(command, cx),
             Event::OpenCard(request) => self.show_card(request, cx),
             Event::RunFinished(run) => cx.emit(StateEvent::RunFinished(run)),
@@ -210,6 +227,8 @@ impl AppState {
     pub fn close_top_layer(&mut self, cx: &mut Context<'_, Self>) {
         if self.report_open {
             self.close_report(cx);
+        } else if self.server_dialog.is_some() {
+            self.close_server_dialog(cx);
         } else if self.settings_open {
             self.close_settings(cx);
         } else if self.agent_view.is_some() {
@@ -255,7 +274,9 @@ impl AppState {
             let stats = nodus.projects().stats().await;
             // ACT-018: the global actions come with every refresh.
             let global_actions = nodus.actions().global().await;
+            let servers = nodus.servers().list().await;
             let _ = this.update(cx, |state, cx| {
+                state.servers = servers;
                 state.projects = projects;
                 state.groups = groups;
                 state.stats = stats;
@@ -503,7 +524,69 @@ impl AppState {
         .detach();
     }
 
+    /// Opens a server dialog over everything, Settings staying under it.
+    pub fn open_server_dialog(&mut self, dialog: ServerDialog, cx: &mut Context<'_, Self>) {
+        self.server_dialog = Some(dialog);
+        cx.notify();
+    }
+
+    pub fn close_server_dialog(&mut self, cx: &mut Context<'_, Self>) {
+        self.server_dialog = None;
+        cx.notify();
+    }
+
+    /// The servers as the core has them now.
+    pub fn refresh_servers(&mut self, cx: &mut Context<'_, Self>) {
+        let nodus = self.nodus.clone();
+        cx.spawn(async move |this, cx| {
+            let servers = nodus.servers().list().await;
+            let _ = this.update(cx, |state, cx| {
+                state.servers = servers;
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// `ev:server-status` (SRV-028): the badge and the pill follow it at
+    /// once. Back from being away, the terminals that were open on its
+    /// boards open again and replay from the host's buffer; the core reloads
+    /// the boards itself.
+    fn server_status(&mut self, server_id: &str, state: ServerState, cx: &mut Context<'_, Self>) {
+        let was = self.servers.iter().find(|s| s.id == server_id).map(|s| s.state);
+        if let Some(server) = self.servers.iter_mut().find(|s| s.id == server_id) {
+            server.state = state;
+        }
+        cx.notify();
+        self.refresh_servers(cx);
+        if state == ServerState::Connected && was.is_some_and(|was| was != ServerState::Connected) {
+            let projects: Vec<String> = self
+                .projects
+                .iter()
+                .filter(|p| p.server.as_deref() == Some(server_id))
+                .map(|p| p.id.clone())
+                .collect();
+            crate::terminal::store::reopen(&projects, cx);
+        }
+    }
+
+    /// The server a project lives on; none for a local project.
+    pub fn server_of(&self, project: &Project) -> Option<&ServerInfo> {
+        let id = project.server.as_deref()?;
+        self.servers.iter().find(|s| s.id == id)
+    }
+
+    /// Whether a project's server is away (SRV-028): it isn't connected, or
+    /// isn't known yet. False for a local project.
+    pub fn server_away(&self, project: &Project) -> bool {
+        project.server.is_some() && self.server_of(project).is_none_or(|s| s.state != ServerState::Connected)
+    }
+
+    /// SRV-163: there's no folder here to reveal for a server project.
     pub fn reveal(&mut self, id: String, cx: &mut Context<'_, Self>) {
+        if self.projects.iter().any(|p| p.id == id && p.server.is_some()) {
+            return;
+        }
         let nodus = self.nodus.clone();
         cx.spawn(async move |_, _| {
             let _ = nodus.projects().reveal_in_finder(&id).await;

@@ -8,6 +8,8 @@ dist
 .env
 .env.*
 *.pem
+# ...but the server release signing key's public half is meant to be committed.
+!packaging/server/signing-key.pub.pem
 *.p12
 *.p8
 *.key

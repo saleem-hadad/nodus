@@ -401,10 +401,11 @@ allow_rootlesskit_userns() {
 	command -v apparmor_parser >/dev/null || return 0
 	local rootlesskit profile
 	rootlesskit=$(command -v rootlesskit) || fail "docker-ce-rootless-extras installed no rootlesskit."
-	profile="/etc/apparmor.d/$(echo "${rootlesskit#/}" | tr / .)"
-	if grep -qs "userns," "$profile"; then
+	# Ubuntu 24.04's apparmor package has one for /usr/bin/rootlesskit.
+	if grep -ls -- "$rootlesskit" /etc/apparmor.d/* | xargs -r grep -ls "userns," | grep -q .; then
 		return 0
 	fi
+	profile="/etc/apparmor.d/$(echo "${rootlesskit#/}" | tr / .)"
 	write_file "$profile" 0644 "# Written by Nodus's install-server.sh: rootless Docker needs a user namespace.
 abi <abi/4.0>,
 include <tunables/global>

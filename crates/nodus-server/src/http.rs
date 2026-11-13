@@ -1,6 +1,5 @@
 //! The server's HTTP side on port 7420 (SRV-021, SRV-022): `/api/hello`,
-//! `/api/ws` upgraded to the WebSocket for a request with the token, and
-//! the files, `PUT /api/uploads` and `GET /api/files/<id>` (SRV-163).
+//! and `/api/ws` upgraded to the WebSocket for a request with the token.
 
 use std::convert::Infallible;
 use std::sync::Arc;
@@ -11,7 +10,7 @@ use hyper::body::{Bytes, Incoming};
 use hyper::header::{CONNECTION, HOST, HeaderMap, HeaderValue, SEC_WEBSOCKET_ACCEPT, SEC_WEBSOCKET_KEY, UPGRADE};
 use hyper::{Method, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
-use nodus_wire::{FILES_PATH, HELLO_PATH, MAX_FRAME, SOCKET_PATH, UPLOADS_PATH};
+use nodus_wire::{HELLO_PATH, MAX_FRAME, SOCKET_PATH};
 use tokio::net::TcpListener;
 use tokio_tungstenite::WebSocketStream;
 use tokio_tungstenite::tungstenite::handshake::derive_accept_key;
@@ -52,32 +51,21 @@ async fn route(server: &Arc<Server>, req: Request<Incoming>) -> Reply {
     if !server.hosts.allows(host) {
         return empty(StatusCode::FORBIDDEN);
     }
-    let path = req.uri().path().to_owned();
-    match (req.method(), path.as_str()) {
+    // SRV-163: the files' routes are their module's.
+    if files::handles(req.uri().path()) {
+        return files::route(server, req).await;
+    }
+    match (req.method(), req.uri().path()) {
         (&Method::GET, HELLO_PATH) => json(&server.hello),
         (&Method::GET, SOCKET_PATH) => upgrade(server, req),
-        (&Method::PUT, UPLOADS_PATH) if authorized(server, &req) => files::upload(server, req).await,
-        (&Method::GET, path) if path.starts_with(FILES_PATH) && authorized(server, &req) => {
-            files::download(server, &path[FILES_PATH.len()..]).await
-        }
-        (&Method::PUT, UPLOADS_PATH) | (&Method::GET, _) if is_files(&path) => empty(StatusCode::UNAUTHORIZED),
         _ => empty(StatusCode::NOT_FOUND),
     }
 }
 
-/// SRV-022: the token in the Authorization header, and nowhere else.
-fn authorized(server: &Server, req: &Request<Incoming>) -> bool {
-    bearer(req.headers()).is_some_and(|token| same_token(token, &server.token))
-}
-
-/// Whether a path is one of the files' routes.
-fn is_files(path: &str) -> bool {
-    path == UPLOADS_PATH || path.starts_with(FILES_PATH)
-}
-
 /// `GET /api/ws`: the token first, then the WebSocket handshake (RFC 6455).
 fn upgrade(server: &Arc<Server>, mut req: Request<Incoming>) -> Reply {
-    if !authorized(server, &req) {
+    // SRV-022: in the Authorization header, and nowhere else.
+    if !bearer(req.headers()).is_some_and(|token| same_token(token, &server.token)) {
         return empty(StatusCode::UNAUTHORIZED);
     }
     let Some(key) = websocket_key(req.headers()) else {

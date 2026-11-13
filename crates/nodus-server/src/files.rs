@@ -10,13 +10,33 @@ use std::path::{Path, PathBuf};
 use http_body_util::{BodyExt as _, Full};
 use hyper::body::{Bytes, Incoming};
 use hyper::header::{CONTENT_LENGTH, HeaderValue};
-use hyper::{Request, Response, StatusCode};
+use hyper::{Method, Request, Response, StatusCode};
 use nodus_wire::files::{file_id_ok, is_uuid, name_from_query, upload_ext};
-use nodus_wire::{MAX_UPLOAD, Upload};
+use nodus_wire::{FILES_PATH, MAX_UPLOAD, UPLOADS_PATH, Upload};
 
+use crate::net::{bearer, same_token};
 use crate::serve::Server;
 
 type Reply = Response<Full<Bytes>>;
+
+/// Whether a path is one of the files' routes.
+pub(crate) fn handles(path: &str) -> bool {
+    path == UPLOADS_PATH || path.starts_with(FILES_PATH)
+}
+
+/// A request on one of the files' routes, once its `Host` was checked:
+/// the token first, in the Authorization header and nowhere else (SRV-022).
+pub(crate) async fn route(server: &Server, req: Request<Incoming>) -> Reply {
+    if !bearer(req.headers()).is_some_and(|token| same_token(token, &server.token)) {
+        return status(StatusCode::UNAUTHORIZED);
+    }
+    let path = req.uri().path().to_owned();
+    match (req.method(), path.strip_prefix(FILES_PATH)) {
+        (&Method::PUT, None) => upload(server, req).await,
+        (&Method::GET, Some(id)) => download(server, id).await,
+        _ => status(StatusCode::NOT_FOUND),
+    }
+}
 
 /// Where uploads are kept: `<data>/uploads`.
 pub(crate) fn uploads_dir(data: &Path) -> PathBuf {
@@ -26,7 +46,7 @@ pub(crate) fn uploads_dir(data: &Path) -> PathBuf {
 /// `PUT /api/uploads?name=<name>`: the body kept as `<uuid>[.<ext>]`, the
 /// name only a label. Over [`MAX_UPLOAD`] it's refused with 413, by its
 /// Content-Length when it says, else as soon as the body passes it.
-pub(crate) async fn upload(server: &Server, req: Request<Incoming>) -> Reply {
+async fn upload(server: &Server, req: Request<Incoming>) -> Reply {
     let declared = req
         .headers()
         .get(CONTENT_LENGTH)
@@ -81,7 +101,7 @@ pub(crate) async fn upload(server: &Server, req: Request<Incoming>) -> Reply {
 
 /// `GET /api/files/<id>`: an upload, else a board picture, else (for a bare
 /// UUID) a view's page as its frame would get it; 404 for anything else.
-pub(crate) async fn download(server: &Server, id: &str) -> Reply {
+async fn download(server: &Server, id: &str) -> Reply {
     if !file_id_ok(id) {
         return status(StatusCode::NOT_FOUND);
     }

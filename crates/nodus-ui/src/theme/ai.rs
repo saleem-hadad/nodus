@@ -8,8 +8,8 @@ use std::f32::consts::{FRAC_PI_2, PI};
 use std::time::{Duration, Instant};
 
 use gpui::{
-    AnyElement, App, Bounds, Div, ElementId, IntoElement, ParentElement, PathBuilder, Pixels, Point, Rgba, Styled,
-    Window, canvas, div, point, px,
+    AnyElement, App, Bounds, Div, ElementId, HighlightStyle, IntoElement, ParentElement, PathBuilder, Pixels, Point,
+    Rgba, Styled, Window, canvas, div, point, px,
 };
 
 use super::motion;
@@ -155,6 +155,35 @@ pub fn sweep(g: f64, rest: Rgba, peak: Rgba) -> Rgba {
         g if g < 0.6 => lerp(purple, peak, ((g - 0.5) / 0.1) as f32),
         g => lerp(peak, rest, ((g - 0.6) / 0.4).min(1.0) as f32),
     }
+}
+
+/// The light through `text` at `phase` (0…1) of a pass, as highlights:
+/// each letter faint (45% of `color`) at rest, `color` as the light passes,
+/// sparkle-tinted at its middle. A highlight's colour is blended over the
+/// text's and keeps the text's alpha, so a fainter one couldn't fade it:
+/// each is opaque and faded out to its tint's alpha, which is the tint.
+pub fn sweep_highlights(text: &str, phase: f64, color: Rgba) -> Vec<(std::ops::Range<usize>, HighlightStyle)> {
+    let faint = Rgba {
+        a: color.a * 0.45,
+        ..color
+    };
+    let n = text.chars().count().max(1);
+    text.char_indices()
+        .enumerate()
+        .map(|(i, (b, ch))| {
+            // Where the letter's middle falls in the 250% gradient.
+            let x = (i as f64 + 0.5) / n as f64;
+            let tint = sweep(sweep_at(x, phase), faint, color);
+            (
+                b..b + ch.len_utf8(),
+                HighlightStyle {
+                    color: Some(Rgba { a: 1.0, ..tint }.into()),
+                    fade_out: Some(1.0 - tint.a),
+                    ..HighlightStyle::default()
+                },
+            )
+        })
+        .collect()
 }
 
 /// Where a letter at `x` ∈ [0, 1] of the words falls in the sweep's

@@ -222,6 +222,9 @@ impl BoardCanvas {
 
     /// Where a node is in its moment this frame (spec 15).
     fn node_moment(&self, node: &FlowNode, now: Instant) -> NodeMoment {
+        if !self.moments.active() {
+            return NodeMoment::default();
+        }
         let active_card = matches!(node.kind, NodeKind::Card { stack: None, .. });
         let arrives = matches!(
             node.kind,

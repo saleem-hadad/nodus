@@ -8,8 +8,8 @@
 use std::time::Duration;
 
 use gpui::{
-    AnyElement, App, Bounds, ElementId, FontWeight, HighlightStyle, IntoElement, ParentElement, Pixels, Rgba, Styled,
-    StyledText, Window, canvas, div, fill, linear_color_stop, linear_gradient, point, px, size,
+    AnyElement, App, Bounds, ElementId, FontWeight, IntoElement, ParentElement, Pixels, Rgba, Styled, StyledText,
+    Window, canvas, div, fill, linear_color_stop, linear_gradient, point, px, size,
 };
 
 use super::parts::mix;
@@ -110,26 +110,7 @@ pub fn title(view_id: &str, z: f32, window: &mut Window, cx: &mut App) -> AnyEle
     let color = t.text_primary;
     let words = match sweep {
         Some(phase) => {
-            let faint = Rgba {
-                a: color.a * 0.45,
-                ..color
-            };
-            let n = text.chars().count();
-            let highlights: Vec<(std::ops::Range<usize>, HighlightStyle)> = text
-                .char_indices()
-                .enumerate()
-                .map(|(i, (b, ch))| {
-                    let x = (i as f64 + 0.5) / n as f64;
-                    let tint = ai::sweep(ai::sweep_at(x, phase), faint, color);
-                    (
-                        b..b + ch.len_utf8(),
-                        HighlightStyle {
-                            color: Some(tint.into()),
-                            ..HighlightStyle::default()
-                        },
-                    )
-                })
-                .collect();
+            let highlights = ai::sweep_highlights(text, phase, color);
             StyledText::new(text).with_highlights(highlights).into_any_element()
         }
         None => text.into_any_element(),

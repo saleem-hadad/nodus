@@ -7,8 +7,8 @@
 use std::time::{Duration, Instant};
 
 use gpui::{
-    AnyElement, App, ElementId, FontWeight, HighlightStyle, InteractiveElement as _, IntoElement, ParentElement, Rgba,
-    Styled, StyledText, Window, div,
+    AnyElement, App, ElementId, FontWeight, InteractiveElement as _, IntoElement, ParentElement, Rgba, Styled,
+    StyledText, Window, div,
 };
 
 use super::units::fu;
@@ -75,29 +75,8 @@ pub fn naming_label(id: &str, zoom: f32, scale: f32, color: Rgba, window: &mut W
     }
     // naming-sweep: 1.8s ease-in-out, background-position 100% → 0%; the
     // gradient is 2.5× the text's width.
-    let phase = ms / ai::SWEEP_MS;
-    let faint = Rgba {
-        a: color.a * 0.45,
-        ..color
-    };
     let text = "Naming…";
-    let n = text.chars().count();
-    let highlights: Vec<(std::ops::Range<usize>, HighlightStyle)> = text
-        .char_indices()
-        .enumerate()
-        .map(|(i, (b, ch))| {
-            // Where the letter's middle falls in the 250% gradient.
-            let x = (i as f64 + 0.5) / n as f64;
-            let tint = ai::sweep(ai::sweep_at(x, phase), faint, color);
-            (
-                b..b + ch.len_utf8(),
-                HighlightStyle {
-                    color: Some(tint.into()),
-                    ..HighlightStyle::default()
-                },
-            )
-        })
-        .collect();
+    let highlights = ai::sweep_highlights(text, ms / ai::SWEEP_MS, color);
     // sparkle-twinkle: 1.6s ease-in-out; at 50% opacity 0.55, scale 0.82, 12°.
     let tw = if frozen { 0.0 } else { ai::twinkle(ms / ai::TWINKLE_MS) };
     div()

@@ -8,9 +8,9 @@ use gpui::component::Sizable as _;
 use gpui::component::input::Textarea;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, App, Context, Div, ExternalPaths, FontWeight, HighlightStyle,
-    InteractiveElement, IntoElement, ParentElement, Render, Rgba, SharedString, StatefulInteractiveElement, Styled,
-    StyledText, Transformation, Window, canvas, div, img, percentage, px, relative,
+    Animation, AnimationExt as _, AnyElement, App, Context, Div, ExternalPaths, FontWeight, InteractiveElement,
+    IntoElement, ParentElement, Render, Rgba, SharedString, StatefulInteractiveElement, Styled, StyledText,
+    Transformation, Window, canvas, div, img, percentage, px, relative,
 };
 use nodus_core::capture_service::page::{self, bytes, host, kind_copy};
 use nodus_domain::{
@@ -1186,30 +1186,7 @@ fn thinking_line(t: &Tokens, frozen: bool, window: &mut Window, cx: &mut App) ->
         Duration::from_millis(ai::TWINKLE_MS as u64),
     )));
     // Faint at rest, the words' colour as the light passes (`naming-sweep`).
-    let faint = Rgba {
-        a: color.a * 0.45,
-        ..color
-    };
-    let n = TEXT.chars().count();
-    let highlights: Vec<(std::ops::Range<usize>, HighlightStyle)> = TEXT
-        .char_indices()
-        .enumerate()
-        .map(|(i, (b, ch))| {
-            let x = (i as f64 + 0.5) / n as f64;
-            let tint = ai::sweep(ai::sweep_at(x, sweep), faint, color);
-            // A highlight's colour is blended over the text's, keeping its
-            // alpha, so a fainter one can't fade it: an opaque colour faded
-            // out to the tint's alpha is the tint exactly.
-            (
-                b..b + ch.len_utf8(),
-                HighlightStyle {
-                    color: Some(Rgba { a: 1.0, ..tint }.into()),
-                    fade_out: Some(1.0 - tint.a),
-                    ..HighlightStyle::default()
-                },
-            )
-        })
-        .collect();
+    let highlights = ai::sweep_highlights(TEXT, sweep, color);
     row.child(ai::sparkle(14., 2., ai::SPARKLE, tw))
         .child(StyledText::new(TEXT).with_highlights(highlights))
 }

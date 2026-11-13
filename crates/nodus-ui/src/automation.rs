@@ -485,7 +485,7 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
                 .to_owned();
             screenshot(cx, &path).await
         }
-        "connect" => connect(&nodus, command).await,
+        "connect" => connect(&nodus, command, cx).await,
         "open" => {
             // A project's board by name, as a double-click on its folder opens it.
             let name = command.get("project").and_then(Value::as_str).unwrap_or_default();
@@ -717,13 +717,20 @@ pub fn srgb_to_display_p3(rgb: [u8; 3]) -> [u8; 3] {
 /// Calls a core command by its `window.api` name.
 /// `connect`: adds the server as Connect to Server… does, then links the
 /// projects asked for, by name or id, or all of them.
-async fn connect(nodus: &nodus_core::Nodus, command: &Value) -> Result<Value, String> {
+async fn connect(nodus: &nodus_core::Nodus, command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
     let field = |key: &str| command.get(key).and_then(Value::as_str).unwrap_or_default();
     let server = nodus
         .servers()
         .add(field("url"), field("token"))
         .await
         .map_err(|e| e.message)?;
+    // Its projects can be asked for once it's connected.
+    for _ in 0..150 {
+        if nodus.servers().status(&server.id).is_some_and(|s| s.state == nodus_domain::ServerState::Connected) {
+            break;
+        }
+        cx.background_executor().timer(Duration::from_millis(100)).await;
+    }
     let wanted: Option<Vec<String>> = match command.get("link") {
         Some(Value::String(all)) if all == "all" => None,
         Some(Value::Array(names)) => Some(names.iter().filter_map(Value::as_str).map(str::to_owned).collect()),

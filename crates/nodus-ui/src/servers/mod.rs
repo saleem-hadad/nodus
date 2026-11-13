@@ -12,13 +12,14 @@ use std::collections::{HashMap, HashSet};
 use gpui::component::input::{Escape, IndentInline, InputEvent, InputState, OutdentInline};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, Context, Entity, FocusHandle, Focusable as _, FontWeight, InteractiveElement, IntoElement,
+    AnyElement, App, Context, Corners, Entity, FocusHandle, Focusable as _, FontWeight, InteractiveElement, IntoElement,
     KeyBinding, KeyDownEvent, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Window, actions,
     div, px,
 };
 use nodus_domain::{Project, ServerInfo, ServerState};
 
 use crate::components::button::button;
+use crate::components::focus_ring::focus_ring;
 use crate::components::folder_icon::folder_icon;
 use crate::components::icon::{Icon, icon};
 use crate::components::modal::Modal;
@@ -105,6 +106,8 @@ impl ServersDialog {
         if state.read(cx).server_dialog == Some(ServerDialog::Connect) {
             focus_all(&address, window, cx);
         }
+        // Servers coming and going, and projects linked, redraw it.
+        cx.observe(&state, |_, _, cx| cx.notify()).detach();
         Self {
             state,
             previous_focus,
@@ -162,9 +165,14 @@ impl ServersDialog {
         .detach();
     }
 
-    /// Asks each server shown for its projects, once.
+    /// Asks each server shown for its projects, once it's connected; one
+    /// that isn't is asked again when it is.
     fn load(&mut self, servers: &[ServerInfo], cx: &mut Context<'_, Self>) {
         for server in servers {
+            if server.state != ServerState::Connected {
+                self.listings.remove(&server.id);
+                continue;
+            }
             if self.listings.contains_key(&server.id) {
                 continue;
             }
@@ -224,12 +232,15 @@ impl ServersDialog {
         next.update(cx, |f, cx| f.focus(window, cx));
     }
 
-    fn on_key_down(&mut self, e: &KeyDownEvent, _: &mut Window, cx: &mut Context<'_, Self>) {
+    fn on_key_down(&mut self, e: &KeyDownEvent, window: &mut Window, cx: &mut Context<'_, Self>) {
         if e.keystroke.key == "escape" {
+            cx.stop_propagation();
             self.close(cx);
+            return;
         }
-        // Nothing typed here reaches the grid's or the board's keys.
-        cx.stop_propagation();
+        // Nothing typed here reaches the grid's or the board's keys; marked,
+        // not stopped, so the fields still get what's typed.
+        window.prevent_default();
     }
 }
 
@@ -455,6 +466,7 @@ impl ServersDialog {
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
         let body: AnyElement = match self.listings.get(&server.id) {
+            None if server.state != ServerState::Connected => div().into_any_element(),
             None | Some(Listing::Loading) => note("Loading its projects…", t).into_any_element(),
             Some(Listing::Failed(error)) => div()
                 .text_color(t.status_waiting)
@@ -551,21 +563,28 @@ fn note_owned(text: String, t: Tokens) -> gpui::Div {
         .child(text)
 }
 
-/// A field in the group picker's frame: a hairline that turns accent, with
-/// the focus band, while it has the keyboard.
+/// A field framed as Settings frames the xAI key's: a hairline, and the
+/// focus ring in its place while it has the keyboard.
 fn field(state: &Entity<InputState>, window: &Window, cx: &App, t: Tokens) -> gpui::Div {
     let focused = state.read(cx).focus_handle(cx).is_focused(window);
     div()
-        .h(px(30.))
-        .px(px(9.))
+        .relative()
+        .h(px(28.))
+        .px(px(10.))
         .flex()
         .items_center()
         .border(px(0.5))
-        .border_color(if focused { t.accent } else { t.border_strong })
+        .border_color(if focused {
+            crate::components::button::transparent()
+        } else {
+            t.border_strong
+        })
         .rounded(RADIUS_SM)
-        .bg(t.bg_sunken)
-        .when(focused, |d| d.shadow(vec![ring(3., t.focus_ring)]))
+        .bg(t.bg_elevated)
         .child(input(state, px(18.), false))
+        .when(focused, |d| {
+            d.child(focus_ring(Corners::all(RADIUS_SM), px(0.), t.focus_ring))
+        })
 }
 
 /// A checkbox: an accent square with a check when ticked, a hairline

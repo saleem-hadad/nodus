@@ -883,10 +883,13 @@ impl ServersDialog {
                             )),
                     ),
             )
-            .child(callout(
-                "On GitHub’s page, tick Enable Device Flow before you create the App. Nodus signs people in with it.",
-                t,
-            ))
+            .child(
+                callout(
+                    "On GitHub’s page, tick Enable Device Flow before you create the App. Nodus signs people in with it.",
+                    t,
+                )
+                .mt(px(14.)),
+            )
             .child(self.error_line(t))
             .child(footer(
                 None,
@@ -1084,7 +1087,8 @@ impl ServersDialog {
             .flex_col()
             .child(heading_owned(title))
             .child(intro_owned(text, t))
-            .child(code_box)
+            // A try that ended shows why, not its spent code.
+            .when(ended.is_none(), |d| d.child(code_box))
             .children(status)
             .when_some(ended, |d, message| d.child(error_text(message, t)))
             .child(self.error_line(t))
@@ -1353,7 +1357,6 @@ fn hint(text: &'static str, t: Tokens) -> gpui::Div {
 /// Something to do on GitHub's side, said plainly.
 fn callout(text: &'static str, t: Tokens) -> gpui::Div {
     div()
-        .mt(px(14.))
         .flex()
         .gap(px(8.))
         .px(px(12.))

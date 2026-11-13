@@ -373,8 +373,9 @@ impl ServersApi<'_> {
             return Some(file);
         }
         let url = url.to_owned();
-        let fetched = self
-            .nodus
+        let kept = file.clone();
+        // Fetched and written on the core's runtime: tokio's files need it.
+        self.nodus
             .on_core(async move {
                 let client = reqwest::Client::builder()
                     .timeout(AVATAR_WAIT)
@@ -385,10 +386,10 @@ impl ServersApi<'_> {
                 if !response.status().is_success() {
                     return None;
                 }
-                response.bytes().await.ok()
+                let bytes = response.bytes().await.ok()?;
+                super::write_file(&kept, &bytes).await.ok()
             })
             .await?;
-        super::write_file(&file, &fetched).await.ok()?;
         Some(file)
     }
 

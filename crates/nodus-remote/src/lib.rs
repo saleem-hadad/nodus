@@ -137,8 +137,8 @@ pub enum CheckError {
 /// A server that still needs setting up ([`Hello::needs_setup`], SRV-060)
 /// passes when the token gets in, as `--dev-token` does on loopback for
 /// development and tests. A person adding one meets the setup wizard
-/// instead, which claims its setup code and signs in for a device token;
-/// that comes later.
+/// instead, which claims its setup code and signs in for a device token
+/// (`nodus-core`'s `servers().claim` and `poll_sign_in`).
 pub async fn check(url: &str, token: &str) -> Result<Hello, CheckError> {
     match attempt(url, token).await {
         Ok((hello, client, _events)) => {

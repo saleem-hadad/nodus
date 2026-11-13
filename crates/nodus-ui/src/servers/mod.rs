@@ -296,6 +296,16 @@ impl ServersDialog {
             self.close(cx);
             return;
         }
+        // Return on a step with no field: its main button (a field's own
+        // Return arrives as `PressEnter`).
+        if e.keystroke.key == "enter"
+            && self.panel.is_focused(window)
+            && self.state.read(cx).server_dialog == Some(ServerDialog::Connect)
+        {
+            cx.stop_propagation();
+            self.primary(window, cx);
+            return;
+        }
         // Nothing typed here reaches the grid's or the board's keys; marked,
         // not stopped, so the fields still get what's typed.
         window.prevent_default();

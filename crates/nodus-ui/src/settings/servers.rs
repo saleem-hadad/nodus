@@ -752,9 +752,10 @@ fn describe(line: &AuditLine) -> String {
     let someone = || who.clone().unwrap_or_else(|| "Someone".into());
     match line.event.as_str() {
         "setup.claimed" => "The setup code was claimed".into(),
-        "server.named" => match detail("name") {
-            Some(name) => format!("{} named the server {name}", someone()),
-            None => format!("{} named the server", someone()),
+        "server.named" => match (who, detail("name")) {
+            (Some(who), Some(name)) => format!("{who} named the server {name}"),
+            (None, Some(name)) => format!("The server was named {name}"),
+            (_, None) => "The server was named".into(),
         },
         "github.app-created" => "The GitHub App was created".into(),
         "github.installations-changed" => "The GitHub App’s installations changed".into(),
@@ -830,6 +831,10 @@ mod tests {
             (
                 line("server.named", Some("octo"), json!({ "name": "Box" })),
                 "@octo named the server Box",
+            ),
+            (
+                line("server.named", None, json!({ "name": "Box" })),
+                "The server was named Box",
             ),
             (line("server.updated", None, json!({})), "server updated"),
         ];

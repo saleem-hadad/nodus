@@ -63,6 +63,9 @@ pub enum StateEvent {
     RunFinished(nodus_domain::ActionRunResult),
     /// A toast for the board on show: a server's notice (SRV-042).
     Toast(String),
+    /// Select a node and pan the board to it: a page the chat points at
+    /// (CHAT-028).
+    ShowNode(String),
 }
 
 /// `useApp` and `useProjectsUi`.
@@ -90,6 +93,9 @@ pub struct AppState {
     pub preview_session_id: Option<String>,
     pub agent_view: Option<(String, Option<String>)>,
     pub selection: Vec<String>,
+    /// The prompts waiting for each session's turn to end, as the session
+    /// host last said (CHAT-021).
+    pub queues: std::collections::HashMap<String, Vec<nodus_domain::QueuedPrompt>>,
 
     pub settings_open: bool,
     /// The Settings section on show; it stays for the next opening.
@@ -148,6 +154,7 @@ impl AppState {
             preview_session_id: None,
             agent_view: None,
             selection: Vec::new(),
+            queues: std::collections::HashMap::new(),
             settings_open: false,
             settings_section: SettingsSection::default(),
             report_open: false,
@@ -206,6 +213,10 @@ impl AppState {
             Event::RunFinished(run) => cx.emit(StateEvent::RunFinished(run)),
             Event::UpdateStatus(status) => {
                 self.update_status = Some(status);
+                cx.notify();
+            }
+            Event::Queue { session_id, items } => {
+                self.queues.insert(session_id, items);
                 cx.notify();
             }
             _ => {}
@@ -617,6 +628,13 @@ impl AppState {
             && self
                 .server_of(project)
                 .is_none_or(|s| s.state != ServerState::Connected)
+    }
+
+    /// CHAT-028: the session window closes and the board shows the node.
+    pub fn show_node(&mut self, id: String, cx: &mut Context<'_, Self>) {
+        self.terminal_session_id = None;
+        cx.emit(StateEvent::ShowNode(id));
+        cx.notify();
     }
 
     /// SRV-163: there's no folder here to reveal for a server project.

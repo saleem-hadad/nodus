@@ -49,6 +49,7 @@ use nodus_terminal::host::AttachPhase;
 
 use super::host::{HostConfig, TerminalHost, WheelGate};
 use super::store::Terminals;
+use crate::chat::{ChatView, ChatViews};
 
 /// Says whether a wheel event over a session's card terminal scrolls it;
 /// called with the session id and whether Ctrl is held (TERM-104…TERM-106).
@@ -134,6 +135,12 @@ impl CardTerminals {
     /// Focuses the card's terminal, at once or as soon as it's attached
     /// (TERM-095, TERM-100).
     pub fn focus(&self, session_id: &str, window: &mut Window, cx: &mut App) {
+        // CHAT-030: a chat's composer takes the keyboard instead.
+        if let Some(chat) = ChatViews::get(session_id, cx) {
+            let handle = chat.read(cx).composer_handle(cx);
+            window.focus(&handle, cx);
+            return;
+        }
         match Self::host(session_id, cx) {
             Some(host) => host.update(cx, |h, cx| h.request_focus(window, cx)),
             None => {
@@ -143,7 +150,12 @@ impl CardTerminals {
     }
 
     /// Types `text` in at the prompt (TERM-028, TERM-102).
-    pub fn type_in(&self, session_id: &str, text: &str, starting: bool, _cx: &mut App) {
+    pub fn type_in(&self, session_id: &str, text: &str, starting: bool, cx: &mut App) {
+        // CHAT-030: into the chat's composer, on its next frame.
+        if let Some(chat) = ChatViews::get(session_id, cx) {
+            chat.update(cx, |c, cx| c.insert_later(text, cx));
+            return;
+        }
         self.registry.type_in(session_id, text, starting);
     }
 
@@ -185,14 +197,30 @@ impl CardTerminals {
             Rc::new(move |ctrl: bool, cx: &mut App| gate(&id, ctrl, cx)) as WheelGate
         });
         let zoom = self.zoom;
+        let chat_state = (kind == SessionKind::Claude)
+            .then(|| crate::shell::window::main_shell(cx).map(|s| s.read(cx).state.clone()))
+            .flatten();
         host.update(cx, |h, cx| {
             h.set_scale(zoom, cx);
             h.set_wheel_gate(gate);
             h.set_enabled(enabled, cx);
-            if focus {
+            if focus && chat_state.is_none() {
                 h.request_focus(window, cx);
             }
         });
+        // CHAT-029: a Claude card shows its chat, the terminal docked in it.
+        if let Some(state) = chat_state {
+            let chat = window.use_keyed_state(gpui::ElementId::Name(format!("card-chat-{id}").into()), cx, {
+                let (id, project, host) = (id.clone(), self.project_id.to_string(), host.clone());
+                move |window, cx| ChatView::new(state, id, project, host, true, window, cx)
+            });
+            chat.update(cx, |c, _| c.set_frame(zoom, enabled));
+            if focus {
+                let handle = chat.read(cx).composer_handle(cx);
+                window.focus(&handle, cx);
+            }
+            return Some(chat.into_any_element());
+        }
         Some(host.into_any_element())
     }
 }

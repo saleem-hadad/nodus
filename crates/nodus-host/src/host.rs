@@ -9,8 +9,8 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use indexmap::IndexMap;
-use nodus_domain::SessionStatus;
 use nodus_domain::js::utf16_len;
+use nodus_domain::{QueuedPrompt, SessionStatus, queued_reason};
 use nodus_host_proto::{
     ExecRequest, HistoryEntry, HostMessage, HostSession, MessageReader, PROTOCOL, ReplayBuffer, StatusLine, Welcome,
     encode, is_status_key,
@@ -32,6 +32,13 @@ pub(crate) const UNUSED: Duration = Duration::from_millis(30_000);
 const TERMINAL_NAME: &str = "xterm-256color";
 /// Hook payload strings longer than this (UTF-16 units) stay out of history.
 const SLIM_STRING_LIMIT: usize = 1024;
+/// How many handed-over prompts a session remembers, so a `queue-set` that
+/// crossed a hand-over can't put one back (QUEUE-003).
+pub(crate) const DELIVERED_LIMIT: usize = 100;
+/// The hook whose answer can hand Claude a queued prompt (QUEUE-005).
+const STOP_EVENT: &str = "Stop";
+/// What a handed-over prompt is recorded and passed on as (QUEUE-006).
+const PROMPT_EVENT: &str = "UserPromptSubmit";
 
 /// `Date.now()`.
 pub(crate) fn now_ms() -> f64 {
@@ -61,6 +68,26 @@ struct Session {
     /// The curl config giving its hook commands that token, removed when
     /// it exits.
     hook_config: Option<std::path::PathBuf>,
+    /// Prompts waiting for its turn to end, first to go first (QUEUE-002).
+    queue: Vec<QueuedPrompt>,
+    /// The ids of the prompts it has handed over, newest last, at most
+    /// [`DELIVERED_LIMIT`] (QUEUE-003).
+    delivered: VecDeque<String>,
+}
+
+impl Session {
+    /// Takes the first queued prompt, remembering it went (QUEUE-005).
+    fn hand_over(&mut self) -> Option<QueuedPrompt> {
+        if self.queue.is_empty() {
+            return None;
+        }
+        let next = self.queue.remove(0);
+        self.delivered.push_back(next.id.clone());
+        while self.delivered.len() > DELIVERED_LIMIT {
+            self.delivered.pop_front();
+        }
+        Some(next)
+    }
 }
 
 struct Relay {
@@ -326,7 +353,7 @@ impl Host {
     }
 
     /// HOST-037: every live session, in spawn order, with its output,
-    /// history and status line.
+    /// history, status line and queue.
     /// A server that asked (`sessionTokens` in its hello) also hears that
     /// this host gives sessions their own tokens (SRV-143).
     fn welcome(&self, state: &State, asked_tokens: bool) -> HostMessage {
@@ -340,6 +367,8 @@ impl Host {
                 buffer: s.output.joined(),
                 history: s.history.iter().cloned().collect(),
                 status_line: s.status_line.clone(),
+                // QUEUE-004
+                queue: s.queue.clone(),
             })
             .collect();
         HostMessage::Welcome(Welcome {
@@ -349,6 +378,8 @@ impl Host {
             sessions,
             mcp: Some(true),
             hook_auth_header: Some(true),
+            // QUEUE-001
+            queue: Some(true),
             key: self.host_key.clone(),
             session_tokens: asked_tokens.then_some(true),
         })
@@ -459,6 +490,7 @@ impl Host {
                 }
             }
             Some("trust") => self.trust(writer, msg),
+            Some("queue-set") => self.set_queue(state, msg),
             // HOST-040: a second hello or an unknown type is ignored.
             _ => {}
         }
@@ -519,6 +551,8 @@ impl Host {
                 kill_timer: None,
                 token,
                 hook_config,
+                queue: Vec::new(),
+                delivered: VecDeque::new(),
             },
         );
         self.log.log(&["spawned", &session_id, &request.file_as_given]);
@@ -745,14 +779,90 @@ impl Host {
         self.lock().sessions.contains_key(session_id)
     }
 
-    /// A hook or status line report for a session. (HOST-073–078)
-    pub(crate) fn hook(&self, event: &str, session_id: &str, payload: Value) {
-        let mut state = self.lock();
+    /// QUEUE-002, QUEUE-003: replaces a live session's queued prompts,
+    /// leaving out any it has already handed over, and tells every app.
+    /// One for a session that isn't live, or that doesn't read, is ignored
+    /// (HOST-040).
+    fn set_queue(&self, state: &mut State, msg: &Value) {
+        let Some(session_id) = msg.get("sessionId").and_then(Value::as_str) else {
+            return;
+        };
+        let Some(items) = msg
+            .get("items")
+            .and_then(|items| serde_json::from_value::<Vec<QueuedPrompt>>(items.clone()).ok())
+        else {
+            return;
+        };
         let Some(s) = state.sessions.get_mut(session_id) else {
             return;
         };
+        s.queue = items
+            .into_iter()
+            .filter(|item| !s.delivered.contains(&item.id))
+            .collect();
+        let items = s.queue.clone();
+        self.broadcast(
+            state,
+            &HostMessage::Queue {
+                session_id: session_id.to_owned(),
+                items,
+            },
+        );
+    }
+
+    /// A hook or status line report for a session (HOST-073–078). With
+    /// `reply`, a Stop hook whose command prints the answer (QUEUE-008)
+    /// may hand Claude the session's first queued prompt: then this is the
+    /// answer to give it (QUEUE-005, QUEUE-006).
+    pub(crate) fn hook(&self, event: &str, session_id: &str, payload: Value, reply: bool) -> Option<Value> {
+        let mut state = self.lock();
+        let s = state.sessions.get_mut(session_id)?;
         // SRV-143: the server checks it too.
         let token = s.token.clone();
+        // QUEUE-005: only the main thread's turn; a subagent's isn't the user's.
+        if reply
+            && event == STOP_EVENT
+            && !from_agent(&payload)
+            && let Some(next) = s.hand_over()
+        {
+            // QUEUE-006: Claude carries on with the user's words, as if they
+            // had typed them, so status, notifications and a relaunched app
+            // see a prompt, not a stop.
+            let mut prompt = Map::new();
+            prompt.insert("prompt".into(), Value::String(next.text.clone()));
+            prompt.insert("nodusQueued".into(), Value::Bool(true));
+            let prompt = Value::Object(prompt);
+            let slimmed = slim(&prompt).unwrap_or_default();
+            record(
+                s,
+                HistoryEntry::Hook {
+                    hook: PROMPT_EVENT.to_owned(),
+                    payload: Value::Object(slimmed),
+                    at: Some(now_ms()),
+                },
+            );
+            let items = s.queue.clone();
+            self.broadcast(
+                &state,
+                &HostMessage::Hook {
+                    session_id: session_id.to_owned(),
+                    event: PROMPT_EVENT.to_owned(),
+                    payload: prompt,
+                    token,
+                },
+            );
+            self.broadcast(
+                &state,
+                &HostMessage::Queue {
+                    session_id: session_id.to_owned(),
+                    items,
+                },
+            );
+            let mut answer = Map::new();
+            answer.insert("decision".into(), Value::String("block".into()));
+            answer.insert("reason".into(), Value::String(queued_reason(&next.text)));
+            return Some(Value::Object(answer));
+        }
         if event == nodus_host_proto::STATUS_LINE_EVENT {
             s.status_line = Some(StatusLine {
                 payload: payload.clone(),
@@ -763,7 +873,7 @@ impl Host {
                 // Object.entries(null) throws in the request's end handler.
                 self.log
                     .log(&["uncaught", "TypeError: Cannot convert undefined or null to object"]);
-                return;
+                return None;
             };
             record(
                 s,
@@ -783,6 +893,7 @@ impl Host {
                 token,
             },
         );
+        None
     }
 
     /// Passes a board tools request to the newest app, at once, so a batch's
@@ -917,6 +1028,14 @@ fn js_string(value: Option<&Value>) -> String {
             .join(","),
         Some(Value::Object(_)) => "[object Object]".into(),
     }
+}
+
+/// A hook from inside a subagent: its payload names the agent.
+fn from_agent(payload: &Value) -> bool {
+    payload
+        .get("agent_id")
+        .and_then(Value::as_str)
+        .is_some_and(|id| !id.is_empty())
 }
 
 fn record(s: &mut Session, entry: HistoryEntry) {
@@ -1226,6 +1345,8 @@ mod tests {
                 kill_timer: None,
                 token: None,
                 hook_config: None,
+                queue: Vec::new(),
+                delivered: VecDeque::new(),
             },
         );
         host.shutdown(&mut host.lock());

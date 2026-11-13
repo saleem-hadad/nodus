@@ -393,7 +393,7 @@ fn no_drag(child: impl IntoElement) -> gpui::Div {
 /// The grid's New Project button (UI-186), with its menu of the other ways
 /// to add: Connect to Server…, Add from GitHub on <server>… for each
 /// connected server, and Show Server Projects… once there's a server
-/// (SRV-060, SRV-120, SRV-161).
+/// (UI-308, UI-329; SRV-060, SRV-120, SRV-161).
 pub fn new_project_button(
     state: &Entity<AppState>,
     menus: &Entity<crate::components::context_menu::MenuLayer>,

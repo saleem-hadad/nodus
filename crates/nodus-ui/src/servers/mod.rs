@@ -638,8 +638,9 @@ impl ServersDialog {
             .into_any_element()
     }
 
-    /// Add from GitHub on <server>… (SRV-120): its repositories, searched,
-    /// each added with a click, and a way to install the App on more.
+    /// Add from GitHub on <server>… (SRV-120, UI-329): its repositories,
+    /// searched, each added with a click, and a way to install the App on
+    /// more.
     fn render_github(
         &mut self,
         server_id: &str,

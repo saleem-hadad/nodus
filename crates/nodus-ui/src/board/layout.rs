@@ -43,7 +43,7 @@ pub const VIEW_SIZE: Size = Size {
 /// A new card opens in its window, then stays expanded on the board.
 pub const NEW_CARD_SIZE: Size = Size {
     w: geo::EXPANDED_W,
-    h: geo::EXPANDED_H,
+    h: geo::NEW_CARD_H,
 };
 
 /// `isTerminal(card)`.

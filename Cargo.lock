@@ -4267,6 +4267,7 @@ dependencies = [
  "libc",
  "nodus-domain",
  "nodus-host-proto",
+ "nodus-platform",
  "serde_json",
  "tempfile",
  "tokio",
@@ -4323,6 +4324,7 @@ name = "nodus-sessions"
 version = "1.0.12"
 dependencies = [
  "indexmap",
+ "libc",
  "nodus-domain",
  "nodus-host",
  "nodus-host-proto",

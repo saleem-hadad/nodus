@@ -30,6 +30,7 @@ use std::sync::Arc;
 use indexmap::IndexMap;
 use nodus_domain::{SessionSearchHit, TranscriptMessage};
 
+pub use claude::ClaudeCall;
 pub use lines::{Json, read_lines};
 pub use meta::{DiscoveredSession, MetaCache, meta_signature};
 pub use naming::{NamingError, NamingSource, name_section};

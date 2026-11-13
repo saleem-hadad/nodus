@@ -8,7 +8,8 @@ use std::time::Duration;
 use nodus_domain::js::trim;
 use nodus_domain::{ActionDraft, ActionIcon};
 use nodus_platform::env::EnvMap;
-use nodus_platform::process::{Command, Signal, SpawnError};
+use nodus_platform::process::{Signal, SpawnError};
+use nodus_platform::runner::{Program, RunRequest, Runner};
 use nodus_platform::{ClaudeNotFound, Env};
 use serde_json::Value;
 
@@ -160,20 +161,30 @@ pub fn read_draft(stdout: &str, stderr: &str, code: Option<i32>) -> Result<Actio
 }
 
 /// `actions:draft` once the login-shell env is ready (ACT-016): drafts in the
-/// project's folder with the user's `claude`.
+/// project's folder with the user's `claude`, run through `runner` (SRV-005).
 pub async fn draft_action(
+    runner: &dyn Runner,
     env: &Env,
     repo_path: &Path,
     description: &str,
     global: bool,
 ) -> Result<ActionDraft, DraftError> {
-    draft_with(env.claude_path(), env.spawn_env(), repo_path, description, global).await
+    draft_with(
+        runner,
+        runner.claude(env).ok(),
+        env.spawn_env(),
+        repo_path,
+        description,
+        global,
+    )
+    .await
 }
 
-/// [`draft_action`] with the `claude` binary and `spawnEnv()` given, for
+/// [`draft_action`] with the `claude` program and `spawnEnv()` given, for
 /// tests and other wiring.
 pub async fn draft_with(
-    claude: Option<&Path>,
+    runner: &dyn Runner,
+    claude: Option<Program>,
     spawn_env: EnvMap,
     repo_path: &Path,
     description: &str,
@@ -188,14 +199,13 @@ pub async fn draft_with(
     let claude = claude.ok_or(ClaudeNotFound)?;
     // ACT-023: stdin closed, otherwise claude -p waits for piped input; no
     // console window on Windows. ACT-024: SIGKILL at the timeout.
-    let output = Command::new(claude)
+    let request = RunRequest::new(claude)
         .args(draft_args(&what, global))
         .cwd(repo_path)
         .env(spawn_env)
         .timeout(DRAFT_TIMEOUT)
-        .kill_signal(Signal::KILL)
-        .output()
-        .await?;
+        .kill_signal(Signal::KILL);
+    let output = runner.run(request).await?;
     if output.timed_out {
         return Err(DraftError::TookTooLong);
     }

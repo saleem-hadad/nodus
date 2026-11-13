@@ -104,7 +104,7 @@ impl BoardApi<'_> {
                 self.nodus
                     .inner
                     .board
-                    .name_section(project_id, session_ids, &env)
+                    .name_section(project_id, session_ids, &env, &*self.nodus.inner.runner)
                     .await
                     .on("board:name-section")
             })

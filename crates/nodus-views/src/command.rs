@@ -4,7 +4,8 @@ use std::time::Duration;
 
 use nodus_domain::{CommandResult, js};
 use nodus_platform::Env;
-use nodus_platform::process::{Capture, Command, Signal};
+use nodus_platform::process::{Capture, Signal};
+use nodus_platform::runner::{RunRequest, Runner};
 
 /// How long a command may run before its whole process tree is stopped (VIEW-078).
 pub const COMMAND_TIMEOUT: Duration = Duration::from_millis(2 * 60 * 1000);
@@ -22,23 +23,30 @@ fn text(bytes: &[u8], max: usize) -> String {
 
 /// Runs `run` in the user's shell (`shellCommand`, 01) in `cwd`, with their
 /// environment and `NO_COLOR=1`, stdin closed, in a session of its own so a
-/// timeout stops everything it started. A non-zero exit is still a result.
-pub(crate) async fn execute(env: &Env, cwd: &str, name: &str, run: &str, clock: impl Fn() -> f64) -> CommandResult {
+/// timeout stops everything it started, through `runner` (SRV-145). A
+/// non-zero exit is still a result.
+pub(crate) async fn execute(
+    runner: &dyn Runner,
+    env: &Env,
+    cwd: &str,
+    name: &str,
+    run: &str,
+    clock: impl Fn() -> f64,
+) -> CommandResult {
     let started = clock();
     let shell = env.shell_command(run);
     let mut vars = env.spawn_env();
     vars.insert("NO_COLOR".into(), "1".into());
-    let output = Command::new(&shell.file)
-        .args(&shell.args)
+    let request = RunRequest::new(shell.file)
+        .args(shell.args)
         .cwd(cwd)
         .env(vars)
         .stdout(Capture::First(MAX_STDOUT_CHARS * 4))
         .stderr(Capture::First(MAX_STDERR_CHARS * 4))
         .timeout(COMMAND_TIMEOUT)
         .kill_signal(Signal::KILL)
-        .new_session()
-        .output()
-        .await;
+        .new_session();
+    let output = runner.run(request).await;
     let at = clock();
     match output {
         Ok(out) => CommandResult {

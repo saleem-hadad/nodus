@@ -4,15 +4,13 @@
 //! in, a few words come out. Thinking, tools and MCP servers are off, and it
 //! runs outside the repo, so it answers in a couple of seconds.
 
-use std::path::Path;
 use std::sync::LazyLock;
 use std::time::Duration;
 
 use nodus_domain::js::{self, slice_utf16, utf16_len};
-use nodus_platform::env::EnvMap;
 use regex::Regex;
 
-use crate::claude::{self, RunError};
+use crate::claude::{self, ClaudeCall, RunError};
 
 /// The call is stopped after this long (SESS-113).
 pub const TIMEOUT: Duration = Duration::from_millis(30_000);
@@ -119,10 +117,10 @@ pub fn naming_args(sources: &[NamingSource]) -> Vec<String> {
 }
 
 /// Asks `claude` to name a section after `sources`, in the OS temp folder
-/// with `spawn_env` (`spawnEnv()`) (SESS-109…113). The caller finds `claude`.
-pub async fn name_section(claude: &Path, spawn_env: &EnvMap, sources: &[NamingSource]) -> Result<String, NamingError> {
+/// (SESS-109…113). The caller finds `claude`.
+pub async fn name_section(claude: ClaudeCall<'_>, sources: &[NamingSource]) -> Result<String, NamingError> {
     let args = naming_args(sources);
-    let finished = match claude::run(claude, &args, &std::env::temp_dir(), spawn_env, TIMEOUT).await {
+    let finished = match claude::run(claude, &args, &std::env::temp_dir(), TIMEOUT).await {
         Ok(finished) => finished,
         Err(RunError::TimedOut) => return Err(NamingError("Naming timed out".into())),
         Err(RunError::Spawn(message)) => return Err(NamingError(message)),
@@ -216,8 +214,22 @@ mod tests {
 
     #[cfg(unix)]
     mod with_a_stand_in {
+        use std::path::Path;
+
+        use nodus_platform::env::EnvMap;
+        use nodus_platform::runner::{LocalRunner, Program};
+
         use super::*;
         use crate::claude::stand_in;
+
+        async fn name_with(claude: &Path, sources: &[NamingSource]) -> Result<String, NamingError> {
+            let call = ClaudeCall {
+                runner: &LocalRunner,
+                program: &Program::from(claude),
+                env: &EnvMap::new(),
+            };
+            name_section(call, sources).await
+        }
 
         #[tokio::test]
         async fn names_the_section_from_claudes_reply() {
@@ -227,7 +239,7 @@ mod tests {
                 r#"echo '{"type":"result","is_error":false,"result":"Name: Auth Work."}'"#,
             );
             let sources = [source("Fix login", None)];
-            let name = name_section(&claude, &EnvMap::new(), &sources).await;
+            let name = name_with(&claude, &sources).await;
             assert_eq!(name, Ok("Auth Work".into()));
             assert_eq!(stand_in::calls(dir.path()), [naming_args(&sources)]);
             let cwd = std::fs::read_to_string(dir.path().join("cwd.log")).unwrap();
@@ -241,14 +253,11 @@ mod tests {
             let claude = stand_in::write(dir.path(), r#"echo '{"result":"***"}'; echo 'warn' >&2; exit 1"#);
             let sources = [source("T", None)];
             // A reply that cleans to nothing gives its own text as the reason.
-            assert_eq!(
-                name_section(&claude, &EnvMap::new(), &sources).await,
-                Err(NamingError("***".into()))
-            );
+            assert_eq!(name_with(&claude, &sources).await, Err(NamingError("***".into())));
             let dir = tempfile::TempDir::new().unwrap();
             let claude = stand_in::write(dir.path(), "exit 7");
             assert_eq!(
-                name_section(&claude, &EnvMap::new(), &sources).await,
+                name_with(&claude, &sources).await,
                 Err(NamingError("claude exited with code 7".into()))
             );
         }
@@ -257,7 +266,7 @@ mod tests {
         async fn times_out_after_30_seconds() {
             let dir = tempfile::TempDir::new().unwrap();
             let claude = stand_in::write(dir.path(), "sleep 600");
-            let result = name_section(&claude, &EnvMap::new(), &[source("T", None)]).await;
+            let result = name_with(&claude, &[source("T", None)]).await;
             assert_eq!(result, Err(NamingError("Naming timed out".into())));
         }
     }

@@ -1,10 +1,12 @@
 //! Running git the one way git.ts does (GIT-001, GIT-002).
 
 use std::path::Path;
+use std::sync::Arc;
 
 use nodus_platform::Env;
 use nodus_platform::env::EnvMap;
-use nodus_platform::process::{Command, ExecError, Exit, Output};
+use nodus_platform::process::{ExecError, Exit, Output};
+use nodus_platform::runner::{RunRequest, Runner};
 
 /// The default cap on each of git's output streams, past which the run fails
 /// as Node's `maxBuffer` makes it (GIT-001).
@@ -27,22 +29,31 @@ pub type RunError = ExecError;
 
 /// Runs git with the user's environment: `git --no-optional-locks -c
 /// core.quotepath=false <args>`, looked up on the login shell's PATH, with
-/// `GIT_TERMINAL_PROMPT=0` so it never waits on a password.
-#[derive(Debug, Clone)]
+/// `GIT_TERMINAL_PROMPT=0` so it never waits on a password. It runs through
+/// `runner`, which finds git on that PATH on its own side: here, or in the
+/// session host on a server (SRV-005).
+#[derive(Clone)]
 pub struct Git {
     env: EnvMap,
+    runner: Arc<dyn Runner>,
+}
+
+impl std::fmt::Debug for Git {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Git").field("env", &self.env).finish_non_exhaustive()
+    }
 }
 
 impl Git {
     /// `spawnEnv({ GIT_TERMINAL_PROMPT: '0' })` from the login-shell environment.
-    pub fn from_env(env: &Env) -> Self {
-        Self::new(env.spawn_env())
+    pub fn from_env(env: &Env, runner: Arc<dyn Runner>) -> Self {
+        Self::new(env.spawn_env(), runner)
     }
 
     /// Runs git in `spawn_env` (`spawnEnv()`), with `GIT_TERMINAL_PROMPT=0` set over it.
-    pub fn new(mut spawn_env: EnvMap) -> Self {
+    pub fn new(mut spawn_env: EnvMap, runner: Arc<dyn Runner>) -> Self {
         spawn_env.insert("GIT_TERMINAL_PROMPT".into(), "0".into());
-        Self { env: spawn_env }
+        Self { env: spawn_env, runner }
     }
 
     /// The argv after `git` for these arguments (GIT-001).
@@ -56,14 +67,12 @@ impl Git {
 
     /// Runs git in `cwd` with a cap on each stream (GIT-001, GIT-002).
     pub async fn run(&self, cwd: &Path, args: &[&str], max_buffer: usize) -> Result<GitResult, RunError> {
-        let output = Command::new("git")
+        let request = RunRequest::new("git")
             .args(Self::argv(args))
             .cwd(cwd)
             .env(self.env.clone())
-            .max_buffer(max_buffer)
-            .output()
-            .await?;
-        answer(output)
+            .max_buffer(max_buffer);
+        answer(self.runner.run(request).await?)
     }
 }
 

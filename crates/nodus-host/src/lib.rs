@@ -8,18 +8,23 @@
 //! do. It exits once it has no sessions and no app connected.
 //!
 //! The app starts it detached as `Nodus host <socket> <key>` and talks to it
-//! over a Unix socket, or a named pipe on Windows (`nodus-host-proto`). It
+//! over a Unix socket, or a named pipe on Windows (`nodus-host-proto`). On a
+//! server it runs on its own as `nodus host --socket <path>`, as another
+//! user than `nodus serve`, which connects to it and has it run every
+//! process (SRV-004, SRV-005). It
 //! sends the same messages as the 0.9.4 Node host under protocol number 2
 //! (0.9.4 says 1, decision U1), so an app of either kind that finds the other
 //! kind's host asks to stop its sessions rather than adopting them.
 //!
 //! Ports `src/main/host.ts`.
 
+pub mod exec;
 mod host;
 mod http;
 mod log;
 pub mod pty;
 pub mod transport;
+pub mod trust;
 
 use std::path::Path;
 use std::sync::Arc;
@@ -27,10 +32,11 @@ use std::sync::Arc;
 pub use log::Logger;
 use tokio::task::JoinSet;
 
-/// `Nodus host <socket> <key>`: runs the host in this process until it
-/// exits, and returns the exit code. Logs go to standard output, which the
-/// app points at `host.log`. Nothing here touches the UI, so the host shows
-/// no Dock icon, window or menu. (HOST-035)
+/// `Nodus host <socket> <key>`, or `nodus host --socket <path>`: runs the
+/// host in this process until it exits, and returns the exit code. Logs go
+/// to standard output, which the app points at `host.log` (and systemd at
+/// its journal). Nothing here touches the UI, so the host shows no Dock
+/// icon, window or menu. (HOST-035)
 pub fn main(args: &[String]) -> i32 {
     let log = Logger::stdout();
     log_panics(&log);
@@ -47,11 +53,21 @@ pub fn main(args: &[String]) -> i32 {
     code
 }
 
-/// Runs a host with these arguments (the socket path and the key path)
-/// until it decides to exit; returns its exit code. Once it returns, the
-/// host stops listening and its sessions' terminals are closed.
+/// Runs a host with these arguments (the socket path and the key path, or
+/// `--socket` and the socket path) until it decides to exit; returns its
+/// exit code. Once it returns, the host stops listening and its sessions'
+/// terminals are closed.
 pub async fn run(args: &[String], log: Logger) -> i32 {
     let arg = |i: usize| args.get(i).filter(|arg| !arg.is_empty());
+    // SRV-004: on its own, at a socket its app's user can reach through its
+    // group. Unix only: a Windows pipe has no group, and its app needs a key.
+    if args.first().map(String::as_str) == Some("--socket") {
+        let Some(socket) = arg(1).filter(|_| cfg!(unix)) else {
+            log.log(&["failed to start", "Error: usage: host --socket <socket path>"]);
+            return 1;
+        };
+        return serve(Path::new(socket), None, true, log).await;
+    }
     // HOST-022, HOST-023
     let (Some(socket), key) = (arg(0), arg(1)) else {
         log.log(&["failed to start", "Error: usage: host <socket path> <key path>"]);
@@ -61,12 +77,19 @@ pub async fn run(args: &[String], log: Logger) -> i32 {
         log.log(&["failed to start", "Error: usage: host <socket path> <key path>"]);
         return 1;
     }
-    let socket = Path::new(socket);
+    serve(Path::new(socket), key.map(Path::new), false, log).await
+}
 
+/// The host at `socket`, the app's own (HOST-022…035) or standalone
+/// (SRV-004): that one makes the socket's folder when it's missing (0750),
+/// lets the socket's group connect (0660), never gives up waiting for an
+/// app (HOST-032, HOST-047), and leaves when an app on another protocol
+/// says hello.
+async fn serve(socket: &Path, key: Option<&Path>, standalone: bool, log: Logger) -> i32 {
     // HOST-030, HOST-029
     let hook_token = random_hex(16);
     let host_key = cfg!(windows).then(|| random_hex(32));
-    let host = host::Host::new(log.clone(), hook_token, host_key);
+    let host = host::Host::new(log.clone(), hook_token, host_key, standalone);
 
     // HOST-024: two apps starting at once could each start a host; the second one leaves.
     if transport::already_served(socket).await {
@@ -79,6 +102,20 @@ pub async fn run(args: &[String], log: Logger) -> i32 {
         log.log(&["failed to start", &format!("Error: {err}")]);
         1
     };
+    if standalone {
+        // Never somewhere else, as the app's own host goes to the temp folder
+        // (HOST-004): on Linux that's every user's.
+        if let Some(most) = too_long(socket) {
+            return failed(&format!(
+                "the socket path {} is longer than {most} bytes",
+                socket.display()
+            ));
+        }
+        // SRV-004: systemd's RuntimeDirectory makes it; anywhere else, this does.
+        if let Err(err) = make_socket_dir(socket) {
+            return failed(&err);
+        }
+    }
     // HOST-026: the hook server first.
     let (hooks, port) = match http::bind().await {
         Ok(bound) => bound,
@@ -87,14 +124,14 @@ pub async fn run(args: &[String], log: Logger) -> i32 {
     host.hook_port
         .store(u64::from(port), std::sync::atomic::Ordering::SeqCst);
     // HOST-027, HOST-028
-    let mut listener = match transport::Listener::bind(socket) {
+    let mut listener = match transport::Listener::bind(socket, standalone) {
         Ok(listener) => listener,
         Err(err) => return failed(&err),
     };
     // HOST-029: before any welcome goes out, and only once the pipe is ours:
     // a second host that lost the race to it never gets here.
     if let (Some(key), Some(key_path)) = (&host.host_key, key)
-        && let Err(err) = nodus_host_proto::write_private_file(Path::new(key_path), key)
+        && let Err(err) = nodus_host_proto::write_private_file(key_path, key)
     {
         return failed(&err);
     }
@@ -116,16 +153,39 @@ pub async fn run(args: &[String], log: Logger) -> i32 {
             while connections.try_join_next().is_some() {}
         }
     });
-    let unused = Arc::clone(&host);
-    tasks.spawn(async move {
-        tokio::time::sleep(host::UNUSED).await;
-        unused.unused_check();
-    });
+    if !standalone {
+        let unused = Arc::clone(&host);
+        tasks.spawn(async move {
+            tokio::time::sleep(host::UNUSED).await;
+            unused.unused_check();
+        });
+    }
 
     let code = host.exited().await;
     tasks.shutdown().await;
     host.close_sessions();
     code
+}
+
+/// The longest a socket's path can be, when `socket` is longer: what fits
+/// in `sockaddr_un.sun_path` with its NUL (108 bytes on Linux, 104 on macOS).
+fn too_long(socket: &Path) -> Option<usize> {
+    let most = if cfg!(target_os = "linux") { 107 } else { 103 };
+    (socket.as_os_str().len() > most).then_some(most)
+}
+
+/// The socket's folder, and any missing above it, made 0750 when missing.
+fn make_socket_dir(socket: &Path) -> std::io::Result<()> {
+    let Some(dir) = socket.parent().filter(|dir| !dir.as_os_str().is_empty()) else {
+        return Ok(());
+    };
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        std::fs::DirBuilder::new().recursive(true).mode(0o750).create(dir)
+    }
+    #[cfg(not(unix))]
+    std::fs::create_dir_all(dir)
 }
 
 /// HOST-033: a crash would take every session with it, so a panic anywhere

@@ -12,6 +12,7 @@ use nodus_domain::{
     ActionRunResult, CreateSessionOptions, Event, InkColor, InkKind, InkStroke, NodePatch, Rect, SessionKind,
     SessionStatus, SummarizePhase, SummarizeProgress, Viewport,
 };
+use nodus_platform::runner::LocalRunner;
 use serde_json::{Map, json};
 
 fn action(id: &str, name: &str) -> ProjectAction {
@@ -480,16 +481,24 @@ async fn names_a_section_only_after_sessions_with_something_to_say() {
     let env = nodus_platform::Env::from_process();
     let ids = vec!["term".to_owned(), B.to_owned(), "missing".to_owned()];
     // SESS-102
-    let err = f.board.name_section("p", &ids, &env).await.unwrap_err();
+    let err = f.board.name_section("p", &ids, &env, &LocalRunner).await.unwrap_err();
     assert_eq!(
         err.to_string(),
         "These sessions have nothing to name the section after yet"
     );
     // With a title, the next thing it needs is claude, which this environment hasn't found.
     f.put(node(A, json!({ "title": "Fix login" })));
-    let err = f.board.name_section("p", &[A.to_owned()], &env).await.unwrap_err();
+    let err = f
+        .board
+        .name_section("p", &[A.to_owned()], &env, &LocalRunner)
+        .await
+        .unwrap_err();
     assert!(matches!(err, BoardError::NoClaude(_)), "{err}");
-    let err = f.board.name_section("nope", &[A.to_owned()], &env).await.unwrap_err();
+    let err = f
+        .board
+        .name_section("nope", &[A.to_owned()], &env, &LocalRunner)
+        .await
+        .unwrap_err();
     assert_eq!(err.to_string(), "Unknown project nope");
 }
 
@@ -870,7 +879,11 @@ async fn summarizes_only_sessions_with_a_conversation() {
     let env = nodus_platform::Env::from_process();
     let ids = vec!["new".to_owned(), "missing".to_owned(), A.to_owned()];
     // SESS-165, SESS-166, then SESS-174: no claude fails the whole call.
-    let err = f.board.summarize("p", &ids, "r1", None, &env).await.unwrap_err();
+    let err = f
+        .board
+        .summarize("p", &ids, "r1", None, &env, &LocalRunner)
+        .await
+        .unwrap_err();
     assert!(matches!(err, BoardError::NoClaude(_)));
     let error = Some("This session has no conversation yet".to_owned());
     let progress = |id: &str| {

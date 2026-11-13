@@ -77,7 +77,7 @@ pub use git::GitApi;
 pub use groups::GroupsApi;
 pub use local_storage::LocalStorageApi;
 pub use menu::MenuApi;
-pub use nodus::{Dialogs, EnvSource, Nodus, NodusConfig, PickFolder, QuitAtOnce, SettingsHook};
+pub use nodus::{Dialogs, EnvSource, HostMode, Nodus, NodusConfig, PickFolder, QuitAtOnce, RunnerSource, SettingsHook};
 /// What the windowed app gives capture, and what it answers.
 pub use nodus_capture as capture_service;
 /// Where the xAI key is sealed; tests give a synthetic one.
@@ -99,8 +99,9 @@ pub use nodus_board::{StopConfirmation, stop_confirmation, stoppable};
 /// The types the API takes and gives, for callers that don't depend on
 /// `nodus-domain` themselves.
 pub use nodus_domain as domain;
-/// How a session host is started, for a caller that starts its own.
-pub use nodus_sessions::client::{HostLauncher, ProcessLauncher};
+/// How a session host is started, for a caller that starts its own, and
+/// the runner that runs every process in it (SRV-005).
+pub use nodus_sessions::client::{HostLauncher, HostRunner, ProcessLauncher};
 /// What a custom notifier implements, and the ids its clicks come back with.
 pub use nodus_sessions::notify::{Notification, NotificationId, Notifier};
 /// A view's page, as the frame's custom protocol answers it.

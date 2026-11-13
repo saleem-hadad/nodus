@@ -19,7 +19,8 @@ pub mod reader;
 pub use buffer::{BUFFER_LIMIT, ReplayBuffer};
 pub use cmdline::{windows_command_line, windows_spawn_command_line};
 pub use message::{
-    ClientMessage, EnvMap, HistoryEntry, HostMessage, HostSession, SpawnRequest, StatusLine, Welcome, encode,
+    ClientMessage, EnvMap, ExecCapture, ExecRequest, ExecResult, HistoryEntry, HostMessage, HostSession, SpawnRequest,
+    StatusLine, Welcome, encode,
 };
 pub use paths::{
     HookConfigError, HostPaths, Platform, ensure_private_dir, host_paths, trusts_host, write_hook_config,

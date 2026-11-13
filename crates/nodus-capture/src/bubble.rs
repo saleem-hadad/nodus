@@ -10,7 +10,8 @@ use std::time::Duration;
 use nodus_domain::js;
 use nodus_domain::{BubbleGuess, BubbleRoute, SessionModel};
 use nodus_platform::ClaudeNotFound;
-use nodus_platform::process::{Capture, Command, Signal};
+use nodus_platform::process::Capture;
+use nodus_platform::runner::RunRequest;
 use serde_json::Value;
 
 use crate::guess::{ClaudeEnv, MAX_REASON_CHARS, MAX_TEXT_CHARS, SETTINGS, TIMEOUT, flat};
@@ -109,27 +110,22 @@ pub async fn route_within(
     }
     let claude = env.claude()?;
     // Stdin closed, or `claude -p` waits for piped input (CAP-069).
-    let child = Command::new(&claude)
+    let request = RunRequest::new(claude)
         .args(bubble_args(text, project))
         .cwd(std::env::temp_dir())
         .env(env.spawn_env())
         .stdout(Capture::All)
-        .stderr(Capture::First(0))
-        .spawn();
-    let child = match child {
-        Ok(child) => child,
-        Err(err) => {
-            tracing::error!(%err, "[bubble] route failed");
-            return Ok(None);
-        }
-    };
-    let killer = child.killer();
+        .stderr(Capture::First(0));
     Ok(tokio::select! {
-        output = child.wait() => read_reply(&output.stdout_text()),
-        () = tokio::time::sleep(timeout) => {
-            killer.kill(Signal::KILL);
-            None
-        }
+        output = env.runner().run(request) => match output {
+            Ok(output) => read_reply(&output.stdout_text()),
+            Err(err) => {
+                tracing::error!(%err, "[bubble] route failed");
+                None
+            }
+        },
+        // Past the timeout the run is dropped, which stops it (SIGKILL).
+        () = tokio::time::sleep(timeout) => None,
     })
 }
 

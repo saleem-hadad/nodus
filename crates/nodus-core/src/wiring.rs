@@ -10,6 +10,9 @@ use std::sync::{Arc, Weak};
 
 use nodus_board::{BoardSessions, BoxFuture, Launcher, Resume, StartNew};
 use nodus_domain::{Event, EventSink, SessionCard, SessionMeta, SessionStatus, SessionUsage};
+use nodus_platform::process::SpawnError;
+use nodus_platform::runner::{Program, RunOutput, RunRequest, Runner};
+use nodus_platform::{ClaudeNotFound, Env};
 use nodus_sessions::launch::{self, ActionRun, SpawnOptions};
 use nodus_sessions::notify::SessionMetas;
 use nodus_tools::{ProjectAdder, ViewTools};
@@ -210,11 +213,34 @@ impl nodus_views::ViewHost for CoreViewHost {
                 return Value::Null;
             };
             let env = core.env().await;
-            match nodus_git::Git::from_env(&env).status(&repo).await {
+            match core.git(&env).status(&repo).await {
                 Ok(Some(status)) => serde_json::to_value(status).unwrap_or(Value::Null),
                 _ => Value::Null,
             }
         })
+    }
+}
+
+/// The core's runner, for the domains made before it (views, capture): it
+/// can be the session host's, and the host connection comes after them.
+pub(crate) struct CoreRunner(pub(crate) Weak<Inner>);
+
+impl Runner for CoreRunner {
+    fn run(&self, request: RunRequest) -> nodus_platform::runner::BoxFuture<Result<RunOutput, SpawnError>> {
+        match self.0.upgrade() {
+            Some(core) => core.runner.run(request),
+            None => {
+                let program = request.program.to_string();
+                Box::pin(async move { Err(SpawnError::reported(program, "Nodus has stopped", None)) })
+            }
+        }
+    }
+
+    fn claude(&self, env: &Env) -> Result<Program, ClaudeNotFound> {
+        match self.0.upgrade() {
+            Some(core) => core.runner.claude(env),
+            None => Err(ClaudeNotFound),
+        }
     }
 }
 

@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use nodus_actions::{ActionError, Actions, DraftError, draft_with, is_run};
 use nodus_domain::{Project, SessionStatus};
+use nodus_platform::runner::LocalRunner;
 use nodus_store::Store;
 use serde_json::{Value, json};
 use tempfile::TempDir;
@@ -177,11 +178,11 @@ fn tells_a_takeover_from_the_terminal_talking() {
 #[tokio::test]
 async fn asks_for_a_description_before_looking_for_claude() {
     let dir = TempDir::new().unwrap();
-    let err = draft_with(None, Default::default(), dir.path(), " \n ", false)
+    let err = draft_with(&LocalRunner, None, Default::default(), dir.path(), " \n ", false)
         .await
         .unwrap_err();
     assert_eq!(err.to_string(), "Describe what the button should do");
-    let err = draft_with(None, Default::default(), dir.path(), "x", false)
+    let err = draft_with(&LocalRunner, None, Default::default(), dir.path(), "x", false)
         .await
         .unwrap_err();
     assert!(matches!(err, DraftError::NoClaude(_)));
@@ -192,9 +193,16 @@ async fn asks_for_a_description_before_looking_for_claude() {
 async fn says_when_claude_cant_start() {
     let dir = TempDir::new().unwrap();
     let missing = dir.path().join("claude");
-    let err = draft_with(Some(&missing), Default::default(), dir.path(), "x", false)
-        .await
-        .unwrap_err();
+    let err = draft_with(
+        &LocalRunner,
+        Some(missing.clone().into()),
+        Default::default(),
+        dir.path(),
+        "x",
+        false,
+    )
+    .await
+    .unwrap_err();
     assert_eq!(err.to_string(), format!("spawn {} ENOENT", missing.display()));
 }
 
@@ -229,9 +237,16 @@ mod stand_in {
         let repo = TempDir::new().unwrap();
         let answer = r#"echo '{"type":"result","is_error":false,"result":"","structured_output":{"name":"Run Tests","icon":"test-tube","prompt":"Run the tests."}}'"#;
         let claude = claude(dir.path(), answer);
-        let draft = draft_with(Some(&claude), env(dir.path()), repo.path(), "  run the tests  ", true)
-            .await
-            .unwrap();
+        let draft = draft_with(
+            &LocalRunner,
+            Some(claude.into()),
+            env(dir.path()),
+            repo.path(),
+            "  run the tests  ",
+            true,
+        )
+        .await
+        .unwrap();
         assert_eq!(
             (draft.name.as_str(), draft.icon.as_str(), draft.prompt.as_str()),
             ("Run Tests", "test-tube", "Run the tests.")
@@ -258,14 +273,28 @@ mod stand_in {
             dir.path(),
             "echo 'Error: one' >&2; echo two >&2; echo three >&2; echo four >&2; exit 1",
         );
-        let err = draft_with(Some(&noisy), env(dir.path()), dir.path(), "x", false)
-            .await
-            .unwrap_err();
+        let err = draft_with(
+            &LocalRunner,
+            Some(noisy.into()),
+            env(dir.path()),
+            dir.path(),
+            "x",
+            false,
+        )
+        .await
+        .unwrap_err();
         assert_eq!(err.to_string(), "two three four");
         let quiet = claude(dir.path(), "exit 3");
-        let err = draft_with(Some(&quiet), env(dir.path()), dir.path(), "x", false)
-            .await
-            .unwrap_err();
+        let err = draft_with(
+            &LocalRunner,
+            Some(quiet.into()),
+            env(dir.path()),
+            dir.path(),
+            "x",
+            false,
+        )
+        .await
+        .unwrap_err();
         assert_eq!(err.to_string(), "claude exited with code 3");
     }
 
@@ -274,9 +303,16 @@ mod stand_in {
         // ACT-024: the paused clock runs ahead to the timeout.
         let dir = TempDir::new().unwrap();
         let claude = claude(dir.path(), "sleep 30");
-        let err = draft_with(Some(&claude), env(dir.path()), dir.path(), "x", false)
-            .await
-            .unwrap_err();
+        let err = draft_with(
+            &LocalRunner,
+            Some(claude.into()),
+            env(dir.path()),
+            dir.path(),
+            "x",
+            false,
+        )
+        .await
+        .unwrap_err();
         assert_eq!(err.to_string(), "Drafting the button took too long");
     }
 }

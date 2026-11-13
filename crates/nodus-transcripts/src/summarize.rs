@@ -14,9 +14,8 @@ use std::time::Duration;
 
 use nodus_domain::js;
 use nodus_domain::{SummarizePhase, SummarizeProgress, SummaryResult};
-use nodus_platform::env::EnvMap;
 
-use crate::claude::{self, RunError};
+use crate::claude::{self, ClaudeCall, RunError};
 
 /// Sessions summarized at once (SESS-169).
 pub const CONCURRENCY: usize = 3;
@@ -60,13 +59,12 @@ pub struct SummarizeTarget {
 }
 
 /// Summarizes each session with `claude`, three at a time, in the project
-/// folder `cwd` with `spawn_env` (`spawnEnv()`), reporting each one's
-/// progress. Results come back in the order asked; a session that couldn't be
-/// summarized has its `error` set (SESS-167…173). The caller finds `claude`
-/// first, failing the whole call without it (SESS-174).
+/// folder `cwd`, reporting each one's progress. Results come back in the
+/// order asked; a session that couldn't be summarized has its `error` set
+/// (SESS-167…173). The caller finds `claude` first, failing the whole call
+/// without it (SESS-174).
 pub async fn summarize_sessions(
-    claude: &Path,
-    spawn_env: &EnvMap,
+    claude: ClaudeCall<'_>,
     cwd: &str,
     targets: &[SummarizeTarget],
     request_id: &str,
@@ -111,7 +109,7 @@ pub async fn summarize_sessions(
                 return;
             };
             progress(&target.session_id, SummarizePhase::Running, None);
-            let outcome = summarize_one(claude, Path::new(cwd), spawn_env, &target.session_id, &prompt).await;
+            let outcome = summarize_one(claude, Path::new(cwd), &target.session_id, &prompt).await;
             let mut all = results.lock().unwrap_or_else(PoisonError::into_inner);
             match outcome {
                 Ok(summary) => {
@@ -133,13 +131,7 @@ pub async fn summarize_sessions(
 }
 
 /// One fork, asked for its summary (SESS-170…172).
-async fn summarize_one(
-    claude: &Path,
-    cwd: &Path,
-    env: &EnvMap,
-    session_id: &str,
-    prompt: &str,
-) -> Result<String, String> {
+async fn summarize_one(claude: ClaudeCall<'_>, cwd: &Path, session_id: &str, prompt: &str) -> Result<String, String> {
     let args: Vec<String> = [
         "-p",
         "--resume",
@@ -152,7 +144,7 @@ async fn summarize_one(
     ]
     .map(str::to_owned)
     .to_vec();
-    let finished = match claude::run(claude, &args, cwd, env, TIMEOUT).await {
+    let finished = match claude::run(claude, &args, cwd, TIMEOUT).await {
         Ok(finished) => finished,
         Err(RunError::TimedOut) => return Err("Timed out after 5 minutes".into()),
         Err(RunError::Spawn(message)) => return Err(message),
@@ -199,9 +191,28 @@ mod tests {
 
     #[cfg(unix)]
     mod with_a_stand_in {
+        use nodus_domain::SummarizePhase::{Done, Error, Queued, Running};
+        use nodus_platform::env::EnvMap;
+        use nodus_platform::runner::{LocalRunner, Program};
+
         use super::*;
         use crate::claude::stand_in;
-        use nodus_domain::SummarizePhase::{Done, Error, Queued, Running};
+
+        /// [`summarize_sessions`] with this `claude`, run here.
+        async fn summarize_with(
+            claude: &Path,
+            cwd: &str,
+            targets: &[SummarizeTarget],
+            on_progress: &(dyn Fn(SummarizeProgress) + Send + Sync),
+            focus: Option<&str>,
+        ) -> Vec<SummaryResult> {
+            let call = ClaudeCall {
+                runner: &LocalRunner,
+                program: &Program::from(claude),
+                env: &EnvMap::new(),
+            };
+            summarize_sessions(call, cwd, targets, "r", on_progress, focus).await
+        }
 
         fn phases(events: &Mutex<Vec<SummarizeProgress>>) -> Vec<(String, SummarizePhase, Option<String>)> {
             events
@@ -230,20 +241,10 @@ mod tests {
                 r#"if [ "$3" = bad ]; then echo 'boom' >&2; echo 'last words' >&2; exit 3; fi
 printf '{"type":"result","is_error":false,"result":"  Summary of %s  "}' "$3""#,
             );
-            let env = EnvMap::new();
             let events = Mutex::new(Vec::new());
             let record = |p: SummarizeProgress| events.lock().unwrap().push(p);
             let cwd = dir.path().to_str().unwrap();
-            let results = summarize_sessions(
-                &claude,
-                &env,
-                cwd,
-                &targets(&["a", "bad", "c", "d"]),
-                "r1",
-                &record,
-                None,
-            )
-            .await;
+            let results = summarize_with(&claude, cwd, &targets(&["a", "bad", "c", "d"]), &record, None).await;
             let summaries: Vec<(&str, &str, Option<&str>)> = results
                 .iter()
                 .map(|r| (r.session_id.as_str(), r.summary.as_str(), r.error.as_deref()))
@@ -298,11 +299,10 @@ printf '{"type":"result","is_error":false,"result":"  Summary of %s  "}' "$3""#,
         async fn uses_the_focused_prompt_for_a_topic() {
             let dir = tempfile::TempDir::new().unwrap();
             let claude = stand_in::write(dir.path(), r#"echo '{"result":"ok"}'"#);
-            let env = EnvMap::new();
             let cwd = dir.path().to_str().unwrap();
             let ignore = |_: SummarizeProgress| {};
-            summarize_sessions(&claude, &env, cwd, &targets(&["a"]), "r", &ignore, Some(" auth ")).await;
-            summarize_sessions(&claude, &env, cwd, &targets(&["b"]), "r", &ignore, Some("  ")).await;
+            summarize_with(&claude, cwd, &targets(&["a"]), &ignore, Some(" auth ")).await;
+            summarize_with(&claude, cwd, &targets(&["b"]), &ignore, Some("  ")).await;
             let calls = stand_in::calls(dir.path());
             let prompt_for = |id: &str| calls.iter().find(|c| c[2] == id).unwrap()[7].clone();
             assert_eq!(prompt_for("a"), focused_summary_prompt("auth"));
@@ -316,10 +316,9 @@ printf '{"type":"result","is_error":false,"result":"  Summary of %s  "}' "$3""#,
                 dir.path(),
                 r#"if [ "$3" = a ]; then echo '{"is_error":true,"result":"Credit balance is too low"}'; else echo '{"result":"   "}'; exit 0; fi"#,
             );
-            let env = EnvMap::new();
             let ignore = |_: SummarizeProgress| {};
             let cwd = dir.path().to_str().unwrap();
-            let results = summarize_sessions(&claude, &env, cwd, &targets(&["a", "b"]), "r", &ignore, None).await;
+            let results = summarize_with(&claude, cwd, &targets(&["a", "b"]), &ignore, None).await;
             assert_eq!(results[0].error.as_deref(), Some("Credit balance is too low"));
             // A blank result is no summary, and is itself the reason given.
             assert_eq!(results[1].error.as_deref(), Some("   "));
@@ -331,7 +330,7 @@ printf '{"type":"result","is_error":false,"result":"  Summary of %s  "}' "$3""#,
             let claude = stand_in::write(dir.path(), "exit 0");
             let ignore = |_: SummarizeProgress| {};
             let cwd = dir.path().to_str().unwrap();
-            let results = summarize_sessions(&claude, &EnvMap::new(), cwd, &targets(&["a"]), "r", &ignore, None).await;
+            let results = summarize_with(&claude, cwd, &targets(&["a"]), &ignore, None).await;
             assert_eq!(results[0].error.as_deref(), Some("claude exited with code 0"));
         }
 
@@ -339,7 +338,7 @@ printf '{"type":"result","is_error":false,"result":"  Summary of %s  "}' "$3""#,
         async fn fails_a_session_whose_claude_wont_start() {
             let ignore = |_: SummarizeProgress| {};
             let missing = Path::new("/nowhere/claude");
-            let results = summarize_sessions(missing, &EnvMap::new(), "/", &targets(&["a"]), "r", &ignore, None).await;
+            let results = summarize_with(missing, "/", &targets(&["a"]), &ignore, None).await;
             assert_eq!(results[0].error.as_deref(), Some("spawn /nowhere/claude ENOENT"));
         }
 
@@ -347,10 +346,9 @@ printf '{"type":"result","is_error":false,"result":"  Summary of %s  "}' "$3""#,
         async fn gives_up_after_five_minutes() {
             let dir = tempfile::TempDir::new().unwrap();
             let claude = stand_in::write(dir.path(), "sleep 600");
-            let env = EnvMap::new();
             let ignore = |_: SummarizeProgress| {};
             let cwd = dir.path().to_str().unwrap();
-            let results = summarize_sessions(&claude, &env, cwd, &targets(&["a"]), "r", &ignore, None).await;
+            let results = summarize_with(&claude, cwd, &targets(&["a"]), &ignore, None).await;
             assert_eq!(results[0].error.as_deref(), Some("Timed out after 5 minutes"));
         }
     }

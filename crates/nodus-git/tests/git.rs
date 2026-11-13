@@ -3,10 +3,12 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use nodus_domain::{GitCommit, GitFileChange, GitFileStatus, GitStatus};
 use nodus_git::{DiffError, Git};
 use nodus_platform::env::EnvMap;
+use nodus_platform::runner::LocalRunner;
 use tempfile::TempDir;
 
 /// The user's git config (signing, default branch, status options) must not
@@ -19,7 +21,7 @@ fn test_env() -> EnvMap {
 }
 
 fn runner() -> Git {
-    Git::new(test_env())
+    Git::new(test_env(), Arc::new(LocalRunner))
 }
 
 /// `fs.realpathSync`, which keeps Windows paths as they are.
@@ -352,7 +354,10 @@ async fn fails_when_git_is_missing() {
     let empty = TempDir::new().unwrap();
     let mut env = test_env();
     env.insert("PATH".into(), empty.path().display().to_string());
-    let err = Git::new(env).status(empty.path()).await.unwrap_err();
+    let err = Git::new(env, Arc::new(LocalRunner))
+        .status(empty.path())
+        .await
+        .unwrap_err();
     assert_eq!(err.to_string(), "spawn git ENOENT");
 }
 
@@ -369,7 +374,7 @@ mod stand_in {
         let mut env = test_env();
         env.insert("PATH".into(), format!("{}:/usr/bin:/bin", dir.display()));
         env.insert("LOG".into(), dir.join("log").display().to_string());
-        Git::new(env)
+        Git::new(env, Arc::new(LocalRunner))
     }
 
     #[tokio::test]
@@ -423,7 +428,7 @@ esac"#,
         fs::set_permissions(dir.path().join("git"), fs::Permissions::from_mode(0o755)).unwrap();
 
         env.insert("CODE".into(), "1".into());
-        let git = Git::new(env.clone());
+        let git = Git::new(env.clone(), Arc::new(LocalRunner));
         let untracked = change("x", GitFileStatus::Untracked);
         assert_eq!(
             git.diff(&root, &untracked).await.unwrap().patch,
@@ -435,7 +440,10 @@ esac"#,
             .unwrap_err();
         assert_eq!(err.to_string(), "git diff failed for x");
         env.insert("CODE".into(), "2".into());
-        let err = Git::new(env).diff(&root, &untracked).await.unwrap_err();
+        let err = Git::new(env, Arc::new(LocalRunner))
+            .diff(&root, &untracked)
+            .await
+            .unwrap_err();
         assert_eq!(err.to_string(), "git diff failed for x");
         let log = fs::read_to_string(dir.path().join("log")).unwrap();
         let first = log.lines().next().unwrap();

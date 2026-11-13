@@ -59,7 +59,7 @@ impl ActionsApi<'_> {
                     .store
                     .read(|state| state.project(project_id).map(|p| PathBuf::from(&p.repo_path)))
                     .on(CHANNEL)?;
-                nodus_actions::draft_action(&env, &repo, description, global)
+                nodus_actions::draft_action(&*self.nodus.inner.runner, &env, &repo, description, global)
                     .await
                     .on(CHANNEL)
             })

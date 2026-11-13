@@ -290,6 +290,7 @@ pub(crate) async fn answer(nodus: Nodus, member: Option<String>, request: Reques
         | Request::DevicesRevoke { .. }
         | Request::AuditList {}
         | Request::ServerInfo {}
+        | Request::ServerUpdate {}
         | Request::GithubInstallations {}
         | Request::GithubReplaceKey { .. }
         | Request::GithubRepos {}

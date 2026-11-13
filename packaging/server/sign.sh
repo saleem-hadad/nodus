@@ -7,8 +7,10 @@
 #
 # The key comes from the repo's secret of that name, which
 # scripts/server-signing-key.sh sets. Before signing anything it checks that
-# the public key written into install-server.sh (next to this script) is
-# that key's, so a release can't ship files its own install script refuses.
+# the public key written into install-server.sh (next to this script), and
+# the one the server binary builds in (signing-key.pub.pem, SRV-200), are
+# that key's, so a release can't ship files its own install script or its
+# own servers refuse.
 # The key is never printed, and its copy on disk goes when this ends.
 set -euo pipefail
 
@@ -38,6 +40,14 @@ if [ -z "$embedded" ]; then
 fi
 if [ "$embedded" != "$(cat "$work/public.pem")" ]; then
 	error "The public key in install-server.sh isn't NODUS_SERVER_SIGNING_KEY's: servers would refuse these files. Write the right one in with scripts/server-signing-key.sh."
+fi
+# What servers built from this commit check their updates against.
+built_in=$(grep -v '^#' "$here/signing-key.pub.pem" || true)
+if [ -z "$built_in" ]; then
+	error "packaging/server/signing-key.pub.pem has no key yet (the TODO placeholder), so this release's servers couldn't update. Run scripts/server-signing-key.sh and commit it."
+fi
+if [ "$built_in" != "$(cat "$work/public.pem")" ]; then
+	error "packaging/server/signing-key.pub.pem isn't NODUS_SERVER_SIGNING_KEY's public key: servers would refuse updates signed with it. Write the right one with scripts/server-signing-key.sh."
 fi
 
 for file in "$@"; do

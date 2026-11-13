@@ -3,6 +3,7 @@
 //!
 //! ```text
 //! nodus-server serve [--bind <address>] [--dev-token <token>] [--run-home <folder>] [--host-socket <path>]
+//!                     [--uploads <folder>]
 //! nodus-server setup-code
 //! nodus-server host <socket> <key>
 //! nodus-server host --socket <path>
@@ -20,6 +21,10 @@
 //!   from the GitHub App's repositories (SRV-120), and each card gets a
 //!   worktree of its own (SRV-122). Sessions run on the members' pool of
 //!   Claude accounts, moving off one that hits its limit (SRV-100…105).
+//!   A member updates it from the app: it installs the newest signed
+//!   release and exits, for systemd to start it again (SRV-200). Uploads
+//!   go in `--uploads`, a folder the sessions can read, else in
+//!   `<data>/uploads` (SRV-163).
 //! - `setup-code`: a fresh setup code, while the server has no member yet,
 //!   which cancels every earlier code and setup token (SRV-060).
 //! - `host`: the session host, as the app runs it (`Nodus host …`), or on
@@ -48,13 +53,16 @@ mod setup;
 mod socket;
 mod store;
 mod terminals;
+mod update;
 
 use std::io::Write;
 use std::path::PathBuf;
 
 const USAGE: &str = "Usage:
   nodus-server serve [--bind <address>] [--dev-token <token>] [--run-home <folder>] [--host-socket <path>]
+                     [--uploads <folder>]
       --dev-token: for development and tests only, on loopback only
+      --uploads: where uploads are kept, for sessions to read (default <data>/uploads)
   nodus-server setup-code
   nodus-server host <socket> <key>
   nodus-server host --socket <path>
@@ -76,12 +84,13 @@ pub fn main(args: &[String]) -> i32 {
     match args.first().map(String::as_str) {
         // Before anything else, as the app does (HOST-035).
         Some("host") => nodus_host::main(&args[1..]),
-        Some("serve") => match Flags::parse(&args[1..], &["bind", "dev-token", "run-home", "host-socket"]) {
+        Some("serve") => match Flags::parse(&args[1..], &["bind", "dev-token", "run-home", "host-socket", "uploads"]) {
             Ok(flags) if flags.positional.is_empty() => serve::serve(serve::ServeOptions {
                 bind: flags.value("bind"),
                 dev_token: flags.value("dev-token"),
                 run_home: flags.value("run-home").map(PathBuf::from),
                 host_socket: flags.value("host-socket").map(PathBuf::from),
+                uploads: flags.value("uploads").map(PathBuf::from),
             }),
             Ok(_) => usage("serve takes no arguments"),
             Err(err) => usage(&err),

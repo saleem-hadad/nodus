@@ -1,7 +1,7 @@
 //! The calls the server answers itself rather than its core: setup,
-//! members, devices, the audit log, the server and its GitHub App, and its
-//! pool of Claude accounts (SRV-040…063, SRV-100…105, SRV-210). Every
-//! member may make every one (SRV-040).
+//! members, devices, the audit log, the server, updating it and its GitHub
+//! App, and its pool of Claude accounts (SRV-040…063, SRV-100…105,
+//! SRV-200, SRV-210). Every member may make every one (SRV-040).
 
 use std::sync::Arc;
 
@@ -36,6 +36,7 @@ pub(crate) async fn answer(server: Arc<Server>, who: Who, request: Request) -> R
         Request::DevicesRevoke { id } => auth.revoke(&who, &id).map(|()| Value::Null),
         Request::AuditList {} => give(auth.audit.last()),
         Request::ServerInfo {} => give(auth.info().await),
+        Request::ServerUpdate {} => crate::update::update(Arc::clone(&server), who).await.and_then(give),
         Request::GithubInstallations {} => auth.installations().await.and_then(give),
         Request::GithubReplaceKey { pem } => auth.replace_key(&who, &pem).await.and_then(give),
         Request::GithubRepos {} => server.hosting.repos().await.and_then(give),

@@ -300,6 +300,7 @@ None of this runs in the app: it's what a server's core does, given the server's
 - **SESS-180 · Phrase** — With more than one term, the phrase is the query lowercased, trimmed, whitespace runs collapsed to one space (all words, duplicates and words past 8 included). One term → no phrase.
 - **SESS-181 · Repo roots** — Paths are shown relative to the repo: roots are `repoPath` and `realRepoPath(repoPath)`, deduplicated.
 - **SESS-182 · Files searched** — Per target: its own transcript (not agent), then each subagent transcript (agent mode) in directory order.
+- **SESS-215 · A card's own folder** — On a server project from GitHub, a card that runs in a worktree of its own (SRV-122, SRV-125) has its transcript and its subagents' under that worktree's transcript folder, so search reads them there, and paths in its snippets are relative to the worktree (SESS-181's roots, for that folder). Other cards are read from the project's folder.
 - **SESS-183 · Yield** — Before reading a target any of whose files is not indexed yet (even a missing one) or has a different size or mtime than indexed (a cached file that can't be stat'ed doesn't count), the search yields to other work once. (Responsiveness only.)
 - **SESS-184 · Searchable documents** — Lines with truthy `isSidechain` are skipped in a session's own transcript. A `user` line, only outside agent mode, gives a `prompt` document of `promptFull(text)` when `userText` (human origin) yields a prompt (slash commands as `/name args`). An `assistant` line gives a `reply` document of its text (handback included) when non-empty, then one `tool` document per tool use (SESS-185). Agent documents are flagged `agent`. Each document's time is `timeOf(line) ?? 0`.
 - **SESS-185 · Tool documents** — From a tool use's `input` (object, else `{}`), with fields counted only when they are strings non-empty after trim: paths = `file_path`, `notebook_path`, `path` (in that order), each made relative by removing the first root followed by the path separator it starts with; rest = `command`, `pattern`, `url`, `query`, `description`, `skill`, `prompt`, `content`, `new_string`, `old_string` (in that order). No paths and no rest → no document. Text = the paths joined with `\n` (if any), then the rest, all joined with `\n`; `tool` = `toolName(name)`; `file` = basename of the first path; `pathEnd` = length of the joined paths (0 without paths).
@@ -969,6 +970,7 @@ Cross-domain dependencies: 01 (store `getBoard`/`getProject`/`save`, env `spawnE
 - [x] SESS-180 Phrase
 - [x] SESS-181 Repo roots
 - [x] SESS-182 Files searched
+- [x] SESS-215 A worktree card's transcripts are searched in its worktree
 - [x] SESS-183 Yield
 - [x] SESS-184 Searchable documents
 - [x] SESS-185 Tool documents

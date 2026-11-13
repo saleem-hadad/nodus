@@ -1130,6 +1130,42 @@ impl SettingsDialog {
 }
 
 impl SettingsDialog {
+    /// SRV-200: **Update server** for a server older than the app, with how
+    /// it's going once pressed, until it's back on the new version.
+    fn update_server_row(&self, server: &nodus_domain::ServerInfo, t: Tokens, cx: &App) -> Option<AnyElement> {
+        let status = self.state.read(cx).server_updates.get(&server.id).cloned();
+        if !crate::servers::offers_update(server, status.as_ref()) {
+            return None;
+        }
+        let busy = crate::servers::updating(status.as_ref());
+        let hint = match (&status, &server.version) {
+            (Some(status), _) => crate::servers::update_text(status),
+            (None, Some(version)) => format!(
+                "It runs Nodus {version}, and this app {}. Sessions keep running while it restarts.",
+                nodus_core::VERSION
+            ),
+            (None, None) => String::new(),
+        };
+        let (state, id) = (self.state.clone(), server.id.clone());
+        Some(
+            plain_row(
+                row_text("Update server".into(), Some(hint), t),
+                Some(
+                    button(SharedString::from(format!("server-update-{}", server.id)))
+                        .primary()
+                        .label(if busy { "Updating…" } else { "Update Server" })
+                        .disabled(busy)
+                        .on_click(move |_, _, cx| {
+                            let id = id.clone();
+                            state.update(cx, |s, cx| s.update_server(id, cx));
+                        })
+                        .into_any_element(),
+                ),
+            )
+            .into_any_element(),
+        )
+    }
+
     /// A Show Projects… and a Disconnect stop for each server, in order.
     fn sync_server_stops(&mut self, cx: &mut Context<'_, Self>) {
         let ids: Vec<String> = self.state.read(cx).servers.iter().map(|s| s.id.clone()).collect();
@@ -1162,9 +1198,10 @@ impl SettingsDialog {
     }
 
     /// Servers (SRV-165): each server's address, version, status and who
-    /// signed in, Show Projects… and Disconnect; then its members, devices,
-    /// GitHub App and recent activity (UI-323…UI-327); last, Connect to
-    /// Server…. Claude accounts and updating the server come later.
+    /// signed in, Show Projects…, Update server when it runs an older Nodus
+    /// (SRV-200) and Disconnect; then its members, devices, Claude
+    /// accounts, GitHub App and recent activity (UI-323…UI-327, UI-330…);
+    /// last, Connect to Server….
     fn servers(&self, ctx: &Ctx, cx: &mut Context<'_, Self>) -> Vec<AnyElement> {
         use crate::state::ServerDialog;
         let t = ctx.t;
@@ -1185,7 +1222,8 @@ impl SettingsDialog {
             }
             let (show, disconnect) = (self.state.clone(), self.state.clone());
             let (show_id, disconnect_id) = (server.id.clone(), server.id.clone());
-            let rows = vec![
+            let update = self.update_server_row(server, t, cx);
+            let mut rows = vec![
                 plain_row(
                     row_text(server.url.trim_start_matches("http://").to_owned(), Some(detail), t),
                     Some(
@@ -1202,6 +1240,9 @@ impl SettingsDialog {
                     ),
                 )
                 .into_any_element(),
+            ];
+            rows.extend(update);
+            rows.push(
                 plain_row(
                     row_text(
                         "Disconnect".into(),
@@ -1224,7 +1265,7 @@ impl SettingsDialog {
                     ),
                 )
                 .into_any_element(),
-            ];
+            );
             body.push(group(Some(&server.name), rows, i == 0, t).into_any_element());
             if let Some((_, manager)) = self.managers.iter().find(|(id, _)| *id == server.id) {
                 body.push(manager.clone().into_any_element());

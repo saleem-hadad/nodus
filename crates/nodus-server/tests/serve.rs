@@ -482,6 +482,13 @@ async fn a_session_runs_on_the_server_and_streams_to_the_app() {
     events.until(status(&id, SessionStatus::Working, true)).await;
 
     // SRV-026: its output only once it's open, after what the open replays.
+    // Nothing of it before the open; once the open has answered, what it
+    // prints next may already be on its way, which is right.
+    assert!(
+        events.arrived().iter().all(|e| !is_output_of(e, &id)),
+        "{:#?}",
+        events.seen
+    );
     let opened: OpenSessionResult = app
         .call_as(&Request::SessionOpen {
             project_id: project.id.clone(),
@@ -492,11 +499,6 @@ async fn a_session_runs_on_the_server_and_streams_to_the_app() {
         .await
         .unwrap();
     assert!(opened.live);
-    assert!(
-        events.arrived().iter().all(|e| !is_output_of(e, &id)),
-        "{:#?}",
-        events.seen
-    );
     events.output.insert(id.clone(), opened.replay);
     events.printed(&id, "stand-in ready").await;
     // In the env file's environment, and only that (SRV-141).

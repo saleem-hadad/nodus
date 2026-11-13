@@ -1,10 +1,10 @@
 //! The server's files (SRV-022, SRV-163): `PUT /api/uploads` keeps what an
 //! app sends (a file dropped on a terminal, a picture added to a board)
-//! under a name the server picks, and `GET /api/files/<id>` gives back an
-//! upload, a board picture or a view's page. Both need a device's token
-//! (or the dev token, which only a server on loopback takes), never a setup
-//! token, and only ids of the form the server issues are ever looked up, so
-//! no request can name a path.
+//! under a name the server picks, in a folder its sessions can read, and
+//! `GET /api/files/<id>` gives back an upload, a board picture or a view's
+//! page. Both need a device's token (or the dev token, which only a server
+//! on loopback takes), never a setup token, and only ids of the form the
+//! server issues are ever looked up, so no request can name a path.
 
 use std::path::{Path, PathBuf};
 
@@ -15,7 +15,7 @@ use hyper::{Method, Request, Response, StatusCode};
 use nodus_wire::files::{file_id_ok, is_uuid, name_from_query, upload_ext};
 use nodus_wire::{FILES_PATH, MAX_UPLOAD, UPLOADS_PATH, Upload};
 
-use crate::auth::Who;
+use crate::auth::{SetupUse, Who};
 use crate::net::bearer;
 use crate::serve::Server;
 
@@ -31,7 +31,7 @@ pub(crate) fn handles(path: &str) -> bool {
 /// as `/api/ws` takes it. A setup token is for the wizard's first steps
 /// only (SRV-060), so it gets 403 here.
 pub(crate) async fn route(server: &Server, req: Request<Incoming>) -> Reply {
-    match bearer(req.headers()).and_then(|token| server.auth.authenticate(token)) {
+    match bearer(req.headers()).and_then(|token| server.auth.authenticate(token, SetupUse::Refuse)) {
         Some(Who::Dev | Who::Device { .. }) => {}
         Some(Who::Setup { .. }) => return status(StatusCode::FORBIDDEN),
         None => return status(StatusCode::UNAUTHORIZED),
@@ -44,10 +44,21 @@ pub(crate) async fn route(server: &Server, req: Request<Incoming>) -> Reply {
     }
 }
 
-/// Where uploads are kept: `<data>/uploads`.
+/// Where uploads are kept without `serve --uploads`: `<data>/uploads`,
+/// which only the server's own user can reach. That does for development
+/// and tests, where sessions run as that user too; an installed server's
+/// sessions run as `nodus-run`, so `install-server.sh` passes a folder they
+/// can read (SRV-163).
 pub(crate) fn uploads_dir(data: &Path) -> PathBuf {
     data.join("uploads")
 }
+
+/// An upload's mode: its group may read it. In `/srv/nodus/uploads`
+/// (2770, `nodus:nodus-run`) every file takes the folder's group, so the
+/// sessions, run as `nodus-run`, can read what was dropped on their
+/// terminal; nobody else can. Set outright, whatever the umask.
+#[cfg(unix)]
+const UPLOAD_MODE: u32 = 0o640;
 
 /// `PUT /api/uploads?name=<name>`: the body kept as `<uuid>[.<ext>]`, the
 /// name only a label. Over [`MAX_UPLOAD`] it's refused with 413, by its
@@ -79,13 +90,18 @@ async fn upload(server: &Server, req: Request<Incoming>) -> Reply {
         Some(ext) => format!("{}.{ext}", uuid::Uuid::new_v4()),
         None => uuid::Uuid::new_v4().to_string(),
     };
-    let dir = uploads_dir(&server.data);
+    let dir = &server.uploads;
     let file = dir.join(&id);
     let size = bytes.len() as u64;
     let kept = async {
-        tokio::fs::create_dir_all(&dir).await?;
+        tokio::fs::create_dir_all(dir).await?;
         let partial = dir.join(format!(".{id}.part"));
         tokio::fs::write(&partial, bytes).await?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            tokio::fs::set_permissions(&partial, std::fs::Permissions::from_mode(UPLOAD_MODE)).await?;
+        }
         tokio::fs::rename(&partial, &file).await
     };
     if kept.await.is_err() {
@@ -112,7 +128,7 @@ async fn download(server: &Server, id: &str) -> Reply {
         return status(StatusCode::NOT_FOUND);
     }
     let images = nodus_core::board_images_dir(&server.data);
-    for dir in [uploads_dir(&server.data), images] {
+    for dir in [server.uploads.clone(), images] {
         if let Ok(bytes) = tokio::fs::read(dir.join(id)).await {
             let mut reply = Response::new(Full::new(Bytes::from(bytes)));
             let headers = reply.headers_mut();

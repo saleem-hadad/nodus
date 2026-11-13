@@ -75,6 +75,15 @@ impl World {
         self.root().join("log")
     }
 
+    /// Adds a line to the server's env file.
+    fn env_line(&self, line: &str) {
+        let file = self.data().join("env");
+        let mut text = std::fs::read_to_string(&file).unwrap();
+        text.push_str(line);
+        text.push('\n');
+        std::fs::write(file, text).unwrap();
+    }
+
     fn serve(&self) -> Server {
         let home = self.root().join("home");
         let mut child = Command::new(env!("CARGO_BIN_EXE_nodus-server"))
@@ -311,6 +320,19 @@ impl Server {
             seen: Vec::new(),
             notices: Vec::new(),
             answers: Vec::new(),
+        }
+    }
+}
+
+impl Server {
+    /// Stops it as systemd does, with SIGTERM, and waits for it to go.
+    fn stop(mut self) {
+        let pid = self.child.id().to_string();
+        assert!(Command::new("kill").args(["-TERM", &pid]).status().unwrap().success());
+        let deadline = std::time::Instant::now() + WAIT;
+        while self.child.try_wait().unwrap().is_none() {
+            assert!(std::time::Instant::now() < deadline, "serve didn't stop");
+            std::thread::sleep(Duration::from_millis(50));
         }
     }
 }
@@ -616,6 +638,111 @@ async fn a_session_moves_off_an_account_at_its_limit_waits_and_comes_back() {
     assert!(!log.contains(ALPHA) && !log.contains(BRAVO), "{log}");
 }
 
+/// SRV-103, SRV-104: an account Claude turns down has its live sessions
+/// moved, as a limit does: the one whose turn failed told to carry on.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_failed_accounts_live_sessions_move_to_another() {
+    let world = World::new();
+    let server = world.serve();
+    let project = world.project(&server).await;
+    let mut app = server.connect().await;
+    app.ok::<Value>(Request::Watch {
+        projects: vec![project.id.clone()],
+    })
+    .await;
+    app.add("Alpha", ALPHA).await;
+    let one = app.start(&project.id).await.unwrap();
+    let two = app.start(&project.id).await.unwrap();
+    app.printed(&one, "stand-in ready on alpha", 1).await;
+    app.printed(&two, "stand-in ready on alpha", 1).await;
+    app.printed(&one, "reported", 1).await;
+    let bravo = app.add("Bravo", BRAVO).await;
+
+    app.type_line(&one, "authfail").await;
+    app.printed(&one, "stand-in ready on bravo", 1).await;
+    app.printed(&one, "prompt: Continue.", 1).await;
+    app.printed(&two, "stand-in ready on bravo", 1).await;
+    for id in [&one, &two] {
+        app.until("the card says where it went", async |app| {
+            let card = app.card(&project.id, id).await;
+            (card.account().as_deref() == Some(bravo.id.as_str())
+                && card.account_note().as_deref() == Some("Moved to Bravo"))
+            .then_some(())
+        })
+        .await;
+        let starts = world.starts(id);
+        assert_eq!(starts.len(), 2, "{id}");
+        assert_eq!(
+            starts[1].1.get("CLAUDE_CODE_OAUTH_TOKEN").map(String::as_str),
+            Some(BRAVO)
+        );
+        assert!(starts[1].0.contains(&"--resume".to_owned()));
+    }
+    assert_eq!(app.account("Alpha").await.state, AccountState::Failed);
+    let bravo = app.account("Bravo").await;
+    assert_eq!((bravo.state, bravo.sessions), (AccountState::Ok, 2));
+    app.sent_no_token(&[ALPHA, BRAVO]);
+}
+
+/// SRV-104: a card waiting for an account still resumes when one frees up
+/// after `serve` restarted meanwhile.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_sessions_waiting_for_an_account_outlive_a_restart() {
+    let world = World::new();
+    let server = world.serve();
+    let project = world.project(&server).await;
+    let mut app = server.connect().await;
+    app.ok::<Value>(Request::Watch {
+        projects: vec![project.id.clone()],
+    })
+    .await;
+    app.add("Alpha", ALPHA).await;
+    let id = app.start(&project.id).await.unwrap();
+    app.printed(&id, "reported", 1).await;
+    let reset = app
+        .until("Alpha's usage arrives", async |app| {
+            app.account("Alpha").await.five_hour.and_then(|w| w.resets_at)
+        })
+        .await;
+    app.type_line(&id, "limit").await;
+    app.until("the card waits", async |app| {
+        let note = app.card(&project.id, &id).await.account_note().unwrap_or_default();
+        note.starts_with("Waiting for a Claude account").then_some(())
+    })
+    .await;
+    let kept = std::fs::read_to_string(world.data().join("claude-waiting.json")).unwrap();
+    assert!(kept.contains(&id), "{kept}");
+    assert_eq!(world.starts(&id).len(), 1);
+
+    // `serve` restarts before Alpha's window resets, stopped as systemd
+    // stops it; the session host and its session carry on.
+    drop(app);
+    server.stop();
+    let server = world.serve();
+    let mut app = server.connect().await;
+    app.ok::<Value>(Request::Watch {
+        projects: vec![project.id.clone()],
+    })
+    .await;
+    let starts = app
+        .until("it resumes on Alpha once it resets", async |_| {
+            let starts = world.starts(&id);
+            (starts.len() == 2).then_some(starts)
+        })
+        .await;
+    assert!(crate_now() >= reset, "resumed early");
+    let (args, env) = &starts[1];
+    assert_eq!(env.get("CLAUDE_CODE_OAUTH_TOKEN").map(String::as_str), Some(ALPHA));
+    assert_eq!(args.last().map(String::as_str), Some("Continue."));
+    app.until("the card says so", async |app| {
+        let note = app.card(&project.id, &id).await.account_note();
+        (note.as_deref() == Some("Resumed on Alpha")).then_some(())
+    })
+    .await;
+    let kept = std::fs::read_to_string(world.data().join("claude-waiting.json")).unwrap();
+    assert!(!kept.contains(&id), "{kept}");
+}
+
 /// Milliseconds since the epoch.
 fn crate_now() -> f64 {
     std::time::SystemTime::now()
@@ -674,8 +801,9 @@ async fn only_a_session_itself_can_report_its_usage_or_failures() {
     // SRV-103: Claude turning the account down fails it, once, and every
     // member hears of it.
     let mut other = server.connect().await;
+    // Its sessions move off the failed account (SRV-104), which can stop
+    // this one before it says so: wait for the account, not the output.
     app.type_line(&one, "authfail").await;
-    app.printed(&one, "turned down", 1).await;
     let failed = app
         .until("Alpha fails", async |app| {
             let a = app.account("Alpha").await;
@@ -705,6 +833,8 @@ async fn only_a_session_itself_can_report_its_usage_or_failures() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn tokens_are_tried_kept_renamed_and_removed_and_background_claude_uses_them() {
     let world = World::new();
+    // SRV-101: a token in the env file would put everything on its account.
+    world.env_line("CLAUDE_CODE_OAUTH_TOKEN=tok-env-file");
     let server = world.serve();
     let project = world.project(&server).await;
     let mut app = server.connect().await;
@@ -809,4 +939,20 @@ async fn tokens_are_tried_kept_renamed_and_removed_and_background_claude_uses_th
     );
 
     app.sent_no_token(&[ALPHA, BRAVO, "bad-token"]);
+    // The env file's token reached nothing, and the server said so, once.
+    let mut envs = world.background_envs();
+    envs.extend(world.starts(&id).into_iter().map(|(_, env)| env));
+    assert!(envs.len() > 4);
+    assert!(
+        envs.iter()
+            .all(|env| env.get("CLAUDE_CODE_OAUTH_TOKEN").map(String::as_str) != Some("tok-env-file")),
+        "{envs:?}"
+    );
+    let log = server.output.lock().unwrap().clone();
+    assert_eq!(
+        log.matches("CLAUDE_CODE_OAUTH_TOKEN in the env file is ignored")
+            .count(),
+        1,
+        "{log}"
+    );
 }

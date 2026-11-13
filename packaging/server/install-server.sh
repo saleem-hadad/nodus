@@ -428,7 +428,9 @@ include <tunables/global>
 
 # The release's public signing key, ed25519. Releases sign the server and
 # this script with its private key, kept in the repo's secrets as
-# NODUS_SERVER_SIGNING_KEY; scripts/server-signing-key.sh writes it here.
+# NODUS_SERVER_SIGNING_KEY; scripts/server-signing-key.sh writes it here and
+# into packaging/server/signing-key.pub.pem, which the server builds in to
+# check its own updates (SRV-200). The two must match.
 # BEGIN SIGNING KEY
 # TODO: placeholder. Run scripts/server-signing-key.sh to make the key and write it here.
 readonly SIGNING_KEY=''
@@ -652,7 +654,7 @@ User=$SERVE_USER
 Group=$SERVE_USER
 SupplementaryGroups=$RUN_USER
 WorkingDirectory=$SERVE_HOME
-ExecStart=$BIN serve --host-socket $HOST_SOCKET --run-home $RUN_HOME
+ExecStart=$BIN serve --host-socket $HOST_SOCKET --run-home $RUN_HOME --uploads $UPLOADS
 # Uploads in $UPLOADS are read by sessions; the data folder itself is 0700.
 UMask=0027
 Restart=always

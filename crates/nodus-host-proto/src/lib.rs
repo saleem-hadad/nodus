@@ -52,6 +52,9 @@ pub const STATUS_LINE_EVENT: &str = "StatusLine";
 /// hook token as its bearer token and its session id in this header.
 pub const MCP_PATH: &str = "/mcp";
 pub const MCP_SESSION_HEADER: &str = "X-Nodus-Session";
+/// Where a session's git credential helper asks for a token, with its own
+/// token as Bearer and its id in [`MCP_SESSION_HEADER`] (SRV-084).
+pub const CREDENTIAL_PATH: &str = "/credential";
 
 /// The keystrokes the status heuristics act on (`noteUserInput` in hooks.ts):
 /// exactly Return, Esc, Ctrl+C or a digit 1–9, as one write.

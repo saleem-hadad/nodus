@@ -347,10 +347,9 @@ impl SessionsApi<'_> {
                     .store
                     .read(|state| state.project(project_id).cloned())
                     .on("session:agents")?;
-                let files = inner
-                    .board
-                    .transcripts()
-                    .list_agent_files(&project.repo_path, session_id);
+                // SRV-125: a card in a worktree keeps its agents there.
+                let folder = inner.board.session_folder(&project, session_id);
+                let files = inner.board.transcripts().list_agent_files(&folder, session_id);
                 Ok(inner.agents.read_agents(&inner.status, session_id, &files))
             })
             .await

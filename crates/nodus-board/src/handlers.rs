@@ -4,8 +4,8 @@
 use indexmap::IndexMap;
 use nodus_domain::js::{self, slice_utf16};
 use nodus_domain::{
-    BoardLink, BoardNote, BoardSection, BoardShape, Event, FolderColor, InkStroke, NodePatch, Rect, SessionKind,
-    SessionSearchHit, SummarizePhase, SummarizeProgress, SummaryResult, TranscriptMessage, Viewport,
+    BoardLink, BoardNode, BoardNote, BoardSection, BoardShape, Event, FolderColor, InkStroke, NodePatch, Rect,
+    SessionKind, SessionSearchHit, SummarizePhase, SummarizeProgress, SummaryResult, TranscriptMessage, Viewport,
 };
 use nodus_platform::Env;
 use nodus_platform::runner::Runner;
@@ -63,10 +63,8 @@ impl Board {
                 // SESS-091: a session nothing was said in is removed rather than
                 // archived; its note falls off where the card was before it moved.
                 if patch.archived == Some(true) && !node.archived {
-                    let meta = self
-                        .transcripts
-                        .session(&project.repo_path, &node.session_id)
-                        .map(|f| f.meta);
+                    let folder = node.worktree().map_or_else(|| project.repo_path.clone(), |w| w.path);
+                    let meta = self.transcripts.session(&folder, &node.session_id).map(|f| f.meta);
                     if is_empty(node, meta.as_ref()) {
                         drop_node(board, &patch.session_id, &mut effects);
                         dropped = true;
@@ -201,9 +199,10 @@ impl Board {
             if node.kind == Some(SessionKind::Terminal) {
                 continue;
             }
+            let folder = node.worktree().map_or_else(|| project.repo_path.clone(), |w| w.path);
             let meta = self
                 .transcripts
-                .session(&project.repo_path, &node.session_id)
+                .session(&folder, &node.session_id)
                 .filter(|f| f.has_content)
                 .map(|f| f.meta);
             let title = [node.title.clone(), meta.as_ref().map(|m| m.title.clone())]
@@ -357,7 +356,11 @@ impl Board {
             return Ok(if title.is_empty() { "A view".into() } else { title });
         }
         let project = self.project(project_id)?;
-        let meta = self.transcripts.session(&project.repo_path, session_id).map(|f| f.meta);
+        let folder = node
+            .as_ref()
+            .and_then(BoardNode::worktree)
+            .map_or_else(|| project.repo_path.clone(), |w| w.path);
+        let meta = self.transcripts.session(&folder, session_id).map(|f| f.meta);
         let title = [node.as_ref().and_then(|n| n.title.clone()), meta.map(|m| m.title)]
             .into_iter()
             .flatten()
@@ -389,9 +392,8 @@ impl Board {
                     .clone()
                     .filter(|t| !t.is_empty())
                     .or_else(|| {
-                        self.transcripts
-                            .session(&project.repo_path, &n.session_id)
-                            .map(|f| f.meta.title)
+                        let folder = n.worktree().map_or_else(|| project.repo_path.clone(), |w| w.path);
+                        self.transcripts.session(&folder, &n.session_id).map(|f| f.meta.title)
                     })
                     .unwrap_or_default(),
             })
@@ -422,7 +424,8 @@ impl Board {
         let mut results: IndexMap<String, SummaryResult> = IndexMap::new();
         let mut with_transcript = Vec::new();
         for (session_id, node_title) in session_ids.iter().zip(titles) {
-            let file = self.transcripts.transcript_path(&project.repo_path, session_id);
+            let folder = self.session_folder(&project, session_id);
+            let file = self.transcripts.transcript_path(&folder, session_id);
             let meta = self.transcripts.read_session(session_id, &file).map(|f| f.meta);
             // SESS-166
             let title = [node_title, meta.as_ref().map(|m| m.title.clone())]
@@ -481,7 +484,8 @@ impl Board {
     /// `session:transcript`: the conversation, for the preview (SESS-162).
     pub fn transcript(&self, project_id: &str, session_id: &str) -> Result<Vec<TranscriptMessage>, BoardError> {
         let project = self.project(project_id)?;
-        Ok(self.transcripts.transcript(&project.repo_path, session_id)?)
+        let folder = self.session_folder(&project, session_id);
+        Ok(self.transcripts.transcript(&folder, session_id)?)
     }
 
     /// `session:agent-transcript`: a subagent's steps, for the agent viewer.
@@ -496,7 +500,8 @@ impl Board {
             return Err(BoardError::NotAnAgent);
         }
         let project = self.project(project_id)?;
-        let dir = self.transcripts.subagents_dir(&project.repo_path, session_id);
+        let folder = self.session_folder(&project, session_id);
+        let dir = self.transcripts.subagents_dir(&folder, session_id);
         Ok(read_transcript(&dir.join(format!("agent-{agent_id}.jsonl")), true)?)
     }
 }

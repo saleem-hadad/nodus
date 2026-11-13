@@ -15,6 +15,9 @@ use crate::{CommandResult, Nodus};
 /// `window.api.git`.
 pub struct GitApi<'a> {
     pub(crate) nodus: &'a Nodus,
+    /// The card it's for: on a server, its worktree's git, not the main
+    /// checkout's (SRV-128). None for the project folder, as in the app.
+    pub(crate) session_id: Option<&'a str>,
 }
 
 impl GitApi<'_> {
@@ -23,8 +26,8 @@ impl GitApi<'_> {
     /// run; the window reads that as none too (GIT-021).
     pub async fn status(&self, project_id: &str) -> CommandResult<Option<GitStatus>> {
         if let Some(route) = self.nodus.route_project(project_id) {
-            let project_id = project_id.to_owned();
-            return route.call(Request::GitStatus { project_id }).await;
+            let (project_id, session_id) = (project_id.to_owned(), self.session_id.map(str::to_owned));
+            return route.call(Request::GitStatus { project_id, session_id }).await;
         }
         self.nodus
             .on_core(async {
@@ -39,7 +42,14 @@ impl GitApi<'_> {
     pub async fn diff(&self, project_id: &str, file: &GitFileChange) -> CommandResult<GitFileDiff> {
         if let Some(route) = self.nodus.route_project(project_id) {
             let (project_id, file) = (project_id.to_owned(), file.clone());
-            return route.call(Request::GitDiff { project_id, file }).await;
+            let session_id = self.session_id.map(str::to_owned);
+            return route
+                .call(Request::GitDiff {
+                    project_id,
+                    file,
+                    session_id,
+                })
+                .await;
         }
         self.nodus
             .on_core(async {
@@ -54,8 +64,14 @@ impl GitApi<'_> {
     /// first. A whole-number `limit` is kept to 1–50; anything else is 5.
     pub async fn log(&self, project_id: &str, limit: Option<f64>) -> CommandResult<Vec<GitCommit>> {
         if let Some(route) = self.nodus.route_project(project_id) {
-            let project_id = project_id.to_owned();
-            return route.call(Request::GitLog { project_id, limit }).await;
+            let (project_id, session_id) = (project_id.to_owned(), self.session_id.map(str::to_owned));
+            return route
+                .call(Request::GitLog {
+                    project_id,
+                    limit,
+                    session_id,
+                })
+                .await;
         }
         self.nodus
             .on_core(async {
@@ -67,13 +83,23 @@ impl GitApi<'_> {
     }
 
     /// GIT-003: the env first, then the project (`Unknown project <id>`).
+    /// For a card with a worktree, its worktree (SRV-128).
     async fn git(&self, project_id: &str, channel: &'static str) -> CommandResult<(Git, PathBuf)> {
         let env = self.nodus.env().await;
+        let session_id = self.session_id;
         let repo = self
             .nodus
             .inner
             .store
-            .read(|state| state.project(project_id).map(|p| PathBuf::from(&p.repo_path)))
+            .read(|state| {
+                let project = state.project(project_id)?;
+                let worktree = session_id
+                    .and_then(|id| state.board(project_id)?.nodes.get(id))
+                    .and_then(nodus_domain::BoardNode::worktree);
+                Ok::<_, nodus_store::NotFound>(PathBuf::from(
+                    worktree.map_or_else(|| project.repo_path.clone(), |w| w.path),
+                ))
+            })
             .on(channel)?;
         Ok((self.nodus.inner.git(&env), repo))
     }

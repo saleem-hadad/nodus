@@ -156,6 +156,19 @@ impl Launcher for CoreLauncher {
                 action,
                 start.initial_prompt.as_deref(),
             );
+            // SRV-122, SRV-123: on a server project from GitHub, the card's
+            // own worktree first. Its process waits for the worktree's setup
+            // on a task of its own, so the card is on the board meanwhile.
+            core.prepare_card(&start.project, &start.node).await?;
+            if core.is_setting_up(&start.node.session_id) {
+                let core = Arc::clone(&core);
+                core.runtime.clone().spawn(async move {
+                    if let Err(err) = core.spawn_session(opts).await {
+                        tracing::error!("[worktree] the session didn't start after setup {err}");
+                    }
+                });
+                return Ok(());
+            }
             core.spawn_session(opts).await
         })
     }

@@ -147,6 +147,10 @@ impl Board {
         }
         // SESS-120
         self.store.save();
+        // As it is now: on a server, starting it gave it a worktree (SRV-122).
+        let node = self
+            .read_board(project_id, |_, board| board.nodes.get(&session_id).cloned())
+            .unwrap_or(node);
         Ok(self.card(&node))
     }
 

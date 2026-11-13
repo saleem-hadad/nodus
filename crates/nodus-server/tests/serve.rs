@@ -382,6 +382,7 @@ async fn with_a_host_of_its_own_the_server_runs_everything_there() {
     let git: Value = app
         .call_as(&Request::GitStatus {
             project_id: project.id.clone(),
+            session_id: None,
         })
         .await
         .unwrap();

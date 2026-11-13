@@ -44,7 +44,8 @@ impl Board {
         let Ok(project) = self.project(&project_id) else {
             return;
         };
-        let meta = self.transcripts.session(&project.repo_path, session_id).map(|f| f.meta);
+        let folder = self.session_folder(&project, session_id);
+        let meta = self.transcripts.session(&folder, session_id).map(|f| f.meta);
         let mut effects = Effects::default();
         self.store.update(|state| {
             let Some(node) = state.board(&project_id).and_then(|b| b.nodes.get(session_id)) else {

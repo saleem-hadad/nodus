@@ -211,9 +211,26 @@ pub(crate) async fn answer(nodus: Nodus, member: Option<String>, request: Reques
         } => done(channel, nodus.views().ask(&project_id, &view_id, &prompt).await),
         Request::ViewsBrain { project_id, view_id } => done(channel, nodus.views().brain(&project_id, &view_id).await),
 
-        Request::GitStatus { project_id } => done(channel, nodus.git().status(&project_id).await),
-        Request::GitDiff { project_id, file } => done(channel, nodus.git().diff(&project_id, &file).await),
-        Request::GitLog { project_id, limit } => done(channel, nodus.git().log(&project_id, limit).await),
+        // SRV-128: a card's own worktree when it's named.
+        Request::GitStatus { project_id, session_id } => {
+            done(channel, nodus.git_for(session_id.as_deref()).status(&project_id).await)
+        }
+        Request::GitDiff {
+            project_id,
+            file,
+            session_id,
+        } => done(
+            channel,
+            nodus.git_for(session_id.as_deref()).diff(&project_id, &file).await,
+        ),
+        Request::GitLog {
+            project_id,
+            limit,
+            session_id,
+        } => done(
+            channel,
+            nodus.git_for(session_id.as_deref()).log(&project_id, limit).await,
+        ),
 
         Request::ActionsGlobal {} => give(channel, nodus.actions().global().await),
         Request::ActionsSave { project_id, action } => done(channel, nodus.actions().save(&project_id, &action).await),

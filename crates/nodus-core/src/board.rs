@@ -57,13 +57,59 @@ impl BoardApi<'_> {
         }
         self.nodus
             .on_core(async {
-                self.nodus
+                let ids: Vec<&str> = patches.iter().map(|p| p.session_id.as_str()).collect();
+                let worktrees = self.worktree_cards(project_id, &ids);
+                let saved = self
+                    .nodus
                     .inner
                     .board
                     .save_nodes(project_id, patches)
-                    .on("board:save-nodes")
+                    .on("board:save-nodes");
+                // SESS-091: a card nothing was said in is removed rather
+                // than archived, and its worktree goes with it (SRV-124).
+                self.retire_gone(project_id, worktrees).await;
+                saved
             })
             .await
+    }
+
+    /// The cards among `ids` that have worktrees (SRV-122), on a server.
+    fn worktree_cards(&self, project_id: &str, ids: &[&str]) -> Vec<nodus_domain::BoardNode> {
+        if self.nodus.inner.hosted().is_none() {
+            return Vec::new();
+        }
+        self.nodus.inner.store.read(|state| {
+            let Some(board) = state.board(project_id) else {
+                return Vec::new();
+            };
+            ids.iter()
+                .filter_map(|id| board.nodes.get(*id))
+                .filter(|node| node.worktree().is_some())
+                .cloned()
+                .collect()
+        })
+    }
+
+    /// SRV-124: the worktrees of those cards that have left the board go,
+    /// with their unpushed work saved first. Archived cards keep theirs.
+    async fn retire_gone(&self, project_id: &str, cards: Vec<nodus_domain::BoardNode>) {
+        if cards.is_empty() {
+            return;
+        }
+        let inner = &self.nodus.inner;
+        let Ok(project) = inner.store.read(|state| state.project(project_id).cloned()) else {
+            return;
+        };
+        for node in cards {
+            let gone = inner.store.read(|state| {
+                state
+                    .board(project_id)
+                    .is_none_or(|board| !board.nodes.contains_key(&node.session_id))
+            });
+            if gone {
+                inner.retire_worktree(&project, &node).await;
+            }
+        }
     }
 
     /// `board:save-archive` (SESS-106).
@@ -102,7 +148,9 @@ impl BoardApi<'_> {
         }
         self.nodus
             .on_core(async {
+                let worktrees = self.worktree_cards(project_id, &[session_id]);
                 self.nodus.inner.board.remove_node(project_id, session_id).await;
+                self.retire_gone(project_id, worktrees).await;
             })
             .await;
     }

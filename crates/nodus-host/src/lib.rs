@@ -89,7 +89,9 @@ async fn serve(socket: &Path, key: Option<&Path>, standalone: bool, log: Logger)
     // HOST-030, HOST-029
     let hook_token = random_hex(16);
     let host_key = cfg!(windows).then(|| random_hex(32));
-    let host = host::Host::new(log.clone(), hook_token, host_key, standalone);
+    // SRV-143: sessions with tokens of their own keep them beside the socket.
+    let hook_configs = socket.parent().map(|dir| dir.join("hooks"));
+    let host = host::Host::new(log.clone(), hook_token, host_key, standalone, hook_configs);
 
     // HOST-024: two apps starting at once could each start a host; the second one leaves.
     if transport::already_served(socket).await {

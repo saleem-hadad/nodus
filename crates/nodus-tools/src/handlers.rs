@@ -421,7 +421,7 @@ impl BoardToolHandlers for StoreHandlers {
     fn list_board(&self, project_id: &str, self_id: &str) -> Result<Value, ToolError> {
         let project = self.project(project_id)?;
         // Read before the state is held: titles come from the transcripts.
-        let disk = self.board.transcripts().scan_repo(&project.repo_path);
+        let disk = self.board.scan_board(&project);
         Ok(self.store.read(|state| {
             let empty = BoardState::default();
             let board = state.board(project_id).unwrap_or(&empty);

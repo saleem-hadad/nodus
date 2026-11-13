@@ -186,15 +186,27 @@ calls! {
 
     // ---- git (GIT-003…021)
 
-    /// `GitStatus | null`.
-    GitStatus = "git:status" { project_id: String },
-    /// `GitFileDiff`.
-    GitDiff = "git:diff" { project_id: String, file: GitFileChange },
-    /// `GitCommit[]`.
+    /// `GitStatus | null`. With `sessionId`, the card's worktree's, when
+    /// it has one; else the main checkout's (SRV-128).
+    GitStatus = "git:status" {
+        project_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session_id: Option<String>,
+    },
+    /// `GitFileDiff`, in the card's worktree as `git:status`.
+    GitDiff = "git:diff" {
+        project_id: String,
+        file: GitFileChange,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session_id: Option<String>,
+    },
+    /// `GitCommit[]`, in the card's worktree as `git:status`.
     GitLog = "git:log" {
         project_id: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         limit: Option<f64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session_id: Option<String>,
     },
 
     // ---- actions (ACT-001…027)
@@ -381,6 +393,7 @@ mod tests {
             Request::GitLog {
                 project_id: "p1".into(),
                 limit: None,
+                session_id: None,
             }
         );
         assert_eq!(

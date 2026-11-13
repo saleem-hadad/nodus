@@ -11,7 +11,7 @@ use hyper::body::{Bytes, Incoming};
 use hyper::header::{HeaderMap, HeaderValue};
 use hyper::{Method, Request, Response, StatusCode};
 use nodus_domain::js::utf16_len;
-use nodus_host_proto::{MCP_PATH, MCP_SESSION_HEADER, Utf8Decoder};
+use nodus_host_proto::{CREDENTIAL_PATH, MCP_PATH, MCP_SESSION_HEADER, Utf8Decoder};
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
 
@@ -81,9 +81,15 @@ async fn route(host: &Host, req: Request<Incoming>) -> Reply {
             }
         };
     }
+    if path == CREDENTIAL_PATH {
+        return serve_credential(host, req).await;
+    }
     // HOST-069: processes started by an older app send the token in the URL.
     let token = bearer(req.headers()).or_else(|| first(&query, "token").map(str::to_owned));
-    if req.method() != Method::POST || path != "/hook" || !host.is_hook_token(token.as_deref()) {
+    let authorized = req.method() == Method::POST
+        && path == "/hook"
+        && host.takes_hook_token(first(&query, "sid").unwrap_or(""), token.as_deref());
+    if !authorized {
         // HOST-071
         return empty(StatusCode::NOT_FOUND);
     }
@@ -115,8 +121,8 @@ async fn route(host: &Host, req: Request<Incoming>) -> Reply {
 /// The MCP streamable HTTP transport, answering every request on its POST:
 /// there are no streams. (HOST-079–089)
 async fn serve_mcp(host: &Host, req: Request<Incoming>) -> Result<Reply, String> {
-    let authorized = host.is_hook_token(bearer(req.headers()).as_deref());
     let session_id = header_text(req.headers(), MCP_SESSION_HEADER);
+    let authorized = host.takes_hook_token(&session_id, bearer(req.headers()).as_deref());
     let live = host.has_session(&session_id);
     if !authorized || !live {
         return Ok(empty(StatusCode::UNAUTHORIZED));
@@ -189,6 +195,58 @@ async fn serve_mcp(host: &Host, req: Request<Incoming>) -> Result<Reply, String>
     } else {
         answers.swap_remove(0)
     }))
+}
+
+/// The largest credential request a helper sends.
+const CREDENTIAL_MAX: usize = 64 * 1024;
+
+/// SRV-084: a session's git credential helper asks for a token. It sends a
+/// token of its own and, from a session, the session's id; the request goes
+/// to the app (the server), which checks both and mints the token, since
+/// the GitHub App's key never leaves it. A session that has a token of its
+/// own is refused here when the token isn't that one (SRV-143).
+async fn serve_credential(host: &Host, req: Request<Incoming>) -> Reply {
+    if req.method() != Method::POST {
+        let mut reply = empty(StatusCode::METHOD_NOT_ALLOWED);
+        reply.headers_mut().insert("Allow", HeaderValue::from_static("POST"));
+        return reply;
+    }
+    let Some(token) = bearer(req.headers()) else {
+        return empty(StatusCode::UNAUTHORIZED);
+    };
+    let session_id = Some(header_text(req.headers(), MCP_SESSION_HEADER)).filter(|id| !id.is_empty());
+    if let Some(session_id) = &session_id
+        && host.has_session(session_id)
+        && !host.takes_token(session_id, Some(&token))
+    {
+        return empty(StatusCode::UNAUTHORIZED);
+    }
+    let Ok(body) = http_body_util::Limited::new(req.into_body(), CREDENTIAL_MAX)
+        .collect()
+        .await
+    else {
+        return empty(StatusCode::PAYLOAD_TOO_LARGE);
+    };
+    let Ok(request) = serde_json::from_slice::<Value>(&body.to_bytes()) else {
+        return empty(StatusCode::BAD_REQUEST);
+    };
+    if !request.is_object() {
+        return empty(StatusCode::BAD_REQUEST);
+    }
+    let Some(pending) = host.start_credential(session_id, token, request) else {
+        return json_reply_status(StatusCode::SERVICE_UNAVAILABLE, &json!({ "error": APP_CLOSED }));
+    };
+    match host.finish_relay(pending).await {
+        Some(reply) if reply.get("error").is_none() && !reply.is_null() => json_reply(&reply),
+        Some(reply) => json_reply_status(StatusCode::FORBIDDEN, &reply),
+        None => json_reply_status(StatusCode::SERVICE_UNAVAILABLE, &json!({ "error": APP_CLOSED })),
+    }
+}
+
+fn json_reply_status(status: StatusCode, value: &Value) -> Reply {
+    let mut reply = json_reply(value);
+    *reply.status_mut() = status;
+    reply
 }
 
 /// A JSON-RPC request: an object with an `id` (any value) and a string `method`. (HOST-083)
@@ -310,13 +368,19 @@ impl Host {
     /// Compared in constant time, so the token can't be worked out from how
     /// long a check takes. (HOST-070)
     pub(crate) fn is_hook_token(&self, value: Option<&str>) -> bool {
-        let given = value.unwrap_or("").as_bytes();
-        let expected = self.hook_token.as_bytes();
-        if given.len() != expected.len() {
-            return false;
+        crate::host::same_token(value, &self.hook_token)
+    }
+
+    /// Whether a hook, status line or board tools request for a session
+    /// carries the token it must (SRV-143): a session with its own takes
+    /// only that one; any other, live or not, the host's (HOST-070), so
+    /// what the app's sessions send is checked as it always was.
+    pub(crate) fn takes_hook_token(&self, session_id: &str, value: Option<&str>) -> bool {
+        if self.has_own_token(session_id) {
+            self.takes_token(session_id, value)
+        } else {
+            self.is_hook_token(value)
         }
-        let difference = given.iter().zip(expected).fold(0u8, |acc, (a, b)| acc | (a ^ b));
-        std::hint::black_box(difference) == 0
     }
 }
 

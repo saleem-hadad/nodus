@@ -33,13 +33,20 @@ pub(crate) struct ServeOptions {
     /// `--host-socket`: the session host `nodus-host.service` runs as
     /// `nodus-run`, to connect to instead of starting one (SRV-004).
     pub host_socket: Option<PathBuf>,
+    /// `--uploads`: where uploads are kept (SRV-163), a folder sessions can
+    /// read, which the data folder isn't: `install-server.sh` passes
+    /// `/srv/nodus/uploads` (2770, `nodus:nodus-run`). Without it they go in
+    /// `<data>/uploads`, for development and tests run as one user.
+    pub uploads: Option<PathBuf>,
 }
 
 /// What every connection shares.
 pub(crate) struct Server {
     pub nodus: Nodus,
-    /// The data folder (SRV-003): uploads are kept in it (SRV-163).
+    /// The data folder (SRV-003).
     pub data: PathBuf,
+    /// Where uploads are kept (SRV-163): `--uploads`, else `<data>/uploads`.
+    pub uploads: PathBuf,
     /// Members, devices, tokens, the GitHub App and the audit log.
     pub auth: Arc<Auth>,
     /// Sessions' tokens, commit identities and installation tokens, and
@@ -53,6 +60,8 @@ pub(crate) struct Server {
     pub presences: Arc<Presences>,
     /// Whose size each session's terminal follows (SRV-144).
     pub terminals: Terminals,
+    /// Updating the server from the app (SRV-200).
+    pub updates: crate::update::Updates,
     /// Each session's project, once looked up: a session never moves.
     sessions: Mutex<HashMap<String, String>>,
 }
@@ -114,6 +123,9 @@ async fn run(options: ServeOptions, log: &Logger) -> Result<(), String> {
     nodus_host_proto::ensure_private_dir(&data).map_err(|err| format!("Can't make {}: {err}", data.display()))?;
     let _lock = data::lock(&data)?;
     let mut env = data::server_env(&data.join("env"), options.run_home.as_deref())?;
+    if data::strip_pool_token(&mut env) {
+        log.log(&["warning", data::POOL_TOKEN_IGNORED]);
+    }
     data::add_session_env(&mut env);
     let tailscale = Tailscale::detect().await;
     let address = net::bind_address(options.bind.as_deref(), tailscale.ip)?;
@@ -134,8 +146,10 @@ async fn run(options: ServeOptions, log: &Logger) -> Result<(), String> {
     // SRV-104: the pool moves sessions and frees accounts from now on.
     tokio::spawn(crate::pool::run(Arc::clone(&hosting.pool), nodus.clone()));
 
+    let updates = crate::update::Updates::new(auth.github.api());
     let server = Arc::new(Server {
         nodus: nodus.clone(),
+        uploads: options.uploads.unwrap_or_else(|| crate::files::uploads_dir(&data)),
         data: data.clone(),
         auth,
         hosting,
@@ -143,6 +157,7 @@ async fn run(options: ServeOptions, log: &Logger) -> Result<(), String> {
         hosts: Hosts::new(&tailscale, address.ip()),
         presences: Presences::start(),
         terminals: Terminals::default(),
+        updates,
         sessions: Mutex::new(HashMap::new()),
     });
     tokio::spawn(follow_exits(Arc::downgrade(&server), nodus.subscribe()));
@@ -158,6 +173,8 @@ async fn run(options: ServeOptions, log: &Logger) -> Result<(), String> {
     tokio::select! {
         () = http::accept(Arc::clone(&server), listener) => {}
         () = stopped() => {}
+        // SRV-200: the new version is in place; systemd starts it.
+        () = server.updates.restart.notified() => log.log(&["restarting", "for the new version"]),
     }
     if let Some(late) = late_tailscale {
         late.abort();

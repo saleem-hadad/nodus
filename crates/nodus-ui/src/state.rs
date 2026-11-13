@@ -11,7 +11,7 @@ use nodus_core::Nodus;
 use nodus_domain::focus::is_focusing;
 use nodus_domain::{
     AppSettings, BoardSnapshot, Event, GroupPatch, MenuCommand, OpenCardRequest, Project, ProjectAction, ProjectGroup,
-    ProjectPatch, ProjectStats, ServerInfo, ServerState, SettingsPatch, UpdateStatus,
+    ProjectPatch, ProjectStats, ServerInfo, ServerState, ServerUpdateStatus, SettingsPatch, UpdateStatus,
 };
 
 use crate::settings::Section as SettingsSection;
@@ -85,6 +85,12 @@ pub struct AppState {
     /// How many times each server's pool of Claude accounts has changed
     /// (`accounts-changed`, SRV-105), for whatever shows it to ask again.
     pub accounts_changed: std::collections::HashMap<String, u64>,
+    /// How many notices each server has sent (SRV-042), for Settings →
+    /// Servers to ask its lists again.
+    pub server_notices: std::collections::HashMap<String, u64>,
+    /// How updating each server is going (SRV-200), by its id, from the
+    /// first press until it's back on the new version.
+    pub server_updates: std::collections::HashMap<String, ServerUpdateStatus>,
     /// The server dialog that's up, if any.
     pub server_dialog: Option<ServerDialog>,
     /// Who else is on the server board on show (SRV-180). An entity of its
@@ -155,6 +161,8 @@ impl AppState {
             projects_loaded: false,
             servers: Vec::new(),
             accounts_changed: std::collections::HashMap::new(),
+            server_notices: std::collections::HashMap::new(),
+            server_updates: std::collections::HashMap::new(),
             server_dialog: None,
             board: None,
             board_loading: false,
@@ -216,7 +224,10 @@ impl AppState {
             }
             Event::ProjectsChanged => self.refresh_projects(cx).detach(),
             Event::ServerStatus { server_id, state } => self.server_status(&server_id, state, cx),
-            Event::ServerNotice { message, .. } => self.server_notice(message, cx),
+            Event::ServerNotice { server_id, message, .. } => {
+                *self.server_notices.entry(server_id).or_default() += 1;
+                self.server_notice(message, cx);
+            }
             Event::AccountsChanged { server_id } => {
                 *self.accounts_changed.entry(server_id).or_default() += 1;
                 cx.notify();
@@ -231,6 +242,10 @@ impl AppState {
                         .and_then(|p| p.server.clone());
                     self.peers.update(cx, |p, cx| p.heard(presence, server.as_deref(), cx));
                 }
+            }
+            Event::ServerUpdate { server_id, status } => {
+                self.server_updates.insert(server_id, status);
+                cx.notify();
             }
             Event::Menu(command) => self.on_menu(command, cx),
             Event::OpenCard(request) => self.show_card(request, cx),
@@ -601,6 +616,15 @@ impl AppState {
     /// the boards itself.
     fn server_status(&mut self, server_id: &str, state: ServerState, cx: &mut Context<'_, Self>) {
         let was = self.servers.iter().find(|s| s.id == server_id).map(|s| s.state);
+        // SRV-200: back, on its new version.
+        if state == ServerState::Connected
+            && matches!(
+                self.server_updates.get(server_id),
+                Some(ServerUpdateStatus::Restarting { .. })
+            )
+        {
+            self.server_updates.remove(server_id);
+        }
         if let Some(server) = self.servers.iter_mut().find(|s| s.id == server_id) {
             server.state = state;
         }
@@ -625,6 +649,24 @@ impl AppState {
                 .collect();
             crate::terminal::store::reopen(&projects, cx);
         }
+    }
+
+    /// SRV-200: Update server, pressed in Settings → Servers or on one of
+    /// its tiles. How it goes arrives as `server-update` events, to every
+    /// member's app; one under way already isn't asked again.
+    pub fn update_server(&mut self, server_id: String, cx: &mut Context<'_, Self>) {
+        if crate::servers::updating(self.server_updates.get(&server_id)) {
+            return;
+        }
+        self.server_updates
+            .insert(server_id.clone(), ServerUpdateStatus::Checking);
+        cx.notify();
+        let nodus = self.nodus.clone();
+        cx.spawn(async move |_, _| {
+            // Its answer, or why not, comes back as an event too.
+            let _ = nodus.servers().update(&server_id).await;
+        })
+        .detach();
     }
 
     /// SRV-042, UI-328: a server's notice (`Saleem signed in on Studio`), as the

@@ -22,11 +22,23 @@ struct World {
     dir: tempfile::TempDir,
     server: Option<Child>,
     port: u16,
+    /// Where the server keeps uploads: `--uploads`, else `<data>/uploads`.
+    uploads: PathBuf,
 }
 
 impl World {
     /// A server whose data holds a project with a view, and a picture.
     fn new() -> Self {
+        Self::start(false)
+    }
+
+    /// The same, with uploads kept apart from the data folder, as
+    /// `install-server.sh` has it (`serve --uploads`).
+    fn with_uploads_folder() -> Self {
+        Self::start(true)
+    }
+
+    fn start(uploads_folder: bool) -> Self {
         let dir = tempfile::Builder::new()
             .prefix("nodus-files-")
             .tempdir_in("/tmp")
@@ -57,10 +69,20 @@ impl World {
 
         // Port 0, and the one it got from what it prints: a port picked
         // here and let go could be taken by another test before it binds.
-        let mut child = Command::new(env!("CARGO_BIN_EXE_nodus-server"))
+        let uploads = if uploads_folder {
+            root.join("srv/uploads")
+        } else {
+            data.join("uploads")
+        };
+        let mut command = Command::new(env!("CARGO_BIN_EXE_nodus-server"));
+        command
             .args(["serve", "--bind", "127.0.0.1:0", "--dev-token", TOKEN])
             .arg("--run-home")
-            .arg(root.join("home"))
+            .arg(root.join("home"));
+        if uploads_folder {
+            command.arg("--uploads").arg(&uploads);
+        }
+        let mut child = command
             .env_clear()
             .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
             .env("HOME", root.join("home"))
@@ -88,6 +110,7 @@ impl World {
             dir,
             server: Some(child),
             port,
+            uploads,
         }
     }
 
@@ -96,7 +119,7 @@ impl World {
     }
 
     fn uploads(&self) -> PathBuf {
-        self.dir.path().join("data/uploads")
+        self.uploads.clone()
     }
 
     /// A request as it is, and the status line the server answered.
@@ -144,6 +167,36 @@ async fn keeps_an_upload_under_a_name_of_its_own_and_gives_it_back() {
     // A name with no extension worth keeping gets none.
     let plain = upload(&world.url(), TOKEN, "Makefile", b"all:").await.unwrap();
     assert_eq!(plain.id.len(), 36);
+}
+
+/// SRV-163: `serve --uploads` keeps uploads in that folder, never in the
+/// data folder, which sessions run as another user can't read; and each is
+/// readable by the folder's group (`install-server.sh`'s
+/// `/srv/nodus/uploads`, group `nodus-run`), whatever the umask.
+#[tokio::test]
+async fn keeps_uploads_where_serve_uploads_says_readable_by_its_group() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let world = World::with_uploads_folder();
+    assert_eq!(world.uploads(), world.dir.path().join("srv/uploads"));
+    let up: Upload = upload(&world.url(), TOKEN, "notes.md", b"# notes").await.unwrap();
+    assert!(up.id.ends_with(".md") && up.id.len() == 36 + 3, "{}", up.id);
+    let kept = world.uploads().join(&up.id);
+    assert_eq!(PathBuf::from(&up.path), kept);
+    assert_eq!(std::fs::read(&kept).unwrap(), b"# notes");
+    assert!(!world.dir.path().join("data/uploads").exists());
+    // Only the file itself is there: no part file left behind.
+    let names: Vec<_> = std::fs::read_dir(world.uploads())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    assert_eq!(names, [std::ffi::OsString::from(&up.id)]);
+
+    let mode = std::fs::metadata(&kept).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode, 0o640, "{mode:o}");
+
+    let back = download(&world.url(), TOKEN, &up.id).await.unwrap();
+    assert_eq!((back.status, back.body.as_slice()), (200, &b"# notes"[..]));
 }
 
 /// SRV-022: the token, in the Authorization header only.

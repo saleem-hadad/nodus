@@ -15,8 +15,10 @@
 //!   `billing_error` make it `failed`, and every member hears of it.
 //! - **Moving** (SRV-104, SRV-105): the session whose turn hit the limit is
 //!   stopped and resumed on another account with `Continue.`; with none
-//!   free it waits, and resumes once one is. Removing an account moves its
-//!   sessions the same way.
+//!   free it waits, and resumes once one is. An account that fails, or is
+//!   removed, has all its live sessions moved the same way. The sessions
+//!   waiting are kept in `claude-waiting.json`, so a restart of `serve`
+//!   still resumes them.
 //!
 //! What a session reports arrives while the session host's messages wait,
 //! so the pool only takes note there; a task of its own ([`run`]) moves
@@ -38,6 +40,8 @@ use crate::store::{self, now_ms, random_hex};
 
 /// Where the pool is kept, beside the rest of the server's data (SRV-003).
 pub(crate) const ACCOUNTS_FILE: &str = "claude-accounts.json";
+/// Where the sessions waiting for an account are kept (SRV-104).
+pub(crate) const WAITING_FILE: &str = "claude-waiting.json";
 /// How long an account is `limited` when its window's reset isn't known.
 const LIMIT_UNKNOWN_MS: f64 = 60.0 * 60.0 * 1000.0;
 /// The longest label.
@@ -118,6 +122,9 @@ enum Work {
     Limited { session_id: String },
     /// An account was removed: its sessions move.
     Removed { account_id: String },
+    /// An account failed (SRV-103): its live sessions move, the one whose
+    /// turn it failed told to carry on.
+    Failed { account_id: String, session_id: String },
     /// An account may be free now: waiting sessions go to it.
     Freed,
 }
@@ -131,8 +138,20 @@ pub(crate) struct Pool {
     /// Taken by [`run`] once the core is up.
     todo: Mutex<Option<mpsc::UnboundedReceiver<Work>>>,
     /// Sessions waiting for an account to free up, oldest first (SRV-104),
-    /// and whether the pool stopped each itself (a removed account's).
-    waiting: Mutex<Vec<(String, bool)>>,
+    /// as `claude-waiting.json` keeps them.
+    waiting: Mutex<Vec<Waiting>>,
+    waiting_file: PathBuf,
+}
+
+/// A session waiting for an account.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Waiting {
+    session_id: String,
+    /// The pool stopped it itself (a removed or failed account's), so it
+    /// starts again even though it isn't live.
+    #[serde(default)]
+    stopped: bool,
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -145,6 +164,12 @@ impl Pool {
     pub(crate) fn open(data: &Path, auth: Arc<Auth>) -> Result<Self, String> {
         let file = data.join(ACCOUNTS_FILE);
         let accounts: Vec<Stored> = store::read_json(&file)?;
+        // Who waits is worth keeping, not worth stopping the server over.
+        let waiting_file = data.join(WAITING_FILE);
+        let waiting: Vec<Waiting> = store::read_json(&waiting_file).unwrap_or_else(|err| {
+            tracing_err(&err);
+            Vec::new()
+        });
         let (work, todo) = mpsc::unbounded_channel();
         Ok(Self {
             file,
@@ -152,8 +177,21 @@ impl Pool {
             accounts: Mutex::new(accounts),
             work,
             todo: Mutex::new(Some(todo)),
-            waiting: Mutex::new(Vec::new()),
+            waiting: Mutex::new(waiting),
+            waiting_file,
         })
+    }
+
+    /// Changes who waits, and keeps it when it changed.
+    fn change_waiting(&self, change: impl FnOnce(&mut Vec<Waiting>)) {
+        let mut waiting = lock(&self.waiting);
+        let before = waiting.clone();
+        change(&mut waiting);
+        if *waiting != before
+            && let Err(err) = store::write_json(&self.waiting_file, &*waiting)
+        {
+            tracing_err(&err);
+        }
     }
 
     fn save(&self, accounts: &[Stored]) {
@@ -379,6 +417,10 @@ impl Pool {
                     });
                 } else if FAILED_ERRORS.contains(&error) {
                     self.fail(account, error);
+                    let _ = self.work.send(Work::Failed {
+                        account_id: account.to_owned(),
+                        session_id: session_id.to_owned(),
+                    });
                 }
             }
             _ => {}
@@ -501,13 +543,15 @@ impl Pool {
     /// The session waits for an account (SRV-104), and its card says so.
     /// `stopped` when the pool stopped its process itself.
     fn wait(&self, nodus: &Nodus, session_id: &str, stopped: bool) {
-        {
-            let mut waiting = lock(&self.waiting);
-            match waiting.iter_mut().find(|(id, _)| id == session_id) {
-                Some(entry) => entry.1 |= stopped,
-                None => waiting.push((session_id.to_owned(), stopped)),
-            }
-        }
+        self.change_waiting(
+            |waiting| match waiting.iter_mut().find(|w| w.session_id == session_id) {
+                Some(entry) => entry.stopped |= stopped,
+                None => waiting.push(Waiting {
+                    session_id: session_id.to_owned(),
+                    stopped,
+                }),
+            },
+        );
         let note = match self.next_reset() {
             Some(at) => format!("Waiting for a Claude account until {}", reset_text(at, now_ms())),
             None => "Waiting for a Claude account".to_owned(),
@@ -522,10 +566,10 @@ impl Pool {
             if !self.has_free() {
                 return;
             }
-            let Some((session_id, stopped)) = lock(&self.waiting).first().cloned() else {
+            let Some(Waiting { session_id, stopped }) = lock(&self.waiting).first().cloned() else {
                 return;
             };
-            lock(&self.waiting).retain(|(id, _)| *id != session_id);
+            self.change_waiting(|waiting| waiting.retain(|w| w.session_id != session_id));
             // Someone stopped it meanwhile: it stays stopped.
             if !stopped && !nodus.is_live(&session_id) {
                 nodus.note_account(&session_id, None);
@@ -538,16 +582,19 @@ impl Pool {
         }
     }
 
-    /// SRV-105: a removed account's sessions move; with nowhere to go, a
-    /// session mid-turn waits and the rest just stop, to start again on
-    /// another account when they're next used.
-    async fn move_off(&self, nodus: &Nodus, account_id: &str) {
+    /// SRV-104, SRV-105: a removed or failed account's live sessions move;
+    /// with nowhere to go, a session mid-turn waits and the rest just stop,
+    /// to start again on another account when they're next used. The
+    /// session whose turn failed (`failed_turn`) counts as mid-turn, and is
+    /// told to carry on.
+    async fn move_off(&self, nodus: &Nodus, account_id: &str, failed_turn: Option<&str>) {
         for session in nodus.sessions_on_account(account_id) {
-            if self.has_free() && self.resume_on_another(nodus, &session.session_id, session.busy).await {
+            let busy = session.busy || failed_turn == Some(session.session_id.as_str());
+            if self.has_free() && self.resume_on_another(nodus, &session.session_id, busy).await {
                 continue;
             }
             nodus.sessions().kill(&session.session_id).await;
-            if session.busy {
+            if busy {
                 self.wait(nodus, &session.session_id, true);
             }
         }
@@ -561,8 +608,12 @@ pub(crate) async fn run(pool: Arc<Pool>, nodus: Nodus) {
     let Some(mut todo) = lock(&pool.todo).take() else {
         return;
     };
-    // Waiting from an earlier run isn't known, but a reset that passed is.
+    // A reset that passed while the server was down frees its account,
+    // and sessions that waited then go on now, if one is free.
     pool.free_due();
+    if !lock(&pool.waiting).is_empty() {
+        let _ = pool.work.send(Work::Freed);
+    }
     loop {
         let wait = pool.next_reset().map(|at| {
             let ms = (at - now_ms()).max(0.0);
@@ -583,7 +634,10 @@ pub(crate) async fn run(pool: Arc<Pool>, nodus: Nodus) {
                 server_id: String::new(),
             }),
             Work::Limited { session_id } => pool.move_session(&nodus, &session_id).await,
-            Work::Removed { account_id } => pool.move_off(&nodus, &account_id).await,
+            Work::Removed { account_id } => pool.move_off(&nodus, &account_id, None).await,
+            Work::Failed { account_id, session_id } => {
+                pool.move_off(&nodus, &account_id, Some(&session_id)).await;
+            }
             Work::Freed => pool.resume_waiting(&nodus).await,
         }
     }
@@ -697,6 +751,40 @@ mod tests {
         store::write_json(&dir.path().join(ACCOUNTS_FILE), &accounts).unwrap();
         let pool = Pool::open(dir.path(), auth).unwrap();
         (dir, pool)
+    }
+
+    /// SRV-104: who waits outlives the pool.
+    #[test]
+    fn keeps_the_sessions_waiting_across_a_restart() {
+        let (dir, pool) = pool(&[account("a", None, None)]);
+        pool.change_waiting(|w| {
+            w.push(Waiting {
+                session_id: "s1".into(),
+                stopped: false,
+            });
+            w.push(Waiting {
+                session_id: "s2".into(),
+                stopped: true,
+            });
+        });
+        drop(pool);
+        let auth = Arc::new(Auth::open(dir.path(), None, "box".into()).unwrap());
+        let again = Pool::open(dir.path(), Arc::clone(&auth)).unwrap();
+        let waiting = lock(&again.waiting).clone();
+        assert_eq!(
+            waiting
+                .iter()
+                .map(|w| (w.session_id.as_str(), w.stopped))
+                .collect::<Vec<_>>(),
+            [("s1", false), ("s2", true)]
+        );
+        again.change_waiting(|w| w.retain(|w| w.session_id != "s1"));
+        drop(again);
+        let kept = Pool::open(dir.path(), Arc::clone(&auth)).unwrap();
+        assert_eq!(lock(&kept.waiting).len(), 1);
+        // One that can't be read starts the server with nobody waiting.
+        std::fs::write(dir.path().join(WAITING_FILE), "not json").unwrap();
+        assert!(lock(&Pool::open(dir.path(), auth).unwrap().waiting).is_empty());
     }
 
     #[test]

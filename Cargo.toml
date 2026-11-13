@@ -101,6 +101,8 @@ objc2-core-audio-types = { version = "0.3", default-features = false, features =
 # Chromium's MediaRecorder encodes them, with nothing to compile for Windows.
 opus1 = "0.3"
 regex = "1.13"
+# A server's update arrives as a .tar.gz (SRV-200); png and usvg already use it.
+flate2 = "1"
 # RS256 for a server's GitHub App JWT (SRV-062). rustls already brings it in,
 # and like rustls it's left out on Windows (see reqwest above).
 ring = "0.17"

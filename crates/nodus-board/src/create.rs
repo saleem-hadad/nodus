@@ -12,6 +12,7 @@ use nodus_store::BoardState;
 
 use crate::archive::bare_node;
 use crate::board::Board;
+use crate::geometry::NEW_CARD_H;
 use crate::runs::find_action;
 use crate::{BoardError, BoxFuture};
 
@@ -91,6 +92,7 @@ pub fn new_session(
     node.created_by_app = Some(true);
     node.run_of = action.as_ref().map(|a| a.id.clone());
     node.expanded = (opts.expanded == Some(true)).then_some(true);
+    node.h = Some(NEW_CARD_H);
     node.auto_mode = (!terminal && opts.auto_mode == Some(true)).then_some(true);
     node.from_view = opts
         .from_view

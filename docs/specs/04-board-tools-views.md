@@ -213,7 +213,7 @@ In Rust the frame becomes a `wry` webview embedded in the GPUI board (see Rust m
 
 - **VIEW-056** The view must have `startsSessions`; otherwise, if the view exists, a toast `“<view title>” tried to start a session. Ask its brain if you want it to be able to.` shows, and the call fails with `This view isn’t allowed to start sessions. The user can ask its brain to let it.`
 - **VIEW-057** At most one start per view every `3000` ms (`VIEW_START_GAP_MS`, in-memory per board): sooner → `This view just started a session; wait a moment before starting another`. The timestamp is recorded before the session is created (so a failed create still counts).
-- **VIEW-058** The new session is an expanded card (720 × 480) placed with `findSpotBeside({x: view.x, y: view.y, ...viewSize(view)}, 720×480, cards + notes + views obstacles, dock, gap 96)` (`VIEW_SESSION_GAP = 3 × GAP`), position rounded; created with `name = title.slice(0, 80) || undefined`, `initialPrompt = prompt`, `expanded: true`, `autoMode: true`, `fromView: view.id`; it joins the section at that position if any; a yellow sticker note with the prompt text (`id` uuid, at the card's position, `sessionId` = the card) is saved; the board pans to show it (`ensureVisible`).
+- **VIEW-058** The new session is an expanded card (720 × 960) placed with `findSpotBeside({x: view.x, y: view.y, ...viewSize(view)}, 720×960, cards + notes + views obstacles, dock, gap 96)` (`VIEW_SESSION_GAP = 3 × GAP`), position rounded; created with `name = title.slice(0, 80) || undefined`, `initialPrompt = prompt`, `expanded: true`, `autoMode: true`, `fromView: view.id`; it joins the section at that position if any; a yellow sticker note with the prompt text (`id` uuid, at the card's position, `sessionId` = the card) is saved; the board pans to show it (`ensureVisible`).
 - **VIEW-059** Main stores `fromView` only for a Claude session whose `fromView` is an own property of that board's views; the board draws an animated dashed edge from the view to it (09).
 
 ### Views: what main answers for a page (`views:call` → `callView`)
@@ -1589,7 +1589,7 @@ One line per behavior ID, in the order above. Tick only when the Rust build matc
 - [x] VIEW-055 The board posts {event: 'board'} to all frames 300 ms after its cards, notes or views last changed (trailing debounce; also once 300 ms after the board mounts), and…
 - [x] VIEW-056 The view must have startsSessions
 - [x] VIEW-057 At most one start per view every 3000 ms (VIEW_START_GAP_MS, in-memory per board): sooner → This view just started a session
-- [x] VIEW-058 The new session is an expanded card (720 × 480) placed with findSpotBeside({x: view.x, y: view.y…
+- [x] VIEW-058 The new session is an expanded card (720 × 960) placed with findSpotBeside({x: view.x, y: view.y…
 - [x] VIEW-059 Main stores fromView only for a Claude session whose fromView is an own property of that board's views
 - [x] VIEW-060 callView first resolves the view on that board (VIEW-016)
 - [x] VIEW-061 The page's rate-limit and other per-view state are keyed by view id

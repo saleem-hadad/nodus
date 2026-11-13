@@ -55,6 +55,8 @@ pub(super) enum Step {
     Members { server_id: String, name: String },
     /// Wizard step 4, Claude accounts (UI-333).
     Accounts { server_id: String, name: String },
+    /// Wizard step 5, the first project (UI-335).
+    Project { server_id: String, name: String },
     /// Set up (UI-322).
     Done { server_id: String, name: String },
 }
@@ -74,18 +76,19 @@ impl Step {
     fn wizard_index(&self) -> Option<usize> {
         match self {
             Self::Name { .. } => Some(0),
-            Self::Github { .. } => Some(1),
-            Self::SignIn { setup: Some(_), .. } => Some(2),
-            Self::Members { .. } => Some(3),
-            Self::Accounts { .. } => Some(4),
+            // Signing in finishes step 2 (SRV-061).
+            Self::Github { .. } | Self::SignIn { setup: Some(_), .. } => Some(1),
+            Self::Members { .. } => Some(2),
+            Self::Accounts { .. } => Some(3),
+            Self::Project { .. } => Some(4),
             Self::Done { .. } => Some(5),
             _ => None,
         }
     }
 }
 
-/// The wizard's steps, as its header names them.
-const WIZARD: [&str; 5] = ["Name", "GitHub", "Sign In", "Members", "Claude"];
+/// The wizard's steps, as its header names them: SRV-061's five.
+const WIZARD: [&str; 5] = ["Name", "GitHub", "Members", "Claude", "Project"];
 
 impl ServersDialog {
     /// Goes to `step`: fields it shows get the keyboard, the error goes,
@@ -103,6 +106,7 @@ impl ServersDialog {
             Step::Name { .. } => Some(&self.name),
             Step::Members { .. } => Some(&self.invite),
             Step::Accounts { .. } => Some(&self.account_label),
+            Step::Project { .. } => Some(&self.search),
             _ => None,
         };
         match field {
@@ -126,6 +130,12 @@ impl ServersDialog {
             Step::Accounts { server_id, .. } => {
                 let server_id = server_id.clone();
                 self.load_accounts(server_id, cx);
+            }
+            Step::Project { server_id, .. } => {
+                let server_id = server_id.clone();
+                self.add_error = None;
+                self.repos.remove(&server_id);
+                self.load_repos(&server_id, cx);
             }
             _ => {}
         }
@@ -173,6 +183,13 @@ impl ServersDialog {
                 let server_id = server_id.clone();
                 self.finish_accounts(server_id, window, cx);
             }
+            // Enter adds the one repository that matches what's typed.
+            Step::Project { server_id, .. } => {
+                let server_id = server_id.clone();
+                if let Some(full_name) = self.only_match(&server_id, cx) {
+                    self.add_first_project(full_name, window, cx);
+                }
+            }
             Step::Done { server_id, .. } => {
                 let server_id = server_id.clone();
                 self.state.update(cx, |s, cx| {
@@ -202,6 +219,7 @@ impl ServersDialog {
             } if self.for_org => vec![self.org.clone()],
             Step::Members { .. } => vec![self.invite.clone()],
             Step::Accounts { .. } => vec![self.account_label.clone(), self.account_token.clone()],
+            Step::Project { .. } => vec![self.search.clone()],
             _ => Vec::new(),
         }
     }
@@ -256,15 +274,23 @@ impl ServersDialog {
                 .find(|s| same_address(&s.url, &url) && s.login.is_some())
                 .cloned();
             let members = match &here {
-                Some(server) => nodus
-                    .servers()
-                    .setup_status(&server.id)
-                    .await
-                    .ok()
-                    .filter(|status| matches!(status.step, SetupStep::Members | SetupStep::Accounts)),
+                Some(server) => nodus.servers().setup_status(&server.id).await.ok().filter(|status| {
+                    matches!(
+                        status.step,
+                        SetupStep::Members | SetupStep::Accounts | SetupStep::Project
+                    )
+                }),
                 None => None,
             };
             let _ = this.update_in(cx, |d, window, cx| match (here, members) {
+                (Some(server), Some(status)) if status.step == SetupStep::Project => d.go(
+                    Step::Project {
+                        server_id: server.id,
+                        name: hello.name,
+                    },
+                    window,
+                    cx,
+                ),
                 (Some(server), Some(status)) if status.step == SetupStep::Accounts => d.go(
                     Step::Accounts {
                         server_id: server.id,
@@ -701,7 +727,8 @@ impl ServersDialog {
         .detach();
     }
 
-    /// Step 4 is done or skipped: `setup:done accounts`.
+    /// Step 4 is done or skipped: `setup:done accounts`, then the first
+    /// project.
     fn finish_accounts(&mut self, server_id: String, window: &mut Window, cx: &mut Context<'_, Self>) {
         self.connecting = true;
         cx.notify();
@@ -709,6 +736,68 @@ impl ServersDialog {
         let name = self.server_name(cx);
         cx.spawn_in(window, async move |this, cx| {
             let done = nodus.servers().finish_step(&server_id, SetupStep::Accounts).await;
+            let _ = this.update_in(cx, |d, window, cx| match done {
+                Ok(_) => d.go(Step::Project { server_id, name }, window, cx),
+                Err(err) => d.failed(err.message, cx),
+            });
+        })
+        .detach();
+    }
+
+    /// The repository Enter would add on step 5: the only one matching
+    /// what's typed.
+    fn only_match(&self, server_id: &str, cx: &gpui::App) -> Option<String> {
+        let Some(super::Repos::Loaded(repos)) = self.repos.get(server_id) else {
+            return None;
+        };
+        let query = self.search.read(cx).value().trim().to_owned();
+        let mut shown = repos.iter().filter(|r| super::repo_matches(&r.full_name, &query));
+        match (shown.next(), shown.next()) {
+            (Some(only), None) => Some(only.full_name.clone()),
+            _ => None,
+        }
+    }
+
+    /// UI-335: clones the repository on the server as its first project
+    /// (`projects:add-github`, SRV-120), which links it into the grid, then
+    /// finishes step 5.
+    pub(super) fn add_first_project(&mut self, full_name: String, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let Step::Project { server_id, .. } = &self.step else {
+            return;
+        };
+        if self.adding.is_some() || self.connecting {
+            return;
+        }
+        let server_id = server_id.clone();
+        self.adding = Some(full_name.clone());
+        self.add_error = None;
+        cx.notify();
+        let nodus = self.state.read(cx).nodus.clone();
+        cx.spawn_in(window, async move |this, cx| {
+            let added = nodus.servers().add_from_github(&server_id, &full_name).await;
+            let _ = this.update_in(cx, |d, window, cx| {
+                d.adding = None;
+                match added {
+                    Ok(_) => {
+                        d.state.update(cx, |s, cx| s.refresh_projects(cx).detach());
+                        d.finish_project(server_id, window, cx);
+                    }
+                    Err(err) => d.add_error = Some(err.message),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Step 5 is done or skipped: `setup:done project`, then Done.
+    fn finish_project(&mut self, server_id: String, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.connecting = true;
+        cx.notify();
+        let nodus = self.state.read(cx).nodus.clone();
+        let name = self.server_name(cx);
+        cx.spawn_in(window, async move |this, cx| {
+            let done = nodus.servers().finish_step(&server_id, SetupStep::Project).await;
             let _ = this.update_in(cx, |d, window, cx| match done {
                 Ok(_) => d.go(Step::Done { server_id, name }, window, cx),
                 Err(err) => d.failed(err.message, cx),
@@ -756,6 +845,7 @@ impl ServersDialog {
             | Step::SignIn { name, .. }
             | Step::Members { name, .. }
             | Step::Accounts { name, .. }
+            | Step::Project { name, .. }
             | Step::Done { name, .. } => name.clone(),
             _ => {
                 let typed = self.name.read(cx).value().trim().to_owned();
@@ -807,6 +897,10 @@ impl ServersDialog {
             Step::Accounts { name, .. } => {
                 let name = name.clone();
                 self.render_accounts(&name, t, window, cx)
+            }
+            Step::Project { server_id, name } => {
+                let (server_id, name) = (server_id.clone(), name.clone());
+                self.render_project(&server_id, &name, t, window, cx)
             }
             Step::Done { name, .. } => {
                 let name = name.clone();
@@ -1361,6 +1455,59 @@ impl ServersDialog {
             .into_any_element()
     }
 
+    /// UI-335: wizard step 5, a repository the App reaches as the first
+    /// project, or Skip.
+    fn render_project(
+        &mut self,
+        server_id: &str,
+        name: &str,
+        t: Tokens,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> AnyElement {
+        let list = self.repo_list(server_id, t, cx);
+        let skip = cx.entity();
+        let busy = self.adding.is_some() || self.connecting;
+        div()
+            .flex()
+            .flex_col()
+            .child(heading_owned("Add a First Project".into()))
+            .child(intro_owned(
+                format!("Pick a repository to clone on {name}. Each card you start in it gets a branch of its own."),
+                t,
+            ))
+            .child(field(&self.search, window, cx, t))
+            .child(
+                div()
+                    .id("server-first-project")
+                    .mt(px(10.))
+                    .flex()
+                    .flex_col()
+                    .max_h(px(220.))
+                    .overflow_y_scroll()
+                    .child(list),
+            )
+            .when_some(self.add_error.clone(), |d, error| d.child(error_text(error, t)))
+            .child(footer(
+                None,
+                vec![
+                    button("server-project-skip")
+                        .label("Skip for Now")
+                        .disabled(busy)
+                        .on_click(move |_, window, cx| {
+                            skip.update(cx, |d, cx| {
+                                if let Step::Project { server_id, .. } = &d.step {
+                                    let server_id = server_id.clone();
+                                    d.finish_project(server_id, window, cx);
+                                }
+                            });
+                        })
+                        .into_any_element(),
+                ],
+            ))
+            .into_any_element()
+    }
+
     fn render_done(&mut self, name: &str, t: Tokens, cx: &mut Context<'_, Self>) -> AnyElement {
         let this = cx.entity();
         div()
@@ -1379,7 +1526,7 @@ impl ServersDialog {
             )
             .child(heading_owned(format!("{name} Is Ready")))
             .child(intro(
-                "Members, devices, Claude accounts and its GitHub App are in Settings → Servers. Add a first project with Add from GitHub in the projects grid.",
+                "Members, devices, Claude accounts and its GitHub App are in Settings → Servers. Add more projects with Add from GitHub in the projects grid.",
                 t,
             ))
             .child(footer(

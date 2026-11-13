@@ -19,8 +19,8 @@ use gpui::{
     Styled, StyledImage as _, Window, actions, div, img, px,
 };
 use nodus_core::GithubRepo;
-use nodus_core::hosted::Member;
-use nodus_domain::{Project, ServerInfo, ServerState};
+use nodus_core::hosted::{Member, ServerVersion, server_version};
+use nodus_domain::{Project, ServerInfo, ServerState, ServerUpdateStatus};
 
 use connect::Step;
 
@@ -47,19 +47,69 @@ pub fn bind_keys(cx: &mut App) {
     ]);
 }
 
+/// What a server newer than the app says (SRV-200).
+pub const UPDATE_APP: &str = "This server runs a newer Nodus. Update the app.";
+
 /// How a server's status reads in Settings and the picker.
 pub fn status_text(server: &ServerInfo) -> String {
+    let newer = server_version(server) == ServerVersion::Newer;
     match server.state {
         ServerState::Connecting => "Connecting…".into(),
+        ServerState::Connected if newer => format!("Connected · {UPDATE_APP}"),
         ServerState::Connected => "Connected".into(),
         ServerState::Offline => match &server.error {
             Some(error) => format!("Offline: {error}"),
             None => "Offline".into(),
         },
+        ServerState::ProtocolMismatch if newer => UPDATE_APP.into(),
         ServerState::ProtocolMismatch => format!(
             "This server runs Nodus {}. Update it in Settings → Servers.",
             server.version.as_deref().unwrap_or("of another version")
         ),
+    }
+}
+
+/// SRV-200: whether an update of the server is under way.
+pub fn updating(status: Option<&ServerUpdateStatus>) -> bool {
+    matches!(
+        status,
+        Some(
+            ServerUpdateStatus::Checking
+                | ServerUpdateStatus::Downloading { .. }
+                | ServerUpdateStatus::Restarting { .. }
+        )
+    )
+}
+
+/// SRV-200: how updating the server reads, in the app's updater's words
+/// where they fit (UI-148).
+pub fn update_text(status: &ServerUpdateStatus) -> String {
+    match status {
+        ServerUpdateStatus::Checking => "Checking for updates…".into(),
+        ServerUpdateStatus::Latest { version } => {
+            format!("It runs the newest release, Nodus {version}.")
+        }
+        ServerUpdateStatus::Downloading { version, percent } => {
+            format!("Downloading version {version}… {percent}%")
+        }
+        ServerUpdateStatus::Restarting { version } => format!("Restarting on version {version}…"),
+        ServerUpdateStatus::Error { message } => message.clone(),
+    }
+}
+
+/// SRV-200: whether a server shows **Update server**: it runs an older
+/// Nodus than the app, or an update of it was pressed and isn't over.
+pub fn offers_update(server: &ServerInfo, status: Option<&ServerUpdateStatus>) -> bool {
+    server_version(server) == ServerVersion::Older || status.is_some()
+}
+
+/// What Update server's button says on a server's tiles.
+pub fn tile_update_label(status: Option<&ServerUpdateStatus>) -> String {
+    match status {
+        Some(ServerUpdateStatus::Checking) => "Updating…".into(),
+        Some(ServerUpdateStatus::Downloading { percent, .. }) => format!("Updating… {percent}%"),
+        Some(ServerUpdateStatus::Restarting { .. }) => "Restarting…".into(),
+        _ => "Update Server".into(),
     }
 }
 
@@ -179,8 +229,15 @@ impl ServersDialog {
             .detach();
         }
         let search = new_input("", "Search repositories", false, window, cx);
-        cx.subscribe_in(&search, window, |_, _, _: &InputEvent, _, cx| cx.notify())
-            .detach();
+        cx.subscribe_in(&search, window, |this, _, e: &InputEvent, window, cx| {
+            // The wizard's step 5 adds the one match on Enter (UI-335).
+            let wizard = matches!(this.state.read(cx).server_dialog, Some(ServerDialog::Connect));
+            if wizard && let InputEvent::PressEnter { .. } = e {
+                this.primary(window, cx);
+            }
+            cx.notify();
+        })
+        .detach();
         match state.read(cx).server_dialog {
             Some(ServerDialog::Connect) => focus_all(&address, window, cx),
             Some(ServerDialog::Github { .. }) => focus_all(&search, window, cx),
@@ -678,75 +735,7 @@ impl ServersDialog {
             .iter()
             .find(|s| s.id == server_id)
             .map_or_else(|| "the server".to_owned(), |s| s.name.clone());
-        let query = self.search.read(cx).value().trim().to_owned();
-        let linked: HashSet<String> = self
-            .state
-            .read(cx)
-            .projects
-            .iter()
-            .filter(|p| p.server.as_deref() == Some(server_id))
-            .map(|p| p.name.to_lowercase())
-            .collect();
-        let body: AnyElement = match self.repos.get(server_id) {
-            None | Some(Repos::Loading) => note("Loading its repositories…", t).into_any_element(),
-            Some(Repos::Failed(error)) => div()
-                .id("github-repos-error")
-                .text_color(t.status_waiting)
-                .child(error.clone())
-                .into_any_element(),
-            Some(Repos::Loaded(repos)) => {
-                let shown: Vec<&GithubRepo> = repos.iter().filter(|r| repo_matches(&r.full_name, &query)).collect();
-                if repos.is_empty() {
-                    note("The App isn’t installed on any repository yet.", t).into_any_element()
-                } else if shown.is_empty() {
-                    note("No repository matches.", t).into_any_element()
-                } else {
-                    let rows = shown.into_iter().map(|repo| {
-                        let this = cx.entity();
-                        let (server, full_name) = (server_id.to_owned(), repo.full_name.clone());
-                        let adding = self.adding.as_deref() == Some(repo.full_name.as_str());
-                        let name = repo
-                            .full_name
-                            .rsplit('/')
-                            .next()
-                            .unwrap_or(&repo.full_name)
-                            .to_lowercase();
-                        let added = linked.contains(&name);
-                        div()
-                            .id(SharedString::from(format!("github-repo-{}", repo.full_name)))
-                            .flex()
-                            .items_center()
-                            .gap(px(10.))
-                            .h(px(34.))
-                            .px(px(10.))
-                            .rounded(RADIUS_SM)
-                            .hover(|s| s.bg(t.bg_hover))
-                            .active(|s| s.bg(t.bg_pressed))
-                            .on_click(move |_, _, cx| {
-                                let (server, full_name) = (server.clone(), full_name.clone());
-                                this.update(cx, |d, cx| d.add_repo(server, full_name, cx));
-                            })
-                            .child(icon(Icon::FolderPlus, 15., 2., t.text_secondary))
-                            .child(div().flex_1().min_w_0().truncate().child(repo.full_name.clone()))
-                            .when(repo.private, |d| {
-                                d.child(div().text_size(TEXT_SM).text_color(t.text_tertiary).child("Private"))
-                            })
-                            .when(added && !adding, |d| {
-                                d.child(
-                                    div()
-                                        .text_size(TEXT_SM)
-                                        .text_color(t.text_tertiary)
-                                        .child("In your grid"),
-                                )
-                            })
-                            .when(adding, |d| {
-                                d.child(div().text_size(TEXT_SM).text_color(t.text_secondary).child("Cloning…"))
-                            })
-                    });
-                    div().flex().flex_col().gap(px(1.)).children(rows).into_any_element()
-                }
-            }
-        };
+        let body = self.repo_list(server_id, t, cx);
         let install = self.install_url.get(server_id).cloned();
         let cancel = cx.entity();
         div()
@@ -805,6 +794,92 @@ impl ServersDialog {
                     ),
             )
             .into_any_element()
+    }
+
+    /// The repositories a server's App reaches, as Add from GitHub and the
+    /// wizard's step 5 list them (UI-329, UI-335): each a row that adds it.
+    fn repo_list(&mut self, server_id: &str, t: Tokens, cx: &mut Context<'_, Self>) -> AnyElement {
+        let query = self.search.read(cx).value().trim().to_owned();
+        let linked: HashSet<String> = self
+            .state
+            .read(cx)
+            .projects
+            .iter()
+            .filter(|p| p.server.as_deref() == Some(server_id))
+            .map(|p| p.name.to_lowercase())
+            .collect();
+        match self.repos.get(server_id) {
+            None | Some(Repos::Loading) => note("Loading its repositories…", t).into_any_element(),
+            Some(Repos::Failed(error)) => div()
+                .id("github-repos-error")
+                .text_color(t.status_waiting)
+                .child(error.clone())
+                .into_any_element(),
+            Some(Repos::Loaded(repos)) => {
+                let shown: Vec<&GithubRepo> = repos.iter().filter(|r| repo_matches(&r.full_name, &query)).collect();
+                if repos.is_empty() {
+                    note("The App isn’t installed on any repository yet.", t).into_any_element()
+                } else if shown.is_empty() {
+                    note("No repository matches.", t).into_any_element()
+                } else {
+                    let rows = shown.into_iter().map(|repo| {
+                        let this = cx.entity();
+                        let (server, full_name) = (server_id.to_owned(), repo.full_name.clone());
+                        let adding = self.adding.as_deref() == Some(repo.full_name.as_str());
+                        let name = repo
+                            .full_name
+                            .rsplit('/')
+                            .next()
+                            .unwrap_or(&repo.full_name)
+                            .to_lowercase();
+                        let added = linked.contains(&name);
+                        div()
+                            .id(SharedString::from(format!("github-repo-{}", repo.full_name)))
+                            .flex()
+                            .items_center()
+                            .gap(px(10.))
+                            .h(px(34.))
+                            .px(px(10.))
+                            .rounded(RADIUS_SM)
+                            .hover(|s| s.bg(t.bg_hover))
+                            .active(|s| s.bg(t.bg_pressed))
+                            .on_click(move |_, window, cx| {
+                                let (server, full_name) = (server.clone(), full_name.clone());
+                                this.update(cx, |d, cx| d.pick_repo(server, full_name, window, cx));
+                            })
+                            .child(icon(Icon::FolderPlus, 15., 2., t.text_secondary))
+                            .child(div().flex_1().min_w_0().truncate().child(repo.full_name.clone()))
+                            .when(repo.private, |d| {
+                                d.child(div().text_size(TEXT_SM).text_color(t.text_tertiary).child("Private"))
+                            })
+                            .when(added && !adding, |d| {
+                                d.child(
+                                    div()
+                                        .text_size(TEXT_SM)
+                                        .text_color(t.text_tertiary)
+                                        .child("In your grid"),
+                                )
+                            })
+                            .when(adding, |d| {
+                                d.child(div().text_size(TEXT_SM).text_color(t.text_secondary).child("Cloning…"))
+                            })
+                    });
+                    div().flex().flex_col().gap(px(1.)).children(rows).into_any_element()
+                }
+            }
+        }
+    }
+
+    /// A repository's row was clicked: the wizard's first project, or Add
+    /// from GitHub's.
+    fn pick_repo(&mut self, server_id: String, full_name: String, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let wizard = matches!(self.step, Step::Project { .. })
+            && matches!(self.state.read(cx).server_dialog, Some(ServerDialog::Connect));
+        if wizard {
+            self.add_first_project(full_name, window, cx);
+        } else {
+            self.add_repo(server_id, full_name, cx);
+        }
     }
 
     /// One server's projects, each with its checkbox.
@@ -1030,8 +1105,61 @@ mod tests {
             "Offline: connection refused"
         );
         assert_eq!(
-            status_text(&server(ServerState::ProtocolMismatch, None, Some("2.0.0"))),
-            "This server runs Nodus 2.0.0. Update it in Settings → Servers."
+            status_text(&server(ServerState::ProtocolMismatch, None, Some("0.1.0"))),
+            "This server runs Nodus 0.1.0. Update it in Settings → Servers."
         );
+        // SRV-200: one newer than the app.
+        assert_eq!(
+            status_text(&server(ServerState::ProtocolMismatch, None, Some("999.0.0"))),
+            "This server runs a newer Nodus. Update the app."
+        );
+        assert_eq!(
+            status_text(&server(ServerState::Connected, None, Some("999.0.0"))),
+            "Connected · This server runs a newer Nodus. Update the app."
+        );
+    }
+
+    /// SRV-200
+    #[test]
+    fn offers_update_server_to_a_server_older_than_the_app() {
+        let older = server(ServerState::Connected, None, Some("0.1.0"));
+        let same = server(ServerState::Connected, None, Some(nodus_core::VERSION));
+        let newer = server(ServerState::ProtocolMismatch, None, Some("999.0.0"));
+        assert!(offers_update(&older, None));
+        assert!(!offers_update(&same, None));
+        assert!(!offers_update(&newer, None));
+        assert!(!offers_update(&server(ServerState::Connecting, None, None), None));
+        // Still shown while its update is under way, on the old version.
+        let restarting = ServerUpdateStatus::Restarting {
+            version: "1.2.0".into(),
+        };
+        assert!(offers_update(&same, Some(&restarting)));
+        assert!(updating(Some(&restarting)));
+        assert!(!updating(Some(&ServerUpdateStatus::Error { message: "x".into() })));
+        assert!(!updating(None));
+    }
+
+    #[test]
+    fn words_an_update_as_the_apps_updater_does() {
+        let downloading = ServerUpdateStatus::Downloading {
+            version: "1.2.0".into(),
+            percent: 42,
+        };
+        assert_eq!(update_text(&ServerUpdateStatus::Checking), "Checking for updates…");
+        assert_eq!(update_text(&downloading), "Downloading version 1.2.0… 42%");
+        assert_eq!(
+            update_text(&ServerUpdateStatus::Restarting {
+                version: "1.2.0".into()
+            }),
+            "Restarting on version 1.2.0…"
+        );
+        assert_eq!(
+            update_text(&ServerUpdateStatus::Latest {
+                version: "1.1.0".into()
+            }),
+            "It runs the newest release, Nodus 1.1.0."
+        );
+        assert_eq!(tile_update_label(None), "Update Server");
+        assert_eq!(tile_update_label(Some(&downloading)), "Updating… 42%");
     }
 }

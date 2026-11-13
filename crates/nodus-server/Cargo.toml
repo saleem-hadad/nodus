@@ -17,6 +17,7 @@ path = "src/main.rs"
 
 [dependencies]
 base64.workspace = true
+flate2.workspace = true
 futures-util.workspace = true
 getrandom.workspace = true
 http-body-util.workspace = true
@@ -41,8 +42,9 @@ uuid.workspace = true
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
 
-# GitHub's API (SRV-041, SRV-062), and the App's RS256 key. A server runs on
-# Linux; on Windows it builds, without the key, as the other crates' TLS does.
+# GitHub's API (SRV-041, SRV-062), the App's RS256 key, and the ed25519
+# signature on an update (SRV-200). A server runs on Linux; on Windows it
+# builds without them, as the other crates' TLS does.
 [target.'cfg(not(windows))'.dependencies]
 reqwest = { workspace = true, features = ["rustls-tls"] }
 ring.workspace = true

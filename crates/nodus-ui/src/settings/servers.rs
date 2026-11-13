@@ -75,8 +75,9 @@ pub struct ServerManager {
     clear_invite: bool,
     /// The pool of Claude accounts (SRV-105).
     accounts: Load<Vec<ClaudeAccount>>,
-    /// The `accounts-changed` count last asked after.
+    /// The `accounts-changed` and notice counts last asked after.
     accounts_seen: u64,
+    notices_seen: u64,
     account_label: Entity<InputState>,
     account_token: Entity<InputState>,
     /// The Add form is open, and a token is being tried.
@@ -135,6 +136,7 @@ impl ServerManager {
             clear_invite: false,
             accounts: Load::Loading,
             accounts_seen: 0,
+            notices_seen: 0,
             account_label,
             account_token,
             adding_account: false,
@@ -159,25 +161,47 @@ impl ServerManager {
             .cloned()
     }
 
-    /// Asks the server again whenever it comes (back) up, and for its
-    /// Claude accounts whenever they change (`accounts-changed`).
+    /// Asks the server again whenever it comes (back) up or sends a notice
+    /// (a device signed in, an account stopped working: SRV-042), and for
+    /// its Claude accounts and activity whenever they change
+    /// (`accounts-changed`).
     fn follow(&mut self, cx: &mut Context<'_, Self>) {
         let connected = self.server(cx).is_some_and(|s| s.state == ServerState::Connected);
-        let changed = self
-            .state
-            .read(cx)
-            .accounts_changed
-            .get(&self.server_id)
-            .copied()
-            .unwrap_or(0);
-        if connected && !self.asked_connected {
-            self.accounts_seen = changed;
-            self.reload(cx);
-        } else if connected && changed != self.accounts_seen {
-            self.accounts_seen = changed;
-            self.reload_accounts(cx);
+        let state = self.state.read(cx);
+        let now = Seen {
+            accounts: state.accounts_changed.get(&self.server_id).copied().unwrap_or(0),
+            notices: state.server_notices.get(&self.server_id).copied().unwrap_or(0),
+        };
+        let seen = Seen {
+            accounts: self.accounts_seen,
+            notices: self.notices_seen,
+        };
+        match refresh(self.asked_connected, connected, seen, now) {
+            Refresh::All => self.reload(cx),
+            Refresh::Accounts => {
+                self.reload_accounts(cx);
+                self.reload_audit(cx);
+            }
+            Refresh::Nothing => {}
+        }
+        if connected {
+            (self.accounts_seen, self.notices_seen) = (now.accounts, now.notices);
         }
         self.asked_connected = connected;
+    }
+
+    /// The activity alone.
+    fn reload_audit(&mut self, cx: &mut Context<'_, Self>) {
+        let nodus = self.state.read(cx).nodus.clone();
+        let id = self.server_id.clone();
+        cx.spawn(async move |this, cx| {
+            let audit = nodus.servers().audit(&id).await;
+            let _ = this.update(cx, |m, cx| {
+                m.audit = loaded(audit);
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     /// Members, devices, the audit and the server, each on its own.
@@ -358,6 +382,37 @@ impl ServerManager {
             });
         })
         .detach();
+    }
+}
+
+/// How many `accounts-changed` events and notices a server has sent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Seen {
+    accounts: u64,
+    notices: u64,
+}
+
+/// What Settings asks a server again.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Refresh {
+    Nothing,
+    /// Its Claude accounts and activity.
+    Accounts,
+    /// Members, devices, accounts, the server and its activity.
+    All,
+}
+
+/// What to ask again, from whether it was and is connected and what it has
+/// sent since last asked.
+fn refresh(was_connected: bool, connected: bool, seen: Seen, now: Seen) -> Refresh {
+    if !connected {
+        Refresh::Nothing
+    } else if !was_connected || now.notices != seen.notices {
+        Refresh::All
+    } else if now.accounts != seen.accounts {
+        Refresh::Accounts
+    } else {
+        Refresh::Nothing
     }
 }
 
@@ -890,6 +945,23 @@ fn describe(line: &AuditLine) -> String {
             someone(),
             detail("label").unwrap_or_default()
         ),
+        // SRV-200
+        "server.updated" => format!(
+            "{} updated the server from Nodus {} to {}",
+            someone(),
+            detail("from").unwrap_or_default(),
+            detail("to").unwrap_or_default()
+        ),
+        "server.up-to-date" => format!(
+            "{} checked for a server update: Nodus {} is the newest",
+            someone(),
+            detail("version").unwrap_or_default()
+        ),
+        "server.update-failed" => format!(
+            "{} couldn’t update the server: {}",
+            someone(),
+            detail("error").unwrap_or_default()
+        ),
         "account.failed" => format!(
             "{}’s Claude account stopped working",
             detail("label").unwrap_or_else(|| "A".into())
@@ -926,6 +998,22 @@ mod tests {
         }
     }
 
+    /// Settings → Servers asks again when a notice or an event says so.
+    #[test]
+    fn asks_again_when_the_server_says_something_changed() {
+        let seen = |accounts, notices| Seen { accounts, notices };
+        // Coming (back) up: everything.
+        assert_eq!(refresh(false, true, seen(0, 0), seen(0, 0)), Refresh::All);
+        assert_eq!(refresh(true, true, seen(1, 2), seen(1, 2)), Refresh::Nothing);
+        // A device signed in, or an account stopped working: everything.
+        assert_eq!(refresh(true, true, seen(1, 2), seen(1, 3)), Refresh::All);
+        assert_eq!(refresh(true, true, seen(1, 2), seen(2, 3)), Refresh::All);
+        // The pool changed: its accounts and the activity.
+        assert_eq!(refresh(true, true, seen(1, 2), seen(2, 2)), Refresh::Accounts);
+        // Away, nothing is asked.
+        assert_eq!(refresh(true, false, seen(1, 2), seen(5, 5)), Refresh::Nothing);
+    }
+
     #[test]
     fn says_what_happened_in_words() {
         let cases = [
@@ -954,7 +1042,28 @@ mod tests {
                 line("server.named", None, json!({ "name": "Box" })),
                 "The server was named Box",
             ),
-            (line("server.updated", None, json!({})), "server updated"),
+            (line("server.restarted", None, json!({})), "server restarted"),
+            // SRV-200
+            (
+                line(
+                    "server.updated",
+                    Some("octo"),
+                    json!({ "from": "1.0.12", "to": "1.1.0" }),
+                ),
+                "@octo updated the server from Nodus 1.0.12 to 1.1.0",
+            ),
+            (
+                line("server.up-to-date", Some("octo"), json!({ "version": "1.1.0" })),
+                "@octo checked for a server update: Nodus 1.1.0 is the newest",
+            ),
+            (
+                line(
+                    "server.update-failed",
+                    Some("octo"),
+                    json!({ "error": "The update’s signature doesn’t match Nodus’s signing key. Nothing was installed." }),
+                ),
+                "@octo couldn’t update the server: The update’s signature doesn’t match Nodus’s signing key. Nothing was installed.",
+            ),
             (
                 line("account.added", Some("octo"), json!({ "label": "Team Max" })),
                 "@octo added the Claude account Team Max",

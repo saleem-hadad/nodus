@@ -15,7 +15,8 @@ use serde_json::Value;
 
 use crate::{
     ActionRunResult, CaptureContext, CaptureShortcut, ClipboardOffer, MenuCommand, OpenCardRequest, Presence,
-    QueuedPrompt, ServerState, SessionStatus, SessionUsage, SummarizeProgress, TabAttachment, UpdateStatus, ViewEvent,
+    QueuedPrompt, ServerState, ServerUpdateStatus, SessionStatus, SessionUsage, SummarizeProgress, TabAttachment,
+    UpdateStatus, ViewEvent,
 };
 
 /// One event, named after its channel.
@@ -103,6 +104,14 @@ pub enum Event {
     /// It follows whoever typed last, so a viewer's terminal may be given a
     /// size it didn't ask for.
     PtySize { session_id: String, cols: f64, rows: f64 },
+    /// `ev:server-update`: how updating a server is going (SRV-200), told
+    /// to every member's app whoever pressed Update server. A server sends
+    /// it without `serverId`; the app names the server it came from.
+    ServerUpdate {
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        server_id: String,
+        status: ServerUpdateStatus,
+    },
 }
 
 /// `Partial<CaptureContext>`: the parts of the context that arrived late.
@@ -221,6 +230,16 @@ mod tests {
                     server_id: String::new(),
                 },
                 r#"{"ev":"accounts-changed","p":{}}"#,
+            ),
+            (
+                Event::ServerUpdate {
+                    server_id: String::new(),
+                    status: ServerUpdateStatus::Downloading {
+                        version: "1.1.0".into(),
+                        percent: 40,
+                    },
+                },
+                r#"{"ev":"server-update","p":{"status":{"state":"downloading","version":"1.1.0","percent":40}}}"#,
             ),
             (
                 Event::ServerStatus {

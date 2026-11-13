@@ -259,8 +259,8 @@ calls! {
     SetupStatus = "setup:status" {},
     /// `SetupStatus`: names the server, which is step 1. With a setup token too.
     SetupName = "setup:name" { name: String },
-    /// `SetupStatus`: a step after step 2 is finished or skipped. Only
-    /// `members` for now; the steps after it come with what they set up.
+    /// `SetupStatus`: a step after step 2 is finished or skipped:
+    /// `members`, `accounts` or `project`.
     SetupDone = "setup:done" { step: crate::SetupStep },
     /// `Member[]`, in the order they were added.
     MembersList = "members:list" {},
@@ -282,6 +282,13 @@ calls! {
     AuditList = "audit:list" {},
     /// `ServerInfo`.
     ServerInfo = "server:info" {},
+    /// `ServerUpdateStatus`, `latest` or `restarting`: the server updates
+    /// itself to the newest release, never an older one, and exits once
+    /// it has answered, for systemd to start the new version (SRV-200).
+    /// Its progress goes to every member as `server-update` events. The one
+    /// call an app makes whatever protocol the server speaks (SRV-027), on
+    /// a connection of its own, so it has to stay as it is.
+    ServerUpdate = "server:update" {},
     /// `Installation[]`: the App's installations, as GitHub says now. With
     /// a setup token too, since step 2 waits for one.
     GithubInstallations = "github:installations" {},
@@ -325,6 +332,7 @@ impl Request {
                 | Self::DevicesRevoke { .. }
                 | Self::AuditList {}
                 | Self::ServerInfo {}
+                | Self::ServerUpdate {}
                 | Self::GithubInstallations {}
                 | Self::GithubReplaceKey { .. }
                 | Self::GithubRepos {}

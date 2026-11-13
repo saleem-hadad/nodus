@@ -137,19 +137,32 @@ pub(crate) fn claim(data: &Path, code: &str, now: f64) -> Result<Claim, String> 
 /// Whether a setup token is good, used now: one claimed from the current
 /// code and used within the hour. Using it keeps it good another hour.
 pub(crate) fn use_token(data: &Path, token: &str, now: f64) -> Result<bool, String> {
+    check_token(data, token, now, true)
+}
+
+/// Whether a setup token is good, without using it: for a route that turns
+/// it down, which mustn't keep it alive (SRV-060).
+pub(crate) fn peek_token(data: &Path, token: &str, now: f64) -> Result<bool, String> {
+    check_token(data, token, now, false)
+}
+
+fn check_token(data: &Path, token: &str, now: f64, using: bool) -> Result<bool, String> {
     let hash = sha256_hex(token);
     with_file(data, |file| {
+        let before = file.tokens.len();
         file.tokens.retain(|kept| now - kept.last_used_at < TOKEN_IDLE_MS);
+        let expired = file.tokens.len() != before;
         match file
             .tokens
             .iter_mut()
             .find(|kept| crate::net::same_token(&kept.hash, &hash))
         {
-            Some(kept) => {
+            Some(kept) if using => {
                 kept.last_used_at = now;
                 (true, true)
             }
-            None => (true, false),
+            Some(_) => (expired, true),
+            None => (expired, false),
         }
     })
 }
@@ -248,6 +261,9 @@ mod tests {
         // Used, it lasts another hour from then.
         assert!(use_token(dir.path(), &token, NOW + TOKEN_IDLE_MS - 1.0).unwrap());
         assert!(use_token(dir.path(), &token, NOW + 2.0 * TOKEN_IDLE_MS - 2.0).unwrap());
+        // Looking at it doesn't keep it alive.
+        assert!(peek_token(dir.path(), &token, NOW + 3.0 * TOKEN_IDLE_MS - 3.0).unwrap());
+        assert!(!peek_token(dir.path(), &token, NOW + 3.0 * TOKEN_IDLE_MS - 1.0).unwrap());
         assert!(!use_token(dir.path(), &token, NOW + 3.0 * TOKEN_IDLE_MS).unwrap());
 
         let code = new_code(dir.path(), NOW).unwrap();

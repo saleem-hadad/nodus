@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use nodus_domain::{ServerInfo, ServerState};
+use nodus_domain::{Event, ServerInfo, ServerState, ServerUpdateStatus};
 use nodus_remote::wire::client::{self as http, Client, ConnectError};
 use nodus_remote::wire::{
     self, AuditLine, ClaudeAccount, Device, GithubApp, Hello, Installation, Member, Nonce, NonceRequest, Request,
@@ -503,6 +503,49 @@ impl ServersApi<'_> {
             Request::GithubReplaceKey { pem: pem.to_owned() },
         )
         .await
+    }
+
+    // ---- updating it (SRV-200)
+
+    /// `server:update` (SRV-200): the server installs the newest release,
+    /// never an older one, and restarts; `latest` when it runs that
+    /// already. Works on a server that speaks another protocol too, over a
+    /// connection of its own (SRV-027). How it goes reaches the window as
+    /// `server-update` events, its answer among them, and the server's
+    /// status shows it coming back.
+    pub async fn update(&self, server_id: &str) -> CommandResult<ServerUpdateStatus> {
+        const CHANNEL: &str = "server:update";
+        let remote = self
+            .nodus
+            .inner
+            .remotes
+            .get(server_id)
+            .ok_or_else(|| CommandError::new(CHANNEL, format!("Unknown server {server_id}")))?;
+        let events = self.nodus.inner.events.clone();
+        let server_id = server_id.to_owned();
+        self.nodus
+            .on_core(async move {
+                connected(&remote).await;
+                let answer = remote
+                    .update()
+                    .await
+                    .and_then(|value| {
+                        serde_json::from_value::<ServerUpdateStatus>(value).map_err(|err| {
+                            wire::CallError::new(CHANNEL, format!("The server's answer didn't fit: {err}"))
+                        })
+                    })
+                    .map_err(|err| CommandError::new(CHANNEL, err.message));
+                // The answer is the last word, whatever events went astray.
+                let status = match &answer {
+                    Ok(status) => status.clone(),
+                    Err(err) => ServerUpdateStatus::Error {
+                        message: err.message.clone(),
+                    },
+                };
+                let _ = events.send(Event::ServerUpdate { server_id, status });
+                answer
+            })
+            .await
     }
 
     // ---- its pool of Claude accounts (SRV-100…105)

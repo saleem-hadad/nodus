@@ -151,6 +151,7 @@ impl Fixture {
             .map(|(id, title)| SearchTarget {
                 session_id: (*id).into(),
                 title: (*title).into(),
+                folder: None,
             })
             .collect()
     }
@@ -242,6 +243,7 @@ async fn returns_title_only_matches_without_snippets() {
     let lone = SearchTarget {
         session_id: "00000000-0000-4000-8000-00000000000f".into(),
         title: "Tidy notes".into(),
+        folder: None,
     };
     let hits = f.transcripts.search(&f.repo, &[lone], "tidy").await;
     assert_eq!(
@@ -282,6 +284,51 @@ async fn cuts_long_text_down_to_a_line_around_the_match() {
         .map(|[s, e]| slice_utf16(text, *s as usize, *e as usize))
         .collect();
     assert_eq!(picked, ["needle"]);
+}
+
+/// SRV-125: a server card runs in a worktree of its own, so its transcript
+/// is under that folder's, not the project's, and paths show relative to it.
+#[tokio::test]
+async fn searches_a_cards_own_worktree() {
+    let f = Fixture::new();
+    let worktree = f._home.path().join("projects/shop/worktrees/fix-login");
+    fs::create_dir_all(&worktree).unwrap();
+    let worktree = worktree.to_string_lossy().into_owned();
+    let card = "00000000-0000-4000-8000-0000000000aa";
+    let file = worktree.clone() + &sep_path(&["", "src", "session.ts"]);
+    f.write_file(
+        &f.transcripts.transcript_dir(&worktree).join(format!("{card}.jsonl")),
+        &[
+            f.prompt("Rotate the session cookie on sign-in"),
+            f.tool("Write", json!({ "file_path": file, "content": "rotateCookie()" })),
+        ],
+    );
+    let target = |folder: Option<String>| SearchTarget {
+        session_id: card.into(),
+        title: "Rotate".into(),
+        folder,
+    };
+    // Looked for in the main checkout, it isn't there.
+    assert!(
+        f.transcripts
+            .search(&f.repo, &[target(None)], "cookie sign")
+            .await
+            .is_empty()
+    );
+    let hits = f
+        .transcripts
+        .search(
+            &f.repo,
+            &[target(Some(worktree)), Fixture::targets()[0].clone()],
+            "session",
+        )
+        .await;
+    let hit = hits.iter().find(|h| h.session_id == card).expect("the worktree's card");
+    assert!(hit.snippets[0].text.contains("session cookie"), "{:?}", hit.snippets);
+    let tool = hit.snippets.iter().find(|s| s.kind == SearchSnippetKind::Tool).unwrap();
+    assert_eq!(tool.text, sep_path(&["src", "session.ts"]));
+    // The project's own sessions are still found beside it.
+    assert!(ids(&hits).contains(&AUTH), "{:?}", ids(&hits));
 }
 
 #[tokio::test]

@@ -168,7 +168,7 @@ In Rust the frame becomes a `wry` webview embedded in the GPUI board (see Rust m
 - **VIEW-023** The injected block is the concatenation, with no separators: `<meta charset="utf-8">` + `<meta http-equiv="Content-Security-Policy" content="<VIEW_CSP>">` + `<meta name="viewport" content="width=device-width, initial-scale=1">` + `<style><THEME></style>` + `<script><BRIDGE with __BOOT__ replaced by scriptJson(boot)></script>`. The replacement is literal (no `$` pattern expansion) and only the first `__BOOT__`.
 - **VIEW-024** `scriptJson(value)` = `JSON.stringify(value) ?? 'null'` with every `<` replaced by `<`, U+2028 by ` `, U+2029 by ` ` (the six-character escapes). `scriptJson(undefined)` = `null`.
 - **VIEW-025** The CSP (`VIEW_CSP`, verbatim in Data & formats) allows inline scripts and styles only, images/media from `data:`/`blob:`, fonts from `data:`, and nothing else: no network, no frames, no workers, no form submission, no `<base>`. It contains no `http:`/`https:`.
-- **VIEW-026** The injected theme (Data & formats) defines `--nodus-*` colours for light and, under `prefers-color-scheme: dark`, dark; `html, body` get margin 0, background `var(--nodus-bg)`, colour `var(--nodus-text)`, `13px/1.45 var(--nodus-font)`, antialiased; links `var(--nodus-accent)`. All with `:where()` (zero specificity) so the page's CSS wins. The colour scheme follows the app's theme setting (System/Light/Dark), not only the OS.
+- **VIEW-026** The injected theme (Data & formats) defines `--nodus-*` colours for light and, under `prefers-color-scheme: dark`, dark; `html, body` get margin 0, background `var(--nodus-bg)`, colour `var(--nodus-text)`, `13px/1.45 var(--nodus-font)`, antialiased; links `var(--nodus-accent)`. All with `:where()` (zero specificity) so the page's CSS wins. The colour scheme follows the app's theme setting (System/Light/Dark), not only the OS. Since 1.0.15 (`crates/nodus-views/src/page/theme.css`) it is Nodus's design system for pages, so a page Claude writes looks and moves like the app: the app's tokens as variables (`--nodus-pressed`, `--selected`, `--border-strong`, `--accent-hover`, `--on-accent`, `--focus`, the statuses `--working`, `--waiting` and `--done`, `--radius`, and the motion of MOTION-036); buttons, inputs, selects, textareas, checkboxes, progress bars, tables, headings, paragraphs, code, `hr`, the focus ring, the selection and scrollbars drawn as the app draws them (controls 26px tall with 6px corners on `--nodus-surface`, `--nodus-hover` under the pointer, `--nodus-pressed` held; fields with a hairline that turns accent with a 3px focus ring); `nodus-primary` (accent-filled) and `nodus-ghost` buttons; `nodus-dot` with `is-working`, `is-waiting` and `is-done`, the board's status dot breathing and pulsing as CARD-012…CARD-014; and Claude's look (MOTION-037). Still all with `:where()`, so the page's CSS wins. 0.9.4's theme had the colours and the body only.
 
 ### Views: the frame
 
@@ -884,7 +884,7 @@ INJECTED = <meta charset="utf-8"><meta http-equiv="Content-Security-Policy" cont
 boot = {"viewId":"<id>","title":"<title>","startsSessions":true?,"data":…?,"state":…?,"results":{…}}
 ```
 
-`THEME`, verbatim (the text between the backticks of `const THEME`, including its leading and trailing newline):
+`THEME` as 0.9.4 had it, verbatim (the text between the backticks of `const THEME`, including its leading and trailing newline). Since 1.0.15 the theme is `crates/nodus-views/src/page/theme.css` (VIEW-026):
 
 ```css
 

@@ -398,17 +398,22 @@ impl Board {
             .filter(|n| {
                 n.kind != Some(SessionKind::Terminal) && !set(n.run_of.as_deref()) && !set(n.view_of.as_deref())
             })
-            .map(|n| SearchTarget {
-                session_id: n.session_id.clone(),
-                title: n
-                    .title
-                    .clone()
-                    .filter(|t| !t.is_empty())
-                    .or_else(|| {
-                        let folder = n.worktree().map_or_else(|| project.repo_path.clone(), |w| w.path);
-                        self.transcripts.session(&folder, &n.session_id).map(|f| f.meta.title)
-                    })
-                    .unwrap_or_default(),
+            .map(|n| {
+                // SRV-125: a server card's transcripts are in its worktree.
+                let folder = n.worktree().map(|w| w.path);
+                SearchTarget {
+                    session_id: n.session_id.clone(),
+                    title: n
+                        .title
+                        .clone()
+                        .filter(|t| !t.is_empty())
+                        .or_else(|| {
+                            let folder = folder.as_deref().unwrap_or(&project.repo_path);
+                            self.transcripts.session(folder, &n.session_id).map(|f| f.meta.title)
+                        })
+                        .unwrap_or_default(),
+                    folder,
+                }
             })
             .collect();
         Ok(self.transcripts.search(&project.repo_path, &targets, query).await)

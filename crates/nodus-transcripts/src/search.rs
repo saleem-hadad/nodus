@@ -273,19 +273,32 @@ impl SearchIndex {
         // SESS-180
         let normalized = js::collapse_spaces(js::trim(&query.to_lowercase()));
         let phrase = (terms.len() > 1).then_some(normalized.as_str());
-        // SESS-181
-        let mut roots = vec![repo_path.to_owned()];
-        let real = real_repo_path(repo_path);
-        if real != repo_path {
-            roots.push(real);
-        }
+        // SESS-181: paths show relative to the folder the session ran in.
+        let roots_of = |folder: &str| {
+            let mut roots = vec![folder.to_owned()];
+            let real = real_repo_path(folder);
+            if real != folder {
+                roots.push(real);
+            }
+            roots
+        };
+        let project_roots = roots_of(repo_path);
 
         let mut scored: Vec<(SessionSearchHit, f64, f64)> = Vec::new();
         for target in targets {
+            // SRV-125: a card in a worktree of its own keeps its transcripts there.
+            let folder = target.folder.as_deref().unwrap_or(repo_path);
+            let worktree_roots;
+            let roots = if folder == repo_path {
+                &project_roots
+            } else {
+                worktree_roots = roots_of(folder);
+                &worktree_roots
+            };
             // SESS-182
-            let mut files = vec![(transcript_path(home, repo_path, &target.session_id), false)];
+            let mut files = vec![(transcript_path(home, folder, &target.session_id), false)];
             files.extend(
-                list_agent_files(home, repo_path, &target.session_id)
+                list_agent_files(home, folder, &target.session_id)
                     .into_iter()
                     .map(|a| (a.file, true)),
             );
@@ -293,7 +306,7 @@ impl SearchIndex {
             if files.iter().any(|(file, _)| self.stale(file)) {
                 tokio::task::yield_now().await;
             }
-            if let Some(hit) = self.score(target, &files, &terms, phrase, &roots) {
+            if let Some(hit) = self.score(target, &files, &terms, phrase, roots) {
                 scored.push(hit);
             }
         }
@@ -436,11 +449,14 @@ fn index_file(index: &mut HashMap<PathBuf, FileIndex>, file: &Path, agent: bool,
     idx.mtime_ms = mtime;
 }
 
-/// A session to search: its id, and the title it goes by on the board.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A session to search: its id, the title it goes by on the board, and
+/// the folder it runs in when that isn't the project's: a server card's
+/// own worktree (SRV-125), where its transcripts are.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SearchTarget {
     pub session_id: String,
     pub title: String,
+    pub folder: Option<String>,
 }
 
 /// The part of a match's text worth showing: a line around the first place

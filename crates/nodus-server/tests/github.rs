@@ -28,7 +28,8 @@ use hyper::body::{Bytes, Incoming};
 use hyper::{Request as HttpRequest, Response};
 use hyper_util::rt::TokioIo;
 use nodus_domain::{
-    BoardNote, BoardSnapshot, CreatedBy, FolderColor, GitStatus, Project, ProjectGithub, SessionCard, Worktree,
+    BoardNote, BoardSnapshot, CreatedBy, FolderColor, GitStatus, Project, ProjectGithub, SessionCard, SessionSearchHit,
+    Worktree,
 };
 use nodus_wire::client::{Client, Events};
 use nodus_wire::{GithubRepo, Member, Request};
@@ -884,6 +885,36 @@ async fn two_members_cards_get_their_own_worktrees_and_push_as_their_starters() 
     let head = |dir: &str| plain_git(Path::new(dir), &["rev-parse", "--abbrev-ref", "HEAD"]);
     assert_eq!(head(&wa.path).trim(), wa.branch);
     assert_eq!(head(&wb.path).trim(), wb.branch);
+    // ⌘K search reads each card's transcript where it runs: in its own
+    // worktree, not the main checkout (SRV-125).
+    let folder: String = wa
+        .path
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    let transcripts = world.root().join("run/.claude/projects").join(folder);
+    std::fs::create_dir_all(&transcripts).unwrap();
+    std::fs::write(
+        transcripts.join(format!("{id_a}.jsonl")),
+        format!(
+            "{{\"type\":\"user\",\"sessionId\":\"{id_a}\",\"timestamp\":\"2026-11-13T10:00:00.000Z\",\"message\":{{\"role\":\"user\",\"content\":\"Wire up the zebracorn widget\"}}}}\n"
+        ),
+    )
+    .unwrap();
+    let hits: Vec<SessionSearchHit> = call(
+        &bob,
+        Request::SessionSearch {
+            project_id: project.id.clone(),
+            query: "zebracorn".into(),
+        },
+    )
+    .await;
+    assert_eq!(
+        hits.iter().map(|h| h.session_id.as_str()).collect::<Vec<_>>(),
+        [id_a.as_str()]
+    );
+    assert!(hits[0].snippets[0].text.contains("zebracorn widget"), "{hits:?}");
+
     // SRV-127: a preview port each.
     let (pa, pb) = (a.node.preview_port().unwrap(), b.node.preview_port().unwrap());
     assert!((8100..=8999).contains(&pa) && (8100..=8999).contains(&pb) && pa != pb);

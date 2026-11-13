@@ -154,6 +154,35 @@ impl SessionsApi<'_> {
             .await
     }
 
+    /// Whether a session runs on a server, so files dropped on its terminal
+    /// go there first (SRV-163).
+    pub fn on_server(&self, session_id: &str) -> bool {
+        self.nodus.route_session(session_id).is_some()
+    }
+
+    /// Files dropped on a server session's terminal, uploaded to its server:
+    /// their paths there, in order, to type in place of the local ones
+    /// (SRV-163). A folder, or a file that can't be read, is left out; a
+    /// local session's paths come back as they are.
+    pub async fn upload_paths(&self, session_id: &str, paths: &[std::path::PathBuf]) -> CommandResult<Vec<String>> {
+        const CHANNEL: &str = "files:upload";
+        let Some(route) = self.nodus.route_session(session_id) else {
+            return Ok(paths.iter().map(|p| p.to_string_lossy().into_owned()).collect());
+        };
+        let mut uploaded = Vec::new();
+        for path in paths {
+            let Ok(bytes) = tokio::fs::read(path).await else {
+                continue;
+            };
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            uploaded.push(route.upload(CHANNEL, bytes, &name).await?.path);
+        }
+        Ok(uploaded)
+    }
+
     /// `session:resize` (HOST-224, SESS-147), fire and forget: ignored unless
     /// live and both are finite; floored, at least 20 × 5.
     pub fn resize(&self, session_id: &str, cols: f64, rows: f64) {

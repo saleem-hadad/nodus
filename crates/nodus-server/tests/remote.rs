@@ -552,3 +552,106 @@ async fn a_server_project_opens_and_runs_like_a_local_one() {
     app.shutdown();
     server.stop();
 }
+
+/// SRV-163: a server board's pictures, its views' pages and the files
+/// dropped on its terminals go through its server, never a local path.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_server_projects_files_go_through_its_server() {
+    let world = World::new();
+    let server = world.serve();
+    let bare = world.bare_repo("shop");
+    world.add_project(&format!("file://{}", bare.display()));
+    let app = world.app().await;
+    let mut heard = Heard::new(app.subscribe());
+    let added = within(app.servers().add(&world.url(), TOKEN)).await.unwrap();
+    heard.server_went(&added.id, ServerState::Connected, WAIT).await;
+    let theirs = within(app.servers().projects(&added.id)).await.unwrap();
+    let project = within(app.servers().link(&added.id, &theirs[0].id)).await.unwrap();
+
+    // A picture goes up to the server, under the name it picks, and is
+    // kept here, so it isn't fetched back.
+    let name = within(app.board().save_image(&project.id, b"\x89PNG one".to_vec(), "PNG"))
+        .await
+        .unwrap();
+    assert!(name.ends_with(".png"), "{name}");
+    let uploads = world.data().join("uploads");
+    assert_eq!(std::fs::read(uploads.join(&name)).unwrap(), b"\x89PNG one");
+    let here = app.board().image_path(&project.id, &name).unwrap();
+    assert!(
+        here.starts_with(world.root().join("app/server-files")),
+        "{}",
+        here.display()
+    );
+    assert_eq!(std::fs::read(&here).unwrap(), b"\x89PNG one");
+    assert!(!world.root().join("app/board-images").exists());
+
+    // One only the server has (a session's board tools put it there) is
+    // fetched once asked for, and the board changes when it's in.
+    let theirs_only = "6f1c2d3e-4a5b-4c6d-8e7f-901a2b3c4d5e.png";
+    std::fs::create_dir_all(world.data().join("board-images")).unwrap();
+    std::fs::write(world.data().join("board-images").join(theirs_only), b"\x89PNG two").unwrap();
+    assert_eq!(app.board().image_path(&project.id, theirs_only), None);
+    heard
+        .until(
+            WAIT,
+            |e| matches!(e, Event::BoardChanged { project_id } if *project_id == project.id),
+        )
+        .await;
+    let fetched = app.board().image_path(&project.id, theirs_only).unwrap();
+    assert_eq!(std::fs::read(fetched).unwrap(), b"\x89PNG two");
+
+    // A view's page comes from the server, not the local core, and is
+    // shown as last seen while the server is away.
+    let view = within(app.views().create(
+        &project.id,
+        &serde_json::from_value(json!({ "description": "orders today", "x": 0, "y": 0 })).unwrap(),
+    ))
+    .await
+    .unwrap();
+    let page_dir = world.data().join("views").join(&view.id);
+    std::fs::create_dir_all(&page_dir).unwrap();
+    std::fs::write(page_dir.join("index.html"), "<h1>From the server</h1>").unwrap();
+    within(app.board().load(&project.id)).await.unwrap();
+    let url = format!("nodus-view://{}/", view.id);
+    let serve = |app: &Nodus| {
+        let (app, url) = (app.clone(), url.clone());
+        tokio::task::spawn_blocking(move || app.views().serve_page(&url))
+    };
+    let page = within(serve(&app)).await.unwrap();
+    assert_eq!(page.status, 200);
+    assert!(page.body.contains("From the server"), "{}", page.body);
+    assert!(page.header("Content-Security-Policy").is_some());
+    assert!(!world.root().join("app/views").join(&view.id).exists());
+
+    // Files dropped on a server terminal are uploaded; their server paths
+    // are what's typed.
+    let opts: CreateSessionOptions = serde_json::from_value(json!({ "x": 0, "y": 0, "name": "Drop" })).unwrap();
+    let card = within(app.sessions().create(&project.id, &opts)).await.unwrap();
+    let id = card.node.session_id;
+    assert!(app.sessions().on_server(&id));
+    let dropped = world.root().join("apphome/notes.txt");
+    std::fs::write(&dropped, "local notes").unwrap();
+    let paths = within(
+        app.sessions()
+            .upload_paths(&id, &[dropped.clone(), world.root().join("apphome")]),
+    )
+    .await
+    .unwrap();
+    assert_eq!(paths.len(), 1, "a folder is left out: {paths:?}");
+    assert!(
+        paths[0].starts_with(&uploads.to_string_lossy().into_owned()),
+        "{paths:?}"
+    );
+    assert!(paths[0].ends_with(".txt"));
+    assert_eq!(std::fs::read_to_string(&paths[0]).unwrap(), "local notes");
+
+    server.stop();
+    heard.server_went(&added.id, ServerState::Offline, WAIT).await;
+    let away = within(serve(&app)).await.unwrap();
+    assert_eq!((away.status, away.body.contains("From the server")), (200, true));
+    let err = within(app.board().save_image(&project.id, b"x".to_vec(), "png"))
+        .await
+        .unwrap_err();
+    assert_eq!(err.message, nodus_remote::OFFLINE);
+    app.shutdown();
+}

@@ -272,17 +272,34 @@ impl BoardApi<'_> {
         images_dir(&self.nodus.inner.user_data)
     }
 
-    /// A picture shape's file, by its name; none for a name that isn't one.
-    pub fn image_path(&self, name: &str) -> Option<PathBuf> {
-        nodus_board::shapes::image_name_ok(name).then(|| self.images_dir().join(name))
+    /// A picture shape's file on `project_id`'s board, by its name; none for
+    /// a name that isn't one. A server board's pictures are its server's:
+    /// each is kept here once fetched, and until it is, this is none, its
+    /// fetch starts, and the board changes when it's in (SRV-163).
+    pub fn image_path(&self, project_id: &str, name: &str) -> Option<PathBuf> {
+        if !nodus_board::shapes::image_name_ok(name) {
+            return None;
+        }
+        match self.nodus.route_project(project_id) {
+            Some(route) => self.nodus.server_file(route.server_id(), project_id, name),
+            None => Some(self.images_dir().join(name)),
+        }
     }
 
     /// `board:save-image`: keeps a picture's bytes under a new name, with
     /// the extension of its type (`png`, `jpg`, `gif`, `webp`…), and returns
-    /// the name a picture shape holds.
-    pub async fn save_image(&self, bytes: Vec<u8>, ext: &str) -> CommandResult<String> {
-        let dir = self.images_dir();
+    /// the name a picture shape holds. A server board's picture is uploaded
+    /// to its server, which picks the name, and kept here too (SRV-163).
+    pub async fn save_image(&self, project_id: &str, bytes: Vec<u8>, ext: &str) -> CommandResult<String> {
         let ext = clean_ext(ext);
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let upload = route
+                .upload("board:save-image", bytes.clone(), &format!("picture.{ext}"))
+                .await?;
+            self.nodus.keep_server_file(route.server_id(), &upload.id, bytes).await;
+            return Ok(upload.id);
+        }
+        let dir = self.images_dir();
         self.nodus
             .on_core(async move {
                 let name = format!("{}.{ext}", uuid::Uuid::new_v4());
@@ -294,10 +311,10 @@ impl BoardApi<'_> {
     }
 
     /// `board:import-image`: copies a picture file in, as `save_image` keeps bytes.
-    pub async fn import_image(&self, file: &Path) -> CommandResult<String> {
+    pub async fn import_image(&self, project_id: &str, file: &Path) -> CommandResult<String> {
         let bytes = tokio::fs::read(file).await.on("board:import-image")?;
         let ext = file.extension().and_then(|e| e.to_str()).unwrap_or("png").to_owned();
-        self.save_image(bytes, &ext).await
+        self.save_image(project_id, bytes, &ext).await
     }
 }
 

@@ -576,6 +576,32 @@ impl TerminalHost {
         let _ = window;
     }
 
+    /// TERM-112: files dropped on a server session's terminal go to its
+    /// server first; their paths there are typed as dropped paths are.
+    fn upload_dropped(&mut self, nodus: nodus_core::Nodus, paths: Vec<std::path::PathBuf>, cx: &mut Context<'_, Self>) {
+        let session = self.session_id.to_string();
+        let rt = super::store::core_runtime(cx);
+        let uploading = rt.spawn(async move { nodus.sessions().upload_paths(&session, &paths).await });
+        cx.spawn(async move |this, cx| {
+            let uploaded = match uploading.await {
+                Ok(Ok(uploaded)) => uploaded,
+                Ok(Err(err)) => {
+                    tracing::warn!("[remote] dropped files not uploaded: {}", err.message);
+                    return;
+                }
+                Err(_) => return,
+            };
+            if uploaded.is_empty() {
+                return;
+            }
+            let _ = this.update(cx, |this, cx| {
+                this.registry.drop_paths(&this.session_id, &uploaded);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     /// Pastes the clipboard's plain text; none (an image) still pastes the
     /// empty brackets Claude Code reacts to (TERM-035, TERM-044).
     fn paste_clipboard(&mut self, cx: &mut Context<'_, Self>) {
@@ -1239,8 +1265,15 @@ impl Render for TerminalHost {
             }))
             // TERM-032: files dropped type their quoted paths; TERM-034: anything else is ignored.
             .on_drop(cx.listener(|this, paths: &ExternalPaths, window, cx| {
-                let paths: Vec<String> = paths.paths().iter().map(|p| p.to_string_lossy().into_owned()).collect();
-                this.registry.drop_paths(&this.session_id, &paths);
+                let nodus = this.terminals.read(cx).nodus.clone();
+                if nodus.sessions().on_server(&this.session_id) {
+                    // TERM-112: a server session gets the files uploaded,
+                    // and their paths on the server (SRV-163).
+                    this.upload_dropped(nodus, paths.paths().to_vec(), cx);
+                } else {
+                    let paths: Vec<String> = paths.paths().iter().map(|p| p.to_string_lossy().into_owned()).collect();
+                    this.registry.drop_paths(&this.session_id, &paths);
+                }
                 window.focus(&this.focus, cx);
                 cx.notify();
             }))

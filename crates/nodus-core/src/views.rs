@@ -190,8 +190,14 @@ impl ViewsApi<'_> {
 
     /// The page a view's frame loads from `nodus-view://<id>/` (or WebView2's
     /// `http(s)://nodus-view.<id>/`): status, headers and body, for the
-    /// webview's custom protocol (VIEW-018…021).
+    /// webview's custom protocol (VIEW-018…021). A view on a server board
+    /// is that server's page, never the local core's (SRV-163).
     pub fn serve_page(&self, url: &str) -> PageResponse {
+        if let Some(view_id) = nodus_views::view_id_from_url(url)
+            && let Some(server_id) = self.nodus.view_server(view_id)
+        {
+            return self.nodus.server_page(&server_id, view_id);
+        }
         self.nodus.inner.views.serve_page(url)
     }
 }

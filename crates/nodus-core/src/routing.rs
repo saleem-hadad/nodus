@@ -14,7 +14,7 @@
 use std::sync::Arc;
 
 use nodus_domain::{BoardSnapshot, CreateSessionOptions, NodePatch, Project, ProjectPatch, SessionCard, Viewport};
-use nodus_remote::{DISCONNECTED, OFFLINE, Remote, Request, TIMED_OUT};
+use nodus_remote::{DISCONNECTED, OFFLINE, Remote, Request, TIMED_OUT, Upload};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
@@ -79,6 +79,20 @@ impl Route {
         };
         self.nodus
             .on_core(async move { remote.call_as::<T>(&request).await })
+            .await
+            .map_err(|err| CommandError::new(channel, err.message))
+    }
+
+    /// `PUT /api/uploads` on the server (SRV-163): `bytes` kept there under
+    /// a name it picks. Fails on `channel` with `Not connected to the
+    /// server`, or why the server refused it.
+    pub(crate) async fn upload(&self, channel: &'static str, bytes: Vec<u8>, name: &str) -> CommandResult<Upload> {
+        let Some(remote) = self.remote.clone() else {
+            return Err(CommandError::new(channel, OFFLINE));
+        };
+        let name = name.to_owned();
+        self.nodus
+            .on_core(async move { remote.upload(&bytes, &name).await })
             .await
             .map_err(|err| CommandError::new(channel, err.message))
     }

@@ -26,8 +26,8 @@ use tokio::runtime::Handle;
 use tokio::sync::{mpsc, watch};
 use tokio::task::AbortHandle;
 
-pub use nodus_wire::client::DISCONNECTED;
-pub use nodus_wire::{CallError, Hello, NOT_AVAILABLE, PROTOCOL, Request};
+pub use nodus_wire::client::{DISCONNECTED, FileBody};
+pub use nodus_wire::{CallError, Hello, MAX_UPLOAD, NOT_AVAILABLE, PROTOCOL, Request, Upload};
 
 /// What a call fails with while the server isn't connected.
 pub const OFFLINE: &str = "Not connected to the server";
@@ -37,6 +37,14 @@ pub const TIMED_OUT: &str = "The server didn't answer in time";
 
 /// What a connection the server turned the token down for says.
 pub const TOKEN_REFUSED: &str = "The server turned down this device's token";
+
+/// What an upload over [`MAX_UPLOAD`] fails with, before anything is sent
+/// (SRV-163).
+pub const TOO_BIG: &str = "Files over 50 MB can’t go to a server";
+
+/// How long an upload may take, and a download.
+const UPLOAD_TIMEOUT: Duration = Duration::from_secs(120);
+const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// How long reaching the server may take: its hello, then the WebSocket.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -233,6 +241,41 @@ impl Remote {
             }
         });
         true
+    }
+
+    /// `PUT /api/uploads` (SRV-163): keeps `bytes` on the server under a
+    /// name it picks, `name` only a label. Fails with [`OFFLINE`] while it
+    /// isn't connected and [`TOO_BIG`] over 50 MB, before sending anything.
+    pub async fn upload(&self, bytes: &[u8], name: &str) -> Result<Upload, CallError> {
+        const CHANNEL: &str = "files:upload";
+        if bytes.len() as u64 > MAX_UPLOAD {
+            return Err(CallError::new(CHANNEL, TOO_BIG));
+        }
+        if !self.is_connected() {
+            return Err(CallError::new(CHANNEL, OFFLINE));
+        }
+        let sent = nodus_wire::client::upload(&self.shared.url, &self.shared.token, name, bytes);
+        match tokio::time::timeout(UPLOAD_TIMEOUT, sent).await {
+            Ok(Ok(upload)) => Ok(upload),
+            Ok(Err(err)) => Err(CallError::new(CHANNEL, err.to_string())),
+            Err(_) => Err(CallError::new(CHANNEL, TIMED_OUT)),
+        }
+    }
+
+    /// `GET /api/files/<id>` (SRV-163): an upload, a board picture or a
+    /// view's page, with the server's status and headers. Fails with
+    /// [`OFFLINE`] while it isn't connected.
+    pub async fn download(&self, id: &str) -> Result<FileBody, CallError> {
+        const CHANNEL: &str = "files:download";
+        if !self.is_connected() {
+            return Err(CallError::new(CHANNEL, OFFLINE));
+        }
+        let asked = nodus_wire::client::download(&self.shared.url, &self.shared.token, id);
+        match tokio::time::timeout(DOWNLOAD_TIMEOUT, asked).await {
+            Ok(Ok(file)) => Ok(file),
+            Ok(Err(err)) => Err(CallError::new(CHANNEL, err.to_string())),
+            Err(_) => Err(CallError::new(CHANNEL, TIMED_OUT)),
+        }
     }
 
     /// Gets these projects' events from now on, and no others' (SRV-026),

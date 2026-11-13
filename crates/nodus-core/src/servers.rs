@@ -4,7 +4,7 @@
 //! and remembers what routing needs: which server each session is on, and
 //! each server board's last snapshot.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
@@ -14,6 +14,7 @@ use nodus_domain::{BoardSnapshot, Event, Project, ProjectStats, ServerInfo, Serv
 use nodus_platform::secrets::{decode_base64, encode_base64};
 use nodus_remote::{Remote, RemoteEvent, RemoteEvents, Request};
 use nodus_store::ServerRecord;
+use nodus_views::PageResponse;
 use serde_json::Map;
 
 use crate::nodus::{Inner, lock};
@@ -31,6 +32,23 @@ const CANNOT_SAVE_TOKEN: &str = if cfg!(target_os = "macos") {
 } else {
     "Encrypted storage isn’t available, so the token can’t be saved."
 };
+
+/// How long a view's frame waits for its page from the server.
+const PAGE_WAIT: Duration = Duration::from_secs(3);
+
+/// How long a file that couldn't be fetched waits before it's tried again.
+const FETCH_RETRY: Duration = Duration::from_secs(10);
+
+/// What a server view's frame shows when its page can't be had.
+const PAGE_AWAY: &str = "The server can’t be reached.";
+
+/// The headers a view's page keeps from its server (VIEW-020).
+const PAGE_HEADERS: [&str; 4] = [
+    "Content-Type",
+    "Content-Security-Policy",
+    "Cache-Control",
+    "X-Content-Type-Options",
+];
 
 /// What a server whose saved token won't open says.
 const TOKEN_UNREADABLE: &str = "The saved token can’t be read on this device. Add the server again.";
@@ -251,6 +269,12 @@ pub(crate) struct Remotes {
     boards: Mutex<HashMap<String, BoardSnapshot>>,
     /// Where those snapshots are kept between runs.
     cache: PathBuf,
+    /// Where servers' files are kept once fetched: `server-files/<server>/<id>`.
+    files: PathBuf,
+    /// Files being fetched, or that failed a moment ago, as `<server>/<id>`.
+    fetching: Mutex<HashSet<String>>,
+    /// Each server view's last page, for while its server can't be reached.
+    pages: Mutex<HashMap<String, PageResponse>>,
 }
 
 impl Remotes {
@@ -261,6 +285,9 @@ impl Remotes {
             sessions: Mutex::default(),
             boards: Mutex::default(),
             cache: user_data.join("server-boards"),
+            files: user_data.join("server-files"),
+            fetching: Mutex::default(),
+            pages: Mutex::default(),
         }
     }
 
@@ -358,7 +385,31 @@ impl Remotes {
             return Some(snapshot.clone());
         }
         let text = std::fs::read_to_string(self.cache_file(project_id)?).ok()?;
-        nodus_domain::json::from_str(&text).ok()
+        let snapshot: BoardSnapshot = nodus_domain::json::from_str(&text).ok()?;
+        lock(&self.boards).insert(project_id.to_owned(), snapshot.clone());
+        Some(snapshot)
+    }
+
+    /// The project of the server board a view is on, from the snapshots
+    /// loaded this run.
+    fn view_project(&self, view_id: &str) -> Option<String> {
+        lock(&self.boards)
+            .iter()
+            .find(|(_, board)| board.views.iter().any(|v| v.id == view_id))
+            .map(|(project_id, _)| project_id.clone())
+    }
+
+    /// Where a server's file is kept here; none for an id that isn't safe
+    /// as a file name.
+    fn file(&self, server_id: &str, id: &str) -> Option<PathBuf> {
+        let safe = |s: &str| {
+            !s.is_empty()
+                && s.len() <= 128
+                && !s.starts_with('.')
+                && s.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        };
+        (safe(server_id) && safe(id)).then(|| self.files.join(server_id).join(id))
     }
 
     /// Forgets unlinked projects' snapshots and sessions.
@@ -463,6 +514,96 @@ impl Nodus {
         }
     }
 
+    /// A server board's picture kept here (SRV-163): its file once fetched;
+    /// until then none, and one fetch starts, after which the board changes.
+    pub(crate) fn server_file(&self, server_id: &str, project_id: &str, id: &str) -> Option<PathBuf> {
+        let remotes = &self.inner.remotes;
+        let file = remotes.file(server_id, id)?;
+        if file.exists() {
+            return Some(file);
+        }
+        let key = format!("{server_id}/{id}");
+        let remote = remotes.get(server_id).filter(|r| r.is_connected())?;
+        if !lock(&remotes.fetching).insert(key.clone()) {
+            return None;
+        }
+        let core = Arc::downgrade(&self.inner);
+        let (id, project_id) = (id.to_owned(), project_id.to_owned());
+        self.inner.runtime.spawn(async move {
+            let fetched = remote.download(&id).await;
+            let Some(core) = core.upgrade() else { return };
+            let kept = match fetched {
+                Ok(body) if body.status == 200 => write_file(&file, &body.body).await.is_ok(),
+                _ => false,
+            };
+            if kept {
+                lock(&core.remotes.fetching).remove(&key);
+                let _ = core.events.send(Event::BoardChanged { project_id });
+            } else {
+                // Not again at once: the next draw would ask again.
+                tokio::time::sleep(FETCH_RETRY).await;
+                lock(&core.remotes.fetching).remove(&key);
+            }
+        });
+        None
+    }
+
+    /// Keeps a file just uploaded to a server, so it isn't fetched back.
+    pub(crate) async fn keep_server_file(&self, server_id: &str, id: &str, bytes: Vec<u8>) {
+        if let Some(file) = self.inner.remotes.file(server_id, id)
+            && let Err(err) = write_file(&file, &bytes).await
+        {
+            tracing::warn!("[remote] couldn't keep {}: {err}", file.display());
+        }
+    }
+
+    /// The server a view is on, for a view on a server board this app has
+    /// loaded; none for a local view.
+    pub(crate) fn view_server(&self, view_id: &str) -> Option<String> {
+        let project_id = self.inner.remotes.view_project(view_id)?;
+        self.inner
+            .store
+            .read(|state| state.project_server(&project_id).map(str::to_owned))
+    }
+
+    /// A server view's page, from its server and nowhere else (SRV-163):
+    /// asked for with `GET /api/files/<viewId>`, waiting at most
+    /// [`PAGE_WAIT`] (the frame's request waits on it). While the server
+    /// can't be reached, the last page it gave, else a 503 that says so.
+    pub(crate) fn server_page(&self, server_id: &str, view_id: &str) -> PageResponse {
+        let (sent, answer) = std::sync::mpsc::channel();
+        let remote = self.inner.remotes.get(server_id);
+        let id = view_id.to_owned();
+        self.inner.runtime.spawn(async move {
+            let page = match remote {
+                Some(remote) => remote.download(&id).await.ok(),
+                None => None,
+            };
+            let _ = sent.send(page);
+        });
+        let fetched = answer.recv_timeout(PAGE_WAIT).ok().flatten();
+        let pages = &self.inner.remotes.pages;
+        match fetched.filter(|body| body.status == 200) {
+            Some(body) => {
+                let page = PageResponse {
+                    status: body.status,
+                    headers: PAGE_HEADERS
+                        .iter()
+                        .filter_map(|&name| body.header(name).map(|value| (name, value.to_owned())))
+                        .collect(),
+                    body: String::from_utf8_lossy(&body.body).into_owned(),
+                };
+                lock(pages).insert(view_id.to_owned(), page.clone());
+                page
+            }
+            None => lock(pages).get(view_id).cloned().unwrap_or_else(|| PageResponse {
+                status: 503,
+                headers: vec![("Content-Type", "text/plain;charset=UTF-8".to_owned())],
+                body: PAGE_AWAY.to_owned(),
+            }),
+        }
+    }
+
     /// Linked projects get their server's name, colour and actions, from
     /// every connected server that has any, for `projects:list`.
     pub(crate) async fn refresh_linked_projects(&self) {
@@ -513,6 +654,16 @@ impl Nodus {
         }
         stats
     }
+}
+
+/// Writes a file whole, through a temporary name, making its folder first.
+async fn write_file(file: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    if let Some(dir) = file.parent() {
+        tokio::fs::create_dir_all(dir).await?;
+    }
+    let partial = file.with_extension("part");
+    tokio::fs::write(&partial, bytes).await?;
+    tokio::fs::rename(&partial, file).await
 }
 
 /// Passes a server's events on to the core's subscribers, as if the core had

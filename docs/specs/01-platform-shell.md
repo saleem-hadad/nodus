@@ -343,6 +343,7 @@ It owns the native application menu on macOS, and the same menu as a popup from 
 
 - **PLAT-115** The only secret is the xAI key for voice prompts. It is stored as `state.voiceKey`: the standard base64 (with padding) of Electron `safeStorage.encryptString(key.trim())`. It is never sent to the UI. The save, forget and source logic belongs to 05.
   - After 1.0.12, servers' device tokens are sealed the same way, in `state.servers[].token`. Adding a server when encryption isn't available fails with `The Keychain isn’t available, so the token can’t be saved.` (Windows: `Encrypted storage isn’t available, …`).
+  - After 1.0.12, an app started with `NODUS_AUTOMATION` (the test driver, D11) seals with a fixed password of its own in the macOS format instead of the Keychain's, on every platform, so a driven app never shows the Keychain's prompt or touches the person's own item.
 - **PLAT-116** macOS ciphertext = ASCII `v10` + AES-128-CBC(PKCS#7) of the UTF-8 plaintext.
   - Key: PBKDF2-HMAC-SHA1(password = the Keychain password **as its UTF-8 string bytes**, salt = `saltysalt`, iterations = 1003, length = 16 bytes).
   - IV: 16 × 0x20 (space).

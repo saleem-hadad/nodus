@@ -9,9 +9,9 @@ use std::sync::{Arc, Mutex, PoisonError};
 use nodus_core::{EnvSource, HostMode, Nodus, NodusConfig, RunnerSource, SafeStorage};
 use nodus_host::Logger;
 use nodus_updater::{BoxFuture, HttpResponse, Platform, RunOutput, System};
-use nodus_wire::{Hello, PROTOCOL};
 use tokio::net::TcpListener;
 
+use crate::auth::Auth;
 use crate::data::{self, ServerEnv};
 use crate::http;
 use crate::net::{self, Hosts, Tailscale};
@@ -20,8 +20,9 @@ use crate::net::{self, Hosts, Tailscale};
 pub(crate) struct ServeOptions {
     /// `--bind`: another address to listen on (SRV-020).
     pub bind: Option<String>,
-    /// `--dev-token`: the token every connection carries. A random one,
-    /// printed, when none is given. Until people sign in (slice 3).
+    /// `--dev-token`: a token that gets in as no member, for development and
+    /// tests only. Refused unless the server listens on loopback: anywhere
+    /// else, people sign in with GitHub (SRV-041).
     pub dev_token: Option<String>,
     /// `--run-home`: the sessions' home, where claude keeps transcripts.
     pub run_home: Option<PathBuf>,
@@ -33,11 +34,11 @@ pub(crate) struct ServeOptions {
 /// What every connection shares.
 pub(crate) struct Server {
     pub nodus: Nodus,
-    pub token: String,
-    pub hosts: Hosts,
-    pub hello: Hello,
-    /// The data folder: uploads are kept in it (SRV-163).
+    /// The data folder (SRV-003): uploads are kept in it (SRV-163).
     pub data: PathBuf,
+    /// Members, devices, tokens, the GitHub App and the audit log.
+    pub auth: Auth,
+    pub hosts: Hosts,
     /// Each session's project, once looked up: a session never moves.
     sessions: Mutex<HashMap<String, String>>,
 }
@@ -86,30 +87,29 @@ async fn run(options: ServeOptions, log: &Logger) -> Result<(), String> {
     let env = data::server_env(&data.join("env"), options.run_home.as_deref())?;
     let tailscale = Tailscale::detect().await;
     let address = net::bind_address(options.bind.as_deref(), tailscale.ip)?;
+    if options.dev_token.is_some() && !address.ip().is_loopback() {
+        return Err(format!(
+            "--dev-token is for development on loopback only, and {} isn't loopback: sign in with GitHub instead",
+            address.ip()
+        ));
+    }
+    let auth = Auth::open(&data, options.dev_token, machine_name())?;
     let listener = TcpListener::bind(address)
         .await
         .map_err(|err| format!("Can't listen on {address}: {err}"))?;
     let address = listener.local_addr().map_err(|err| err.to_string())?;
     let nodus = start_core(&data, env, options.host_socket).await?;
 
-    let generated = options.dev_token.is_none();
-    let token = options.dev_token.unwrap_or_else(random_token);
     let server = Arc::new(Server {
         nodus: nodus.clone(),
-        token,
-        hosts: Hosts::new(&tailscale, address.ip()),
-        hello: Hello {
-            name: machine_name(),
-            version: nodus_core::VERSION.to_owned(),
-            protocol: PROTOCOL,
-            needs_setup: false,
-        },
         data: data.clone(),
+        auth,
+        hosts: Hosts::new(&tailscale, address.ip()),
         sessions: Mutex::new(HashMap::new()),
     });
     log.log(&["data in", &data.to_string_lossy()]);
-    if generated {
-        log.log(&["dev token", &server.token]);
+    if server.auth.needs_setup() {
+        log.log(&["not set up yet", "run nodus-server setup-code for a setup code"]);
     }
     log.log(&["listening", &format!("http://{address}")]);
     tokio::select! {
@@ -220,13 +220,6 @@ async fn stopped() {
             std::future::pending::<()>().await;
         }
     }
-}
-
-/// 32 random bytes as hex.
-fn random_token() -> String {
-    let mut bytes = [0u8; 32];
-    getrandom::fill(&mut bytes).expect("the system has randomness");
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 /// The machine's name without its domain, until the server is named in

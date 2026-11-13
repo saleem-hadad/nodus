@@ -47,6 +47,8 @@ alacritty_terminal = { version = "=0.26.0", default-features = false }
 aes = "0.8"
 aes-gcm = "0.10"
 anyhow = "1.0.104"
+# Base64 for a server's GitHub App: the JWT it signs and the PEM key it reads.
+base64 = "0.22"
 block2 = "0.6"
 cbc = { version = "0.1", features = ["alloc"] }
 dispatch2 = "0.3"
@@ -98,6 +100,9 @@ objc2-core-audio-types = { version = "0.3", default-features = false, features =
 # Chromium's MediaRecorder encodes them, with nothing to compile for Windows.
 opus1 = "0.3"
 regex = "1.13"
+# RS256 for a server's GitHub App JWT (SRV-062). rustls already brings it in,
+# and like rustls it's left out on Windows (see reqwest above).
+ring = "0.17"
 rustix = { version = "1.1", features = ["fs"] }
 # The shortest digits for a number, breaking ties to even as JavaScript does.
 ryu = "1.0.23"

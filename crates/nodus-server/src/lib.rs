@@ -3,6 +3,7 @@
 //!
 //! ```text
 //! nodus-server serve [--bind <address>] [--dev-token <token>] [--run-home <folder>] [--host-socket <path>]
+//! nodus-server setup-code
 //! nodus-server host <socket> <key>
 //! nodus-server host --socket <path>
 //! nodus-server project add <path or git URL> [--name <name>] [--server <address>] --token <token>
@@ -12,7 +13,11 @@
 //!   (SRV-002, SRV-003, SRV-141), on port 7420 of this machine's Tailscale
 //!   address or loopback (SRV-020…023), answering the calls `nodus-wire`
 //!   lists (SRV-024, SRV-025) and sending each connection the events it
-//!   asked for (SRV-026).
+//!   asked for (SRV-026). People sign in with GitHub and use the token of
+//!   their device (SRV-040…045); `--dev-token` is for development and
+//!   tests only, and only a server on loopback takes one.
+//! - `setup-code`: a fresh setup code, while the server has no member yet,
+//!   which cancels every earlier code and setup token (SRV-060).
 //! - `host`: the session host, as the app runs it (`Nodus host …`), or on
 //!   its own with `--socket` as `nodus-host.service` runs it (SRV-004), so one
 //!   binary covers both.
@@ -20,20 +25,29 @@
 //!   through a running server. For development until projects come from the
 //!   GitHub App (SRV-120).
 
+mod app_key;
+mod audit;
+mod auth;
+mod calls;
 mod data;
 mod dispatch;
 mod files;
+mod github;
 mod http;
+mod manifest;
 mod net;
 mod project;
 mod serve;
+mod setup;
 mod socket;
+mod store;
 
 use std::io::Write;
 use std::path::PathBuf;
 
 const USAGE: &str = "Usage:
   nodus-server serve [--bind <address>] [--dev-token <token>] [--run-home <folder>] [--host-socket <path>]
+  nodus-server setup-code
   nodus-server host <socket> <key>
   nodus-server host --socket <path>
   nodus-server project add <path or git URL> [--name <name>] [--server <address>] --token <token>";
@@ -54,6 +68,8 @@ pub fn main(args: &[String]) -> i32 {
             Ok(_) => usage("serve takes no arguments"),
             Err(err) => usage(&err),
         },
+        Some("setup-code") if args.len() == 1 => setup::print_code(),
+        Some("setup-code") => usage("setup-code takes no arguments"),
         Some("project") if args.get(1).map(String::as_str) == Some("add") => {
             match Flags::parse(&args[2..], &["name", "server", "token"]) {
                 Ok(flags) => match (flags.positional.as_slice(), flags.value("token")) {

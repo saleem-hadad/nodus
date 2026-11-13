@@ -32,7 +32,7 @@ impl Tailscale {
 }
 
 /// What `tailscale <args>` prints, when it runs and succeeds in time.
-async fn tailscale(args: &[&str]) -> Option<String> {
+pub(crate) async fn tailscale(args: &[&str]) -> Option<String> {
     let run = tokio::process::Command::new("tailscale")
         .args(args)
         .stdin(std::process::Stdio::null())

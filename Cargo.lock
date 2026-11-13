@@ -4343,6 +4343,7 @@ dependencies = [
 name = "nodus-server"
 version = "1.0.12"
 dependencies = [
+ "base64 0.22.1",
  "futures-util",
  "getrandom 0.3.4",
  "http-body-util",
@@ -4357,11 +4358,15 @@ dependencies = [
  "nodus-remote",
  "nodus-updater",
  "nodus-wire",
+ "reqwest",
+ "ring",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tempfile",
  "tokio",
  "tokio-tungstenite",
+ "url",
  "uuid",
 ]
 

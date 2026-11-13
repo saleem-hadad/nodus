@@ -16,6 +16,7 @@ name = "nodus-server"
 path = "src/main.rs"
 
 [dependencies]
+base64.workspace = true
 futures-util.workspace = true
 getrandom.workspace = true
 http-body-util.workspace = true
@@ -30,12 +31,23 @@ nodus-updater.workspace = true
 nodus-wire = { workspace = true, features = ["client"] }
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 tokio = { workspace = true, features = ["fs", "net", "process", "signal"] }
 tokio-tungstenite.workspace = true
+url.workspace = true
 uuid.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
+
+# GitHub's API (SRV-041, SRV-062), and the App's RS256 key. A server runs on
+# Linux; on Windows it builds, without the key, as the other crates' TLS does.
+[target.'cfg(not(windows))'.dependencies]
+reqwest = { workspace = true, features = ["rustls-tls"] }
+ring.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+reqwest = { workspace = true, features = ["native-tls"] }
 
 [dev-dependencies]
 nodus-remote.workspace = true

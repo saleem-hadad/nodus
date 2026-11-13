@@ -21,7 +21,7 @@ use futures_util::{SinkExt, StreamExt};
 use hyper::upgrade::Upgraded;
 use hyper_util::rt::TokioIo;
 use nodus_domain::Event;
-use nodus_wire::{Answer, CALLS, CallError, CallFrame, Frame, NOT_AVAILABLE, Request};
+use nodus_wire::{Answer, CALLS, CallError, CallFrame, Frame, NOT_AVAILABLE, Notice, Request, SETUP_CALLS};
 use serde_json::Value;
 use tokio::sync::broadcast::error::{RecvError, TryRecvError};
 use tokio::sync::{broadcast, mpsc, watch};
@@ -30,8 +30,9 @@ use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::{Error as WsError, Message};
 
-use crate::dispatch;
+use crate::auth::Who;
 use crate::serve::Server;
+use crate::{calls, dispatch};
 
 pub(crate) type Socket = WebSocketStream<TokioIo<Upgraded>>;
 
@@ -72,14 +73,19 @@ enum Control {
     },
 }
 
-/// Serves one connection until either side closes it.
-pub(crate) async fn serve(server: Arc<Server>, socket: Socket) {
+/// Serves one connection, made with `who`'s token, until either side
+/// closes it, or the server does: when its device is revoked or its member
+/// removed (SRV-042), or a setup token's setup is over (SRV-060).
+pub(crate) async fn serve(server: Arc<Server>, socket: Socket, who: Who) {
     let (sink, mut frames) = socket.split();
     let (outbox, outgoing) = mpsc::channel(OUTBOX);
     let writer = tokio::spawn(write(sink, outgoing));
     let (control, controls) = mpsc::unbounded_channel();
-    // The forwarder ends the connection by sending why here.
+    // The forwarder, and the server, end the connection by sending why here.
     let (stop, mut stopped) = watch::channel(None);
+    let connection = server.auth.connected(who.clone(), stop.clone());
+    // SRV-042: members hear the server's notices; a setup token doesn't.
+    let notices = (!matches!(who, Who::Setup { .. })).then(|| server.auth.notices());
     let forwarder = Forwarder {
         server: Arc::clone(&server),
         outbox: outbox.clone(),
@@ -88,7 +94,7 @@ pub(crate) async fn serve(server: Arc<Server>, socket: Socket) {
         watched: HashSet::new(),
         open: HashSet::new(),
     };
-    let events = tokio::spawn(forwarder.run(server.nodus.subscribe(), controls));
+    let events = tokio::spawn(forwarder.run(server.nodus.subscribe(), controls, notices));
 
     let mut close = None;
     loop {
@@ -100,7 +106,12 @@ pub(crate) async fn serve(server: Arc<Server>, socket: Socket) {
             }
         };
         match message {
-            Some(Ok(Message::Text(text))) => receive(&server, text.as_str(), &outbox, &control).await,
+            Some(Ok(Message::Text(text))) => {
+                if let Some(why) = receive(&server, &who, text.as_str(), &outbox, &control).await {
+                    close = Some(why);
+                    break;
+                }
+            }
             Some(Ok(Message::Close(_))) | None => break,
             // SRV-023: a frame over 4 MB closes the connection.
             Some(Err(WsError::Capacity(_))) => {
@@ -117,6 +128,7 @@ pub(crate) async fn serve(server: Arc<Server>, socket: Socket) {
     }
 
     // SRV-026: what it opened and watched goes with it.
+    server.auth.disconnected(connection);
     events.abort();
     let _ = outbox.try_send(Outgoing::Close(close));
     drop((outbox, control));
@@ -128,22 +140,43 @@ pub(crate) async fn serve(server: Arc<Server>, socket: Socket) {
 
 /// One frame from the app. Anything but a call is for the server to ignore:
 /// presence until it's relayed (SRV-180), and frames only an app reads.
+/// Why to close the connection, when it's to close.
 async fn receive(
     server: &Arc<Server>,
+    who: &Who,
     text: &str,
     outbox: &mpsc::Sender<Outgoing>,
     control: &mpsc::UnboundedSender<Control>,
-) {
+) -> Option<CloseFrame> {
     let Ok(Frame::Call(CallFrame { id, call, args })) = Frame::parse(text) else {
-        return;
+        return None;
     };
     // SRV-025: what stays on the app isn't answered here.
     if !CALLS.contains(&call.as_str()) {
-        return answer(outbox, id, Err(CallError::new(call, NOT_AVAILABLE))).await;
+        answer(outbox, id, Err(CallError::new(call, NOT_AVAILABLE))).await;
+        return None;
+    }
+    // SRV-060: a setup token is for the wizard's steps 1 and 2, and only
+    // while it holds.
+    if matches!(who, Who::Setup { .. }) {
+        if !SETUP_CALLS.contains(&call.as_str()) {
+            answer(outbox, id, Err(CallError::new(call, SIGN_IN_FIRST))).await;
+            return None;
+        }
+        if !server.auth.still_good(who) {
+            answer(outbox, id, Err(CallError::new(call, SETUP_OVER))).await;
+            return Some(CloseFrame {
+                code: CloseCode::Policy,
+                reason: SETUP_OVER.into(),
+            });
+        }
     }
     let request = match Request::from_call(&call, args) {
         Ok(request) => request,
-        Err(err) => return answer(outbox, id, Err(CallError::new(call, format!("Bad arguments: {err}")))).await,
+        Err(err) => {
+            answer(outbox, id, Err(CallError::new(call, format!("Bad arguments: {err}")))).await;
+            return None;
+        }
     };
     let _ = match request {
         Request::Watch { projects } => control.send(Control::Watch { id, projects }),
@@ -161,7 +194,11 @@ async fn receive(
         }),
         Request::SessionClose { session_id } => control.send(Control::Close { id, session_id }),
         request => {
-            let mut answering: Answering = Box::pin(dispatch::answer(server.nodus.clone(), request));
+            let mut answering: Answering = if request.is_server_call() {
+                Box::pin(calls::answer(Arc::clone(server), who.clone(), request))
+            } else {
+                Box::pin(dispatch::answer(server.nodus.clone(), request))
+            };
             match poll_once(&mut answering) {
                 Some(result) => answer(outbox, id, result).await,
                 None => {
@@ -172,7 +209,14 @@ async fn receive(
             Ok(())
         }
     };
+    None
 }
+
+/// What a setup token's call that isn't the wizard's first steps gets.
+const SIGN_IN_FIRST: &str = "Sign in to do that: a setup token only names the server and sets up GitHub";
+/// What a setup token gets once it has expired or setup is over.
+const SETUP_OVER: &str =
+    "The setup token has expired, or setup is done: sign in, or run nodus setup-code for a new code";
 
 /// Passes on the core's events this connection gets (SRV-026).
 struct Forwarder {
@@ -187,7 +231,12 @@ struct Forwarder {
 }
 
 impl Forwarder {
-    async fn run(mut self, mut events: broadcast::Receiver<Event>, mut controls: mpsc::UnboundedReceiver<Control>) {
+    async fn run(
+        mut self,
+        mut events: broadcast::Receiver<Event>,
+        mut controls: mpsc::UnboundedReceiver<Control>,
+        mut notices: Option<broadcast::Receiver<Notice>>,
+    ) {
         loop {
             let going = tokio::select! {
                 biased;
@@ -200,6 +249,10 @@ impl Forwarder {
                     Err(RecvError::Lagged(_)) => self.fell_behind(),
                     Err(RecvError::Closed) => false,
                 },
+                notice = next_notice(&mut notices) => {
+                    let text = Frame::Notice(notice).to_text();
+                    self.outbox.send(Outgoing::Text(text)).await.is_ok()
+                }
             };
             if !going {
                 return;
@@ -349,6 +402,22 @@ impl Forwarder {
 async fn answer(outbox: &mpsc::Sender<Outgoing>, id: u64, result: Result<Value, CallError>) {
     let text = Frame::Answer(Answer { id, result }).to_text();
     let _ = outbox.send(Outgoing::Text(text)).await;
+}
+
+/// The server's next notice for members; never, for a socket that doesn't
+/// get them. One that fell behind skips what it missed: notices aren't
+/// state.
+async fn next_notice(notices: &mut Option<broadcast::Receiver<Notice>>) -> Notice {
+    if let Some(notices) = notices {
+        loop {
+            match notices.recv().await {
+                Ok(notice) => return notice,
+                Err(RecvError::Lagged(_)) => {}
+                Err(RecvError::Closed) => break,
+            }
+        }
+    }
+    std::future::pending().await
 }
 
 /// Sends frames until the last one, flushing whenever none are waiting.

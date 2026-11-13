@@ -224,6 +224,20 @@ pub(crate) async fn answer(nodus: Nodus, request: Request) -> Result<Value, Call
         } => done(channel, nodus.actions().draft(&project_id, &description, global).await),
 
         Request::Watch { .. } | Request::SessionClose { .. } => DONE,
+
+        // The server's own, answered by calls.rs with who's asking.
+        Request::SetupStatus {}
+        | Request::SetupName { .. }
+        | Request::SetupDone { .. }
+        | Request::MembersList {}
+        | Request::MembersInvite { .. }
+        | Request::MembersRemove { .. }
+        | Request::DevicesList {}
+        | Request::DevicesRevoke { .. }
+        | Request::AuditList {}
+        | Request::ServerInfo {}
+        | Request::GithubInstallations {}
+        | Request::GithubReplaceKey { .. } => Err(CallError::new(channel, nodus_wire::NOT_AVAILABLE)),
     }
 }
 

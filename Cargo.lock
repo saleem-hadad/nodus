@@ -4358,6 +4358,7 @@ dependencies = [
  "nodus-host-proto",
  "nodus-platform",
  "nodus-remote",
+ "nodus-transcripts",
  "nodus-updater",
  "nodus-wire",
  "reqwest",

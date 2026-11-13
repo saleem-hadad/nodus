@@ -52,6 +52,7 @@ reqwest = { workspace = true, features = ["native-tls"] }
 
 [dev-dependencies]
 nodus-remote.workspace = true
+nodus-transcripts.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
 

@@ -240,7 +240,7 @@ async fn protocol_answers_ping_and_unknown_methods_with_an_error() {
 #[tokio::test]
 async fn protocol_gives_every_session_the_note_and_view_tools_and_action_runs_the_session_tools_too() {
     let server = server(Mock::default());
-    // The drawing tools came after 0.9.4 (TOOL-101).
+    // The drawing tools came after 0.9.4 (TOOL-101), and the chat's after them (TOOLCHAT-001).
     let common = [
         "create_note",
         "update_note",
@@ -256,6 +256,9 @@ async fn protocol_gives_every_session_the_note_and_view_tools_and_action_runs_th
         "update_view",
         "get_view",
         "list_views",
+        "show_visual",
+        "ask",
+        "show_page",
     ];
     assert_eq!(tool_names(&server, "s1").await, common);
     let mut run = common.to_vec();
@@ -282,6 +285,9 @@ fn protocol_allows_every_tool_by_name_and_keeps_the_token_out_of_the_config() {
             "mcp__nodus__update_view",
             "mcp__nodus__get_view",
             "mcp__nodus__list_views",
+            "mcp__nodus__show_visual",
+            "mcp__nodus__ask",
+            "mcp__nodus__show_page",
             "mcp__nodus__list_sessions",
             "mcp__nodus__archive_sessions",
         ]
@@ -533,7 +539,7 @@ async fn tools_say_the_board_isnt_there_before_handlers_are_given() {
     let reply = call_none(&server).await;
     assert_eq!(reply["result"]["content"][0]["text"], "The board is not available");
     let tools = server.answer(RUN, &json!({ "id": 1, "method": "tools/list" })).await;
-    assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 14);
+    assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 17);
 }
 
 async fn call_none(server: &McpServer<Mock>) -> Value {

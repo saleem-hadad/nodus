@@ -13,7 +13,7 @@ pub(crate) fn show_visual(args: &Value) -> Result<Value, ToolError> {
     let Some(visual) = args.get("visual") else {
         return Err("visual is required: the chart, stats, table or layout, as JSON".into());
     };
-    temp_stub::parse_visual(visual).map_err(|err| ToolError(format!("The visual can’t be shown: {err}")))?;
+    nodus_visual::parse_visual(visual).map_err(|err| ToolError(format!("The visual can’t be shown: {err}")))?;
     Ok(json!({
         "shown": true,
         "note": "It’s in the user’s chat now. Don’t repeat in words what it already shows: add only what it doesn’t, such as the conclusion or the next step."
@@ -22,7 +22,8 @@ pub(crate) fn show_visual(args: &Value) -> Result<Value, ToolError> {
 
 /// TOOLCHAT-002: a form the chat can draw, or exactly why not.
 pub(crate) fn ask(args: &Value) -> Result<Value, ToolError> {
-    let form = temp_stub::parse_form(args).map_err(|err| ToolError(format!("The questions can’t be shown: {err}")))?;
+    let form =
+        nodus_visual::parse_form(args).map_err(|err| ToolError(format!("The questions can’t be shown: {err}")))?;
     Ok(json!({
         "shown": true,
         "questions": form.questions.len(),
@@ -80,17 +81,3 @@ mod tests {
         assert_eq!(page_args(&args), json!({ "title": "T", "html": "<p>", "width": 600 }));
     }
 }
-
-// TEMP-STUB-BEGIN
-mod temp_stub {
-    pub struct Form {
-        pub questions: Vec<()>,
-    }
-    pub fn parse_visual(_: &serde_json::Value) -> Result<(), String> {
-        Ok(())
-    }
-    pub fn parse_form(_: &serde_json::Value) -> Result<Form, String> {
-        Ok(Form { questions: Vec::new() })
-    }
-}
-// TEMP-STUB-END

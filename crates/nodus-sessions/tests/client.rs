@@ -941,7 +941,13 @@ async fn host_093_concurrent_connects_start_one_host() {
     }
     assert_eq!(launcher.logged().iter().filter(|l| *l == "app connected ").count(), 1);
     client.stop_all().await;
+}
 
+// On one thread, so the first attempt can't end before the second caller
+// asks: with no host, connecting fails at once on Linux, and on two threads
+// the first attempt could be over before the second asked.
+#[tokio::test]
+async fn host_093_the_first_callers_attempt_is_everyones() {
     // Whatever `start` the second caller passed: one that doesn't start a
     // host, asked first, is the attempt everyone gets (spec 02, Edge cases).
     let setup = Setup::new();

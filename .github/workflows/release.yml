@@ -12,6 +12,13 @@
 # certificate 0.9.4 is signed with, decision D10) reach only the keychain
 # step; APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID only the
 # signing step, and APPLE_TEAM_ID the gate, which compares it and never prints it.
+#
+# The Linux server (SRV-201) goes alongside, and never holds the app up:
+# `server` builds it for x64 and arm64, `server-sign` signs it and
+# install-server.sh with NODUS_SERVER_SIGNING_KEY (the only step that sees
+# it), and once the app's release is published, `publish-server` adds their
+# nine files to it. If any of them fails, the app's release goes out all the
+# same, without the server's files.
 name: Release
 
 on:
@@ -230,6 +237,72 @@ jobs:
           path: smoke
           if-no-files-found: ignore
 
+  # The Linux server, on each architecture's own runner rather than cross-
+  # compiled, and on Ubuntu 22.04 so it needs no newer glibc than 2.35: it
+  # then starts on every system install-server.sh accepts (Ubuntu 22.04+,
+  # Debian 12+), which package.sh checks. No secrets here: this job runs
+  # every dependency's build script.
+  server:
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x64, runner: ubuntu-22.04 }
+          - { arch: arm64, runner: ubuntu-22.04-arm }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      - run: cargo test --locked -p nodus-server
+
+      - name: Build and pack
+        run: |
+          cargo build --release --locked -p nodus-server
+          packaging/server/package.sh ${{ matrix.arch }} target/release/nodus-server dist
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: server-${{ matrix.arch }}
+          path: dist/nodus-server-linux-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
+
+  # SRV-201: an ed25519 signature and a SHA-256 for both archives and the
+  # install script. sign.sh fails, saying how to fix it, when the secret is
+  # missing or isn't the key written into install-server.sh.
+  server-sign:
+    needs: server
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: server-*
+          merge-multiple: true
+          path: dist
+
+      - name: Sign
+        env:
+          NODUS_SERVER_SIGNING_KEY: ${{ secrets.NODUS_SERVER_SIGNING_KEY }}
+        run: |
+          cp packaging/server/install-server.sh dist/
+          packaging/server/sign.sh dist/nodus-server-linux-x64.tar.gz dist/nodus-server-linux-arm64.tar.gz dist/install-server.sh
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: server
+          path: dist
+          if-no-files-found: error
+
   # Only after every gate passed. The release is made as a draft, so
   # releases/latest doesn't hand installed copies a release without its assets
   # (REL-014 published first and uploaded after); each asset's digest is
@@ -270,3 +343,40 @@ jobs:
           gh release edit "v$VERSION" --repo "$REPO" --draft=false --prerelease=false --latest
           tag=$(gh api "repos/$REPO/releases/latest" --jq .tag_name)
           [ "$tag" = "v$VERSION" ] || { echo "::error::releases/latest is $tag, not v$VERSION"; exit 1; }
+
+  # The server's nine files, added to the release once it's published, and
+  # each one's digest checked. After `publish` rather than in it, so the app's
+  # release never waits on the server; until this finishes (a minute or so),
+  # releases/latest has no install-server.sh.
+  publish-server:
+    needs: [publish, server-sign]
+    if: inputs.publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: server
+          path: dist
+
+      - name: Upload
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          assets=""
+          for file in nodus-server-linux-x64.tar.gz nodus-server-linux-arm64.tar.gz install-server.sh; do
+            for asset in "$file" "$file.sha256" "$file.sig"; do
+              [ -f "dist/$asset" ] || { echo "::error::No $asset"; exit 1; }
+              assets="$assets $asset"
+            done
+          done
+          for asset in $assets; do gh release upload "v$VERSION" "dist/$asset" --repo "$REPO"; done
+          id=$(gh api "repos/$REPO/releases" --jq ".[] | select(.tag_name == \"v$VERSION\") | .id")
+          for asset in $assets; do
+            want="sha256:$(sha256sum "dist/$asset" | cut -d' ' -f1)"
+            got=$(gh api "repos/$REPO/releases/$id" --jq ".assets[] | select(.name == \"$asset\" and .state == \"uploaded\") | .digest")
+            [ "$got" = "$want" ] || { echo "::error::$asset's digest is '$got', not $want"; exit 1; }
+          done

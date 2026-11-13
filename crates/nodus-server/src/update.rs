@@ -145,9 +145,8 @@ impl Updates {
             .get(&self.releases_url)
             .header("Accept", "application/vnd.github+json")
             .send();
-        let response = match tokio::time::timeout(LOOKUP_TIMEOUT, asked).await {
-            Ok(Ok(response)) => response,
-            _ => return Err(UNREACHABLE.to_owned()),
+        let Ok(Ok(response)) = tokio::time::timeout(LOOKUP_TIMEOUT, asked).await else {
+            return Err(UNREACHABLE.to_owned());
         };
         // UPD-018, UPD-019
         let status = response.status().as_u16();
@@ -157,9 +156,8 @@ impl Updates {
         if !response.status().is_success() {
             return Err(format!("GitHub answered the update check with an error ({status})."));
         }
-        let body = match tokio::time::timeout(LOOKUP_TIMEOUT, response.text()).await {
-            Ok(Ok(body)) => body,
-            _ => return Err(UNREACHABLE.to_owned()),
+        let Ok(Ok(body)) = tokio::time::timeout(LOOKUP_TIMEOUT, response.text()).await else {
+            return Err(UNREACHABLE.to_owned());
         };
         let releases: Vec<Value> = serde_json::from_str(&body).map_err(|_| UNREADABLE.to_owned())?;
         Ok(pick(&releases, asset))
@@ -168,9 +166,8 @@ impl Updates {
     /// A release's file, whole, telling `progress` the percent received
     /// when it changes (UPD-031…UPD-035).
     async fn download(&self, url: &str, size: Option<u64>, mut progress: impl FnMut(u8)) -> Result<Vec<u8>, String> {
-        let mut response = match tokio::time::timeout(STALL, self.http.get(url).send()).await {
-            Ok(Ok(response)) => response,
-            _ => return Err(INTERRUPTED.to_owned()),
+        let Ok(Ok(mut response)) = tokio::time::timeout(STALL, self.http.get(url).send()).await else {
+            return Err(INTERRUPTED.to_owned());
         };
         if !response.status().is_success() {
             return Err(format!(

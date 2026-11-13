@@ -67,9 +67,13 @@ impl ChatView {
         }
         match self.shows.forms.get(id).cloned() {
             Some(Ok(form)) => {
+                // The form locks itself on Send; the transcript only ever
+                // confirms it (CHAT-007), it never opens one again.
                 let answered = answered.cloned();
                 form.update(cx, |f, cx| {
-                    f.set_answered(answered, cx);
+                    if answered.is_some() {
+                        f.set_answered(answered, cx);
+                    }
                     f.set_scale(scale, cx);
                 });
                 div().w_full().child(form).into_any_element()

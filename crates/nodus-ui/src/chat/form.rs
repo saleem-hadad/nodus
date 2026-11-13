@@ -256,10 +256,12 @@ impl FormView {
     ) -> AnyElement {
         let s = self.scale;
         let read_only = self.answered.is_some();
+        // Rows of text never wrap as flex rows: in the chat's list they'd
+        // shrink to their narrowest; the text takes the rest of the row.
         let head = div()
+            .w_full()
             .flex()
             .items_center()
-            .flex_wrap()
             .gap(px(8. * s))
             .when_some(q.tag.clone().filter(|t| !t.is_empty()), |d, tag| {
                 d.child(
@@ -281,6 +283,8 @@ impl FormView {
             })
             .child(
                 div()
+                    .flex_1()
+                    .min_w_0()
                     .text_size(px(14. * s))
                     .line_height(px(19. * s))
                     .font_weight(FontWeight::SEMIBOLD)
@@ -289,6 +293,7 @@ impl FormView {
             .when(q.multiple && !q.text, |d| {
                 d.child(
                     div()
+                        .flex_none()
                         .text_size(px(11.5 * s))
                         .text_color(t.text_tertiary)
                         .child("Pick any"),
@@ -396,12 +401,14 @@ impl FormView {
             .font_weight(FontWeight::SEMIBOLD)
             .child(letter(c).to_string());
         let label = div()
+            .w_full()
             .flex()
             .items_center()
-            .flex_wrap()
             .gap(px(6. * s))
             .child(
                 div()
+                    .flex_1()
+                    .min_w_0()
                     .text_size(px(13. * s))
                     .line_height(px(19. * s))
                     .font_weight(FontWeight::MEDIUM)

@@ -7,6 +7,7 @@ use gpui::{
     AnyElement, Context, FontWeight, InteractiveElement, IntoElement, ParentElement, SharedString,
     StatefulInteractiveElement, Styled, Window, div,
 };
+use gpui::{HighlightStyle, StyleRefinement, px, rems};
 use nodus_domain::{Answers, ChatEntry, SessionStatus};
 use serde_json::Value;
 
@@ -21,16 +22,33 @@ const COLUMN_W: f32 = 780.;
 /// A run of tool calls shows this many of its last calls until opened (CHAT-009).
 const TOOLS_SHOWN: usize = 3;
 
-/// The Markdown look in the theme's colours.
-pub(crate) fn markdown_style(t: &Tokens) -> TextViewStyle {
+/// The Markdown look in the theme's colours, every size at `s` (CHAT-009).
+pub(crate) fn markdown_style(t: &Tokens, s: f32) -> TextViewStyle {
     TextViewStyle::default()
+        .with_dark(t.dark)
         .with_foreground(t.text_primary.into())
         .with_muted_foreground(t.text_secondary.into())
         .with_link(t.accent.into())
         .with_selection(t.bg_selected.into())
         .with_code_background(t.bg_sunken.into())
         .with_border(t.border.into())
-        .with_dark(t.dark)
+        // Inline code keeps a light wash on the light theme's: name it for both.
+        .with_inline_code(HighlightStyle {
+            background_color: Some(if t.dark { t.bg_pressed } else { t.bg_hover }.into()),
+            ..HighlightStyle::default()
+        })
+        .with_paragraph_gap(rems(0.6 * s))
+        .with_heading(move |level| {
+            let size = match level {
+                1 => 17.,
+                2 => 15.,
+                _ => 13.5,
+            };
+            StyleRefinement::default()
+                .text_size(px(size * s))
+                .font_weight(FontWeight::SEMIBOLD)
+        })
+        .with_code_block(StyleRefinement::default().text_size(px(12. * s)).rounded(px(8. * s)))
 }
 
 impl ChatView {
@@ -288,7 +306,7 @@ impl ChatView {
                 .line_height(self.px(21.))
                 .child(
                     TextView::markdown(SharedString::from(format!("chat-md-{id}")), markdown)
-                        .style(markdown_style(t))
+                        .style(markdown_style(t, self.scale))
                         .selectable(true),
                 )
                 .into_any_element(),

@@ -43,6 +43,8 @@ const AVATAR_WAIT: Duration = Duration::from_secs(15);
 pub const SETUP_EXPIRED: &str = "This setup code is no longer good. Run nodus setup-code on the server for a new one.";
 
 /// Where a sign-in stands, after one poll (SRV-041).
+// One answer to one poll: its size doesn't matter.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum SignIn {
     /// Not yet: ask again after this many seconds.

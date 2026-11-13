@@ -300,12 +300,11 @@ impl ServersDialog {
 
     /// The wizard's step as `setup:status` has it (SRV-061).
     fn resume(&mut self, session: SetupSession, status: SetupStatus, window: &mut Window, cx: &mut Context<'_, Self>) {
+        // The name as the server has it, for this step and the ones after.
         let name = status.name.clone();
+        self.name.update(cx, |f, cx| f.set_value(name, window, cx));
         match (status.step, status.github) {
-            (SetupStep::Name, _) => {
-                self.name.update(cx, |f, cx| f.set_value(name, window, cx));
-                self.go(Step::Name { session }, window, cx);
-            }
+            (SetupStep::Name, _) => self.go(Step::Name { session }, window, cx),
             (_, None) => self.go(
                 Step::Github {
                     session,
@@ -594,7 +593,6 @@ impl ServersDialog {
         self.error = None;
         cx.notify();
         let nodus = self.state.read(cx).nodus.clone();
-        let invite = self.invite.clone();
         cx.spawn(async move |this, cx| {
             let invited = nodus.servers().invite(&server_id, &login).await;
             let _ = this.update(cx, |d, cx| {
@@ -607,7 +605,6 @@ impl ServersDialog {
                     }
                     Err(err) => d.error = Some(err.message),
                 }
-                let _ = &invite;
                 cx.notify();
             });
         })

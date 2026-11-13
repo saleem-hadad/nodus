@@ -282,7 +282,7 @@ impl ServersDialog {
             .iter()
             .position(|f| f.read(cx).focus_handle(cx).is_focused(window));
         let next = match (at, back) {
-            (Some(0), true) | (None, true) => fields.len() - 1,
+            (Some(0) | None, true) => fields.len() - 1,
             (Some(i), true) => i - 1,
             (Some(i), false) if i + 1 < fields.len() => i + 1,
             _ => 0,

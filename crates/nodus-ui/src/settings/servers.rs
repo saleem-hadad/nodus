@@ -218,7 +218,7 @@ impl ServerManager {
             };
             let gone = nodus.servers().status(&id).is_none();
             if gone {
-                let _ = state.update(cx, |s, cx| {
+                state.update(cx, |s, cx| {
                     s.refresh_servers(cx);
                     s.refresh_projects(cx).detach();
                 });

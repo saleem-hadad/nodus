@@ -38,6 +38,7 @@ nodus-ui = { path = "crates/nodus-ui" }
 nodus-updater = { path = "crates/nodus-updater" }
 nodus-views = { path = "crates/nodus-views" }
 nodus-voice = { path = "crates/nodus-voice" }
+nodus-wire = { path = "crates/nodus-wire" }
 
 # The terminal grid and VT parser (decision D2); exact, since nodus-terminal
 # reaches into its grid to keep xterm.js's character widths.
@@ -48,6 +49,8 @@ anyhow = "1.0.104"
 block2 = "0.6"
 cbc = { version = "0.1", features = ["alloc"] }
 dispatch2 = "0.3"
+# Streams and sinks, for the server's WebSocket and its client.
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 getrandom = "0.3"
 # GPUI, gpui-component and their assets behind one facade (D1). Its GPUI is
 # the patched one under [patch.crates-io].
@@ -104,6 +107,8 @@ serde_json = { version = "1.0.154", features = ["float_roundtrip", "preserve_ord
 tempfile = "3.27"
 thiserror = "2.0"
 tokio = { version = "1.54", features = ["io-util", "macros", "process", "rt", "rt-multi-thread", "sync", "time"] }
+# A server's WebSocket (SRV-023), upgraded from hyper on the server's side.
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
 tracing = "0.1.44"
 # Line breaks and graphemes as Chromium finds them (UAX #14, #29), for the
 # board's wrapped and clamped text. gpui-component already depends on both.

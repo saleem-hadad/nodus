@@ -570,6 +570,23 @@ impl AppState {
         }
     }
 
+    /// Disconnect (SRV-165): forgets a server and its projects' links on
+    /// this device; its board leaves the window if it's open.
+    pub fn disconnect_server(&mut self, server_id: String, cx: &mut Context<'_, Self>) {
+        let open = self
+            .route_project()
+            .is_some_and(|p| p.server.as_deref() == Some(server_id.as_str()));
+        if open {
+            self.navigate(Route::Projects, cx);
+        }
+        let nodus = self.nodus.clone();
+        cx.spawn(async move |this, cx| {
+            nodus.servers().remove(&server_id).await;
+            let _ = this.update(cx, |state, cx| state.refresh_projects(cx).detach());
+        })
+        .detach();
+    }
+
     /// The server a project lives on; none for a local project.
     pub fn server_of(&self, project: &Project) -> Option<&ServerInfo> {
         let id = project.server.as_deref()?;

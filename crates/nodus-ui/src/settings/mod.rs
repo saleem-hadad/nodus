@@ -1,6 +1,6 @@
 //! The Settings dialog (`SettingsDialog.tsx`, `SettingsDialog.css`;
 //! UI-116…UI-152): a sidebar of sections (Appearance, Board, Capture &
-//! Voice, Notifications, Updates) beside the one on show.
+//! Voice, Notifications, Updates, Servers) beside the one on show.
 //!
 //! The voice key (05) and the update status (06) come from the core; the
 //! capture shortcut state (07) comes with the capture panel track, and until
@@ -68,15 +68,18 @@ pub enum Section {
     CaptureVoice,
     Notifications,
     Updates,
+    /// The Nodus servers this app connects to (SRV-165).
+    Servers,
 }
 
 impl Section {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Appearance,
         Self::Board,
         Self::CaptureVoice,
         Self::Notifications,
         Self::Updates,
+        Self::Servers,
     ];
 
     pub fn label(self) -> &'static str {
@@ -86,6 +89,7 @@ impl Section {
             Self::CaptureVoice => "Capture & Voice",
             Self::Notifications => "Notifications",
             Self::Updates => "Updates",
+            Self::Servers => "Servers",
         }
     }
 
@@ -96,6 +100,7 @@ impl Section {
             Self::CaptureVoice => Icon::Mic,
             Self::Notifications => Icon::Bell,
             Self::Updates => Icon::Download,
+            Self::Servers => Icon::Server,
         }
     }
 
@@ -149,6 +154,10 @@ struct Stops {
     remove: FocusHandle,
     check: FocusHandle,
     auto_update: FocusHandle,
+    /// Servers: Connect to Server…, then each server's Show Projects… and
+    /// Disconnect, by its id.
+    connect: FocusHandle,
+    servers: Vec<(String, FocusHandle, FocusHandle)>,
 }
 
 impl SettingsDialog {
@@ -204,6 +213,8 @@ impl SettingsDialog {
             remove: cx.focus_handle(),
             check: cx.focus_handle(),
             auto_update: cx.focus_handle(),
+            connect: cx.focus_handle(),
+            servers: Vec::new(),
         };
         let shortcut_poll = poll_shortcut(&state, cx);
         Self {
@@ -340,6 +351,12 @@ impl SettingsDialog {
                     stops.push(self.stops.auto_update.clone());
                 }
             }
+            Section::Servers => {
+                for (_, show, disconnect) in &self.stops.servers {
+                    stops.extend([show.clone(), disconnect.clone()]);
+                }
+                stops.push(self.stops.connect.clone());
+            }
             _ => {}
         }
         stops
@@ -396,6 +413,7 @@ impl Render for SettingsDialog {
             self.scroll.set_offset(point(px(0.), px(0.)));
         }
         let loaded = settings.is_some();
+        self.sync_server_stops(cx);
         let key_value = self.key_field.read(cx).value().to_string();
         let key_blank = key_value.trim().is_empty();
         let stops = self.tab_stops(section, loaded, self.key_source, update_status.as_ref(), key_blank, cx);
@@ -411,6 +429,7 @@ impl Render for SettingsDialog {
             Section::CaptureVoice => self.capture_voice(&s, &ctx, &key_value, key_blank, window, cx),
             Section::Notifications => self.notifications(&s, &ctx),
             Section::Updates => self.updates(&s, &ctx, update_status.as_ref(), cx),
+            Section::Servers => self.servers(&ctx, cx),
         };
 
         let header = div()
@@ -1103,6 +1122,113 @@ impl SettingsDialog {
     }
 }
 
+impl SettingsDialog {
+    /// A Show Projects… and a Disconnect stop for each server, in order.
+    fn sync_server_stops(&mut self, cx: &mut Context<'_, Self>) {
+        let ids: Vec<String> = self.state.read(cx).servers.iter().map(|s| s.id.clone()).collect();
+        let mut stops = std::mem::take(&mut self.stops.servers);
+        self.stops.servers = ids
+            .into_iter()
+            .map(|id| match stops.iter().position(|(known, _, _)| *known == id) {
+                Some(at) => stops.swap_remove(at),
+                None => (id, cx.focus_handle(), cx.focus_handle()),
+            })
+            .collect();
+    }
+
+    /// Servers (SRV-165, basic): each server's address, version and status,
+    /// Show Projects… and Disconnect; then Connect to Server…. Members,
+    /// devices, Claude accounts and updates come in later slices.
+    fn servers(&self, ctx: &Ctx, cx: &mut Context<'_, Self>) -> Vec<AnyElement> {
+        use crate::state::ServerDialog;
+        let t = ctx.t;
+        let servers = self.state.read(cx).servers.clone();
+        let mut body = Vec::new();
+        for (i, server) in servers.iter().enumerate() {
+            let Some((_, show_stop, disconnect_stop)) = self.stops.servers.iter().find(|(id, _, _)| *id == server.id)
+            else {
+                continue;
+            };
+            let status = crate::servers::status_text(server);
+            let detail = match &server.version {
+                Some(version) => format!("Nodus {version} · {status}"),
+                None => status,
+            };
+            let (show, disconnect) = (self.state.clone(), self.state.clone());
+            let (show_id, disconnect_id) = (server.id.clone(), server.id.clone());
+            let rows = vec![
+                plain_row(
+                    row_text(server.url.trim_start_matches("http://").to_owned(), Some(detail), t),
+                    Some(
+                        button(SharedString::from(format!("server-show-{}", server.id)))
+                            .label("Show Projects…")
+                            .focus(show_stop)
+                            .on_click(move |_, _, cx| {
+                                let server_id = Some(show_id.clone());
+                                show.update(cx, |s, cx| s.open_server_dialog(ServerDialog::Projects { server_id }, cx));
+                            })
+                            .into_any_element(),
+                    ),
+                )
+                .into_any_element(),
+                plain_row(
+                    row_text(
+                        "Disconnect".into(),
+                        Some("Forgets this server and its projects on this device. Nothing changes on the server.".into()),
+                        t,
+                    ),
+                    Some(
+                        button(SharedString::from(format!("server-disconnect-{}", server.id)))
+                            .kind(crate::components::button::Kind::Danger)
+                            .label("Disconnect")
+                            .focus(disconnect_stop)
+                            .on_click(move |_, _, cx| {
+                                let id = disconnect_id.clone();
+                                disconnect.update(cx, |s, cx| s.disconnect_server(id, cx));
+                            })
+                            .into_any_element(),
+                    ),
+                )
+                .into_any_element(),
+            ];
+            body.push(group(Some(&server.name), rows, i == 0, t).into_any_element());
+        }
+        let connect = self.state.clone();
+        let (title, hint) = if servers.is_empty() {
+            (
+                "No servers yet",
+                "Connect to a Nodus server to show its projects beside your own.",
+            )
+        } else {
+            ("Another server", "Its projects show beside these servers’ and your own.")
+        };
+        body.push(
+            group(
+                None,
+                vec![
+                    plain_row(
+                        row_text(title.into(), Some(hint.into()), t),
+                        Some(
+                            button("server-connect-open")
+                                .label("Connect to Server…")
+                                .focus(&self.stops.connect)
+                                .on_click(move |_, _, cx| {
+                                    connect.update(cx, |s, cx| s.open_server_dialog(ServerDialog::Connect, cx));
+                                })
+                                .into_any_element(),
+                        ),
+                    )
+                    .into_any_element(),
+                ],
+                servers.is_empty(),
+                t,
+            )
+            .into_any_element(),
+        );
+        body
+    }
+}
+
 fn transparent_c() -> gpui::Rgba {
     crate::components::button::transparent()
 }
@@ -1334,7 +1460,8 @@ mod tests {
         assert_eq!(Section::Appearance.step(1), Section::Board);
         assert_eq!(Section::Board.step(1), Section::CaptureVoice);
         assert_eq!(Section::Updates.step(-1), Section::Notifications);
-        assert_eq!(Section::Updates.step(1), Section::Updates);
+        assert_eq!(Section::Updates.step(1), Section::Servers);
+        assert_eq!(Section::Servers.step(1), Section::Servers);
     }
 
     #[test]

@@ -736,6 +736,17 @@ pub(crate) struct OnCore<F: Future> {
     work: Pin<Box<F>>,
 }
 
+impl<F: Future> OnCore<F> {
+    /// `work`, polled inside `runtime`'s context, for what outlives a
+    /// borrow of the core (a setup session's calls).
+    pub(crate) fn new(runtime: &Handle, work: F) -> Self {
+        Self {
+            runtime: runtime.clone(),
+            work: Box::pin(work),
+        }
+    }
+}
+
 impl<F: Future> Future for OnCore<F> {
     type Output = F::Output;
 

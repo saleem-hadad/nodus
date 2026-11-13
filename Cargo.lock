@@ -4220,6 +4220,7 @@ dependencies = [
  "nodus-updater",
  "nodus-views",
  "nodus-voice",
+ "reqwest",
  "serde",
  "serde_json",
  "tempfile",

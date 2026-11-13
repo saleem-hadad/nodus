@@ -7,7 +7,7 @@
 //! kept in git. A stand-in `tailscale` says the machine is tagged.
 #![cfg(unix)]
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::convert::Infallible;
 use std::io::{BufRead, BufReader};
 use std::os::unix::fs::PermissionsExt;
@@ -22,7 +22,10 @@ use http_body_util::{BodyExt, Full};
 use hyper::body::{Bytes, Incoming};
 use hyper::{Request as HttpRequest, Response};
 use hyper_util::rt::TokioIo;
-use nodus_core::domain::ServerState;
+use nodus_core::domain::{Event, ServerState};
+use nodus_core::hosted::{SETUP_EXPIRED, install_url};
+use nodus_core::{EnvSource, HostLauncher, Nodus, NodusConfig, SafeStorage, SignIn};
+use nodus_host_proto::HostPaths;
 use nodus_remote::{Remote, RemoteEvent, RemoteEvents};
 use nodus_wire::client::{
     Client, ConnectError, Events, claim_setup, download, github_nonce, hello, poll_sign_in, start_sign_in, upload,
@@ -462,6 +465,55 @@ esac
             .await;
         assert_eq!(status, 200);
         signed_in(&self.github, server, Some(&setup), "Studio", OCTO).await.0
+    }
+}
+
+impl World {
+    /// The app's core, headless, as `remote.rs` starts it: a data folder and
+    /// home of its own, a synthetic Keychain and no local sessions.
+    async fn app(&self) -> Nodus {
+        let home = self.root().join("apphome");
+        let vars: BTreeMap<String, String> = [
+            ("PATH", "/usr/bin:/bin".to_owned()),
+            ("HOME", home.display().to_string()),
+            ("SHELL", "/bin/sh".to_owned()),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_owned(), v))
+        .collect();
+        let env = nodus_platform::Env::with_vars(vars, Some(&home)).await;
+        let nodus = Nodus::start(NodusConfig {
+            env: EnvSource::Given(env),
+            home,
+            host_launcher: Some(Arc::new(NoHost)),
+            secrets: Some(Arc::new(SafeStorage::with_mac_password(b"a test password"))),
+            ..NodusConfig::new(self.root().join("app"), tokio::runtime::Handle::current())
+        })
+        .unwrap();
+        nodus.launch().await.unwrap();
+        nodus
+    }
+}
+
+/// The app runs no sessions of its own here.
+struct NoHost;
+
+impl HostLauncher for NoHost {
+    fn start(&self, _paths: &HostPaths) -> std::io::Result<()> {
+        Err(std::io::Error::other("no local sessions in this test"))
+    }
+}
+
+/// Polls a sign-in through the app's core until it's no longer pending.
+async fn core_signed_in(app: &Nodus, url: &str, handle: &str) -> SignIn {
+    let deadline = tokio::time::Instant::now() + WAIT;
+    loop {
+        let polled = app.servers().poll_sign_in(url, handle).await.unwrap();
+        if !matches!(polled, SignIn::Pending { .. }) {
+            return polled;
+        }
+        assert!(tokio::time::Instant::now() < deadline, "still pending");
+        tokio::time::sleep(Duration::from_millis(250)).await;
     }
 }
 
@@ -1159,6 +1211,175 @@ async fn files_take_a_devices_token_but_never_a_setup_token() {
     assert_eq!(gone.status, 401);
     let refused = upload(&server.url, "not-a-token", "a.txt", b"x").await.unwrap_err();
     assert!(matches!(refused, ConnectError::Refused(401)), "{refused:?}");
+}
+
+/// SRV-060…063, SRV-041, SRV-165: the app's own path, through its core's
+/// API as the window calls it: hello, the code, the wizard's steps, the
+/// first sign-in, members and devices, a notice, and signing out.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_app_sets_a_server_up_and_signs_in_through_its_core() {
+    let world = World::new().await;
+    let server = world.serve(&[]);
+    let github = &world.github;
+    let app = world.app().await;
+    let servers = app.servers();
+    let address = server.url.trim_start_matches("http://");
+
+    // SRV-060: an address as typed, then the code, in the server's words.
+    let said = servers.hello(address).await.unwrap();
+    assert!(said.needs_setup);
+    let wrong = servers.claim(address, "AAAA-AAAA").await.unwrap_err();
+    assert!(!wrong.message.starts_with("The server answered"), "{}", wrong.message);
+    assert!(servers.setup_session(address).is_none());
+    let setup = servers.claim(address, &world.setup_code()).await.unwrap();
+    assert_eq!(setup.url(), server.url);
+    assert!(servers.setup_session(&server.url).is_some());
+
+    // Step 1, then step 2's App through the browser.
+    let status = setup.status().await.unwrap();
+    assert_eq!(status.step, SetupStep::Name);
+    let status = setup.name("Box").await.unwrap();
+    assert_eq!((status.step, status.github), (SetupStep::Github, None));
+    let nonce = setup.nonce(false).await.unwrap().nonce;
+    let start = setup.start_url(&nonce, "");
+    let (status, page) = server.get(start.strip_prefix(&server.url).unwrap()).await;
+    assert_eq!(status, 200, "{page}");
+    github.app_page_made("made-1", &new_key());
+    let (status, _) = server
+        .get(&format!("/github/setup/callback?code=made-1&state={nonce}"))
+        .await;
+    assert_eq!(status, 200);
+    let made = setup.status().await.unwrap().github.expect("the App");
+    assert_eq!(
+        install_url(&made),
+        format!("{}/apps/nodus-box/installations/new", github.url)
+    );
+    assert!(setup.installations().await.unwrap().is_empty());
+    github.fake().installations.push(json!({
+        "id": 77,
+        "account": { "login": "octo", "type": "User" },
+        "repository_selection": "all",
+        "html_url": "https://github.com/settings/installations/77",
+    }));
+    assert_eq!(setup.installations().await.unwrap().len(), 1);
+
+    // SRV-041: the first sign-in, with the session's token; the server is
+    // added with who signed in, and the setup token is done for.
+    let started = setup.start_sign_in("Studio").await.unwrap();
+    let first = servers.poll_sign_in(address, &started.handle).await.unwrap();
+    assert!(matches!(first, SignIn::Pending { .. }), "{first:?}");
+    github.approve(&started.user_code, OCTO);
+    let SignIn::SignedIn { server: added, member } = core_signed_in(&app, address, &started.handle).await else {
+        panic!("not signed in");
+    };
+    assert_eq!((member.github_id, member.login.as_str()), (OCTO, "octo"));
+    assert_eq!(
+        (
+            added.url.as_str(),
+            added.name.as_str(),
+            added.login.as_deref(),
+            added.github_id
+        ),
+        (server.url.as_str(), "Box", Some("octo"), Some(OCTO))
+    );
+    assert!(servers.setup_session(address).is_none());
+    assert_eq!(setup.status().await.unwrap_err().message, SETUP_EXPIRED);
+    let listed = servers.list().await;
+    assert_eq!(
+        (listed[0].login.as_deref(), listed[0].github_id),
+        (Some("octo"), Some(OCTO))
+    );
+    // Kept in state.json once the store writes, the token sealed.
+    let state = world.root().join("app/state.json");
+    let deadline = tokio::time::Instant::now() + WAIT;
+    let kept: Value = loop {
+        let text = std::fs::read_to_string(&state).unwrap_or_default();
+        if text.contains("githubId") {
+            break serde_json::from_str(&text).unwrap();
+        }
+        assert!(tokio::time::Instant::now() < deadline, "state.json not written");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    };
+    assert_eq!(kept["servers"][0]["login"], "octo");
+    assert_eq!(kept["servers"][0]["githubId"], OCTO);
+    assert_eq!(kept["servers"][0]["name"], "Box");
+    assert!(!servers.device_name().await.is_empty());
+
+    // Step 3 with the device's token, through the server just added.
+    let id = added.id.as_str();
+    assert_eq!(servers.setup_status(id).await.unwrap().step, SetupStep::Members);
+    let alice = servers.invite(id, " @alice ").await.unwrap();
+    assert_eq!(alice.github_id, ALICE);
+    let err = servers.invite(id, "nobody-here").await.unwrap_err();
+    assert!(!err.message.is_empty());
+    let members = servers.members(id).await.unwrap();
+    assert_eq!(members.iter().map(|m| m.github_id).collect::<Vec<_>>(), [OCTO, ALICE]);
+    let status = servers.finish_step(id, SetupStep::Members).await.unwrap();
+    assert_eq!(status.step, SetupStep::Accounts);
+
+    // Settings → Servers: devices, the audit newest first, the server.
+    let devices = servers.devices(id).await.unwrap();
+    assert_eq!((devices.len(), devices[0].current), (1, true));
+    let audit = servers.audit(id).await.unwrap();
+    assert!(audit.windows(2).all(|w| w[0].time >= w[1].time));
+    assert_eq!(audit.last().unwrap().event, "setup.claimed");
+    let details = servers.info(id).await.unwrap();
+    assert_eq!((details.name.as_str(), details.tailscale.tagged), ("Box", true));
+    assert_eq!(servers.installations(id).await.unwrap()[0].id, 77);
+
+    // SRV-042: Octo signing in elsewhere reaches this app as a notice.
+    let mut events = app.subscribe();
+    let (_, _, laptop) = signed_in(github, &server, None, "Laptop", OCTO).await;
+    let notice = tokio::time::timeout(WAIT, async {
+        loop {
+            if let Ok(Event::ServerNotice {
+                server_id,
+                kind,
+                message,
+            }) = events.recv().await
+            {
+                return (server_id, kind, message);
+            }
+        }
+    })
+    .await
+    .expect("a notice");
+    assert_eq!(
+        notice,
+        (
+            added.id.clone(),
+            DEVICE_SIGNED_IN.to_owned(),
+            "Octo Cat signed in on Laptop".to_owned()
+        )
+    );
+
+    // Revoking another device keeps this one; revoking this one signs out.
+    servers.revoke_device(id, &laptop.id).await.unwrap();
+    assert_eq!(servers.list().await.len(), 1);
+    servers.revoke_device(id, &devices[0].id).await.unwrap();
+    assert!(servers.list().await.is_empty());
+
+    // Set up, a server signs people in without a setup token: a member
+    // gets in, and anyone else is told why not, in the server's words.
+    assert!(!servers.hello(address).await.unwrap().needs_setup);
+    let started = servers.start_sign_in(address, "Studio", None).await.unwrap();
+    github.approve(&started.user_code, MALLORY);
+    let refused = core_signed_in(&app, address, &started.handle).await;
+    assert_eq!(
+        refused,
+        SignIn::Ended {
+            message: "mallory isn't a member of this server. Ask a member to invite you.".into()
+        }
+    );
+    assert!(servers.list().await.is_empty());
+    let started = servers.start_sign_in(address, "Studio", None).await.unwrap();
+    github.approve(&started.user_code, ALICE);
+    let SignIn::SignedIn { server: again, .. } = core_signed_in(&app, address, &started.handle).await else {
+        panic!("not signed in");
+    };
+    assert_eq!(again.login.as_deref(), Some("alice"));
+    assert_eq!(servers.list().await.len(), 1);
+    app.shutdown();
 }
 
 fn hex_sha256(text: &str) -> String {

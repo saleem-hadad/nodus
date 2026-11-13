@@ -26,6 +26,9 @@ use tokio::runtime::Handle;
 use tokio::sync::{mpsc, watch};
 use tokio::task::AbortHandle;
 
+/// The wire itself, for setting a server up and signing in (SRV-041,
+/// SRV-060…063) outside a [`Remote`]: its routes, their helpers and types.
+pub use nodus_wire as wire;
 pub use nodus_wire::client::{DISCONNECTED, FileBody};
 pub use nodus_wire::{CallError, Hello, MAX_UPLOAD, NOT_AVAILABLE, Notice, PROTOCOL, Request, Upload};
 

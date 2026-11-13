@@ -73,6 +73,14 @@ pub enum Event {
     /// `ev:server-status`: the connection to a server changed (SRV-028). The
     /// app's own: a server never sends it.
     ServerStatus { server_id: String, state: ServerState },
+    /// `ev:server-notice`: something a server tells every member, such as
+    /// `Saleem signed in on Studio` (SRV-042), shown as a toast. The app's
+    /// own: a server sends its notices apart from its events.
+    ServerNotice {
+        server_id: String,
+        kind: String,
+        message: String,
+    },
 }
 
 /// `Partial<CaptureContext>`: the parts of the context that arrived late.

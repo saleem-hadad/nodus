@@ -97,7 +97,18 @@ pub use nodus_platform::secrets::SafeStorage;
 pub use nodus_voice::controller::{VoiceBackend, VoiceController};
 pub use notifications::Notifications;
 pub use projects::ProjectsApi;
-pub use servers::ServersApi;
+pub use servers::{ServersApi, SetupSession, SignIn};
+/// What a Nodus server says of itself and its people, as `nodus.servers()`
+/// hands it out (SRV-040…063, SRV-210): setting it up, signing in, its
+/// members, devices, audit and GitHub App.
+pub mod hosted {
+    pub use crate::servers::{SETUP_EXPIRED, install_url};
+    pub use nodus_remote::wire::{
+        AuditDevice, AuditLine, AuditMember, DEVICE_SIGNED_IN, Device, GithubApp, Hello, Installation, Member, Nonce,
+        ServerInfo as ServerDetails, SetupStatus, SetupStep, SignInStarted, TAILSCALE_TAG, TailscaleIdentity,
+        TailscaleStatus,
+    };
+}
 pub use sessions::SessionsApi;
 pub use settings::SettingsApi;
 pub use shell::{AppShell, BoxFuture, Headless, ReplaceChoice};

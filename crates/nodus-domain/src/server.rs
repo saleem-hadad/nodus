@@ -36,4 +36,11 @@ pub struct ServerInfo {
     /// turned down.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// Who this device signed in as, by GitHub login, refreshed at each
+    /// sign-in; none for a server added with a token (SRV-040).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub login: Option<String>,
+    /// That member's GitHub id, which is what the server goes by.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub github_id: Option<u64>,
 }

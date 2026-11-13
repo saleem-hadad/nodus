@@ -61,6 +61,13 @@ pub struct ServerRecord {
     /// is, in base64. Never shown.
     #[serde(default)]
     pub token: String,
+    /// The GitHub login this device signed in as (SRV-161), for saying who
+    /// "you" are; none for a server added with a token.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub login: Option<String>,
+    /// That member's GitHub id (SRV-040).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub github_id: Option<u64>,
     /// Fields this version doesn't know, written back as they were read.
     #[serde(flatten)]
     pub extra: Map<String, Value>,

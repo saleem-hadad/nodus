@@ -289,7 +289,8 @@ impl Forwarder {
             | Event::OpenCard(_)
             | Event::CaptureShown(_)
             | Event::CaptureContext(_)
-            | Event::ServerStatus { .. } => false,
+            | Event::ServerStatus { .. }
+            | Event::ServerNotice { .. } => false,
         }
     }
 

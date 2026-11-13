@@ -74,7 +74,9 @@ pub fn timeout_for(request: &Request) -> Duration {
         | Request::ViewsBrain { .. }
         | Request::SessionCreate { .. }
         | Request::SessionOpen { .. }
-        | Request::SessionSend { .. } => Duration::from_secs(120),
+        | Request::SessionSend { .. }
+        // A new token is tried with one `claude -p` run first (SRV-100).
+        | Request::AccountsAdd { .. } => Duration::from_secs(120),
         _ => Duration::from_secs(30),
     }
 }

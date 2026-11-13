@@ -272,8 +272,8 @@ impl Forwarder {
 
     /// SRV-026: a session's output only while it's open here; its status,
     /// agents, usage and exit, a board's changes, a view's events and a
-    /// run's end only while its project is watched; the projects changing
-    /// always. The rest is the app's own (SRV-025).
+    /// run's end only while its project is watched; the projects and the
+    /// Claude accounts changing always. The rest is the app's own (SRV-025).
     fn wants(&self, event: &Event) -> bool {
         match event {
             Event::PtyData { session_id, .. } => self.open.contains(session_id),
@@ -284,7 +284,8 @@ impl Forwarder {
             Event::SummarizeProgress(progress) => self.watches_session(&progress.session_id),
             Event::BoardChanged { project_id } | Event::View { project_id, .. } => self.watched.contains(project_id),
             Event::RunFinished(run) => self.watched.contains(&run.project_id),
-            Event::ProjectsChanged => true,
+            // SRV-105: the pool is the whole server's, so every member's.
+            Event::ProjectsChanged | Event::AccountsChanged { .. } => true,
             Event::Menu(_)
             | Event::UpdateStatus(_)
             | Event::OpenCard(_)

@@ -745,6 +745,12 @@ async fn pass_on(core: Weak<Inner>, server_id: String, mut events: RemoteEvents)
             return;
         };
         match event {
+            // SRV-105: whose pool changed.
+            RemoteEvent::Event(Event::AccountsChanged { .. }) => {
+                let _ = core.events.send(Event::AccountsChanged {
+                    server_id: server_id.clone(),
+                });
+            }
             RemoteEvent::Event(event) => {
                 let status = match &event {
                     Event::Status {

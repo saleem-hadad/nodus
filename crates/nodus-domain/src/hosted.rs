@@ -172,6 +172,38 @@ impl BoardNode {
     pub fn set_preview_live(&mut self, live: bool) {
         set(&mut self.extra, "previewLive", live.then_some(Value::Bool(true)));
     }
+
+    /// The id of the Claude account its process last started on, from the
+    /// server's pool (SRV-101).
+    pub fn account(&self) -> Option<String> {
+        read::<String>(&self.extra, "account").filter(|id| !id.is_empty())
+    }
+
+    /// That account's label, as the card's menu and hover show it.
+    pub fn account_label(&self) -> Option<String> {
+        read::<String>(&self.extra, "accountLabel").filter(|label| !label.is_empty())
+    }
+
+    /// Records the account (id and label) its process started on; none
+    /// takes both away.
+    pub fn set_account(&mut self, account: Option<(&str, &str)>) {
+        set(&mut self.extra, "account", account.map(|(id, _)| Value::from(id)));
+        set(
+            &mut self.extra,
+            "accountLabel",
+            account.map(|(_, label)| Value::from(label)),
+        );
+    }
+
+    /// What its account did last, for the card to say (SRV-104): `Moved to
+    /// <label>`, or that it waits for an account to free up.
+    pub fn account_note(&self) -> Option<String> {
+        read::<String>(&self.extra, "accountNote").filter(|note| !note.is_empty())
+    }
+
+    pub fn set_account_note(&mut self, note: Option<&str>) {
+        set(&mut self.extra, "accountNote", note.map(Value::from));
+    }
 }
 
 #[cfg(test)]
@@ -226,6 +258,20 @@ mod tests {
         );
         let read: BoardNode = serde_json::from_str(&text).unwrap();
         assert_eq!(read.worktree(), Some(worktree));
+        let mut moved = read.clone();
+        moved.set_account(Some(("a2", "Team Max")));
+        moved.set_account_note(Some("Moved to Team Max"));
+        assert!(
+            crate::json::to_string(&moved)
+                .unwrap()
+                .ends_with(r#""account":"a2","accountLabel":"Team Max","accountNote":"Moved to Team Max"}"#)
+        );
+        assert_eq!(moved.account().as_deref(), Some("a2"));
+        assert_eq!(moved.account_label().as_deref(), Some("Team Max"));
+        assert_eq!(moved.account_note().as_deref(), Some("Moved to Team Max"));
+        moved.set_account(None);
+        moved.set_account_note(None);
+        assert_eq!(moved, read);
         assert_eq!(read.preview_port(), Some(8100));
         assert!(read.preview_live());
         node.set_preview_live(false);

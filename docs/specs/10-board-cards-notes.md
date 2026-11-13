@@ -84,6 +84,8 @@ All values below are resolved for **light** and **dark**. The theme follows `nat
 - **CARD-055** While a server card's worktree is set up (`setup.state` `running`), its preview reads `Setting up…` and the setup's last line (`Setting up… <line>`), styled as `No messages yet`; once it failed, `Setup failed: <line>` (`Setup failed` with no line). This comes before a terminal's folder and before Claude's reply.
 - **CARD-056** While something listens on a server card's preview port (`previewLive`), its heading ends with an **Open preview** glyph (`AppWindowMac` 13px, stroke 2, `--accent`, tooltip `Open preview (port N)`) and its menu has `Open preview` after the open items; both open `http://<server's host>:<port>` in the browser and never open the card.
 - **CARD-057** A server card's footer shows the transcript's branch, else its worktree's branch, and a server terminal's preview shows its worktree's folder rather than the project's.
+- **CARD-058** A server card that took a Claude account from the pool (`accountLabel`, SRV-101) says which: its title's tooltip adds a line `Claude account: <label>` after `Started by <login>`, and its menu ends with a disabled `Claude account: <label>` row after `Started by`.
+- **CARD-059** A server card with an `accountNote` (SRV-104) shows it as a pill under its heading, where the `merged from` chip goes (after it when both are there, and the preview clamps to 3 lines either way): `Moved to <label>` (or `Resumed on <label>`) in `--accent` on 10% accent with an arrow, tooltip `Its turn hit its Claude account’s limit, so it carried on on another.`; `Waiting for a Claude account until <time>` in `--status-waiting` on 10% of it with a loader, tooltip `<the note>. Every Claude account on the server is at its limit; it carries on by itself once one is free.` An open card's title bar shows the same pill after its title (`Waiting for an account` there, the time in its tooltip).
 
 ### Expanded card — XCARD
 
@@ -739,6 +741,8 @@ Cross-domain dependencies: 09 (node z-order incl. select elevation +1000, drag/d
 - [x] CARD-055 `Setting up…` / `Setup failed` preview (server)
 - [x] CARD-056 Open preview glyph and menu item (server)
 - [x] CARD-057 worktree branch and folder (server)
+- [x] CARD-058 `Claude account` in the title tooltip and the menu (server)
+- [x] CARD-059 `Moved to` / `Waiting for a Claude account` pill (server)
 - [x] XCARD-001 expanded condition + default 720×480
 - [x] XCARD-002 expanded surface, clip, no drag scale
 - [x] XCARD-003 title bar 40px layout

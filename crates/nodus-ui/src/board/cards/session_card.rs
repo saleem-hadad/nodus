@@ -372,6 +372,10 @@ pub fn heading(
                 .into_any_element(),
         );
     }
+    // CARD-059: an open card says it too, beside its title.
+    if expanded && let Some(pill) = account_pill(z, &t, card, id, true) {
+        out.push(pill.into_any_element());
+    }
     if card.live && !shell {
         // CARD-019
         out.push(
@@ -406,6 +410,48 @@ pub fn heading(
         );
     }
     out
+}
+
+/// CARD-059: `Moved to <label>`, or that it waits for an account, as a pill;
+/// `short` in an open card's title bar, where waiting reads `Waiting for an
+/// account` and the tooltip says until when.
+fn account_pill(z: Z, t: &Tokens, card: &SessionCard, id: &str, short: bool) -> Option<gpui::Stateful<gpui::Div>> {
+    let (note, waiting) = present::account_note(card)?;
+    let color = if waiting { t.status_waiting } else { t.accent };
+    let tip = if waiting {
+        format!("{note}. Every Claude account on the server is at its limit; it carries on by itself once one is free.")
+    } else {
+        "Its turn hit its Claude account’s limit, so it carried on on another.".to_owned()
+    };
+    let note = if waiting && short {
+        "Waiting for an account".to_owned()
+    } else {
+        note
+    };
+    Some(
+        div()
+            .id(anim::key(id, "account-note"))
+            .flex()
+            .flex_none()
+            .items_center()
+            .gap(z.px(4.))
+            .h(z.px(19.))
+            .px(z.px(7.))
+            .rounded_full()
+            .bg(fade(color, 0.10))
+            .tooltip(native_tooltip(tip.into()))
+            .child(card_icon(
+                if waiting {
+                    CardIcon::LoaderCircle
+                } else {
+                    CardIcon::ArrowRight
+                },
+                z.f(11.),
+                2.2,
+                color,
+            ))
+            .child(super::text(z, note, 11.0, FontWeight::MEDIUM, color)),
+    )
 }
 
 /// The compact card's body (CARD-001…CARD-042).
@@ -527,8 +573,11 @@ fn compact(
                 t.accent,
             ))
     });
-    let has_chip = chip.is_some();
+    // CARD-059: where its account sent it (SRV-104).
+    let moved = account_pill(z, &t, card, &id, false).map(|pill| pill.self_start().opacity(content));
+    let has_chip = chip.is_some() || moved.is_some();
     body = body.when_some(chip, ParentElement::child);
+    body = body.when_some(moved, ParentElement::child);
 
     // CARD-026…CARD-032: the kinds (CARD-026), 12px secondary collapsed and
     // clamped to 4 (CARD-028), 3 after a chip (CARD-029), the prompt italic

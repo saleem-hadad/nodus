@@ -53,6 +53,12 @@ impl World {
             ),
         )
         .unwrap();
+        // SRV-101: one Claude account in the pool, so sessions can start.
+        std::fs::write(
+            world.data().join("claude-accounts.json"),
+            r#"[{"id":"seed","label":"Test","token":"test-token","addedAt":1,"state":"ok"}]"#,
+        )
+        .unwrap();
         world
     }
 
@@ -575,9 +581,15 @@ async fn a_session_runs_on_the_server_and_streams_to_the_app() {
         .until(|e| matches!(e, Event::PtyExit { session_id, .. } if *session_id == id))
         .await;
 
-    // The other app watched nothing, so it heard nothing of the session.
+    // The other app watched nothing, so it heard nothing of the session:
+    // only that the projects and the server's Claude accounts changed.
     let heard = elsewhere.arrived();
-    assert!(heard.iter().all(|e| *e == Event::ProjectsChanged), "{heard:#?}");
+    assert!(
+        heard
+            .iter()
+            .all(|e| matches!(e, Event::ProjectsChanged | Event::AccountsChanged { .. })),
+        "{heard:#?}"
+    );
 
     // Disconnected and back, the board is as it was left.
     app.close();

@@ -16,6 +16,7 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 
 use crate::auth::Auth;
+use crate::pool::Pool;
 use crate::store;
 
 /// How long a minted token is used before another is minted: GitHub's
@@ -39,6 +40,8 @@ pub(crate) struct ServerHosting {
     tokens: Mutex<HashMap<TokenKey, (String, Instant)>>,
     /// The App's bot, once looked up, by App id.
     bot: Mutex<Option<(u64, GitIdentity)>>,
+    /// The Claude accounts sessions run on (SRV-100…105).
+    pub(crate) pool: Arc<Pool>,
 }
 
 impl ServerHosting {
@@ -54,12 +57,14 @@ impl ServerHosting {
             }
         };
         let exe = std::env::current_exe().map_err(|err| format!("Can't find this program: {err}"))?;
+        let pool = Arc::new(Pool::open(data, Arc::clone(&auth))?);
         Ok(Self {
             auth,
             session_key: key.into_bytes(),
             exe,
             tokens: Mutex::default(),
             bot: Mutex::default(),
+            pool,
         })
     }
 
@@ -204,6 +209,16 @@ impl Hosting for ServerHosting {
 
     fn credential_helper(&self) -> String {
         format!("!{} git-credential", shell_quote(&self.exe))
+    }
+
+    /// SRV-101: a server always has a pool, so a process with no account
+    /// to take doesn't start.
+    fn claude_account(&self) -> Result<Option<nodus_core::PoolAccount>, String> {
+        self.pool.pick().map(Some)
+    }
+
+    fn session_hook(&self, session_id: &str, account: Option<&str>, event: &str, payload: &serde_json::Value) {
+        self.pool.session_hook(session_id, account, event, payload);
     }
 }
 

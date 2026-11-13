@@ -30,18 +30,23 @@ fn item(
     })
 }
 
-/// CARD-054: `Started by <login>`, a line that does nothing, at the
-/// bottom of a server card's menu.
-fn started_by(card: &SessionCard) -> Option<MenuItem> {
-    let label = crate::board::cards::present::started_by(card)?;
-    Some(MenuItem::Item {
-        label: label.into(),
-        icon: None,
-        hint: None,
-        danger: false,
-        disabled: true,
-        on_select: Rc::new(|_, _| {}),
-    })
+/// CARD-054, CARD-058: `Started by <login>` and `Claude account: <label>`,
+/// lines that do nothing, at the bottom of a server card's menu.
+fn started_by(card: &SessionCard) -> Option<Vec<MenuItem>> {
+    use crate::board::cards::present;
+    let lines: Vec<MenuItem> = [present::started_by(card), present::claude_account(card)]
+        .into_iter()
+        .flatten()
+        .map(|label| MenuItem::Item {
+            label: label.into(),
+            icon: None,
+            hint: None,
+            danger: false,
+            disabled: true,
+            on_select: Rc::new(|_, _| {}),
+        })
+        .collect();
+    (!lines.is_empty()).then_some(lines)
 }
 
 /// CARD-056: Open preview, while something listens on the card's port.
@@ -322,9 +327,9 @@ impl BoardCanvas {
             })
             .danger(),
         );
-        if let Some(by) = started_by(card) {
+        if let Some(lines) = started_by(card) {
             items.push(MenuItem::Separator);
-            items.push(by);
+            items.extend(lines);
         }
         items
     }
@@ -437,9 +442,9 @@ impl BoardCanvas {
             })
             .danger(),
         );
-        if let Some(by) = started_by(card) {
+        if let Some(lines) = started_by(card) {
             items.push(MenuItem::Separator);
-            items.push(by);
+            items.extend(lines);
         }
         items
     }

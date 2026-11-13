@@ -256,8 +256,13 @@ calls! {
     /// `Member`: the GitHub login resolved to its id and added (SRV-044).
     MembersInvite = "members:invite" { login: String },
     /// `null`: the member and every device of theirs, whose sockets close.
-    /// The last member can't remove themselves.
-    MembersRemove = "members:remove" { github_id: u64 },
+    /// The last member can't remove themselves. With `removeAccounts`, the
+    /// Claude accounts they added go too (SRV-040).
+    MembersRemove = "members:remove" {
+        github_id: u64,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        remove_accounts: bool,
+    },
     /// `Device[]`: every member's, oldest first.
     DevicesList = "devices:list" {},
     /// `null`: its socket closes at once (SRV-042).
@@ -275,6 +280,19 @@ calls! {
     /// `GithubRepo[]`: every repository the App's installations reach,
     /// which projects can be added from (SRV-120).
     GithubRepos = "github:repos" {},
+
+    // ---- the pool of Claude accounts (SRV-100…105). No answer ever holds
+    // a token.
+
+    /// `ClaudeAccount[]`, in the order they were added.
+    AccountsList = "accounts:list" {},
+    /// `ClaudeAccount`: a token from `claude setup-token`, taken once one
+    /// `claude -p` run with it has worked (SRV-100).
+    AccountsAdd = "accounts:add" { label: String, token: String },
+    /// `ClaudeAccount`.
+    AccountsRename = "accounts:rename" { id: String, label: String },
+    /// `null`: the sessions running on it move to another (SRV-105).
+    AccountsRemove = "accounts:remove" { id: String },
 }
 
 /// The calls a setup token may make: wizard steps 1 and 2 (SRV-060). The
@@ -300,6 +318,10 @@ impl Request {
                 | Self::GithubReplaceKey { .. }
                 | Self::GithubRepos {}
                 | Self::ProjectsAddGithub { .. }
+                | Self::AccountsList {}
+                | Self::AccountsAdd { .. }
+                | Self::AccountsRename { .. }
+                | Self::AccountsRemove { .. }
         )
     }
 }
@@ -362,7 +384,21 @@ mod tests {
         }
         assert!(!SETUP_CALLS.contains(&"members:invite"));
         let remove = Request::from_call("members:remove", json!({ "githubId": 583231 })).unwrap();
-        assert_eq!(remove, Request::MembersRemove { github_id: 583231 });
+        assert_eq!(
+            remove,
+            Request::MembersRemove {
+                github_id: 583231,
+                remove_accounts: false
+            }
+        );
+        assert_eq!(
+            Request::from_call("members:remove", json!({ "githubId": 1, "removeAccounts": true })).unwrap(),
+            Request::MembersRemove {
+                github_id: 1,
+                remove_accounts: true
+            }
+        );
+        assert!(Request::AccountsList {}.is_server_call());
         assert!(remove.is_server_call());
         assert!(!Request::ProjectsList {}.is_server_call());
         assert_eq!(

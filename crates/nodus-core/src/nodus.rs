@@ -393,6 +393,15 @@ impl Nodus {
                 RunnerSource::Host => Arc::new(HostRunner::new(host.clone())),
                 RunnerSource::Given(runner) => runner,
             };
+            // SRV-101: on a server, Claude Code runs on the pool's accounts.
+            let runner: Arc<dyn Runner> = if config.hosting.is_some() {
+                Arc::new(crate::pool::PoolRunner {
+                    inner: runner,
+                    core: core.clone(),
+                })
+            } else {
+                runner
+            };
             let updater = Updater::new(
                 Arc::new(CoreUpdaterApp(core.clone())),
                 config
@@ -733,7 +742,7 @@ impl Inner {
         self.wait_for_setup(&opts.session_id).await;
         // On a server: the session's own token, git through the App, its
         // preview port, and its worktree (SRV-122, SRV-143).
-        let extras = match self.session_extras(&opts.project_id, &opts.session_id).await {
+        let mut extras = match self.session_extras(&opts.project_id, &opts.session_id).await {
             Some((extras, cwd, token)) => {
                 if !cwd.is_empty() {
                     opts.cwd = cwd;
@@ -743,6 +752,14 @@ impl Inner {
             }
             None => Vec::new(),
         };
+        // The hook port is the connected host's, which the command below
+        // gets once connected: one read here, before the first connect after
+        // a start, would be 0 and win over it.
+        extras.retain(|(name, _)| name != "NODUS_PORT");
+        // SRV-101: and an account from the pool, whose token reaches the
+        // process only through this spawn.
+        extras.extend(self.take_account(&opts.project_id, &opts.session_id, opts.kind)?);
+        let server = self.hosted().is_some();
         let env = self.env().await;
         let launch_env = launch::LaunchEnv::from_env(&env);
         let powershell = hooks::uses_powershell(&env);
@@ -751,7 +768,12 @@ impl Inner {
         let spawned = self
             .host
             .spawn_session(&opts, move |opts, host| {
-                let settings = endpoint.settings(powershell);
+                // SRV-103: a server's sessions report failed turns too.
+                let settings = if server {
+                    endpoint.server_settings(powershell)
+                } else {
+                    endpoint.settings(powershell)
+                };
                 let hook_env = endpoint.env(&opts.session_id);
                 let tools = host.relays_mcp.then_some(launch::BoardTools {
                     mcp_config: nodus_tools::BOARD_MCP_CONFIG,

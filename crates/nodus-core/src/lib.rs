@@ -65,6 +65,7 @@ mod local_storage;
 mod menu;
 mod nodus;
 mod notifications;
+mod pool;
 mod projects;
 mod realpath;
 mod routing;
@@ -102,6 +103,7 @@ pub use nodus_remote::GithubRepo;
 /// What a mic implements and runs, for the window's mics (`VoiceApi::backend`).
 pub use nodus_voice::controller::{VoiceBackend, VoiceController};
 pub use notifications::Notifications;
+pub use pool::{AccountSession, CONTINUE, PoolAccount, TOKEN_VAR as CLAUDE_TOKEN_VAR};
 pub use projects::ProjectsApi;
 pub use servers::{ServersApi, SetupSession, SignIn};
 /// What a Nodus server says of itself and its people, as `nodus.servers()`
@@ -110,9 +112,9 @@ pub use servers::{ServersApi, SetupSession, SignIn};
 pub mod hosted {
     pub use crate::servers::{SETUP_EXPIRED, install_url};
     pub use nodus_remote::wire::{
-        AuditDevice, AuditLine, AuditMember, DEVICE_SIGNED_IN, Device, GithubApp, Hello, Installation, Member, Nonce,
-        ServerInfo as ServerDetails, SetupStatus, SetupStep, SignInStarted, TAILSCALE_TAG, TailscaleIdentity,
-        TailscaleStatus,
+        ACCOUNT_FAILED, AccountState, AuditDevice, AuditLine, AuditMember, ClaudeAccount, DEVICE_SIGNED_IN, Device,
+        GithubApp, Hello, Installation, Member, Nonce, ServerInfo as ServerDetails, SetupStatus, SetupStep,
+        SignInStarted, TAILSCALE_TAG, TailscaleIdentity, TailscaleStatus, UsageWindow,
     };
 }
 pub use sessions::SessionsApi;

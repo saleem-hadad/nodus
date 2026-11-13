@@ -355,6 +355,39 @@ impl Registry {
         result
     }
 
+    /// Starts a terminal whose process exited over again from what the open
+    /// replays, once the session is live again without this terminal having
+    /// asked: a server moved it to another Claude account (SRV-104), or
+    /// someone else resumed it. Only an exited terminal; resolves once the
+    /// replay is written.
+    pub async fn revive(&self, session_id: &str, project_id: &str) -> Result<(), String> {
+        let (id, cols, rows, done) = {
+            let mut inner = self.lock();
+            let Some(entry) = inner.entries.get_mut(session_id).filter(|e| e.state == State::Exited) else {
+                return Ok(());
+            };
+            self.trace(&["term-reset", session_id]);
+            entry.terminal.reset();
+            entry.has_output = false;
+            let (done, rx) = watch::channel(None);
+            entry.opening = Some(rx);
+            entry.state = State::Opening;
+            entry.exit_pending = false;
+            (entry.id, entry.terminal.cols(), entry.terminal.rows(), done)
+        };
+        let result = self.open_process(session_id, project_id, id, cols, rows).await;
+        done.send_replace(Some(result.clone()));
+        result
+    }
+
+    /// Whether the session's terminal shows its process exited.
+    pub fn is_exited(&self, session_id: &str) -> bool {
+        self.lock()
+            .entries
+            .get(session_id)
+            .is_some_and(|e| e.state == State::Exited)
+    }
+
     /// Opens a live session again and starts its terminal over from what
     /// the open replays: for a server session whose output stopped coming
     /// while the connection was down (SRV-028). Only a terminal that's

@@ -1033,7 +1033,14 @@ async fn devices_are_told_of_new_ones_and_close_when_revoked() {
     let _: Member = call(&studio, Request::MembersInvite { login: "alice".into() }).await;
     let (alice_token, _, _) = signed_in(github, &server, None, "Alice's Mac", ALICE).await;
     let (alice_app, _) = server.connect(&alice_token).await;
-    let () = call(&studio, Request::MembersRemove { github_id: ALICE }).await;
+    let () = call(
+        &studio,
+        Request::MembersRemove {
+            github_id: ALICE,
+            remove_accounts: false,
+        },
+    )
+    .await;
     let closed = tokio::time::timeout(WAIT, alice_app.closed()).await.expect("closed");
     assert_eq!(closed.code, Some(1008), "{closed:?}");
     let gone = Client::connect(&server.url, &alice_token).await.err();
@@ -1042,7 +1049,10 @@ async fn devices_are_told_of_new_ones_and_close_when_revoked() {
     assert_eq!(devices.len(), 1);
     // The last member can't remove themselves.
     let err = studio
-        .call(&Request::MembersRemove { github_id: OCTO })
+        .call(&Request::MembersRemove {
+            github_id: OCTO,
+            remove_accounts: false,
+        })
         .await
         .unwrap_err();
     assert_eq!(err.message, "You're the last member, so you can't remove yourself");

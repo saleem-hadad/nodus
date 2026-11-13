@@ -15,8 +15,8 @@ use std::time::Duration;
 use nodus_domain::{ServerInfo, ServerState};
 use nodus_remote::wire::client::{self as http, Client, ConnectError};
 use nodus_remote::wire::{
-    self, AuditLine, Device, GithubApp, Hello, Installation, Member, Nonce, NonceRequest, Request, SetupStatus,
-    SetupStep, SignInStarted,
+    self, AuditLine, ClaudeAccount, Device, GithubApp, Hello, Installation, Member, Nonce, NonceRequest, Request,
+    SetupStatus, SetupStep, SignInStarted,
 };
 use nodus_remote::{CheckError, DISCONNECTED, PROTOCOL, Remote};
 use serde::de::DeserializeOwned;
@@ -428,13 +428,21 @@ impl ServersApi<'_> {
             .await
     }
 
-    /// `members:remove` (SRV-040): the member and every device of theirs.
-    /// Removing yourself signs this device out: the server is forgotten
-    /// here, as Disconnect does.
-    pub async fn remove_member(&self, server_id: &str, github_id: u64) -> CommandResult<()> {
+    /// `members:remove` (SRV-040): the member and every device of theirs,
+    /// and with `remove_accounts` the Claude accounts they added, whose
+    /// sessions move to other accounts. Removing yourself signs this device
+    /// out: the server is forgotten here, as Disconnect does.
+    pub async fn remove_member(&self, server_id: &str, github_id: u64, remove_accounts: bool) -> CommandResult<()> {
         let yours = self.status(server_id).and_then(|s| s.github_id) == Some(github_id);
-        self.server_call::<()>(server_id, "members:remove", Request::MembersRemove { github_id })
-            .await?;
+        self.server_call::<()>(
+            server_id,
+            "members:remove",
+            Request::MembersRemove {
+                github_id,
+                remove_accounts,
+            },
+        )
+        .await?;
         if yours {
             self.remove(server_id).await;
         }
@@ -493,6 +501,60 @@ impl ServersApi<'_> {
             server_id,
             "github:replace-key",
             Request::GithubReplaceKey { pem: pem.to_owned() },
+        )
+        .await
+    }
+
+    // ---- its pool of Claude accounts (SRV-100…105)
+
+    /// `accounts:list`: the server's Claude accounts in the order they were
+    /// added, with their usage and state; never their tokens.
+    pub async fn accounts(&self, server_id: &str) -> CommandResult<Vec<ClaudeAccount>> {
+        self.server_call(server_id, "accounts:list", Request::AccountsList {})
+            .await
+    }
+
+    /// `accounts:add` (SRV-100): a token from `claude setup-token` and a
+    /// label for it. The server tries the token with one `claude -p` run
+    /// first, and fails in its own words when Claude turns it down.
+    pub async fn add_account(&self, server_id: &str, label: &str, token: &str) -> CommandResult<ClaudeAccount> {
+        const CHANNEL: &str = "accounts:add";
+        let (label, token) = (label.trim().to_owned(), token.trim().to_owned());
+        if label.is_empty() {
+            return Err(CommandError::new(CHANNEL, "A label is needed"));
+        }
+        if token.is_empty() {
+            return Err(CommandError::new(CHANNEL, "Paste the token claude setup-token printed"));
+        }
+        self.server_call(server_id, CHANNEL, Request::AccountsAdd { label, token })
+            .await
+    }
+
+    /// `accounts:rename`.
+    pub async fn rename_account(&self, server_id: &str, id: &str, label: &str) -> CommandResult<ClaudeAccount> {
+        let label = label.trim().to_owned();
+        if label.is_empty() {
+            return Err(CommandError::new("accounts:rename", "A label is needed"));
+        }
+        self.server_call(
+            server_id,
+            "accounts:rename",
+            Request::AccountsRename {
+                id: id.to_owned(),
+                label,
+            },
+        )
+        .await
+    }
+
+    /// `accounts:remove` (SRV-105): the sessions running on it move to
+    /// another account. The token itself still works until its owner
+    /// revokes it.
+    pub async fn remove_account(&self, server_id: &str, id: &str) -> CommandResult<()> {
+        self.server_call(
+            server_id,
+            "accounts:remove",
+            Request::AccountsRemove { id: id.to_owned() },
         )
         .await
     }

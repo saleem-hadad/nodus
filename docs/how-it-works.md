@@ -204,6 +204,14 @@ Nodus runs on Windows 10 and 11, on x64 and Arm. The installer puts it in your u
 - The app's data is in `%APPDATA%\Nodus`, and a saved xAI key is encrypted for your Windows account.
 - The installer isn't code signed yet, so SmartScreen asks before it runs: **More info › Run anyway**.
 
+## Running on a server
+
+A Nodus server runs the same core with no window on a Linux machine: `nodus-server`, installed as `/opt/nodus/bin/nodus`. The app connects to it over one WebSocket on port 7420, through Tailscale or an SSH tunnel, and sends every call about a server project there: its board, sessions, views, git and actions. Settings, capture, voice and the app's own updates stay local. The server's events come back on the same socket, so a server board updates as a local one does, with the others' pointers and edits as they happen.
+
+On the server, two Unix users split the work. `nodus` runs `nodus serve` and keeps the secrets: the GitHub App's key, the Claude accounts, the members and their devices. `nodus-run` runs the session host, and through it every process that touches a repository: Claude Code, terminals, git, view commands and setup scripts. The core never starts those itself. It hands each one to a `Runner`, which on a Mac spawns it as before, and on a server sends it to the host as an `exec` message. Each session gets a token of its own for its hooks and its git credentials, and git gets a token for that session's repository only, minted with the App's key, which never leaves `nodus`.
+
+[Running a server](server.md) covers installing and using one, and [spec 17](specs/17-hosted.md) has every behavior.
+
 ## Shortcuts
 
 | Where | Action | Shortcut |
@@ -270,7 +278,7 @@ In the terminal, Esc goes to Claude (it interrupts a turn), so it never closes t
 
 ## Project layout
 
-Nodus is one Cargo workspace. Each domain is a crate of its own with no UI in it, so the same core could run without a window; only `nodus-ui` and the `nodus` binary know about GPUI.
+Nodus is one Cargo workspace. Each domain is a crate of its own with no UI in it, so the same core runs without a window on a server; only `nodus-ui` and the `nodus` binary know about GPUI.
 
 ```
 crates/
@@ -306,10 +314,14 @@ crates/
                       Claude's guess, and making what's captured on the board
   nodus-git/          the branch chip and Changes window's git status, diff and log
   nodus-updater/      updates from GitHub releases: download, checks, and the swap on quit
+  nodus-wire/         what a Nodus server and the app say to each other: routes, frames, calls
+  nodus-remote/       the app's connection to a server, which keeps itself connected
+  nodus-server/       the Linux server: the core with no window, sign-in, GitHub, Claude accounts,
+                      and its session host
 third_party/gpui/     our patched copy of GPUI: backdrop blur, transforms, group opacity and text
                       rendering (PATCHES.md says what and why)
-packaging/            the macOS bundle and DMGs, the Windows installer, the checks a release
-                      passes, and the smoke test
+packaging/            the macOS bundle and DMGs, the Windows installer, the server's install
+                      script, the checks a release passes, and the smoke test
 build/                the app icons
 docs/specs/           every behavior, one file per domain, with the IDs the code and tests cite;
                       the decisions the Rust app was built on
@@ -349,7 +361,7 @@ Releases are made by `.github/workflows/release.yml`, which you start by hand: s
 
 Without **publish** ticked it stops there, and the packages are the run's artifacts to try by hand. With it ticked, and only once every check has passed, it makes the release `v<version>` as a draft, uploads the four files, checks each one's digest and publishes it. The README's download links point at `releases/latest/download/`, so they pick up each new release.
 
-The same run builds the Linux server for x64 and arm64 and signs both archives and `packaging/server/install-server.sh` with the ed25519 key in the `NODUS_SERVER_SIGNING_KEY` secret. Once the app's release is published, it adds `nodus-server-linux-{x64,arm64}.tar.gz` and `install-server.sh` to it, each with a `.sha256` and a `.sig`. That part never holds the app's release up: when it fails, the release goes out without them. The key is made once with `scripts/server-signing-key.sh`, which sets the secret and writes the public key into the install script.
+The same run builds the Linux server for x64 and arm64 and signs both archives and `packaging/server/install-server.sh` with the ed25519 key in the `NODUS_SERVER_SIGNING_KEY` secret. Once the app's release is published, it adds `nodus-server-linux-{x64,arm64}.tar.gz` and `install-server.sh` to it, each with a `.sha256` and a `.sig`. That part never holds the app's release up: when it fails, the release goes out without them. The key is made once with `scripts/server-signing-key.sh`, which sets the secret and writes the public key into the install script and `packaging/server/signing-key.pub.pem`, the copy the server builds in to check its own updates ([Running a server](server.md#for-maintainers-the-release-signing-key)).
 
 Installed copies update themselves from `releases/latest`. They look for `Nodus-arm64.dmg`, `Nodus-x64.dmg`, `Nodus-Setup-x64.exe` and `Nodus-Setup-arm64.exe` by name, so keep those names, and don't publish a release before its files are ready to go out.
 

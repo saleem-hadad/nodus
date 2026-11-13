@@ -17,6 +17,10 @@
 //! {"cmd":"pinch","x":720,"y":400,"delta":0.02}     a trackpad pinch step (+ zooms in)
 //! {"cmd":"files","kind":"entered","x":700,"y":400,"paths":["/…"]}   entered | pending | submit | exited
 //! {"cmd":"emit","event":"updateStatus","payload":{"state":"ready","version":"0.9.5","current":"0.9.4"}}
+//! {"cmd":"connect","url":"http://127.0.0.1:7420","token":"…","link":["shop"]}
+//!                                                  adds a server (SRV-060) and links its projects by
+//!                                                  name or id ("link":"all" for every one); gives
+//!                                                  {server, linked}
 //! {"cmd":"open","project":"storefront"}          a project's board, by name
 //! {"cmd":"board","project":"storefront"}         that board as the core has it (cards, notes, ink, views)
 //! {"cmd":"pick","label":"Restore to board"}       the open context menu's row, chosen
@@ -481,6 +485,7 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
                 .to_owned();
             screenshot(cx, &path).await
         }
+        "connect" => connect(&nodus, command).await,
         "open" => {
             // A project's board by name, as a double-click on its folder opens it.
             let name = command.get("project").and_then(Value::as_str).unwrap_or_default();
@@ -710,6 +715,40 @@ pub fn srgb_to_display_p3(rgb: [u8; 3]) -> [u8; 3] {
 }
 
 /// Calls a core command by its `window.api` name.
+/// `connect`: adds the server as Connect to Server… does, then links the
+/// projects asked for, by name or id, or all of them.
+async fn connect(nodus: &nodus_core::Nodus, command: &Value) -> Result<Value, String> {
+    let field = |key: &str| command.get(key).and_then(Value::as_str).unwrap_or_default();
+    let server = nodus
+        .servers()
+        .add(field("url"), field("token"))
+        .await
+        .map_err(|e| e.message)?;
+    let wanted: Option<Vec<String>> = match command.get("link") {
+        Some(Value::String(all)) if all == "all" => None,
+        Some(Value::Array(names)) => Some(names.iter().filter_map(Value::as_str).map(str::to_owned).collect()),
+        _ => Some(Vec::new()),
+    };
+    let mut linked = Vec::new();
+    if wanted.as_ref().is_none_or(|w| !w.is_empty()) {
+        let theirs = nodus.servers().projects(&server.id).await.map_err(|e| e.message)?;
+        for project in theirs {
+            let pick = wanted
+                .as_ref()
+                .is_none_or(|w| w.iter().any(|n| *n == project.name || *n == project.id));
+            if pick {
+                let project = nodus
+                    .servers()
+                    .link(&server.id, &project.id)
+                    .await
+                    .map_err(|e| e.message)?;
+                linked.push(project);
+            }
+        }
+    }
+    Ok(serde_json::json!({ "server": server, "linked": linked }))
+}
+
 async fn core(nodus: &nodus_core::Nodus, command: &Value) -> Result<Value, String> {
     let method = command.get("method").and_then(Value::as_str).unwrap_or_default();
     let args = command
@@ -766,6 +805,20 @@ async fn core(nodus: &nodus_core::Nodus, command: &Value) -> Result<Value, Strin
         }
         "updates.status" => serde_json::to_value(nodus.updates().status().await).map_err(|e| e.to_string()),
         "voice.keySource" => serde_json::to_value(nodus.voice().key_source().await).map_err(|e| e.to_string()),
+        "servers.list" => serde_json::to_value(nodus.servers().list().await).map_err(|e| e.to_string()),
+        "servers.projects" => {
+            serde_json::to_value(nodus.servers().projects(&text(0)).await.map_err(err)?).map_err(|e| e.to_string())
+        }
+        "servers.link" => serde_json::to_value(nodus.servers().link(&text(0), &text(1)).await.map_err(err)?)
+            .map_err(|e| e.to_string()),
+        "servers.unlink" => {
+            nodus.servers().unlink(&text(0)).await.map_err(err)?;
+            Ok(Value::Null)
+        }
+        "servers.remove" => {
+            nodus.servers().remove(&text(0)).await;
+            Ok(Value::Null)
+        }
         other => Err(format!("unknown core method {other}")),
     }
 }

@@ -310,4 +310,15 @@ mod tests {
         assert_eq!(subtitle(Some(&stats(1, 0))), "1 session");
         assert_eq!(subtitle(Some(&stats(5, 2))), "5 sessions · 2 active");
     }
+
+    /// SRV-162
+    #[test]
+    fn names_the_server_on_its_badge() {
+        let badge = |away| ServerBadge {
+            name: "nodus-box".into(),
+            away,
+        };
+        assert_eq!(badge(false).tooltip(), "On nodus-box");
+        assert_eq!(badge(true).tooltip(), "On nodus-box · Reconnecting…");
+    }
 }

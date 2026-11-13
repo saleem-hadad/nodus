@@ -19,5 +19,7 @@ mod store;
 
 pub use paths::user_data_dir;
 pub use records::Records;
-pub use state::{BoardState, CaptureRecord, DEFAULT_ARCHIVE_W, NotFound, State, normalize_settings};
+pub use state::{
+    BoardState, CaptureRecord, DEFAULT_ARCHIVE_W, NotFound, ServerBoardState, ServerRecord, State, normalize_settings,
+};
 pub use store::{SAVE_DELAY, Store};

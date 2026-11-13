@@ -91,6 +91,7 @@ impl ProjectsApi<'_> {
                 actions: None,
                 focused: focusing.then_some(true),
                 archived: None,
+                server: None,
                 extra: Map::new(),
             };
             state.projects.push(project.clone());
@@ -418,6 +419,7 @@ mod tests {
             actions: None,
             focused: None,
             archived: None,
+            server: None,
             extra: Map::new(),
         };
         assert_eq!(pick_folder_color(&[], 0), FolderColor::Blue);

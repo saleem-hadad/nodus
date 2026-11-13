@@ -34,6 +34,49 @@ pub struct State {
     /// What floating capture made lately, newest first.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub captures: Option<Vec<CaptureRecord>>,
+    /// The Nodus servers this app connects to, in the order they were added
+    /// (SRV-161). Added after 0.9.4; left out while there are none.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub servers: Vec<ServerRecord>,
+    /// What's this person's own on the boards of server projects, by project
+    /// id: kept here, never on the server (SRV-164).
+    #[serde(skip_serializing_if = "IndexMap::is_empty")]
+    pub server_boards: IndexMap<String, ServerBoardState>,
+    /// Fields this version doesn't know, written back as they were read.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+/// A server this app connects to (SRV-161).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerRecord {
+    pub id: String,
+    /// `http://host:port`, as it was added.
+    pub url: String,
+    /// The server's name, from its hello when it was added.
+    #[serde(default)]
+    pub name: String,
+    /// This device's token for it, sealed with safeStorage as the voice key
+    /// is, in base64. Never shown.
+    #[serde(default)]
+    pub token: String,
+    /// Fields this version doesn't know, written back as they were read.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+/// A server project's board, as far as it's this person's own (SRV-164):
+/// where they last looked, and which cards they have open in place. The rest
+/// of the board is the server's, shared with everyone on it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerBoardState {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub viewport: Option<Viewport>,
+    /// The cards expanded here, by session id.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub expanded: Vec<String>,
     /// Fields this version doesn't know, written back as they were read.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
@@ -116,6 +159,8 @@ impl Default for State {
             actions: None,
             voice_key: None,
             captures: None,
+            servers: Vec::new(),
+            server_boards: IndexMap::new(),
             extra: Map::new(),
         }
     }
@@ -169,6 +214,11 @@ impl State {
             _ => None,
         };
         let captures = take_array(&mut raw, "captures")?;
+        let servers = take_array(&mut raw, "servers")?.unwrap_or_default();
+        let server_boards = match raw.shift_remove("serverBoards") {
+            Some(boards @ Value::Object(_)) => serde_json::from_value(boards)?,
+            _ => IndexMap::new(),
+        };
         Ok(Self {
             projects,
             groups,
@@ -177,6 +227,8 @@ impl State {
             actions,
             voice_key,
             captures,
+            servers,
+            server_boards,
             extra: raw,
         })
     }
@@ -226,6 +278,19 @@ impl State {
             .iter()
             .find(|(_, board)| board.views.contains_key(view_id))
             .map(|(id, _)| id.as_str())
+    }
+
+    /// A server, by its id.
+    pub fn server(&self, id: &str) -> Option<&ServerRecord> {
+        self.servers.iter().find(|s| s.id == id)
+    }
+
+    /// The server a project lives on, for a server project.
+    pub fn project_server(&self, project_id: &str) -> Option<&str> {
+        self.projects
+            .iter()
+            .find(|p| p.id == project_id)
+            .and_then(|p| p.server.as_deref())
     }
 
     /// The project that owns a session card.
@@ -336,6 +401,31 @@ mod tests {
         for value in [json!(0), json!(1), json!("false"), json!("true"), Value::Null] {
             assert_eq!(normalize_settings(&all(&value)), AppSettings::default(), "{value}");
         }
+    }
+
+    #[test]
+    fn keeps_servers_and_their_boards_and_leaves_them_out_while_there_are_none() {
+        let raw = json!({
+            "projects": [{
+                "id": "p1", "name": "Shop", "repoPath": "", "color": "blue", "createdAt": 1,
+                "server": "s1", "later": true
+            }],
+            "servers": [{ "id": "s1", "url": "http://nodus:7420", "name": "nodus", "token": "djEw", "login": "sam" }],
+            "serverBoards": { "p1": { "viewport": { "x": 1, "y": 2, "zoom": 0.5 }, "expanded": ["c1"] } }
+        });
+        let state = State::from_json(raw.clone()).unwrap();
+        assert_eq!(state.project_server("p1"), Some("s1"));
+        assert_eq!(state.server("s1").unwrap().extra["login"], "sam");
+        assert_eq!(state.server_boards["p1"].expanded, ["c1"]);
+        assert_eq!(state.projects[0].extra["later"], true);
+        let written: Value = serde_json::to_value(&state).unwrap();
+        let text = |value: &Value| nodus_domain::json::to_string(value).unwrap();
+        for key in ["servers", "serverBoards"] {
+            assert_eq!(text(&written[key]), text(&raw[key]), "{key}");
+        }
+        assert_eq!(written["projects"][0]["server"], "s1");
+        let empty = serde_json::to_value(State::default()).unwrap();
+        assert!(empty.get("servers").is_none() && empty.get("serverBoards").is_none());
     }
 
     #[test]

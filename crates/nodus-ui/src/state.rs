@@ -677,6 +677,7 @@ mod tests {
             actions: None,
             focused: None,
             archived: None,
+            server: None,
             extra: Map::new(),
         }
     }

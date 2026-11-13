@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    ActionRunResult, CaptureContext, CaptureShortcut, ClipboardOffer, MenuCommand, OpenCardRequest, SessionStatus,
-    SessionUsage, SummarizeProgress, TabAttachment, UpdateStatus, ViewEvent,
+    ActionRunResult, CaptureContext, CaptureShortcut, ClipboardOffer, MenuCommand, OpenCardRequest, ServerState,
+    SessionStatus, SessionUsage, SummarizeProgress, TabAttachment, UpdateStatus, ViewEvent,
 };
 
 /// One event, named after its channel.
@@ -70,6 +70,9 @@ pub enum Event {
     CaptureShown(CaptureContext),
     /// `ev:capture-context`: more of what the panel came up over, arriving after it.
     CaptureContext(CaptureContextPatch),
+    /// `ev:server-status`: the connection to a server changed (SRV-028). The
+    /// app's own: a server never sends it.
+    ServerStatus { server_id: String, state: ServerState },
 }
 
 /// `Partial<CaptureContext>`: the parts of the context that arrived late.
@@ -183,6 +186,13 @@ mod tests {
             ),
             (Event::ProjectsChanged, r#"{"ev":"projects-changed"}"#),
             (Event::Menu(MenuCommand::Settings), r#"{"ev":"menu","p":"settings"}"#),
+            (
+                Event::ServerStatus {
+                    server_id: "srv1".into(),
+                    state: ServerState::ProtocolMismatch,
+                },
+                r#"{"ev":"server-status","p":{"serverId":"srv1","state":"protocol-mismatch"}}"#,
+            ),
             (
                 Event::View {
                     project_id: "p1".into(),

@@ -583,6 +583,7 @@ mod tests {
                 actions: None,
                 focused: None,
                 archived: None,
+                server: None,
                 extra: Map::new(),
             },
             cards,
@@ -599,6 +600,7 @@ mod tests {
             shapes: vec![],
             links: vec![],
             viewport: None,
+            offline: false,
         }
     }
 

@@ -44,6 +44,13 @@ pub struct Project {
     /// Archived projects are listed apart on the projects grid and left out of the board's project rail.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub archived: Option<bool>,
+    /// The server the project lives on, by its id, for a server project
+    /// linked into this app's grid (SRV-161). Its `repoPath` is empty then:
+    /// the folder is on the server, and its name, colour and actions come
+    /// from there. Only the per-person fields (group, opened, focus, archive)
+    /// are this app's own.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server: Option<String>,
     /// Fields this version doesn't know, written back as they were read.
     #[serde(flatten)]
     pub extra: Map<String, Value>,

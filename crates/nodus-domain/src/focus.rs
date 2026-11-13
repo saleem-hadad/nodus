@@ -48,6 +48,7 @@ mod tests {
             actions: None,
             focused: focused.then_some(true),
             archived: archived.then_some(true),
+            server: None,
             extra: Map::new(),
         }
     }

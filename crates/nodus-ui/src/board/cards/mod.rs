@@ -460,7 +460,7 @@ pub struct BoardEnv {
     pub project_id: String,
     pub repo_path: Option<String>,
     /// A server project's server, by host name or address, where its cards'
-    /// previews open (CARD-051); none for a local project.
+    /// previews open (CARD-056); none for a local project.
     pub server_host: Option<String>,
     /// `RenamingContext`: the card, section or note being renamed or written in.
     pub renaming: Option<String>,

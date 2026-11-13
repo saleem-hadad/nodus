@@ -30,7 +30,7 @@ fn item(
     })
 }
 
-/// CARD-049: `Started by <login>`, a line that does nothing, at the
+/// CARD-054: `Started by <login>`, a line that does nothing, at the
 /// bottom of a server card's menu.
 fn started_by(card: &SessionCard) -> Option<MenuItem> {
     let label = crate::board::cards::present::started_by(card)?;
@@ -44,7 +44,7 @@ fn started_by(card: &SessionCard) -> Option<MenuItem> {
     })
 }
 
-/// CARD-051: Open preview, while something listens on the card's port.
+/// CARD-056: Open preview, while something listens on the card's port.
 fn open_preview(card: &SessionCard, server_host: Option<&str>) -> Option<MenuItem> {
     let url = crate::board::cards::present::preview_url(card, server_host)?;
     Some(MenuItem::item("Open preview", Icon::Globe, move |_, _| {
@@ -445,7 +445,7 @@ impl BoardCanvas {
     }
 
     /// The server a server project's board is on, by host, for its cards'
-    /// previews (CARD-051).
+    /// previews (CARD-056).
     fn server_host(&self, cx: &gpui::App) -> Option<String> {
         let state = self.state.read(cx);
         let board = self.board.as_ref()?;

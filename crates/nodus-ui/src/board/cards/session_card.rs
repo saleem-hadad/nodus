@@ -366,7 +366,7 @@ pub fn heading(
                 .min_w_0()
                 // `.card-title`: the canvas waits 240ms before opening (BOARD-043).
                 .on_mouse_down(MouseButton::Left, move |_, _, _| actions.press_title())
-                // CARD-049: on a server, who started it too.
+                // CARD-054: on a server, who started it too.
                 .tooltip(native_tooltip(present::title_tooltip(card).into()))
                 .child(p)
                 .into_any_element(),
@@ -385,7 +385,7 @@ pub fn heading(
                 .into_any_element(),
         );
     }
-    // CARD-051: Open preview, while something listens on the card's port.
+    // CARD-056: Open preview, while something listens on the card's port.
     if let Some(url) = present::preview_url(card, env.server_host.as_deref()) {
         let port = card.node.preview_port().unwrap_or_default();
         out.push(
@@ -703,7 +703,7 @@ fn footer(
         .h(z.px(9.0 + 0.5 + 15.4))
         .opacity(content);
     if let Some(branch) = present::branch(card) {
-        // CARD-034, CARD-052
+        // CARD-034, CARD-057
         foot = foot.child(
             item()
                 .id(anim::key(&id, "branch"))

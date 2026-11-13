@@ -186,6 +186,7 @@ Three small features that share the board's chrome:
 - **GIT-001** — Runner argv: every git call runs `git --no-optional-locks -c core.quotepath=false <args…>` (no shell; `git` resolved on the login-shell `PATH`), with env = `spawnEnv({ GIT_TERMINAL_PROMPT: '0' })` (01), UTF-8 output, no console window on Windows, and a default output cap of 32 MiB (33 554 432 bytes) per stream.
 - **GIT-002** — Runner results: exit 0 → `{ stdout, code: 0 }`; a non-zero numeric exit → `{ stdout, code }` (an answer, not a failure); failing to start git, being killed by a signal, or exceeding the cap on stdout or stderr → a thrown error.
 - **GIT-003** — Env wait: `git:status`, `git:diff` and `git:log` each wait for the login-shell env and resolve the project's `repoPath` (unknown → `Unknown project <id>`).
+- **GIT-056** — A card's worktree (server only, SRV-128): each of the three also takes a `sessionId`; when that card has a worktree, it reads the worktree instead of `repoPath`. On a server board the window sends the one selected card's id when that card has a worktree, so the branch chip, its log and the Changes window follow the selected card, and the main checkout's with none; a read that settles after the selection changed is dropped. Local boards never send one.
 
 ### Git · status
 

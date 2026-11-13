@@ -60,13 +60,13 @@ pub fn rename_initial(card: &SessionCard) -> String {
         .unwrap_or_default()
 }
 
-/// CARD-049: `Started by <login>`, on a server card a member started.
+/// CARD-054: `Started by <login>`, on a server card a member started.
 pub fn started_by(card: &SessionCard) -> Option<String> {
     card.node.created_by().map(|login| format!("Started by {login}"))
 }
 
 /// The card's title as its tooltip shows it: who started it under it, on
-/// a server (CARD-049).
+/// a server (CARD-054).
 pub fn title_tooltip(card: &SessionCard) -> String {
     match started_by(card) {
         Some(by) => format!("{}\n{by}", title(card)),
@@ -74,7 +74,7 @@ pub fn title_tooltip(card: &SessionCard) -> String {
     }
 }
 
-/// CARD-034, CARD-052: the branch the footer shows: the transcript's, else
+/// CARD-034, CARD-057: the branch the footer shows: the transcript's, else
 /// the card's worktree's on a server.
 pub fn branch(card: &SessionCard) -> Option<String> {
     card.meta
@@ -83,14 +83,14 @@ pub fn branch(card: &SessionCard) -> Option<String> {
         .or_else(|| card.node.worktree().map(|w| w.branch))
 }
 
-/// CARD-051: where a server card's preview opens, while something listens
+/// CARD-056: where a server card's preview opens, while something listens
 /// on its port: `http://<server's host>:<port>`.
 pub fn preview_url(card: &SessionCard, server_host: Option<&str>) -> Option<String> {
     let port = card.node.preview_port().filter(|_| card.node.preview_live())?;
     Some(format!("http://{}:{port}", server_host?))
 }
 
-/// NOTEUI-045: who wrote a note on a server board, for its hover.
+/// NOTEUI-050: who wrote a note on a server board, for its hover.
 pub fn note_author(note: &BoardNote) -> Option<String> {
     note.created_by().map(|login| format!("Written by {login}"))
 }
@@ -118,7 +118,7 @@ pub struct Preview {
 
 /// CARD-026: a terminal's folder, Claude's last reply, the first prompt, or
 /// `No messages yet`. On a server, while its worktree is set up, `Setting
-/// up…` and the setup's last line, or why it failed (CARD-050).
+/// up…` and the setup's last line, or why it failed (CARD-055).
 pub fn preview(card: &SessionCard, repo_path: Option<&str>) -> Preview {
     if let Some(setup) = card.node.setup() {
         let line = setup.line.trim();
@@ -134,7 +134,7 @@ pub fn preview(card: &SessionCard, repo_path: Option<&str>) -> Preview {
         };
     }
     if is_terminal(card) {
-        // A server card's own folder is its worktree (CARD-052).
+        // A server card's own folder is its worktree (CARD-057).
         let worktree = card.node.worktree().map(|w| w.path);
         let folder = worktree.as_deref().or(repo_path.filter(|p| !p.is_empty()));
         return Preview {
@@ -1009,7 +1009,7 @@ mod tests {
     }
 
     #[test]
-    fn card_049_to_052_a_server_cards_starter_setup_branch_and_preview() {
+    fn card_054_to_057_a_server_cards_starter_setup_branch_and_preview() {
         use serde_json::json;
         let local = card(&json!({ "title": "Fix it" }));
         assert_eq!(started_by(&local), None);
@@ -1023,15 +1023,15 @@ mod tests {
         assert_eq!(started_by(&server).as_deref(), Some("Started by alice"));
         assert_eq!(title_tooltip(&server), "Fix it\nStarted by alice");
         assert_eq!(branch(&server).as_deref(), Some("nodus/fix-it-abcd"));
-        // CARD-052: a terminal's folder is its worktree.
+        // CARD-057: a terminal's folder is its worktree.
         let shown = preview(&server, Some(""));
         assert_eq!(shown.text, "~/projects/shop/worktrees/abcd1234");
-        // CARD-051: Open preview only while something listens.
+        // CARD-056: Open preview only while something listens.
         assert_eq!(preview_url(&server, Some("box")), None);
         let live = card(&json!({ "previewPort": 8100, "previewLive": true }));
         assert_eq!(preview_url(&live, Some("box")).as_deref(), Some("http://box:8100"));
         assert_eq!(preview_url(&live, None), None);
-        // CARD-050: setting up, then what failed.
+        // CARD-055: setting up, then what failed.
         let setting_up = card(&json!({ "setup": { "state": "running", "line": "npm install" } }));
         assert_eq!(preview(&setting_up, None).text, "Setting up… npm install");
         let failed = card(&json!({ "setup": { "state": "failed", "line": "exit 1" } }));

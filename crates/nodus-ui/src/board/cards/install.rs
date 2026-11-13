@@ -197,7 +197,7 @@ pub fn env(board: &BoardCx, zoom: f32, window: &Window, cx: &mut App) -> Rc<Boar
         .and_then(|s| s.board.as_ref())
         .filter(|b| b.project.id == board.project_id.as_ref())
         .map(|b| b.project.repo_path.clone());
-    // CARD-051: a server project's previews open on its server.
+    // CARD-056: a server project's previews open on its server.
     let server_host = state.and_then(|s| {
         let server_id = s
             .projects

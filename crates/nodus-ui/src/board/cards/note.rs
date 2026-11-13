@@ -174,7 +174,7 @@ pub fn note(
                 "Drag a note onto the board, or click for one beside the pad".into(),
             ))
         })
-        // NOTEUI-045: on a server board, who wrote it.
+        // NOTEUI-050: on a server board, who wrote it.
         .when_some(
             present::note_author(note).filter(|_| !draft && !editing),
             |d, author| d.tooltip(native_tooltip(author.into())),

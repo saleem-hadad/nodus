@@ -50,6 +50,8 @@ struct NodeMoment {
     lift: f32,
     /// MOTION-031: 0…1 through the ring round a card whose long run finished.
     ring: Option<f32>,
+    /// MOTION-035: 0…1 through the glow of a card a finished child's pulse reached.
+    news: Option<f32>,
 }
 
 impl NodeMoment {
@@ -89,6 +91,17 @@ impl NodeMoment {
 /// `t` through the ring, for a node `w`×`h` px at `z`.
 fn done_ring(t: f32, w: f32, h: f32, z: f32) -> AnyElement {
     let (angle, opacity) = moments::ring_at(t);
+    card_glow(angle, opacity, w, h, z)
+}
+
+/// MOTION-035: the parent's edge lighting up as the pulse reaches it, then
+/// fading, `t` through it.
+fn news_glow(t: f32, w: f32, h: f32, z: f32) -> AnyElement {
+    card_glow(0.0, 0.9 * (1.0 - motion::ease_out(t)), w, h, z)
+}
+
+/// Claude's glow round a compact card, turned to `angle`.
+fn card_glow(angle: f64, opacity: f32, w: f32, h: f32, z: f32) -> AnyElement {
     let out = 1.5 * z;
     div()
         .absolute()
@@ -225,7 +238,21 @@ impl BoardCanvas {
                 0.0
             },
             ring: active_card.then(|| self.moments.ring(&node.id, now)).flatten(),
+            news: if active_card { self.news(&node.id, now) } else { None },
         }
+    }
+
+    /// MOTION-035: how far through its glow a card is that a finished
+    /// child's pulse just reached up a lineage edge.
+    fn news(&self, parent: &str, now: Instant) -> Option<f32> {
+        let travel = moments::PULSE_TRAVEL_MS;
+        self.edges
+            .iter()
+            .filter(|e| !e.view && e.source == parent)
+            .filter_map(|e| self.moments.pulse(&e.target, now))
+            .filter(|ms| *ms >= travel)
+            .map(|ms| ((ms - travel) / (moments::PULSE_MS - travel)) as f32)
+            .reduce(f32::min)
     }
 
     /// A node's box on screen, with its contents.
@@ -430,6 +457,7 @@ impl BoardCanvas {
             // `grabbing` while dragged; otherwise `default` (board.css).
             .when(node.dragging, |d| d.cursor(CursorStyle::ClosedHand))
             .children(moment.ring.map(|t| done_ring(t, w, h, z)))
+            .children(moment.news.map(|t| news_glow(t, w, h, z)))
             .child(content);
         let wrapper = moment.apply(wrapper, &node.kind, z);
         let wrapper = if click_through {
@@ -772,7 +800,7 @@ fn paint_edge(edge: &EdgePaint, origin: gpui::Point<Pixels>, phase: f64, window:
 
 /// MOTION-035: a light running up a lineage edge from the session that
 /// finished (the edge's end) to its parent (its start) in Claude's colours,
-/// trailing a fading tail, then a ring opening at the parent.
+/// trailing a fading tail, then going out at the parent (whose card glows).
 fn paint_pulse(edge: &EdgePaint, origin: gpui::Point<Pixels>, ms: f64, zoom: f64, window: &mut Window) {
     let at = |p: Point| point(origin.x + px(p.x as f32), origin.y + px(p.y as f32));
     let dot = |c: Point, r: f64, color: gpui::Rgba, window: &mut Window| {
@@ -803,26 +831,7 @@ fn paint_pulse(edge: &EdgePaint, origin: gpui::Point<Pixels>, ms: f64, zoom: f64
     } else {
         let t = ((ms - travel) / (moments::PULSE_MS - travel)).clamp(0.0, 1.0);
         let e = f64::from(motion::ease_out(t as f32));
-        let c = edge.pts[0];
-        let r = (4.0 + 14.0 * e) * zoom;
-        let mut ring = PathBuilder::stroke(px((2.0 * zoom) as f32));
-        const STEPS: usize = 48;
-        for i in 0..=STEPS {
-            let a = std::f64::consts::TAU * i as f64 / STEPS as f64;
-            let p = at(Point {
-                x: c.x + r * a.cos(),
-                y: c.y + r * a.sin(),
-            });
-            if i == 0 {
-                ring.move_to(p);
-            } else {
-                ring.line_to(p);
-            }
-        }
-        if let Ok(ring) = ring.build() {
-            window.paint_path(ring, hue.with_alpha(0.7 * (1.0 - e) as f32));
-        }
-        dot(c, 3.5 * zoom * (1.0 - e), hue, window);
+        dot(edge.pts[0], 3.5 * zoom * (1.0 - e), hue, window);
     }
 }
 

@@ -102,7 +102,7 @@ impl Drawing {
     }
 
     fn ms(&self, now: Instant) -> f64 {
-        now.saturating_duration_since(self.start).as_secs_f64() * 1000.0
+        since(self.start, now)
     }
 
     /// The pen this frame, and how much of it shows.
@@ -426,7 +426,7 @@ impl Moments {
 
     /// Drops what's over.
     pub fn tick(&mut self, now: Instant) {
-        let within = |at: &Instant, ms: f64| now.saturating_duration_since(*at).as_secs_f64() * 1000.0 < ms;
+        let within = |at: &Instant, ms: f64| since(*at, now) < ms;
         self.pops.retain(|_, at| within(at, POP_MS));
         self.lifts.retain(|_, at| within(at, LIFT_MS));
         self.rings.retain(|_, at| within(at, RING_MS));
@@ -459,7 +459,7 @@ impl Moments {
             }
         }
         let at = self.pops.get(id)?;
-        let p = now.saturating_duration_since(*at).as_secs_f64() * 1000.0 / POP_MS;
+        let p = since(*at, now) / POP_MS;
         (p < 1.0).then_some(Arrival::Pop(p as f32))
     }
 
@@ -467,14 +467,14 @@ impl Moments {
     /// then down on the spring (MOTION-013).
     pub fn lift(&self, id: &str, now: Instant) -> f32 {
         let Some(at) = self.lifts.get(id) else { return 0.0 };
-        let t = (now.saturating_duration_since(*at).as_secs_f64() * 1000.0 / LIFT_MS) as f32;
+        let t = (since(*at, now) / LIFT_MS) as f32;
         lift_at(t)
     }
 
     /// The ring round a card whose long run just finished: 0…1 through it.
     pub fn ring(&self, id: &str, now: Instant) -> Option<f32> {
         let at = self.rings.get(id)?;
-        let t = now.saturating_duration_since(*at).as_secs_f64() * 1000.0 / RING_MS;
+        let t = since(*at, now) / RING_MS;
         (t < 1.0).then_some(t as f32)
     }
 
@@ -482,9 +482,14 @@ impl Moments {
     /// ms since it set off.
     pub fn pulse(&self, child: &str, now: Instant) -> Option<f64> {
         let at = self.pulses.get(child)?;
-        let ms = now.saturating_duration_since(*at).as_secs_f64() * 1000.0;
+        let ms = since(*at, now);
         (ms < PULSE_MS).then_some(ms)
     }
+}
+
+/// Milliseconds from `at` to `now` on the moments' clock.
+pub fn since(at: Instant, now: Instant) -> f64 {
+    now.saturating_duration_since(at).as_secs_f64() * 1000.0
 }
 
 /// The lift at `t` (0…1): up in the first fifth on `--ease-out`, then back

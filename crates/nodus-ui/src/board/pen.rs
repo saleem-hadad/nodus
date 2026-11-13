@@ -26,7 +26,7 @@ impl BoardCanvas {
             .filter_map(|d| {
                 let (at, opacity) = d.pen(now);
                 let p = self.pen_point(d, at)?;
-                let ms = now.saturating_duration_since(d.start).as_secs_f64() * 1000.0;
+                let ms = super::moments::since(d.start, now);
                 let (x, y) = super::viewport::to_screen(vp, p.x, p.y);
                 Some(pen(x as f32, y as f32, &d.title, ms, opacity))
             })
@@ -88,7 +88,8 @@ impl BoardCanvas {
 }
 
 /// The pen at (`x`, `y`) on screen: a dot of ink in Claude's colours where
-/// it draws, the twinkling sparkle above it and the session's name below,
+/// it draws, the twinkling sparkle above and left of it and the session's
+/// name above and right,
 /// `ms` into the drawing.
 fn pen(x: f32, y: f32, title: &str, ms: f64, opacity: f32) -> AnyElement {
     let hue = ai::hue(ms / 2400.0);
@@ -125,15 +126,16 @@ fn pen(x: f32, y: f32, title: &str, ms: f64, opacity: f32) -> AnyElement {
         .child(
             div()
                 .absolute()
-                .left(px(5.))
-                .top(px(-23.))
+                .left(px(-25.))
+                .top(px(-25.))
                 .child(ai::sparkle(16., 2., hue, tw)),
         )
+        // Above the tip, clear of what's being drawn below and beside it.
         .child(
             div()
                 .absolute()
-                .left(px(12.))
-                .top(px(9.))
+                .left(px(10.))
+                .top(px(-30.))
                 .h(px(20.))
                 .px(px(8.))
                 .flex()

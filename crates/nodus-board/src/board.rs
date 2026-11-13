@@ -178,6 +178,7 @@ impl Board {
                 shapes: board.shapes.values().cloned().collect(),
                 links: board.links.values().cloned().collect(),
                 viewport: board.viewport,
+                offline: false,
             };
             Ok::<_, BoardError>((snapshot, board.nodes.values().cloned().collect::<Vec<_>>()))
         });

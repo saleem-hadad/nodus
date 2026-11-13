@@ -16,6 +16,7 @@ use crate::feedback::ReportDialog;
 use crate::platform::Platform;
 use crate::projects::grid::ProjectsView;
 use crate::projects::rail::ProjectRail;
+use crate::servers::ServersDialog;
 use crate::settings::SettingsDialog;
 use crate::shell::title_bar::{new_project_button, title_bar};
 use crate::state::{AppState, Route};
@@ -31,6 +32,8 @@ pub struct Shell {
     rail: Option<Entity<ProjectRail>>,
     settings: Option<Entity<SettingsDialog>>,
     report: Option<Entity<ReportDialog>>,
+    /// Connect to Server… and Show Server Projects… (SRV-060, SRV-161).
+    servers: Option<Entity<ServersDialog>>,
     /// The session window, transcript preview and agents viewer (spec 12).
     pub terminal_layers: Entity<crate::terminal::layers::TerminalLayers>,
     /// The board the main area shows; a fresh one per project (UI-028,
@@ -83,6 +86,7 @@ impl Shell {
             rail: None,
             settings: None,
             report: None,
+            servers: None,
             terminal_layers,
             board_key: None,
             board: None,
@@ -92,9 +96,14 @@ impl Shell {
 
     /// Keeps the views that belong to the route alive, and only those.
     fn sync_views(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
-        let (route, settings_open, report_open) = {
+        let (route, settings_open, report_open, servers_open) = {
             let s = self.state.read(cx);
-            (s.route.clone(), s.settings_open, s.report_open)
+            (
+                s.route.clone(),
+                s.settings_open,
+                s.report_open,
+                s.server_dialog.is_some(),
+            )
         };
         match &route {
             Route::Projects => {
@@ -151,6 +160,23 @@ impl Shell {
             (false, Some(dialog)) => {
                 let previous = dialog.read(cx).previous_focus.clone();
                 self.report = None;
+                match previous {
+                    Some(previous) => window.focus(&previous, cx),
+                    None => window.focus(&self.focus, cx),
+                }
+            }
+            _ => {}
+        }
+        // The server dialogs, the same way.
+        match (servers_open, &self.servers) {
+            (true, None) => {
+                let state = self.state.clone();
+                let previous = window.focused(cx);
+                self.servers = Some(cx.new(|cx| ServersDialog::new(state, previous, window, cx)));
+            }
+            (false, Some(dialog)) => {
+                let previous = dialog.read(cx).previous_focus.clone();
+                self.servers = None;
                 match previous {
                     Some(previous) => window.focus(&previous, cx),
                     None => window.focus(&self.focus, cx),
@@ -221,18 +247,21 @@ impl Render for Shell {
         let route = self.state.read(cx).route.clone();
         let pinned = self.state.read(cx).pin_rail();
         let actions = match route {
-            Route::Projects => vec![new_project_button(&self.state)],
-            // BOARD-147: the board's split button.
+            Route::Projects => vec![new_project_button(&self.state, &self.menus, window, cx)],
+            // BOARD-147: the board's split button; none on a read-only
+            // board (SRV-028).
             Route::Board(_) => self
                 .board
                 .clone()
+                .filter(|board| !board.read(cx).read_only())
                 .map(|board| vec![crate::board::title_bar_button(&board, &self.menus, window, cx)])
                 .unwrap_or_default(),
         };
         let bar = title_bar(&self.state, actions, window, cx);
         // The actions rail (05) on the board's right edge; the board canvas
         // starts its runs (ACT-031).
-        let action_rail = matches!(route, Route::Board(_)).then(|| {
+        let read_only = self.board.as_ref().is_some_and(|b| b.read(cx).read_only());
+        let action_rail = (matches!(route, Route::Board(_)) && !read_only).then(|| {
             let hooks = crate::actions::RailHooks {
                 run: self.board.clone().map(|board| {
                     std::rc::Rc::new(move |action: &nodus_domain::ProjectAction, cx: &mut gpui::App| {
@@ -340,6 +369,7 @@ impl Render for Shell {
             .child(self.terminal_layers.clone())
             .children(self.settings.clone())
             .children(self.report.clone())
+            .children(self.servers.clone())
             .child(self.menus.clone())
             // UI-099: the ☰ button's application menu, off a Mac.
             .when(!Platform::CURRENT.is_mac(), |d| {

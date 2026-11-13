@@ -338,6 +338,10 @@ pub struct BoardSnapshot {
     pub links: Vec<BoardLink>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub viewport: Option<Viewport>,
+    /// A server board's last snapshot, given while the server can't be
+    /// reached: show it read-only, under `Reconnecting…` (SRV-028).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub offline: bool,
 }
 
 /// The changes `board.saveNodes` makes to a card.

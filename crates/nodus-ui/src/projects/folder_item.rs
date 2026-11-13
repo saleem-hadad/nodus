@@ -31,6 +31,26 @@ pub struct FolderItem<'a> {
     pub pop: f32,
     /// The pointer is pressed on it (UI-231).
     pub pressed: bool,
+    /// A server project's badge (SRV-162); none for a local one.
+    pub server: Option<ServerBadge>,
+}
+
+/// The badge on a server project's folder: its server's name for the
+/// tooltip, dimmed while the server is away (SRV-162).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ServerBadge {
+    pub name: String,
+    pub away: bool,
+}
+
+impl ServerBadge {
+    pub fn tooltip(&self) -> String {
+        if self.away {
+            format!("On {} · Reconnecting…", self.name)
+        } else {
+            format!("On {}", self.name)
+        }
+    }
 }
 
 /// The subtitle (UI-233): a blank line while stats load, else the counts.
@@ -180,7 +200,26 @@ impl FolderItem<'_> {
                                 .child(icon(Icon::Target, 12., 2.4, t.accent)),
                         )
                     })
-                    .children(badges),
+                    .children(badges)
+                    .when_some(self.server, |d, server| {
+                        d.child(
+                            div()
+                                .id((id.clone(), "server-badge"))
+                                .absolute()
+                                .bottom(px(16.))
+                                .left(px(2.))
+                                .size(px(20.))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .rounded(px(10.))
+                                .bg(t.bg_elevated)
+                                .shadow(t.md())
+                                .when(server.away, |d| d.opacity(0.45))
+                                .tooltip(native_tooltip(server.tooltip().into()))
+                                .child(icon(Icon::Server, 11., 2.4, t.text_secondary)),
+                        )
+                    }),
             )
             .map(|d| match self.rename {
                 Some(field) => d.child(field),
@@ -270,5 +309,16 @@ mod tests {
         assert_eq!(subtitle(Some(&stats(0, 0))), "No sessions");
         assert_eq!(subtitle(Some(&stats(1, 0))), "1 session");
         assert_eq!(subtitle(Some(&stats(5, 2))), "5 sessions · 2 active");
+    }
+
+    /// SRV-162
+    #[test]
+    fn names_the_server_on_its_badge() {
+        let badge = |away| ServerBadge {
+            name: "nodus-box".into(),
+            away,
+        };
+        assert_eq!(badge(false).tooltip(), "On nodus-box");
+        assert_eq!(badge(true).tooltip(), "On nodus-box · Reconnecting…");
     }
 }

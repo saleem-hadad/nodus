@@ -4212,6 +4212,7 @@ dependencies = [
  "nodus-host",
  "nodus-host-proto",
  "nodus-platform",
+ "nodus-remote",
  "nodus-sessions",
  "nodus-store",
  "nodus-tools",
@@ -4326,6 +4327,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "nodus-remote"
+version = "1.0.12"
+dependencies = [
+ "nodus-domain",
+ "nodus-wire",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "nodus-server"
 version = "1.0.12"
 dependencies = [
@@ -4340,6 +4354,7 @@ dependencies = [
  "nodus-host",
  "nodus-host-proto",
  "nodus-platform",
+ "nodus-remote",
  "nodus-updater",
  "nodus-wire",
  "serde",
@@ -4347,6 +4362,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-tungstenite",
+ "uuid",
 ]
 
 [[package]]

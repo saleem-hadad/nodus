@@ -4,8 +4,8 @@
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, Bounds, Context, FontWeight, InteractiveElement, IntoElement, MouseButton, ParentElement,
-    PathBuilder, Pixels, StatefulInteractiveElement, Styled, Window, canvas, div, fill, point, px, size,
+    AnimationExt as _, AnyElement, App, Bounds, Context, FontWeight, InteractiveElement, IntoElement, MouseButton,
+    ParentElement, PathBuilder, Pixels, StatefulInteractiveElement, Styled, Window, canvas, div, fill, point, px, size,
 };
 use nodus_domain::{Rect, SessionStatus, Viewport};
 
@@ -148,6 +148,105 @@ impl BoardCanvas {
             .child(div().w(px(1.)).h(px(16.)).mx(px(3.)).bg(t.separator))
             .child(fit)
             .into_any_element()
+    }
+
+    /// SRV-028: while a server board's server is away, a `Reconnecting…`
+    /// pill at the bottom's middle, where the prompt bar is when the board
+    /// isn't read-only, in line with the zoom controls.
+    pub(crate) fn render_reconnecting(&self, cx: &mut Context<'_, Self>) -> Option<AnyElement> {
+        let away = {
+            let s = self.state.read(cx);
+            let project = s.route_project();
+            project.is_some_and(|p| s.server_away(p))
+        };
+        if !away && !self.read_only() {
+            return None;
+        }
+        let t = theme::tokens(cx);
+        let spinner = icon(Icon::Loader2, 13., 2.2, t.text_secondary);
+        let spinner = if crate::parity::frozen(cx) {
+            spinner.into_any_element()
+        } else {
+            spinner
+                .with_animation(
+                    "reconnecting-spin",
+                    gpui::Animation::new(std::time::Duration::from_millis(900)).repeat(),
+                    |svg, delta| svg.with_transformation(gpui::Transformation::rotate(gpui::percentage(delta))),
+                )
+                .into_any_element()
+        };
+        Some(
+            div()
+                .absolute()
+                .bottom(px(16.))
+                .left_0()
+                .right_0()
+                .flex()
+                .justify_center()
+                .child(
+                    div()
+                        .id("board-reconnecting")
+                        .occlude()
+                        .flex()
+                        .items_center()
+                        .gap(px(7.))
+                        .h(px(34.))
+                        .pl(px(12.))
+                        .pr(px(14.))
+                        .rounded(px(11.))
+                        .map(|d| frosted(d, rgba_mix(t.bg_elevated, 0.86), 20., 1.6))
+                        .shadow(t.md())
+                        .font_family(fonts::UI)
+                        .text_size(TEXT_SM)
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(t.text_secondary)
+                        .tooltip(native_tooltip(
+                            "The server can’t be reached. This is its board as last seen, read-only until it’s back."
+                                .into(),
+                        ))
+                        .child(spinner)
+                        .child("Reconnecting…"),
+                )
+                .into_any_element(),
+        )
+    }
+
+    /// SRV-028: a board loaded while its server was away is read-only. A
+    /// clear cover over it takes every press, so nothing on it can be
+    /// picked, moved, typed into or dropped on, and views show as pictures
+    /// (D3); pressing and dragging pans, and the wheel and pinch pan and
+    /// zoom, since the viewport is this person's own (SRV-164).
+    pub(crate) fn render_read_only_cover(&self, cx: &mut Context<'_, Self>) -> Option<AnyElement> {
+        if !self.read_only() {
+            return None;
+        }
+        let pan = |this: &mut Self, e: &gpui::MouseDownEvent, cx: &mut Context<'_, Self>| {
+            this.pointer = Some(e.position);
+            this.gesture = super::canvas::Gesture::Pan { last: e.position };
+            this.move_started(cx);
+            cx.notify();
+        };
+        Some(
+            div()
+                .id("board-read-only")
+                .absolute()
+                .top_0()
+                .left_0()
+                .size_full()
+                .occlude()
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |this, e: &gpui::MouseDownEvent, _, cx| pan(this, e, cx)),
+                )
+                .on_mouse_down(
+                    MouseButton::Middle,
+                    cx.listener(move |this, e: &gpui::MouseDownEvent, _, cx| pan(this, e, cx)),
+                )
+                .on_mouse_down(MouseButton::Right, |_, _, cx| cx.stop_propagation())
+                .on_scroll(cx.listener(|this, e, _, cx| this.wheel(e, cx)))
+                .on_pinch(cx.listener(|this, e, _, cx| this.pinch(e, cx)))
+                .into_any_element(),
+        )
     }
 
     /// The minimap, 16px from the bottom-right (z 5).

@@ -32,11 +32,13 @@ serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["fs", "net", "process", "signal"] }
 tokio-tungstenite.workspace = true
+uuid.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
 
 [dev-dependencies]
+nodus-remote.workspace = true
 tempfile.workspace = true
 
 [lints]

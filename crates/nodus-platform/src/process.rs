@@ -457,7 +457,7 @@ impl Command {
             .stdout(pipe_for(self.stdout))
             .stderr(pipe_for(self.stderr));
         let mut command = tokio::process::Command::from(command);
-        let child = command.spawn().map_err(|err| self.spawn_error(err))?;
+        let child = retry_busy(|| command.spawn()).map_err(|err| self.spawn_error(err))?;
         let pid = child.id().unwrap_or_default();
         let killer = Killer(Arc::new(KillerInner {
             tree: imp::Tree::new(&child, pid),
@@ -509,10 +509,29 @@ impl Command {
                 command.stdout(Stdio::null()).stderr(Stdio::null());
             }
         }
-        let child = command.spawn().map_err(|err| self.spawn_error(err))?;
+        let child = retry_busy(|| command.spawn()).map_err(|err| self.spawn_error(err))?;
         let pid = child.id();
         imp::let_go(child);
         Ok(pid)
+    }
+}
+
+/// Starts a process with `start`, trying again a few times when Linux says
+/// the program is busy (`ETXTBSY`): it won't run a file something still has
+/// open for writing, and a script written just before it runs can be held
+/// open for a moment by a child forked elsewhere in this process, until that
+/// child execs. Go's `os/exec` does the same.
+fn retry_busy<T>(mut start: impl FnMut() -> io::Result<T>) -> io::Result<T> {
+    const ETXTBSY: i32 = 26;
+    let mut tries = 0;
+    loop {
+        match start() {
+            Err(err) if cfg!(target_os = "linux") && err.raw_os_error() == Some(ETXTBSY) && tries < 5 => {
+                tries += 1;
+                std::thread::sleep(Duration::from_millis(10 * tries));
+            }
+            started => return started,
+        }
     }
 }
 

@@ -6,7 +6,9 @@
 //! saves through the core.
 
 use gpui::{Context, Task};
-use nodus_domain::{BoardNote, BoardSection, NodePatch, Rect, SessionCard, SessionStatus, SessionUsage, ViewPatch};
+use nodus_domain::{
+    BoardNote, BoardSection, BoardSnapshot, NodePatch, Rect, SessionCard, SessionStatus, SessionUsage, ViewPatch,
+};
 
 use crate::state::AppState;
 use crate::terminal::actions::{PreviewFind, PreviewFindState};
@@ -53,11 +55,33 @@ impl AppState {
             })
             .await;
             let _ = this.update(cx, |state, cx| {
-                if let Ok(board) = loaded
+                if let Ok(mut board) = loaded
                     && state.route.project_id() == Some(project_id.as_str())
                 {
+                    // SRV-028: the server went away. The board on show is
+                    // newer than the snapshot the core kept from its last
+                    // load (cards started since), so it stays, read-only.
+                    if board.offline
+                        && let Some(shown) = state
+                            .board
+                            .as_ref()
+                            .filter(|b| b.project.id == project_id && !b.offline)
+                    {
+                        board = BoardSnapshot {
+                            offline: true,
+                            ..shown.clone()
+                        };
+                    }
                     if came_back_archived(state.terminal_session_id.as_deref(), &board.cards) {
                         state.terminal_session_id = None;
+                    }
+                    // SRV-028: a board read-only while its server is away
+                    // has no session window, preview or agents open over it.
+                    if board.offline {
+                        state.terminal_session_id = None;
+                        state.preview_session_id = None;
+                        state.agent_view = None;
+                        state.selection.clear();
                     }
                     state.board = Some(board);
                 }

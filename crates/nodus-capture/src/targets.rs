@@ -167,16 +167,22 @@ pub fn missing_boards(state: &State) -> Vec<String> {
     state
         .projects
         .iter()
-        .filter(|p| p.archived != Some(true) && state.board(&p.id).is_none())
+        .filter(|p| p.archived != Some(true) && p.server.is_none() && state.board(&p.id).is_none())
         .map(|p| p.id.clone())
         .collect()
 }
 
 /// `capture:targets` (CAP-149): the projects that aren't archived, in
 /// state.json's order; their sessions, most recently active first; the
-/// recents that still resolve; and the default project.
+/// recents that still resolve; and the default project. Server projects
+/// aren't among them until captures can be uploaded to their servers
+/// (SRV-163).
 pub fn targets(state: &State, last_board: Option<&str>, sessions: &dyn CaptureSessions) -> CaptureTargets {
-    let projects: Vec<_> = state.projects.iter().filter(|p| p.archived != Some(true)).collect();
+    let projects: Vec<_> = state
+        .projects
+        .iter()
+        .filter(|p| p.archived != Some(true) && p.server.is_none())
+        .collect();
     let mut found = Vec::new();
     for project in &projects {
         let Some(board) = state.board(&project.id) else {

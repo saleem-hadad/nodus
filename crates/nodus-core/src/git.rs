@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 use nodus_domain::{GitCommit, GitFileChange, GitFileDiff, GitStatus};
 use nodus_git::{Git, clamp_limit};
+use nodus_remote::Request;
 
 use crate::error::OnChannel;
 use crate::{CommandResult, Nodus};
@@ -21,6 +22,10 @@ impl GitApi<'_> {
     /// none when the folder isn't in a git repository. Fails when git can't
     /// run; the window reads that as none too (GIT-021).
     pub async fn status(&self, project_id: &str) -> CommandResult<Option<GitStatus>> {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let project_id = project_id.to_owned();
+            return route.call(Request::GitStatus { project_id }).await;
+        }
         self.nodus
             .on_core(async {
                 const CHANNEL: &str = "git:status";
@@ -32,6 +37,10 @@ impl GitApi<'_> {
 
     /// `git:diff` (GIT-014…GIT-020): one changed file against HEAD.
     pub async fn diff(&self, project_id: &str, file: &GitFileChange) -> CommandResult<GitFileDiff> {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, file) = (project_id.to_owned(), file.clone());
+            return route.call(Request::GitDiff { project_id, file }).await;
+        }
         self.nodus
             .on_core(async {
                 const CHANNEL: &str = "git:diff";
@@ -44,6 +53,10 @@ impl GitApi<'_> {
     /// `git:log` (GIT-011…GIT-013): the newest commits on the branch, newest
     /// first. A whole-number `limit` is kept to 1–50; anything else is 5.
     pub async fn log(&self, project_id: &str, limit: Option<f64>) -> CommandResult<Vec<GitCommit>> {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let project_id = project_id.to_owned();
+            return route.call(Request::GitLog { project_id, limit }).await;
+        }
         self.nodus
             .on_core(async {
                 const CHANNEL: &str = "git:log";

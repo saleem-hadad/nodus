@@ -853,9 +853,17 @@ impl Render for BoardCanvas {
         let marquee = self.render_marquee(&t);
         let pill = self.render_zoom_pill(window, cx);
         let minimap = self.render_minimap(cx);
-        let hint = empty.then(|| self.render_hint(window, cx));
+        // Its keys and bar aren't there on a read-only board (SRV-028).
+        let hint = (empty && !self.read_only()).then(|| self.render_hint(window, cx));
         // BOARD-138: the toast is stacked above the prompt bar (spec 11).
-        let bar = self.render_bar(window, cx);
+        // SRV-028: nothing to add to a read-only board.
+        let read_only = self.read_only();
+        // A field or terminal on it lets go of the keyboard as it turns read-only.
+        if read_only && !self.read_only_seen {
+            window.focus(&self.focus, cx);
+        }
+        self.read_only_seen = read_only;
+        let bar = (!read_only).then(|| self.render_bar(window, cx));
         let search = self.render_search(window, cx);
         let merge = self.render_merge(window, cx);
         let confirm = self.render_confirm(window, cx);
@@ -875,8 +883,14 @@ impl Render for BoardCanvas {
                 let at = this.bounds.contains(&at).then(|| this.to_flow(at));
                 this.add_images(paths.paths().to_vec(), at, cx);
             }));
-        let ink_dock = self.render_ink_dock(window, cx);
-        let bubble = self.render_bubble(window, cx);
+        let ink_dock = (!read_only).then(|| self.render_ink_dock(window, cx));
+        let bubble = if read_only {
+            Vec::new()
+        } else {
+            self.render_bubble(window, cx)
+        };
+        let read_only_cover = self.render_read_only_cover(cx);
+        let reconnecting = self.render_reconnecting(cx);
         // Spec 04: views' webviews kept in step, their large window and the New view dialog.
         let views_layer = crate::views::board_layer(self, window, cx);
 
@@ -929,15 +943,17 @@ impl Render for BoardCanvas {
             .child(ink_hitbox)
             .child(drop_layer)
             .children(hint)
-            .child(ink_dock)
+            .children(ink_dock)
+            .children(read_only_cover)
             .child(pill)
             .child(minimap)
-            .child(bar)
+            .children(bar)
             .children(bubble)
             .children(search)
             .children(merge)
             .children(confirm)
             .children(views_layer)
+            .children(reconnecting)
             .into_any_element()
     }
 }

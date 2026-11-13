@@ -22,11 +22,13 @@
 mod call;
 #[cfg(feature = "client")]
 pub mod client;
+pub mod files;
 mod frame;
 
 use serde::{Deserialize, Serialize};
 
 pub use call::{CALLS, NOT_AVAILABLE, Request};
+pub use files::{FILES_PATH, MAX_UPLOAD, UPLOADS_PATH, Upload};
 pub use frame::{Answer, CallError, CallFrame, Frame, FrameError};
 
 /// What the wire speaks. A client and a server with different protocols

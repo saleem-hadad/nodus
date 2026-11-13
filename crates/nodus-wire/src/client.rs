@@ -4,8 +4,11 @@
 //! reconnecting on top (SRV-028).
 
 use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::task::{Context, Poll};
 
 use futures_util::{SinkExt, StreamExt};
 use nodus_domain::Event;
@@ -64,6 +67,37 @@ impl Events {
     }
 }
 
+/// A call's answer to come, from [`Client::begin`]: await it. Fails with
+/// [`DISCONNECTED`] when the connection goes first.
+pub struct Pending {
+    call: String,
+    /// None when the call never left.
+    answer: Option<oneshot::Receiver<Result<Value, CallError>>>,
+}
+
+impl Pending {
+    fn failed(call: &str) -> Self {
+        Self {
+            call: call.to_owned(),
+            answer: None,
+        }
+    }
+}
+
+impl Future for Pending {
+    type Output = Result<Value, CallError>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
+        let Some(answer) = this.answer.as_mut() else {
+            return Poll::Ready(Err(CallError::new(this.call.as_str(), DISCONNECTED)));
+        };
+        Pin::new(answer)
+            .poll(cx)
+            .map(|answer| answer.unwrap_or_else(|_| Err(CallError::new(this.call.as_str(), DISCONNECTED))))
+    }
+}
+
 /// One connection to a server. Calls can be made from many tasks at once.
 pub struct Client {
     outbox: mpsc::UnboundedSender<Message>,
@@ -94,6 +128,75 @@ pub async fn hello(address: &str) -> Result<Hello, ConnectError> {
         return Err(ConnectError::Refused(status));
     }
     nodus_domain::json::from_str(body).map_err(|err| ConnectError::Protocol(err.to_string()))
+}
+
+/// What a files route answered: its status, headers and body.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileBody {
+    pub status: u16,
+    /// Names in lower case.
+    pub headers: Vec<(String, String)>,
+    pub body: Vec<u8>,
+}
+
+impl FileBody {
+    /// A header's value, by its name in any case.
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(name))
+            .map(|(_, v)| v.as_str())
+    }
+}
+
+/// `PUT /api/uploads` (SRV-163): keeps `bytes` on the server under a name
+/// it picks; `name` goes along as a label. Fails with the HTTP status the
+/// server answered (413 over [`crate::MAX_UPLOAD`], 401 for the token).
+pub async fn upload(address: &str, token: &str, name: &str, bytes: &[u8]) -> Result<crate::Upload, ConnectError> {
+    let target = format!("{}?name={}", crate::UPLOADS_PATH, crate::files::encode_name(name));
+    let answer = http(address, "PUT", &target, token, bytes).await?;
+    if answer.status != 200 {
+        return Err(ConnectError::Refused(answer.status));
+    }
+    serde_json::from_slice(&answer.body).map_err(|err| ConnectError::Protocol(err.to_string()))
+}
+
+/// `GET /api/files/<id>` (SRV-163): an upload, a board picture or a view's
+/// page, whatever the status.
+pub async fn download(address: &str, token: &str, id: &str) -> Result<FileBody, ConnectError> {
+    http(address, "GET", &format!("{}{id}", crate::FILES_PATH), token, &[]).await
+}
+
+/// One HTTP/1.1 request with the token, the connection closed after it.
+async fn http(address: &str, method: &str, target: &str, token: &str, body: &[u8]) -> Result<FileBody, ConnectError> {
+    let authority = authority(address)?;
+    let mut stream = TcpStream::connect(&authority).await?;
+    let head = format!(
+        "{method} {target} HTTP/1.1\r\nHost: {authority}\r\nAuthorization: Bearer {token}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    stream.write_all(head.as_bytes()).await?;
+    stream.write_all(body).await?;
+    let mut answer = Vec::new();
+    stream.read_to_end(&mut answer).await?;
+    let not_http = || ConnectError::Protocol("The server's answer wasn't HTTP".into());
+    let split = answer.windows(4).position(|w| w == b"\r\n\r\n").ok_or_else(not_http)?;
+    let head = String::from_utf8_lossy(&answer[..split]).into_owned();
+    let mut lines = head.split("\r\n");
+    let status = lines
+        .next()
+        .and_then(|line| line.get(9..12))
+        .and_then(|code| code.parse().ok())
+        .ok_or_else(not_http)?;
+    let headers = lines
+        .filter_map(|line| line.split_once(':'))
+        .map(|(name, value)| (name.trim().to_ascii_lowercase(), value.trim().to_owned()))
+        .collect();
+    Ok(FileBody {
+        status,
+        headers,
+        body: answer[split + 4..].to_vec(),
+    })
 }
 
 impl Client {
@@ -159,12 +262,25 @@ impl Client {
     /// Makes a call by any name, with any arguments, as a client that
     /// doesn't know the server's calls would.
     pub async fn call_named(&self, call: &str, args: Value) -> Result<Value, CallError> {
+        self.begin_named(call, args).await
+    }
+
+    /// Sends a call now, after every call sent before it and before any
+    /// sent after, and gives its answer to come. Keys typed into a session
+    /// go this way, so they reach it in order without waiting on each
+    /// other. Dropping the answer leaves the call made.
+    pub fn begin(&self, request: &Request) -> Pending {
+        self.begin_named(request.name(), request.args())
+    }
+
+    /// [`Client::begin`] by any name, with any arguments.
+    pub fn begin_named(&self, call: &str, args: Value) -> Pending {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let (answered, answer) = oneshot::channel();
         {
             let mut waiting = lock(&self.waiting);
             if !waiting.open {
-                return Err(CallError::new(call, DISCONNECTED));
+                return Pending::failed(call);
             }
             waiting.calls.insert(id, (call.to_owned(), answered));
         }
@@ -175,9 +291,12 @@ impl Client {
         });
         if !self.send_text(frame.to_text()) {
             lock(&self.waiting).calls.remove(&id);
-            return Err(CallError::new(call, DISCONNECTED));
+            return Pending::failed(call);
         }
-        answer.await.unwrap_or_else(|_| Err(CallError::new(call, DISCONNECTED)))
+        Pending {
+            call: call.to_owned(),
+            answer: Some(answer),
+        }
     }
 
     /// Sends a text frame as it is; false once the connection has gone.

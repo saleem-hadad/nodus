@@ -19,6 +19,7 @@ nodus-feedback.workspace = true
 nodus-git.workspace = true
 nodus-host-proto.workspace = true
 nodus-platform.workspace = true
+nodus-remote.workspace = true
 nodus-sessions.workspace = true
 nodus-store.workspace = true
 nodus-tools.workspace = true

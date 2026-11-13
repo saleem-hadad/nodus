@@ -37,6 +37,7 @@ A **shape** is a thing on the board, like a note: a rectangle, ellipse or diamon
 - **SHAPE-006** **Add a picture…** (the dock button under Sticker) opens the system's file picker for several files. PNG, JPEG, GIF and WebP files go up in the middle of the view, each 32 units (scaled) down and right of the one before.
 - **SHAPE-007** ⌘V (Ctrl+V) on the board with a picture on the clipboard and no copied notes puts it up at the pointer, or the view's middle.
 - **SHAPE-008** Picture files dropped on the board, over cards and notes too, go up where they're dropped.
+- **SHAPE-041** On a server board (hosted Nodus, added after 1.0.12), a picture added by SHAPE-006…SHAPE-008 is uploaded to the server (`PUT /api/uploads`), which picks its name, and the shape holds that name; the bytes are kept here too, in `server-files/<server>/<name>`. A picture the board has but this app hasn't is fetched once with `GET /api/files/<name>` when it's first drawn, and the board redraws when it's in; until then, and while the server is away, it draws as a picture not yet loaded. Adding a picture while the server is away fails, as every change to a server board does (SRV-163, SRV-028).
   - Other files are left out.
   - A picture is copied into `board-images` under a new name, then shown at its own proportions (read from its header), its longer side at most 480 units (scaled) and never larger than it is.
   - Files aren't removed when their shape goes, so ⌘Z can bring it back.

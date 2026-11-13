@@ -55,10 +55,17 @@ pub fn run(user_data: PathBuf) -> anyhow::Result<()> {
     // binary's `host` subcommand and updates come from GitHub (the defaults).
     let flags = Arc::new(WindowFlags::default());
     let (shell, shell_requests) = UiShell::new(Arc::clone(&flags));
+    // A driven app (D11) keeps secrets with a password of its own, so a
+    // test that saves a key or a server's token never asks the real
+    // Keychain, whose prompt would land on the person's screen.
+    let secrets = std::env::var_os("NODUS_AUTOMATION")
+        .filter(|socket| !socket.is_empty())
+        .map(|_| Arc::new(nodus_core::SafeStorage::with_mac_password(b"nodus-automation")));
     let nodus = Nodus::start(NodusConfig {
         dialogs: Some(Arc::new(WindowDialogs { requests })),
         shell: Some(Arc::new(shell)),
         notifications: Notifications::System,
+        secrets,
         ..NodusConfig::new(user_data, runtime.handle().clone())
     })?;
 
@@ -97,6 +104,7 @@ pub fn run(user_data: PathBuf) -> anyhow::Result<()> {
         menus::bind_shortcuts(cx);
         crate::components::selectable::bind_keys(cx);
         crate::settings::bind_keys(cx);
+        crate::servers::bind_keys(cx);
         menus::register_actions(&nodus, cx);
         // CAP-038: capture gets its panel window, screen, permissions and key hook.
         crate::capture::register(&nodus, cx);

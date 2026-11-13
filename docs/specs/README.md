@@ -51,7 +51,7 @@ A crate depends only on crates in lower layers. When a crate needs something fro
 | L1 | `nodus-store`, `nodus-platform`, `nodus-host-proto`, `nodus-terminal` |
 | L2 | `nodus-transcripts`, `nodus-git`, `nodus-host` |
 | L3 | `nodus-sessions`, `nodus-board` |
-| L4 | `nodus-views`, `nodus-tools`, `nodus-actions`, `nodus-voice`, `nodus-capture`, `nodus-updater`, `nodus-feedback` |
+| L4 | `nodus-views`, `nodus-tools`, `nodus-actions`, `nodus-voice`, `nodus-capture`, `nodus-updater`, `nodus-feedback`, `nodus-remote` |
 | L5 | `nodus-core` |
 | L6 | `nodus-ui` |
 | L7 | `nodus` (the binary) |

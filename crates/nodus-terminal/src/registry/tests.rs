@@ -230,3 +230,66 @@ fn term_015_exit_lines() {
         "\r\n\x1b[2m[shell exited · press Restart or reopen the card for a new shell]\x1b[0m\r\n"
     );
 }
+
+/// SRV-028: a server session whose output stopped while its server was away
+/// is opened again, and its terminal starts over from the replay; one that
+/// isn't ready is left for its next attach.
+#[tokio::test]
+async fn reopens_a_ready_session_from_its_replay() {
+    let log: Log = Arc::default();
+    let sessions = Arc::new(FakeSessions {
+        log: log.clone(),
+        opens: Mutex::new(Vec::new()),
+    });
+    let registry = Registry::new(sessions.clone(), Platform::Mac, tokio::runtime::Handle::current());
+    let answer = |n: usize, replay: &str| {
+        let reply = sessions.opens.lock().unwrap()[n].take().unwrap();
+        reply.send(Ok(replay.to_owned())).unwrap();
+    };
+    let screen = |registry: &Registry| {
+        registry
+            .with_terminal("s1", |t| t.line_text(0, true, 0, None))
+            .unwrap_or_default()
+    };
+
+    // Nothing to open again before there's a terminal.
+    registry.reopen("s1", "p1").await.unwrap();
+    assert!(sessions.opens.lock().unwrap().is_empty());
+
+    let attach = {
+        let registry = registry.clone();
+        tokio::spawn(async move {
+            registry
+                .attach("s1", "p1", ContainerId(1), SessionKind::Claude, Some((80, 24)))
+                .await
+        })
+    };
+    settle().await;
+    answer(0, "before");
+    attach.await.unwrap().unwrap();
+    registry.pty_data("s1", " more");
+    assert!(screen(&registry).contains("before more"));
+
+    let reopen = {
+        let registry = registry.clone();
+        tokio::spawn(async move { registry.reopen("s1", "p1").await })
+    };
+    settle().await;
+    // While it's opening, live output is covered by the replay (TERM-009).
+    registry.pty_data("s1", " lost");
+    answer(1, "after");
+    reopen.await.unwrap().unwrap();
+    let text = screen(&registry);
+    assert!(
+        text.contains("after") && !text.contains("before") && !text.contains("lost"),
+        "{text}"
+    );
+    let opens: Vec<_> = log.lock().unwrap().iter().filter(|e| e[0] == "open").cloned().collect();
+    assert_eq!(opens.len(), 2);
+    assert_eq!(opens[1][1..3], ["p1".to_owned(), "s1".to_owned()]);
+
+    // An exited one waits for its next attach.
+    registry.pty_exit("s1");
+    registry.reopen("s1", "p1").await.unwrap();
+    assert_eq!(sessions.opens.lock().unwrap().len(), 2);
+}

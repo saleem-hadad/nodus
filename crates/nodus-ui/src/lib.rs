@@ -22,6 +22,7 @@ pub mod mac;
 pub mod parity;
 pub mod platform;
 pub mod projects;
+pub mod servers;
 pub mod settings;
 pub mod shell;
 pub mod state;

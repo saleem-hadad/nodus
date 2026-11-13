@@ -5,6 +5,7 @@
 use std::path::PathBuf;
 
 use nodus_domain::{ActionDraft, ActionLists, ProjectAction};
+use nodus_remote::Request;
 use serde_json::Value;
 
 use crate::error::OnChannel;
@@ -26,6 +27,10 @@ impl ActionsApi<'_> {
     /// out of the other list. `raw` is what the window sent, checked and
     /// trimmed as 0.9.4 does: `An action needs a prompt`, `Unknown project <id>`.
     pub async fn save(&self, project_id: &str, raw: &Value) -> CommandResult<ActionLists> {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, action) = (project_id.to_owned(), raw.clone());
+            return route.call(Request::ActionsSave { project_id, action }).await;
+        }
         self.nodus
             .on_core(async { self.nodus.inner.actions.save(project_id, raw).on("actions:save") })
             .await
@@ -34,6 +39,10 @@ impl ActionsApi<'_> {
     /// `actions:remove` (ACT-015): deletes one of the project's actions, or a
     /// global one from every project.
     pub async fn remove(&self, project_id: &str, action_id: &str) -> CommandResult<ActionLists> {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, action_id) = (project_id.to_owned(), action_id.to_owned());
+            return route.call(Request::ActionsRemove { project_id, action_id }).await;
+        }
         self.nodus
             .on_core(async {
                 self.nodus
@@ -49,6 +58,15 @@ impl ActionsApi<'_> {
     /// name, icon and prompt, in the project's folder, once the login
     /// shell's environment is in. A global one fits any repository.
     pub async fn draft(&self, project_id: &str, description: &str, global: bool) -> CommandResult<ActionDraft> {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            return route
+                .call(Request::ActionsDraft {
+                    project_id: project_id.to_owned(),
+                    description: description.to_owned(),
+                    global,
+                })
+                .await;
+        }
         self.nodus
             .on_core(async {
                 const CHANNEL: &str = "actions:draft";

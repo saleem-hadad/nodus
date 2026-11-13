@@ -78,8 +78,16 @@ pub fn title_bar(state: &Entity<AppState>, actions: Vec<AnyElement>, window: &mu
                     .child(current_name("Projects".into())),
             ),
             Route::Board(_) => {
-                let tooltip = project.as_ref().map(|p| {
-                    format!(
+                // SRV-163: a server project's folder isn't here to reveal;
+                // the crumb names its server instead.
+                let server = project.as_ref().filter(|p| p.server.is_some()).map(|p| {
+                    let s = state.read(cx);
+                    s.server_of(p)
+                        .map_or_else(|| p.server.clone().unwrap_or_default(), |server| server.name.clone())
+                });
+                let tooltip = project.as_ref().map(|p| match &server {
+                    Some(server) => format!("On {server}"),
+                    None => format!(
                         "{}\nDouble-click to {}",
                         p.repo_path,
                         if platform.is_mac() {
@@ -87,11 +95,11 @@ pub fn title_bar(state: &Entity<AppState>, actions: Vec<AnyElement>, window: &mu
                         } else {
                             "show in File Explorer"
                         }
-                    )
+                    ),
                 });
                 let reveal = {
                     let state = state.clone();
-                    let id = project.as_ref().map(|p| p.id.clone());
+                    let id = project.as_ref().filter(|p| p.server.is_none()).map(|p| p.id.clone());
                     move |e: &gpui::ClickEvent, _: &mut Window, cx: &mut App| {
                         // UI-094: reveals, and never zooms the window.
                         if e.click_count() == 2
@@ -382,13 +390,42 @@ fn no_drag(child: impl IntoElement) -> gpui::Div {
         .child(child)
 }
 
-/// The grid's New Project button (UI-186).
-pub fn new_project_button(state: &Entity<AppState>) -> AnyElement {
-    let state = state.clone();
-    button("new-project")
-        .icon(Icon::Plus, 15., 2.2)
-        .label("New Project")
-        .tooltip(format!("New Project ({})", keys("⇧⌘N")))
-        .on_click(move |_, _, cx| state.update(cx, |s, cx| s.add_project(None, false, cx)))
-        .into_any_element()
+/// The grid's New Project button (UI-186), with its menu of the other ways
+/// to add: Connect to Server…, and Show Server Projects… once there's a
+/// server (SRV-060, SRV-161).
+pub fn new_project_button(
+    state: &Entity<AppState>,
+    menus: &Entity<crate::components::context_menu::MenuLayer>,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
+    use crate::components::context_menu::MenuItem;
+    use crate::state::ServerDialog;
+    let add = state.clone();
+    let connect = state.clone();
+    let mut items = vec![MenuItem::item("Connect to Server…", Icon::Server, move |_, cx| {
+        connect.update(cx, |s, cx| s.open_server_dialog(ServerDialog::Connect, cx));
+    })];
+    if !state.read(cx).servers.is_empty() {
+        let show = state.clone();
+        items.push(MenuItem::item(
+            "Show Server Projects…",
+            Icon::Folders,
+            move |_, cx| {
+                show.update(cx, |s, cx| {
+                    s.open_server_dialog(ServerDialog::Projects { server_id: None }, cx);
+                });
+            },
+        ));
+    }
+    crate::components::split_button::SplitButton {
+        id: "new-project".into(),
+        label: "New Project".into(),
+        icon: Some((Icon::Plus, 15., 2.2)),
+        title: Some(format!("New Project ({})", keys("⇧⌘N")).into()),
+        on_click: std::rc::Rc::new(move |_, cx| add.update(cx, |s, cx| s.add_project(None, false, cx))),
+        items,
+        menu_label: "More ways to add".into(),
+    }
+    .render(menus, window, cx)
 }

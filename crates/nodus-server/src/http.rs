@@ -18,7 +18,7 @@ use tokio_tungstenite::tungstenite::protocol::{Role, WebSocketConfig};
 
 use crate::net::{bearer, same_token};
 use crate::serve::Server;
-use crate::socket;
+use crate::{files, socket};
 
 type Reply = Response<Full<Bytes>>;
 
@@ -34,7 +34,7 @@ pub(crate) async fn accept(server: Arc<Server>, listener: TcpListener) {
         tokio::spawn(async move {
             let service = hyper::service::service_fn(move |req| {
                 let server = Arc::clone(&server);
-                async move { Ok::<_, Infallible>(route(&server, req)) }
+                async move { Ok::<_, Infallible>(route(&server, req).await) }
             });
             let _ = hyper::server::conn::http1::Builder::new()
                 .serve_connection(TokioIo::new(stream), service)
@@ -44,12 +44,16 @@ pub(crate) async fn accept(server: Arc<Server>, listener: TcpListener) {
     }
 }
 
-fn route(server: &Arc<Server>, req: Request<Incoming>) -> Reply {
+async fn route(server: &Arc<Server>, req: Request<Incoming>) -> Reply {
     // SRV-021: only a request that calls the server by one of its own
     // names, so a page whose name was pointed here (DNS rebinding) can't.
     let host = req.headers().get(HOST).and_then(|host| host.to_str().ok());
     if !server.hosts.allows(host) {
         return empty(StatusCode::FORBIDDEN);
+    }
+    // SRV-163: the files' routes are their module's.
+    if files::handles(req.uri().path()) {
+        return files::route(server, req).await;
     }
     match (req.method(), req.uri().path()) {
         (&Method::GET, HELLO_PATH) => json(&server.hello),

@@ -235,7 +235,8 @@ impl Forwarder {
             | Event::UpdateStatus(_)
             | Event::OpenCard(_)
             | Event::CaptureShown(_)
-            | Event::CaptureContext(_) => false,
+            | Event::CaptureContext(_)
+            | Event::ServerStatus { .. } => false,
         }
     }
 

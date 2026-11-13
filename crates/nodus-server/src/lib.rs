@@ -22,6 +22,7 @@
 
 mod data;
 mod dispatch;
+mod files;
 mod http;
 mod net;
 mod project;

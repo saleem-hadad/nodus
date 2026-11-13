@@ -24,6 +24,14 @@
 //! window.api.on.menu(cb)                 nodus.subscribe() → Event::Menu(..)
 //! ```
 //!
+//! # Server projects
+//!
+//! A project linked from a Nodus server (`Project::server`) works like a
+//! local one through the same calls: every method that takes a project or a
+//! session sends a server project's to its server and gives back the same
+//! types, and the server's events arrive among the core's own (SRV-160).
+//! [`Nodus::servers`] adds, links and watches servers.
+//!
 //! A command that fails gives a [`CommandError`] with 0.9.4's message. Events
 //! go to every [`Nodus::subscribe`]r; domains emit them through
 //! [`Nodus::sink`]. What only a window can do (the folder picker, the
@@ -58,6 +66,8 @@ mod nodus;
 mod notifications;
 mod projects;
 mod realpath;
+mod routing;
+mod servers;
 mod sessions;
 mod settings;
 mod shell;
@@ -70,6 +80,7 @@ pub mod zoom;
 pub use actions::ActionsApi;
 pub use app::AppApi;
 pub use board::BoardApi;
+pub use board::images_dir as board_images_dir;
 pub use capture::{CaptureApi, CaptureSystem, WindowSize};
 pub use error::{CommandError, CommandResult};
 pub use feedback::{AreaShot, FeedbackApi};
@@ -86,6 +97,7 @@ pub use nodus_platform::secrets::SafeStorage;
 pub use nodus_voice::controller::{VoiceBackend, VoiceController};
 pub use notifications::Notifications;
 pub use projects::ProjectsApi;
+pub use servers::ServersApi;
 pub use sessions::SessionsApi;
 pub use settings::SettingsApi;
 pub use shell::{AppShell, BoxFuture, Headless, ReplaceChoice};

@@ -109,12 +109,14 @@ impl BoardCanvas {
         }
         let nodus = self.state.read(cx).nodus.clone();
         let rt = super::core_rt(cx);
+        let project_id = self.project_id.clone();
         cx.spawn(async move |this, cx| {
             for (i, path) in paths.into_iter().enumerate() {
                 let bytes = std::fs::read(&path).ok();
                 let size = bytes.as_deref().and_then(picture_size);
-                let nodus = nodus.clone();
-                let name = super::on_core(&rt, async move { nodus.board().import_image(&path).await }).await;
+                let (nodus, project_id) = (nodus.clone(), project_id.clone());
+                let name =
+                    super::on_core(&rt, async move { nodus.board().import_image(&project_id, &path).await }).await;
                 let Ok(name) = name else { continue };
                 let _ = this.update(cx, |c, cx| c.put_up_image(name, size, at, i, cx));
             }
@@ -132,8 +134,13 @@ impl BoardCanvas {
             .pointer
             .filter(|p| self.bounds.contains(p))
             .map(|p| self.to_flow(p));
+        let project_id = self.project_id.clone();
         cx.spawn(async move |this, cx| {
-            let name = super::on_core(&rt, async move { nodus.board().save_image(bytes, ext).await }).await;
+            let name = super::on_core(
+                &rt,
+                async move { nodus.board().save_image(&project_id, bytes, ext).await },
+            )
+            .await;
             let Ok(name) = name else { return };
             let _ = this.update(cx, |c, cx| c.put_up_image(name, size, at, 0, cx));
         })
@@ -161,9 +168,10 @@ impl BoardCanvas {
         self.add_shape(ShapeKind::Image, rect, String::new(), Some(name), false, cx);
     }
 
-    /// Where a picture shape's file is.
+    /// Where a picture shape's file is; a server board's, once it's here
+    /// (SRV-163).
     pub(crate) fn image_path(&self, name: &str, cx: &gpui::App) -> Option<PathBuf> {
-        self.state.read(cx).nodus.board().image_path(name)
+        self.state.read(cx).nodus.board().image_path(&self.project_id, name)
     }
 }
 

@@ -255,6 +255,8 @@ pub struct BoardCanvas {
     pub(crate) overlays: super::overlays::Overlays,
     /// A link whose label the menu asked to write, opened when next drawn.
     pub(crate) pending_link_label: Option<String>,
+    /// The board was read-only when last drawn (SRV-028).
+    pub(crate) read_only_seen: bool,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -344,6 +346,7 @@ impl BoardCanvas {
             clock: Instant::now(),
             overlays: super::overlays::Overlays::default(),
             pending_link_label: None,
+            read_only_seen: false,
             _subscriptions: subscriptions,
         };
         canvas.sync(cx);
@@ -358,6 +361,12 @@ impl BoardCanvas {
     /// The board as drawn.
     pub fn board(&self) -> Option<&BoardSnapshot> {
         self.board.as_ref()
+    }
+
+    /// A server board loaded while its server was away: read-only until
+    /// the server is back and the board reloads (SRV-028).
+    pub fn read_only(&self) -> bool {
+        self.board.as_ref().is_some_and(|b| b.offline)
     }
 
     /// Takes in a new snapshot from the store (BOARD-005, BOARD-003), and what
@@ -984,6 +993,8 @@ impl BoardCanvas {
             || self.search_open
             // ACT-053: the actions rail's dialog, menu or delete confirmation.
             || crate::actions::overlay_open(cx)
+            // SRV-028: a read-only board takes no shortcut or menu command.
+            || self.read_only()
     }
 
     // ---- the archive stack ----------------------------------------------------

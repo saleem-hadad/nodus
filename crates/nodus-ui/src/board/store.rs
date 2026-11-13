@@ -59,6 +59,14 @@ impl AppState {
                     if came_back_archived(state.terminal_session_id.as_deref(), &board.cards) {
                         state.terminal_session_id = None;
                     }
+                    // SRV-028: a board read-only while its server is away
+                    // has no session window, preview or agents open over it.
+                    if board.offline {
+                        state.terminal_session_id = None;
+                        state.preview_session_id = None;
+                        state.agent_view = None;
+                        state.selection.clear();
+                    }
                     state.board = Some(board);
                 }
                 state.board_loading = false;

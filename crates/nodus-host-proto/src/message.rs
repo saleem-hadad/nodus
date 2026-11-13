@@ -10,7 +10,7 @@
 
 use std::collections::BTreeMap;
 
-use nodus_domain::SessionStatus;
+use nodus_domain::{QueuedPrompt, SessionStatus};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -63,6 +63,11 @@ pub struct HostSession {
     /// keep one; that needs no new protocol, and running sessions carry on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status_line: Option<StatusLine>,
+    /// The prompts waiting for its turn to end, first to go first, so a
+    /// relaunched app shows them (QUEUE-004). Left out when there are
+    /// none, and by a host from before the queue.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub queue: Vec<QueuedPrompt>,
 }
 
 /// `spawn`: start a session's process in a new pseudo-terminal.
@@ -229,6 +234,14 @@ pub enum ClientMessage {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reply: Option<Value>,
     },
+    /// Replaces a live session's queued prompts (QUEUE-002), answered by a
+    /// `queue` to every app. Only sent to a host whose welcome says
+    /// `queue`; an older one would ignore it (HOST-040).
+    #[serde(rename = "queue-set", rename_all = "camelCase")]
+    QueueSet {
+        session_id: String,
+        items: Vec<QueuedPrompt>,
+    },
 }
 
 /// The host's `welcome`, the first thing it says to a connection that said hello.
@@ -249,6 +262,11 @@ pub struct Welcome {
     /// Mac can list. An older host only reads it from the URL.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hook_auth_header: Option<bool>,
+    /// The host keeps each session's queued prompts and hands the first to
+    /// Claude when its turn ends (QUEUE-001). An older host doesn't, which
+    /// needs no new protocol: the app keeps the queue and types it in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queue: Option<bool>,
     /// On Windows, the key the host wrote to the host folder, which only the
     /// user can read. It shows the app this pipe is its own host's
     /// ([`crate::trusts_host`]), as anyone on the PC can make a pipe with that name.
@@ -325,6 +343,13 @@ pub enum HostMessage {
         id: f64,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         error: Option<String>,
+    },
+    /// A session's queued prompts changed: the app set them, or the host
+    /// handed the first to Claude (QUEUE-002, QUEUE-005). To every app.
+    #[serde(rename = "queue", rename_all = "camelCase")]
+    Queue {
+        session_id: String,
+        items: Vec<QueuedPrompt>,
     },
 }
 
@@ -441,9 +466,11 @@ mod tests {
                     payload: json!({"model":{"display_name":"Model"}}),
                     at: Some(1_762_600_002_000.0),
                 }),
+                queue: vec![],
             }],
             mcp: Some(true),
             hook_auth_header: Some(true),
+            queue: None,
             key: None,
             session_tokens: None,
         });
@@ -635,6 +662,7 @@ mod tests {
             sessions: vec![],
             mcp: Some(true),
             hook_auth_header: Some(true),
+            queue: None,
             key: Some("k".repeat(64)),
             session_tokens: None,
         };
@@ -659,6 +687,86 @@ mod tests {
         assert_eq!(welcome.mcp, None);
         assert_eq!(welcome.hook_auth_header, None);
         assert_eq!(welcome.sessions[0].status_line, None);
+        // QUEUE-001: nor a queue.
+        assert_eq!(welcome.queue, None);
+        assert!(welcome.sessions[0].queue.is_empty());
+    }
+
+    /// QUEUE-001–005: the queue's messages, which neither 0.9.4 nor an
+    /// earlier Rust host sends or reads.
+    #[test]
+    fn writes_queue_messages() {
+        let items = vec![
+            QueuedPrompt {
+                id: "q1".into(),
+                text: "run the tests".into(),
+                at: 1_762_600_000_000.0,
+            },
+            QueuedPrompt {
+                id: "q2".into(),
+                text: "then\nfix \"them\" 🎉".into(),
+                at: 1_762_600_000_000.5,
+            },
+        ];
+        let set = ClientMessage::QueueSet {
+            session_id: "s1".into(),
+            items: items.clone(),
+        };
+        let wire = r#"{"type":"queue-set","sessionId":"s1","items":[{"id":"q1","text":"run the tests","at":1762600000000},{"id":"q2","text":"then\nfix \"them\" 🎉","at":1762600000000.5}]}"#;
+        assert_eq!(encode(&set), format!("{wire}\n"));
+        assert_eq!(decode::<ClientMessage>(wire), set);
+        let cleared = ClientMessage::QueueSet {
+            session_id: "s1".into(),
+            items: vec![],
+        };
+        assert_eq!(
+            encode(&cleared),
+            "{\"type\":\"queue-set\",\"sessionId\":\"s1\",\"items\":[]}\n"
+        );
+
+        let queue = HostMessage::Queue {
+            session_id: "s1".into(),
+            items: items[1..].to_vec(),
+        };
+        let wire = r#"{"type":"queue","sessionId":"s1","items":[{"id":"q2","text":"then\nfix \"them\" 🎉","at":1762600000000.5}]}"#;
+        assert_eq!(encode(&queue), format!("{wire}\n"));
+        assert_eq!(decode::<HostMessage>(wire), queue);
+
+        // QUEUE-001, QUEUE-004: a new host says so, and a session's queue
+        // comes last, only when there is one.
+        let welcome = HostMessage::Welcome(Welcome {
+            protocol: 2.0,
+            hook_port: 1.0,
+            hook_token: "t".into(),
+            sessions: vec![
+                HostSession {
+                    session_id: "s1".into(),
+                    project_id: "p1".into(),
+                    initial: SessionStatus::Working,
+                    buffer: String::new(),
+                    history: vec![],
+                    status_line: None,
+                    queue: items[..1].to_vec(),
+                },
+                HostSession {
+                    session_id: "s2".into(),
+                    project_id: "p1".into(),
+                    initial: SessionStatus::Done,
+                    buffer: String::new(),
+                    history: vec![],
+                    status_line: None,
+                    queue: vec![],
+                },
+            ],
+            mcp: Some(true),
+            hook_auth_header: Some(true),
+            queue: Some(true),
+            key: None,
+            session_tokens: None,
+        });
+        let wire = r#"{"type":"welcome","protocol":2,"hookPort":1,"hookToken":"t","sessions":[{"sessionId":"s1","projectId":"p1","initial":"working","buffer":"","history":[],"queue":[{"id":"q1","text":"run the tests","at":1762600000000}]},{"sessionId":"s2","projectId":"p1","initial":"done","buffer":"","history":[]}],"mcp":true,"hookAuthHeader":true,"queue":true}"#;
+        assert_eq!(encode(&welcome), format!("{wire}\n"));
+        assert_eq!(decode::<HostMessage>(wire), welcome);
     }
 
     #[test]

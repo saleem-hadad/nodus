@@ -298,7 +298,8 @@ impl Host {
                 return false;
             }
             *greeted = true;
-            let welcome = self.welcome(&state);
+            let asked_tokens = msg.get("sessionTokens").and_then(Value::as_bool) == Some(true);
+            let welcome = self.welcome(&state, asked_tokens);
             self.send_to(writer, &welcome);
             let protocol = msg.get("protocol");
             // HOST-038: an app on another protocol may only ask us to stop.
@@ -326,7 +327,9 @@ impl Host {
 
     /// HOST-037: every live session, in spawn order, with its output,
     /// history and status line.
-    fn welcome(&self, state: &State) -> HostMessage {
+    /// A server that asked (`sessionTokens` in its hello) also hears that
+    /// this host gives sessions their own tokens (SRV-143).
+    fn welcome(&self, state: &State, asked_tokens: bool) -> HostMessage {
         let sessions = state
             .sessions
             .iter()
@@ -347,6 +350,7 @@ impl Host {
             mcp: Some(true),
             hook_auth_header: Some(true),
             key: self.host_key.clone(),
+            session_tokens: asked_tokens.then_some(true),
         })
     }
 

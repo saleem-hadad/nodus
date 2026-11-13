@@ -683,6 +683,8 @@ impl Inner {
         let conn = connection::open(self.next_id(), stream, reader, greeted, WELCOME);
         conn.write(encode(&ClientMessage::Hello {
             protocol: f64::from(PROTOCOL),
+            // SRV-143: a server asks for sessions' own tokens.
+            session_tokens: self.wiring.server.is_some().then_some(true),
         }));
         match greeting.await {
             Ok(Ok(adopted)) => Ok((adopted, conn)),
@@ -1043,7 +1045,12 @@ impl Reader for Inner {
             let _ = greeting.send(Err(UNTRUSTED.into()));
             return false;
         }
-        if !welcome || msg.get("protocol").and_then(Value::as_f64) != Some(f64::from(PROTOCOL)) {
+        // A server takes only a host that gives sessions their own tokens
+        // (SRV-143): one from before is treated as another protocol's, so
+        // it's stopped and started again from the new binary (SRV-004).
+        let tokens = msg.get("sessionTokens").and_then(Value::as_bool) == Some(true);
+        let old_for_a_server = self.wiring.server.is_some() && !tokens;
+        if !welcome || msg.get("protocol").and_then(Value::as_f64) != Some(f64::from(PROTOCOL)) || old_for_a_server {
             let _ = greeting.send(Ok(false));
             return true;
         }

@@ -184,7 +184,14 @@ pub struct ExecResult {
 #[serde(tag = "type")]
 pub enum ClientMessage {
     #[serde(rename = "hello")]
-    Hello { protocol: f64 },
+    Hello {
+        protocol: f64,
+        /// A server asks for sessions' own tokens and credential relays
+        /// (SRV-143, SRV-084); the app leaves it out, and its welcome is
+        /// as it was.
+        #[serde(rename = "sessionTokens", default, skip_serializing_if = "Option::is_none")]
+        session_tokens: Option<bool>,
+    },
     #[serde(rename = "spawn")]
     Spawn(SpawnRequest),
     #[serde(rename = "write", rename_all = "camelCase")]
@@ -247,6 +254,10 @@ pub struct Welcome {
     /// ([`crate::trusts_host`]), as anyone on the PC can make a pipe with that name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
+    /// The host gives sessions their own tokens and relays credential
+    /// requests (SRV-143, SRV-084). A server takes no host without it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_tokens: Option<bool>,
 }
 
 /// Host → app (`HostMessage`).
@@ -341,7 +352,10 @@ mod tests {
         env.insert("NODUS_SESSION".into(), json!("s1"));
         let cases = [
             (
-                ClientMessage::Hello { protocol: 1.0 },
+                ClientMessage::Hello {
+                    protocol: 1.0,
+                    session_tokens: None,
+                },
                 r#"{"type":"hello","protocol":1}"#,
             ),
             (
@@ -431,6 +445,7 @@ mod tests {
             mcp: Some(true),
             hook_auth_header: Some(true),
             key: None,
+            session_tokens: None,
         });
         let cases = [
             (
@@ -621,6 +636,7 @@ mod tests {
             mcp: Some(true),
             hook_auth_header: Some(true),
             key: Some("k".repeat(64)),
+            session_tokens: None,
         };
         assert_eq!(
             encode(&HostMessage::Welcome(welcome)),

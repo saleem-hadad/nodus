@@ -85,6 +85,7 @@ mod tests {
         assert_eq!(
             encode(&ClientMessage::Hello {
                 protocol: f64::from(PROTOCOL),
+                session_tokens: None,
             }),
             "{\"type\":\"hello\",\"protocol\":2}\n"
         );
@@ -93,6 +94,7 @@ mod tests {
             hello,
             ClientMessage::Hello {
                 protocol: f64::from(PROTOCOL_0_9_4),
+                session_tokens: None,
             }
         );
         let welcome: HostMessage = nodus_domain::json::from_str(

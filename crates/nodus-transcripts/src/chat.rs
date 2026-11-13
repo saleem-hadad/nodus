@@ -474,18 +474,18 @@ mod tests {
         }
     }
 
-    fn user(uuid: &str, content: Value) -> Value {
+    fn user(uuid: &str, content: &Value) -> Value {
         json!({ "type": "user", "uuid": uuid, "timestamp": "2026-11-13T10:00:00Z", "message": { "role": "user", "content": content } })
     }
 
-    fn assistant(uuid: &str, block: Value) -> Value {
+    fn assistant(uuid: &str, block: &Value) -> Value {
         json!({ "type": "assistant", "uuid": uuid, "timestamp": "2026-11-13T10:00:01Z", "message": { "role": "assistant", "content": [block] } })
     }
 
     fn result(uuid: &str, tool: &str, text: &str, error: bool) -> Value {
         user(
             uuid,
-            json!([{ "type": "tool_result", "tool_use_id": tool, "is_error": error, "content": [{ "type": "text", "text": text }] }]),
+            &json!([{ "type": "tool_result", "tool_use_id": tool, "is_error": error, "content": [{ "type": "text", "text": text }] }]),
         )
     }
 
@@ -516,12 +516,12 @@ mod tests {
         let t = Transcript::new();
         let mut log = ChatLog::new(t.path.clone());
         t.add(&[
-            user("u1", json!("Why is the build slow?")),
-            assistant("a1", json!({ "type": "thinking", "thinking": "hm" })),
-            assistant("a2", json!({ "type": "text", "text": "Let me look." })),
+            user("u1", &json!("Why is the build slow?")),
+            assistant("a1", &json!({ "type": "thinking", "thinking": "hm" })),
+            assistant("a2", &json!({ "type": "text", "text": "Let me look." })),
             assistant(
                 "a3",
-                json!({ "type": "tool_use", "id": "t1", "name": "Bash", "input": { "command": "cargo build" } }),
+                &json!({ "type": "tool_use", "id": "t1", "name": "Bash", "input": { "command": "cargo build" } }),
             ),
         ]);
         assert!(log.refresh());
@@ -548,7 +548,7 @@ mod tests {
     fn a_partly_written_line_waits_for_its_newline() {
         let t = Transcript::new();
         let mut log = ChatLog::new(t.path.clone());
-        let line = user("u1", json!("hello")).to_string();
+        let line = user("u1", &json!("hello")).to_string();
         fs::write(&t.path, &line[..10]).unwrap();
         assert!(!log.refresh());
         fs::write(&t.path, format!("{line}\n")).unwrap();
@@ -561,7 +561,7 @@ mod tests {
         let t = Transcript::new();
         let mut log = ChatLog::new(t.path.clone());
         let text = "Here it is:\n\n```visual\n{\"mark\": \"bar\"}\n```\n\nAnd a question:\n\n```questions\n{\"title\": \"Pick\", \"questions\": []}\n```\n";
-        t.add(&[assistant("a1", json!({ "type": "text", "text": text }))]);
+        t.add(&[assistant("a1", &json!({ "type": "text", "text": text }))]);
         log.refresh();
         assert_eq!(kinds(&log), ["text", "visual", "text", "questions"]);
         assert!(matches!(&log.entries()[1], ChatEntry::Visual { spec, .. } if spec == &json!({"mark": "bar"})));
@@ -572,17 +572,11 @@ mod tests {
         let t = Transcript::new();
         let mut log = ChatLog::new(t.path.clone());
         t.add(&[
-            assistant(
-                "a1",
-                json!({ "type": "tool_use", "id": "v1", "name": "mcp__nodus__show_visual", "input": { "visual": { "mark": "line" } } }),
+            assistant("a1", &json!({ "type": "tool_use", "id": "v1", "name": "mcp__nodus__show_visual", "input": { "visual": { "mark": "line" } } }),
             ),
-            assistant(
-                "a2",
-                json!({ "type": "tool_use", "id": "q1", "name": "mcp__nodus__ask", "input": { "title": "Layout", "questions": [] } }),
+            assistant("a2", &json!({ "type": "tool_use", "id": "q1", "name": "mcp__nodus__ask", "input": { "title": "Layout", "questions": [] } }),
             ),
-            assistant(
-                "a3",
-                json!({ "type": "tool_use", "id": "p1", "name": "mcp__nodus__show_page", "input": { "title": "Mockups", "html": "<p>" } }),
+            assistant("a3", &json!({ "type": "tool_use", "id": "p1", "name": "mcp__nodus__show_page", "input": { "title": "Mockups", "html": "<p>" } }),
             ),
             result("r3", "p1", "{\"view_id\": \"view-9\"}", false),
         ]);
@@ -603,8 +597,8 @@ mod tests {
             answers: json!({ "seen": true }),
         };
         t.add(&[
-            user("u1", json!(form.to_message())),
-            user("u2", json!(page.to_message())),
+            user("u1", &json!(form.to_message())),
+            user("u2", &json!(page.to_message())),
         ]);
         log.refresh();
         assert!(
@@ -619,9 +613,7 @@ mod tests {
         let t = Transcript::new();
         let mut log = ChatLog::new(t.path.clone());
         t.add(&[
-            assistant(
-                "a1",
-                json!({ "type": "tool_use", "id": "v1", "name": "mcp__nodus__show_visual", "input": { "visual": {} } }),
+            assistant("a1", &json!({ "type": "tool_use", "id": "v1", "name": "mcp__nodus__show_visual", "input": { "visual": {} } }),
             ),
             result("r1", "v1", "mark: missing\nmore", true),
         ]);
@@ -637,15 +629,15 @@ mod tests {
         let mut log = ChatLog::new(t.path.clone());
         let mut queued = user(
             "u1",
-            json!(format!(
+            &json!(format!(
                 "Stop hook feedback:\n{}",
                 nodus_domain::queued_reason("run the tests")
             )),
         );
         queued["isMeta"] = json!(true);
-        let mut meta = user("u2", json!("Caveat: something"));
+        let mut meta = user("u2", &json!("Caveat: something"));
         meta["isMeta"] = json!(true);
-        t.add(&[queued, meta, user("u3", json!("[Request interrupted by user]"))]);
+        t.add(&[queued, meta, user("u3", &json!("[Request interrupted by user]"))]);
         log.refresh();
         assert_eq!(kinds(&log), ["user", "notice"]);
         assert!(matches!(&log.entries()[0], ChatEntry::User { queued: true, text, .. } if text == "run the tests"));
@@ -655,9 +647,9 @@ mod tests {
     fn sidechain_lines_and_noise_stay_out() {
         let t = Transcript::new();
         let mut log = ChatLog::new(t.path.clone());
-        let mut side = assistant("a1", json!({ "type": "text", "text": "agent words" }));
+        let mut side = assistant("a1", &json!({ "type": "text", "text": "agent words" }));
         side["isSidechain"] = json!(true);
-        t.add(&[side, user("u1", json!("<system-reminder>x</system-reminder>"))]);
+        t.add(&[side, user("u1", &json!("<system-reminder>x</system-reminder>"))]);
         log.refresh();
         assert!(log.entries().is_empty());
     }
@@ -666,9 +658,9 @@ mod tests {
     fn a_replaced_transcript_is_read_again() {
         let t = Transcript::new();
         let mut log = ChatLog::new(t.path.clone());
-        t.add(&[user("u1", json!("one")), user("u2", json!("two"))]);
+        t.add(&[user("u1", &json!("one")), user("u2", &json!("two"))]);
         log.refresh();
-        fs::write(&t.path, format!("{}\n", user("u3", json!("three")))).unwrap();
+        fs::write(&t.path, format!("{}\n", user("u3", &json!("three")))).unwrap();
         assert!(log.refresh());
         assert_eq!(log.entries().len(), 1);
     }

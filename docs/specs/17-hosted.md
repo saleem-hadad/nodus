@@ -53,7 +53,8 @@ The server reuses what the app already has: `nodus-core`'s headless config (`Nod
     - `claude-accounts.json` and `claude-waiting.json` (SRV-100, SRV-104);
     - `audit.jsonl`, appended to and never rewritten (SRV-210);
     - `env`, the sessions' environment, which a person writes (SRV-141);
-    - `uploads/`, and `board-images/` and `views/` as on a Mac (SRV-163).
+    - `board-images/` and `views/` as on a Mac, and `uploads/` when `serve` isn't given `--uploads` (one user, development and tests).
+  - **Uploads** go in `serve --uploads <folder>`, which the installer sets to `/srv/nodus/uploads` (2770, `nodus:nodus-run`), so sessions can read them. Each is written 0640 (SRV-163).
   - **The sessions' data** is in `/home/nodus-run` (0750, group `nodus-run`): `projects/<slug>/main` (the clone), `projects/<slug>/worktrees/`, `projects/<slug>/saved/` and `projects/<slug>/setup-logs/` (SESS-206…SESS-212), and Claude Code's own `.claude/` and `.claude.json`, transcripts included.
 - **SRV-004** **The session host** runs as `nodus-run`, under its own unit, `nodus-host.service` (SRV-013); `serve` never starts it. `serve --host-socket /run/nodus/host.sock` connects to it (the folder 0750 and the socket 0660, both group `nodus-run`, which `nodus` belongs to) and retries every second until it's up.
   - Restarting or updating `serve` leaves sessions running, and the next `serve` adopts them.
@@ -98,7 +99,7 @@ The server reuses what the app already has: `nodus-core`'s headless config (`Nod
   10. Prints the address and a setup code, `In Nodus: Connect to server… → http://<name>:7420 → code K7QM-4RXD`, the SSH tunnel to use while it listens on loopback only, where the logs are, and `Give this VM no cloud instance role, and add your provider's firewall if it has one.`
 - **SRV-012** Running it again upgrades in place and keeps the data. A new binary restarts `nodus.service` only, so sessions keep running in the host (SRV-004); a changed host unit restarts the host, and its sessions stop. `--uninstall` stops and removes both services and the binary, and kills the host's leftover sessions. It keeps the data, the users, `nodus-run`'s Docker and the firewall, so nothing left running is exposed. `--uninstall --purge` removes those too. The packages stay.
 - **SRV-013** **The units.** Paths are absolute, because in a system unit `%h` is root's home whatever `User=` says.
-  - `nodus.service`: `User=nodus`, `SupplementaryGroups=nodus-run`, `ExecStart=/opt/nodus/bin/nodus serve --host-socket /run/nodus/host.sock --run-home /home/nodus-run`, `UMask=0027`, `Restart=always`, `RestartSec=1`, after `nodus-host.service` and `tailscaled.service`.
+  - `nodus.service`: `User=nodus`, `SupplementaryGroups=nodus-run`, `ExecStart=/opt/nodus/bin/nodus serve --host-socket /run/nodus/host.sock --run-home /home/nodus-run --uploads /srv/nodus/uploads`, `UMask=0027`, `Restart=always`, `RestartSec=1`, after `nodus-host.service` and `tailscaled.service`.
   - `nodus-host.service`:
     - `User=nodus-run`, `ExecStart=/opt/nodus/bin/nodus host --socket /run/nodus/host.sock`;
     - `RuntimeDirectory=nodus`, `RuntimeDirectoryMode=0750`, `RuntimeDirectoryPreserve=yes`;
@@ -193,7 +194,7 @@ The server reuses what the app already has: `nodus-core`'s headless config (`Nod
   2. **GitHub**: create the App (SRV-062), install it on repositories, then sign in (UI-319, UI-320). The person who signs in is the first member.
   3. **Members**: invite GitHub logins (UI-321). Can be skipped.
   4. **Claude accounts**: add at least one (SRV-100, UI-333). Can be skipped; sessions can't start until there's one.
-  5. **First project**: pick a repository to clone (SRV-120; 08, the wizard's first project). Can be skipped.
+  5. **First project**: pick a repository to clone (SRV-120, UI-335). Can be skipped.
 - **SRV-062** **Creating the GitHub App** uses GitHub's manifest flow (UI-319).
   1. The app asks the server for a nonce (SRV-022), then opens `/github/setup/start?nonce=…&owner=<organization or empty>` in the browser.
   2. That page posts a manifest to GitHub with the nonce as `state`. The manifest asks for:
@@ -289,6 +290,7 @@ Sessions on a server run on Claude accounts its members add, from `claude setup-
   - Reveal in Finder (Show in File Explorer) and the folder picker are hidden for server projects (UI-312).
   - Files dropped on a server session's terminal and pictures added to a server board are uploaded first (`PUT /api/uploads`), and the server's path or name is typed or kept (TERM-112, SHAPE-041).
     - The server picks the stored name, a UUID with the original's extension; the original name is kept only as a label.
+    - It keeps them in the `--uploads` folder (SRV-003), written 0640 so the session's user can read them through the group.
     - An upload over 50 MB is refused before anything is sent: `Files over 50 MB can’t go to a server`.
   - Board pictures and views' pages load through `GET /api/files/<id>`, and pictures are kept in `server-files/<server>/` (01).
   - A server view's page and its bridge calls go only to that server, never to the local core (VIEW-020).
@@ -314,7 +316,7 @@ Sessions on a server run on Claude accounts its members add, from `claude setup-
   - A peer drops out 10 s after its last frame, or at once when it leaves the board or disconnects.
   - Who a peer is comes only from its connection's token; a `login` in the frame is ignored. A dev-token connection shows as `dev`, and a setup token is never on a board.
   - A read-only board and a local board send nothing.
-- **SRV-181** The title bar shows the others on the board, each person once, as avatars ringed in their colour (08, people on the board). Their pointers are drawn on the canvas with their login, gliding between updates (BOARD-180). A person's colour is worked out from their login, so it's the same on every device.
+- **SRV-181** The title bar shows the others on the board, each person once, as avatars ringed in their colour (UI-334). Their pointers are drawn on the canvas with their login, gliding between updates (BOARD-180). A person's colour is worked out from their login, so it's the same on every device.
 - **SRV-182** **Follow mode** (BOARD-181). Clicking an avatar follows that person: your view flies to theirs at each update until you pan, zoom, move the view any other way or press Esc, or they leave. A frame and a `Following @<login>` pill in their colour show it.
 - **SRV-183** **Who made what.** Cards, notes, views, shapes, links, sections and ink strokes made on a server board record `createdBy: <login>`. What a session makes with board tools records the session's starter. A card's menu and tooltip show `Started by <login>` (CARD-054), and a note's hover `Written by <login>` (NOTEUI-050).
 - **SRV-184** **Concurrent edits.** Saves are per-object patches (`board:save-nodes`, `board:save-note`, `board:save-shapes`, …), so the last write to each thing wins. Ink, which a local board saves as one whole list, goes a stroke at a time on a server board: `board:add-ink { projectId, strokes }` and `board:remove-ink { projectId, ids }` (INK-013, INKUI-028). Two people drawing at once keep both drawings. Undo on a server board takes back only that step's own strokes, on top of the ink as it is now.
@@ -323,7 +325,7 @@ Sessions on a server run on Claude accounts its members add, from `claude setup-
 
 ## 12 · Updates and the audit log
 
-- **SRV-200** **Update server** (UPD-086…UPD-095). The server reports its version in `/api/hello`. While the app is newer, Settings → Servers and the server's tiles show **Update Server** (UI-315; 08, Update server in Settings and on a tile), which any member can press. It sends `server:update {}`, and:
+- **SRV-200** **Update server** (UPD-086…UPD-095). The server reports its version in `/api/hello`. While the app is newer, Settings → Servers and the server's tiles show **Update Server** (UI-315, UI-336, UI-337), which any member can press. It sends `server:update {}`, and:
   1. The server works out the target itself: the newest release that isn't a draft or prerelease and has this machine's `nodus-server-linux-<arch>.tar.gz` and its `.sig`. One that isn't newer than what it runs changes nothing. The app never names a version, so the server never downgrades.
   2. It downloads both, at most 256 MB, and checks the archive's ed25519 signature against the public key built into the running binary (`packaging/server/signing-key.pub.pem`). A build with no key, as with the placeholder, refuses before it asks GitHub anything.
   3. It takes `nodus` out of the archive, checks it's built for this machine, writes it as `/opt/nodus/bin/nodus.new`, syncs it and renames it over the binary.
@@ -393,7 +395,6 @@ So rebuilding `nodus-run`'s side and replacing the Claude tokens that were live 
 ## Not yet
 
 What the design has that isn't built:
-- **Uploads sessions can read.** Uploads are kept in `<data>/uploads`, inside `nodus`'s private home, so a session running as `nodus-run` can't open a file dropped on its terminal. The installer makes `/srv/nodus/uploads` (2770, `nodus:nodus-run`) for them, and `serve` doesn't use it yet.
 - `nodus status` (version, address, members, accounts, live sessions, and a warning when the server isn't tagged). Settings → Servers shows these instead.
 - permessage-deflate on the WebSocket.
 - Installation tokens for reading CI (checks and actions, read only). The `gh` shim's token has contents, pull requests and issues, so `gh` can't read checks or workflow runs with it.

@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    ActionRunResult, CaptureContext, QueuedPrompt, CaptureShortcut, ClipboardOffer, MenuCommand, OpenCardRequest, ServerState,
-    SessionStatus, SessionUsage, SummarizeProgress, TabAttachment, UpdateStatus, ViewEvent,
+    ActionRunResult, CaptureContext, CaptureShortcut, ClipboardOffer, MenuCommand, OpenCardRequest, QueuedPrompt,
+    ServerState, SessionStatus, SessionUsage, SummarizeProgress, TabAttachment, UpdateStatus, ViewEvent,
 };
 
 /// One event, named after its channel.

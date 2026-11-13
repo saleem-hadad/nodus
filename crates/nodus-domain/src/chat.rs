@@ -27,7 +27,8 @@ pub const STOP_FEEDBACK_PREFIX: &str = "Stop hook feedback:\n";
 
 /// The first line of a queued prompt as the host hands it over, so Claude
 /// reads it as the user's next message and the chat can show it as one.
-pub const QUEUED_PROMPT_LEAD: &str = "[Nodus] The user queued this message while you were working. Treat it as their next message:";
+pub const QUEUED_PROMPT_LEAD: &str =
+    "[Nodus] The user queued this message while you were working. Treat it as their next message:";
 
 /// The Stop hook's reason for a queued prompt.
 pub fn queued_reason(text: &str) -> String {
@@ -221,7 +222,10 @@ mod tests {
     #[test]
     fn a_queued_prompt_reads_back_from_its_stop_hook_line() {
         let reason = queued_reason("run the tests");
-        assert_eq!(queued_text(&format!("{STOP_FEEDBACK_PREFIX}{reason}")), Some("run the tests"));
+        assert_eq!(
+            queued_text(&format!("{STOP_FEEDBACK_PREFIX}{reason}")),
+            Some("run the tests")
+        );
         assert_eq!(queued_text(&reason), Some("run the tests"));
         assert_eq!(queued_text("Stop hook feedback:\nsomething else"), None);
     }

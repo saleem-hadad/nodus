@@ -4442,6 +4442,7 @@ dependencies = [
  "indexmap",
  "nodus-domain",
  "nodus-platform",
+ "nodus-visual",
  "notify",
  "regex",
  "serde_json",

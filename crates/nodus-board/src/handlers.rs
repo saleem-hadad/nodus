@@ -488,6 +488,17 @@ impl Board {
         Ok(self.transcripts.transcript(&folder, session_id)?)
     }
 
+    /// Where a session's transcript is, for the chat view to follow
+    /// (CHAT-001). The file may not be there yet.
+    pub fn transcript_file(&self, project_id: &str, session_id: &str) -> Result<std::path::PathBuf, BoardError> {
+        if !is_agent_id(session_id) {
+            return Err(BoardError::NotOnBoard);
+        }
+        let project = self.project(project_id)?;
+        let folder = self.session_folder(&project, session_id);
+        Ok(self.transcripts.transcript_path(&folder, session_id))
+    }
+
     /// `session:agent-transcript`: a subagent's steps, for the agent viewer.
     /// Both ids end up in a path, so only safe ones are read (SESS-163).
     pub fn agent_transcript(

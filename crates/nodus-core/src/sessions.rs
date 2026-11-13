@@ -274,6 +274,16 @@ impl SessionsApi<'_> {
             .await
     }
 
+    /// Where a session's transcript is, for the chat view to follow
+    /// (CHAT-001). None for a session on a server board, whose transcript
+    /// isn't on this computer, and for one this board doesn't have.
+    pub fn transcript_file(&self, project_id: &str, session_id: &str) -> Option<std::path::PathBuf> {
+        if self.nodus.route_project(project_id).is_some() {
+            return None;
+        }
+        self.nodus.inner.board.transcript_file(project_id, session_id).ok()
+    }
+
     /// `session:summarize` (SESS-165…174): handoff summaries, one per id
     /// asked for in that order, once the login shell's environment is in.
     /// Progress arrives as `Event::SummarizeProgress`.

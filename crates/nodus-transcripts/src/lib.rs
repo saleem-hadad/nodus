@@ -10,6 +10,7 @@
 //! index) for the life of the app; the free functions in each module are the
 //! pieces other domains reuse (the status machine's agents, capture).
 
+pub mod chat;
 mod claude;
 pub mod date;
 pub mod lines;
@@ -30,6 +31,7 @@ use std::sync::Arc;
 use indexmap::IndexMap;
 use nodus_domain::{SessionSearchHit, TranscriptMessage};
 
+pub use chat::ChatLog;
 pub use claude::ClaudeCall;
 pub use lines::{Json, read_lines};
 pub use meta::{DiscoveredSession, MetaCache, meta_signature};

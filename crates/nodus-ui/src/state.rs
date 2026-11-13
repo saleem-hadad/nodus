@@ -35,7 +35,8 @@ impl Route {
 /// A server dialog over everything (SRV-060, SRV-161).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ServerDialog {
-    /// Connect to Server…: an address and a token.
+    /// Connect to Server…: the address, then setting the server up or
+    /// signing in (UI-316…UI-322).
     Connect,
     /// Show Server Projects…: one server's projects, or every server's.
     Projects { server_id: Option<String> },
@@ -57,6 +58,8 @@ pub enum StateEvent {
     BoardMenu(MenuCommand),
     /// An action run finished (`ev:run-finished`, BOARD-106).
     RunFinished(nodus_domain::ActionRunResult),
+    /// A toast for the board on show: a server's notice (SRV-042).
+    Toast(String),
 }
 
 /// `useApp` and `useProjectsUi`.
@@ -194,6 +197,7 @@ impl AppState {
             }
             Event::ProjectsChanged => self.refresh_projects(cx).detach(),
             Event::ServerStatus { server_id, state } => self.server_status(&server_id, state, cx),
+            Event::ServerNotice { message, .. } => self.server_notice(message, cx),
             Event::Menu(command) => self.on_menu(command, cx),
             Event::OpenCard(request) => self.show_card(request, cx),
             Event::RunFinished(run) => cx.emit(StateEvent::RunFinished(run)),
@@ -567,6 +571,16 @@ impl AppState {
                 .map(|p| p.id.clone())
                 .collect();
             crate::terminal::store::reopen(&projects, cx);
+        }
+    }
+
+    /// SRV-042, UI-328: a server's notice (`Saleem signed in on Studio`), as the
+    /// toast of whatever is on show: the grid's (UI-251) or the board's
+    /// (BOARD-139).
+    fn server_notice(&mut self, message: String, cx: &mut Context<'_, Self>) {
+        match self.route {
+            Route::Board(_) => cx.emit(StateEvent::Toast(message)),
+            Route::Projects => self.show_toast(message, cx),
         }
     }
 

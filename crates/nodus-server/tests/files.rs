@@ -55,13 +55,10 @@ impl World {
         std::fs::create_dir_all(&images).unwrap();
         std::fs::write(images.join(PICTURE), b"\x89PNG picture").unwrap();
 
-        let port = std::net::TcpListener::bind("127.0.0.1:0")
-            .unwrap()
-            .local_addr()
-            .unwrap()
-            .port();
+        // Port 0, and the one it got from what it prints: a port picked
+        // here and let go could be taken by another test before it binds.
         let mut child = Command::new(env!("CARGO_BIN_EXE_nodus-server"))
-            .args(["serve", "--bind", &format!("127.0.0.1:{port}"), "--dev-token", TOKEN])
+            .args(["serve", "--bind", "127.0.0.1:0", "--dev-token", TOKEN])
             .arg("--run-home")
             .arg(root.join("home"))
             .env_clear()
@@ -76,12 +73,17 @@ impl World {
         let (listening, heard) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-                if line.contains("listening http://") {
-                    let _ = listening.send(());
+                if let Some(at) = line.find("listening http://") {
+                    let _ = listening.send(line[at + "listening http://".len()..].trim().to_owned());
                 }
             }
         });
-        heard.recv_timeout(Duration::from_secs(20)).expect("the server listens");
+        let address = heard.recv_timeout(Duration::from_secs(20)).expect("the server listens");
+        let port = address
+            .rsplit(':')
+            .next()
+            .and_then(|port| port.parse().ok())
+            .expect("it listens on a port");
         Self {
             dir,
             server: Some(child),

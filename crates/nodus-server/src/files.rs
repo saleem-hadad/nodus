@@ -1,9 +1,10 @@
 //! The server's files (SRV-022, SRV-163): `PUT /api/uploads` keeps what an
 //! app sends (a file dropped on a terminal, a picture added to a board)
 //! under a name the server picks, and `GET /api/files/<id>` gives back an
-//! upload, a board picture or a view's page. Both need the token, and only
-//! ids of the form the server issues are ever looked up, so no request can
-//! name a path.
+//! upload, a board picture or a view's page. Both need a device's token
+//! (or the dev token, which only a server on loopback takes), never a setup
+//! token, and only ids of the form the server issues are ever looked up, so
+//! no request can name a path.
 
 use std::path::{Path, PathBuf};
 
@@ -14,7 +15,8 @@ use hyper::{Method, Request, Response, StatusCode};
 use nodus_wire::files::{file_id_ok, is_uuid, name_from_query, upload_ext};
 use nodus_wire::{FILES_PATH, MAX_UPLOAD, UPLOADS_PATH, Upload};
 
-use crate::net::{bearer, same_token};
+use crate::auth::Who;
+use crate::net::bearer;
 use crate::serve::Server;
 
 type Reply = Response<Full<Bytes>>;
@@ -25,10 +27,14 @@ pub(crate) fn handles(path: &str) -> bool {
 }
 
 /// A request on one of the files' routes, once its `Host` was checked:
-/// the token first, in the Authorization header and nowhere else (SRV-022).
+/// the token first, in the Authorization header and nowhere else (SRV-022),
+/// as `/api/ws` takes it. A setup token is for the wizard's first steps
+/// only (SRV-060), so it gets 403 here.
 pub(crate) async fn route(server: &Server, req: Request<Incoming>) -> Reply {
-    if !bearer(req.headers()).is_some_and(|token| same_token(token, &server.token)) {
-        return status(StatusCode::UNAUTHORIZED);
+    match bearer(req.headers()).and_then(|token| server.auth.authenticate(token)) {
+        Some(Who::Dev | Who::Device { .. }) => {}
+        Some(Who::Setup { .. }) => return status(StatusCode::FORBIDDEN),
+        None => return status(StatusCode::UNAUTHORIZED),
     }
     let path = req.uri().path().to_owned();
     match (req.method(), path.strip_prefix(FILES_PATH)) {

@@ -5,6 +5,8 @@ use nodus_domain::Event;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+use crate::{NOTICE_EVENT, Notice};
+
 /// One text frame.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Frame {
@@ -15,6 +17,10 @@ pub enum Frame {
     Answer(Answer),
     /// `{ "ev": "pty-data", "p": {…} }`, from the server.
     Event(Event),
+    /// `{ "ev": "server-notice", "p": { "kind", "message" } }`, from the
+    /// server: the server's own news for every member (SRV-042), which the
+    /// core's events don't carry.
+    Notice(Notice),
     /// `{ "presence": {…} }`, from a client: its cursor and viewport on a
     /// board (SRV-180). Read, but nothing is done with it until slice 6.
     Presence(Value),
@@ -73,6 +79,12 @@ impl Frame {
         let Value::Object(mut frame) = value else {
             return Err(FrameError::Unknown);
         };
+        if frame.get("ev").and_then(Value::as_str) == Some(NOTICE_EVENT) {
+            let notice = frame.shift_remove("p").unwrap_or(Value::Null);
+            return serde_json::from_value(notice)
+                .map(Frame::Notice)
+                .map_err(FrameError::Event);
+        }
         if frame.contains_key("ev") {
             return serde_json::from_value(Value::Object(frame))
                 .map(Frame::Event)
@@ -115,6 +127,10 @@ impl Frame {
                 ),
             ]),
             Self::Event(event) => return nodus_domain::json::to_string(event).expect("an event is always JSON"),
+            Self::Notice(notice) => object([
+                ("ev", NOTICE_EVENT.into()),
+                ("p", serde_json::to_value(notice).expect("a notice is always JSON")),
+            ]),
             Self::Presence(presence) => object([("presence", presence.clone())]),
         };
         nodus_domain::json::to_string(&value).expect("a frame is always JSON")
@@ -185,6 +201,13 @@ mod tests {
                 project_id: "p1".into(),
             }),
             r#"{"ev":"board-changed","p":{"projectId":"p1"}}"#,
+        );
+        round_trip(
+            &Frame::Notice(Notice {
+                kind: "device-signed-in".into(),
+                message: "Saleem signed in on Studio".into(),
+            }),
+            r#"{"ev":"server-notice","p":{"kind":"device-signed-in","message":"Saleem signed in on Studio"}}"#,
         );
         round_trip(
             &Frame::Presence(json!({ "project": "p1", "cursor": null })),

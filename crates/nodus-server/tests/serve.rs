@@ -421,7 +421,8 @@ async fn a_session_runs_on_the_server_and_streams_to_the_app() {
     let said = hello(&server.url).await.unwrap();
     assert_eq!(said.protocol, PROTOCOL);
     assert_eq!(said.version, env!("CARGO_PKG_VERSION"));
-    assert!(!said.needs_setup && !said.name.is_empty());
+    // No member has signed in: a dev token gets in all the same (SRV-060).
+    assert!(said.needs_setup && !said.name.is_empty());
 
     // A repository added by its URL is cloned into the data folder.
     let bare = world.bare_repo("shop");

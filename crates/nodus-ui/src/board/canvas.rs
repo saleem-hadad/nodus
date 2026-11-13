@@ -272,6 +272,7 @@ impl BoardCanvas {
             cx.subscribe(&state, |this, _, e: &StateEvent, cx| match e {
                 StateEvent::BoardMenu(command) => this.on_menu(*command, cx),
                 StateEvent::RunFinished(run) => this.run_finished(run, cx),
+                StateEvent::Toast(message) => this.show_toast(message.clone(), cx),
                 StateEvent::SettingsChanged => {}
             }),
         ];

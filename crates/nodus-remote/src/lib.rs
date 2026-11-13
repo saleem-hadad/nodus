@@ -5,9 +5,9 @@
 //! A [`Remote`] keeps itself connected. It checks the server's hello first,
 //! and talks only to one with this app's [`PROTOCOL`]; then it opens the
 //! WebSocket with the device's token, sends `watch` for the projects it was
-//! asked to watch, and hands out the server's events. When the connection
-//! drops it tries again after 1, 2, 4… seconds, at most every 30, and on
-//! reconnecting it sends `watch` again before anything else. Its
+//! asked to watch, and hands out the server's events and notices. When the
+//! connection drops it tries again after 1, 2, 4… seconds, at most every
+//! 30, and on reconnecting it sends `watch` again before anything else. Its
 //! [`Status`] says how that's going, and every change of it arrives in
 //! [`RemoteEvents`] among the events.
 //!
@@ -19,15 +19,18 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use nodus_domain::{Event, ServerState};
-use nodus_wire::client::{Client, ConnectError, Events, hello};
+use nodus_wire::client::{Client, ConnectError, Events, Received, hello};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use tokio::runtime::Handle;
 use tokio::sync::{mpsc, watch};
 use tokio::task::AbortHandle;
 
+/// The wire itself, for setting a server up and signing in (SRV-041,
+/// SRV-060…063) outside a [`Remote`]: its routes, their helpers and types.
+pub use nodus_wire as wire;
 pub use nodus_wire::client::{DISCONNECTED, FileBody};
-pub use nodus_wire::{CallError, Hello, MAX_UPLOAD, NOT_AVAILABLE, PROTOCOL, Request, Upload};
+pub use nodus_wire::{CallError, Hello, MAX_UPLOAD, NOT_AVAILABLE, Notice, PROTOCOL, Request, Upload};
 
 /// What a call fails with while the server isn't connected.
 pub const OFFLINE: &str = "Not connected to the server";
@@ -95,6 +98,9 @@ pub enum RemoteEvent {
     Status(Status),
     /// One of the server's events.
     Event(Event),
+    /// The server's news for every member, such as a device signing in
+    /// (SRV-042).
+    Notice(Notice),
 }
 
 /// A [`Remote`]'s events and status changes, across reconnects. None once
@@ -127,6 +133,12 @@ pub enum CheckError {
 
 /// Checks that `url` is a Nodus server with this app's protocol (SRV-027)
 /// that takes `token`, by connecting once. Gives its hello.
+///
+/// A server that still needs setting up ([`Hello::needs_setup`], SRV-060)
+/// passes when the token gets in, as `--dev-token` does on loopback for
+/// development and tests. A person adding one meets the setup wizard
+/// instead, which claims its setup code and signs in for a device token
+/// (`nodus-core`'s `servers().claim` and `poll_sign_in`).
 pub async fn check(url: &str, token: &str) -> Result<Hello, CheckError> {
     match attempt(url, token).await {
         Ok((hello, client, _events)) => {
@@ -429,8 +441,11 @@ async fn connected(shared: &Shared, said: Hello, client: Client, mut events: Eve
             hello: Some(said),
             error: None,
         });
-        while let Some(event) = events.next().await {
-            let _ = shared.events.send(RemoteEvent::Event(event));
+        while let Some(received) = events.next_received().await {
+            let _ = shared.events.send(match received {
+                Received::Event(event) => RemoteEvent::Event(event),
+                Received::Notice(notice) => RemoteEvent::Notice(notice),
+            });
         }
     }
     let mut current = lock(&shared.client);

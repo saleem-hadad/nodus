@@ -21,6 +21,10 @@ use crate::nodus::{Inner, lock};
 use crate::projects::now_ms;
 use crate::{CommandError, CommandResult, Nodus};
 
+mod people;
+
+pub use people::{SETUP_EXPIRED, SetupSession, SignIn, install_url};
+
 /// How long the grid waits on a server for its projects' names, colours
 /// and counts before it shows what it last had.
 const LIST_TIMEOUT: Duration = Duration::from_secs(5);
@@ -76,6 +80,13 @@ impl ServersApi<'_> {
     /// can't be reached, `This server runs Nodus <v>. Update it in Settings
     /// → Servers.`, or the token turned down.
     pub async fn add(&self, url: &str, token: &str) -> CommandResult<ServerInfo> {
+        self.add_as(url, token, None).await
+    }
+
+    /// [`ServersApi::add`], saying who signed in on this device: their
+    /// GitHub login and id, kept with the server (SRV-161). A token added
+    /// by hand forgets whoever was kept.
+    pub(crate) async fn add_as(&self, url: &str, token: &str, who: Option<(&str, u64)>) -> CommandResult<ServerInfo> {
         const CHANNEL: &str = "servers:add";
         let url = server_url(url).ok_or_else(|| CommandError::new(CHANNEL, format!("Not a server address: {url}")))?;
         let token = token.trim();
@@ -91,10 +102,14 @@ impl ServersApi<'_> {
             .nodus
             .seal(token)
             .ok_or_else(|| CommandError::new(CHANNEL, CANNOT_SAVE_TOKEN))?;
+        let login = who.map(|(login, _)| login.to_owned());
+        let github_id = who.map(|(_, id)| id);
         let record = self.nodus.inner.store.update(|state| {
             if let Some(known) = state.servers.iter_mut().find(|s| s.url == url) {
                 known.name.clone_from(&hello.name);
                 known.token = sealed;
+                known.login = login;
+                known.github_id = github_id;
                 return known.clone();
             }
             let record = ServerRecord {
@@ -102,6 +117,8 @@ impl ServersApi<'_> {
                 url,
                 name: hello.name.clone(),
                 token: sealed,
+                login,
+                github_id,
                 extra: Map::new(),
             };
             state.servers.push(record.clone());
@@ -232,7 +249,7 @@ impl ServersApi<'_> {
 
 /// A server's address as it's kept: `http://host[:port]`, trimmed, without
 /// a trailing slash. None for anything else (no TLS in v1, SRV-021).
-fn server_url(url: &str) -> Option<String> {
+pub(crate) fn server_url(url: &str) -> Option<String> {
     let url = url.trim().trim_end_matches('/');
     let rest = url.strip_prefix("http://").unwrap_or(url);
     (!rest.is_empty() && !rest.contains("://") && !rest.contains('/') && !rest.contains(char::is_whitespace))
@@ -275,6 +292,9 @@ pub(crate) struct Remotes {
     fetching: Mutex<HashSet<String>>,
     /// Each server view's last page, for while its server can't be reached.
     pages: Mutex<HashMap<String, PageResponse>>,
+    /// Setup sessions claimed this run, by the server's address, so the
+    /// wizard picks up where it was when it's opened again (SRV-061).
+    setups: Mutex<HashMap<String, SetupSession>>,
 }
 
 impl Remotes {
@@ -288,6 +308,7 @@ impl Remotes {
             files: user_data.join("server-files"),
             fetching: Mutex::default(),
             pages: Mutex::default(),
+            setups: Mutex::default(),
         }
     }
 
@@ -347,6 +368,8 @@ impl Remotes {
             state,
             version,
             error,
+            login: record.login.clone(),
+            github_id: record.github_id,
         }
     }
 
@@ -680,6 +703,14 @@ async fn pass_on(core: Weak<Inner>, server_id: String, mut events: RemoteEvents)
             RemoteEvent::Event(event) => {
                 let _ = core.events.send(event);
             }
+            // SRV-042: a server's news for every member, as a toast.
+            RemoteEvent::Notice(notice) => {
+                let _ = core.events.send(Event::ServerNotice {
+                    server_id: server_id.clone(),
+                    kind: notice.kind,
+                    message: notice.message,
+                });
+            }
             RemoteEvent::Status(status) => {
                 if told == Some(status.state) {
                     continue;
@@ -725,6 +756,8 @@ mod tests {
                 url: "http://127.0.0.1:9".into(),
                 name: "box".into(),
                 token: String::new(),
+                login: None,
+                github_id: None,
                 extra: Map::new(),
             });
             state.projects.push(Project {

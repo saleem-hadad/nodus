@@ -7,7 +7,9 @@
 
 mod composer;
 mod entries;
+pub mod form;
 mod shows;
 mod view;
+pub mod visual;
 
 pub use view::{ChatView, ChatViews};

@@ -136,6 +136,8 @@ pub struct ChatView {
     pub(crate) rows: Vec<Row>,
     pub(crate) list: ListState,
     pub(crate) composer: Entity<TextareaState>,
+    /// Claude's charts and forms, read once each.
+    pub(crate) shows: super::shows::Shows,
     /// Tool runs shown in full, by their first call's id.
     pub(crate) opened: HashSet<String>,
     pub(crate) dock: Dock,
@@ -230,6 +232,7 @@ impl ChatView {
             rows: Vec::new(),
             list,
             composer,
+            shows: super::shows::Shows::default(),
             opened: HashSet::new(),
             dock: Dock::default(),
             scale: 1.0,

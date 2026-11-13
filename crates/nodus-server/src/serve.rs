@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use nodus_core::{EnvSource, HostMode, Nodus, NodusConfig, RunnerSource, SafeStorage};
+use nodus_domain::Event;
 use nodus_host::Logger;
 use nodus_updater::{BoxFuture, HttpResponse, Platform, RunOutput, System};
 use tokio::net::TcpListener;
@@ -16,6 +17,8 @@ use crate::data::{self, ServerEnv};
 use crate::hosting::ServerHosting;
 use crate::http;
 use crate::net::{self, Hosts, Tailscale};
+use crate::presence::Presences;
+use crate::terminals::Terminals;
 
 /// What `serve` was asked.
 pub(crate) struct ServeOptions {
@@ -46,6 +49,10 @@ pub(crate) struct Server {
     /// (SRV-003).
     pub run_home: PathBuf,
     pub hosts: Hosts,
+    /// Who is on which board (SRV-180).
+    pub presences: Arc<Presences>,
+    /// Whose size each session's terminal follows (SRV-144).
+    pub terminals: Terminals,
     /// Each session's project, once looked up: a session never moves.
     sessions: Mutex<HashMap<String, String>>,
 }
@@ -60,6 +67,21 @@ impl Server {
         let project_id = self.nodus.board().session_project(session_id)?;
         known.insert(session_id.to_owned(), project_id.clone());
         Some(project_id)
+    }
+}
+
+/// A session's process ended: its next one starts at its opener's
+/// terminal size (SRV-144).
+async fn follow_exits(server: std::sync::Weak<Server>, mut events: tokio::sync::broadcast::Receiver<Event>) {
+    loop {
+        match events.recv().await {
+            Ok(Event::PtyExit { session_id, .. }) => match server.upgrade() {
+                Some(server) => server.terminals.exited(&session_id),
+                None => return,
+            },
+            Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+            Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
+        }
     }
 }
 
@@ -119,8 +141,11 @@ async fn run(options: ServeOptions, log: &Logger) -> Result<(), String> {
         hosting,
         run_home,
         hosts: Hosts::new(&tailscale, address.ip()),
+        presences: Presences::start(),
+        terminals: Terminals::default(),
         sessions: Mutex::new(HashMap::new()),
     });
+    tokio::spawn(follow_exits(Arc::downgrade(&server), nodus.subscribe()));
     // Tailscale may come up after the server at boot: it's looked for
     // until it's there, and listened on then too.
     let late_tailscale = (options.bind.is_none() && tailscale.ip.is_none())

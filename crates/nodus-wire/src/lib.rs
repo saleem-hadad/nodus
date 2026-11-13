@@ -17,7 +17,8 @@
 //!                   { "id": 7, "err": { "channel": "board:load", "message": "Unknown project …" } }
 //! server → client   { "ev": "pty-data", "p": { "sessionId": "…", "data": "…" } }
 //! server → client   { "ev": "server-notice", "p": { "kind": "…", "message": "…" } }
-//! client → server   { "presence": { … } }   (SRV-180, from slice 6)
+//! client → server   { "presence": { "project": "…", "cursor": { "x", "y" } | null, "viewport": … | null } }
+//! server → client   { "ev": "presence", "p": { "project": "…", "peers": [ … ] } }   (SRV-180)
 //! ```
 
 mod auth;
@@ -27,6 +28,7 @@ pub mod client;
 pub mod files;
 mod frame;
 mod pool;
+mod presence;
 
 use serde::{Deserialize, Serialize};
 
@@ -35,10 +37,12 @@ pub use call::{CALLS, NOT_AVAILABLE, Request, SETUP_CALLS};
 pub use files::{FILES_PATH, MAX_UPLOAD, UPLOADS_PATH, Upload};
 pub use frame::{Answer, CallError, CallFrame, Frame, FrameError};
 pub use pool::{ACCOUNT_FAILED, AccountState, ClaudeAccount, UsageWindow};
+pub use presence::{PRESENCE_EVERY, PRESENCE_TIMEOUT, PresenceFrame};
 
 /// What the wire speaks. A client and a server with different protocols
-/// don't talk (SRV-027).
-pub const PROTOCOL: u32 = 1;
+/// don't talk (SRV-027). 2: presence, `pty-size`, and ink by the stroke
+/// (slice 6).
+pub const PROTOCOL: u32 = 2;
 
 /// The port a server listens on (SRV-020).
 pub const PORT: u16 = 7420;

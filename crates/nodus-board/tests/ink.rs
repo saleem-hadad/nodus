@@ -1,6 +1,6 @@
 //! ink.test.ts, ported.
 
-use nodus_board::ink::{INK_MAX_POINTS, INK_MAX_STROKES, INK_MAX_TEXT, clean_ink, save_ink};
+use nodus_board::ink::{INK_MAX_POINTS, INK_MAX_STROKES, INK_MAX_TEXT, add_ink, clean_ink, remove_ink, save_ink};
 use nodus_domain::js;
 use nodus_store::BoardState;
 use serde_json::{Value, json};
@@ -129,4 +129,30 @@ fn saving_replaces_the_boards_ink() {
     assert_eq!(board.ink.as_ref().map(Vec::len), Some(1));
     save_ink(&mut board, &json!("nope"));
     assert_eq!(board.ink, Some(Vec::new()));
+}
+
+/// SRV-184: a stroke at a time, on top of what's there.
+#[test]
+fn adds_and_removes_single_strokes_leaving_the_rest() {
+    let mut board = BoardState::default();
+    add_ink(&mut board, &json!([pen("a", json!([0, 0, 1, 1]))]));
+    // Someone else's, meanwhile.
+    add_ink(&mut board, &json!([pen("b", json!([5, 5, 6, 6]))]));
+    let ids = |board: &BoardState| -> Vec<String> { board.ink.iter().flatten().map(|s| s.id.clone()).collect() };
+    assert_eq!(ids(&board), ["a", "b"]);
+    // A stroke moved keeps its place, and malformed ones are dropped.
+    add_ink(&mut board, &json!([pen("a", json!([10, 10, 11, 11])), { "id": "c" }]));
+    assert_eq!(ids(&board), ["a", "b"]);
+    assert_eq!(board.ink.as_ref().unwrap()[0].points, [10.0, 10.0, 11.0, 11.0]);
+    remove_ink(&mut board, &["a".to_owned(), "nope".to_owned()]);
+    assert_eq!(ids(&board), ["b"]);
+
+    // Past the cap, the oldest go.
+    let many: Vec<Value> = (0..INK_MAX_STROKES + 3)
+        .map(|i| pen(&format!("s{i}"), json!([0, 0])))
+        .collect();
+    add_ink(&mut board, &Value::Array(many));
+    let kept = ids(&board);
+    assert_eq!(kept.len(), INK_MAX_STROKES);
+    assert_eq!(kept[0], "s3");
 }

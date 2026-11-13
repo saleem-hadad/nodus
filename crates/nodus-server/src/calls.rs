@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use nodus_wire::{CallError, Request};
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::auth::Who;
 use crate::serve::Server;
@@ -61,6 +61,44 @@ pub(crate) async fn answer(server: Arc<Server>, who: Who, request: Request) -> R
         _ => Err(nodus_wire::NOT_AVAILABLE.to_owned()),
     };
     answered.map_err(|message| CallError::new(channel, message))
+}
+
+/// `views:approve` (SRV-145): any member may allow or turn down a view's
+/// command. The command records who allowed it (`approvedBy`), and the
+/// audit log has a line for each (SRV-210).
+pub(crate) async fn approve_view(server: Arc<Server>, who: Who, request: Request) -> Result<Value, CallError> {
+    let channel = request.name();
+    let Request::ViewsApprove {
+        project_id,
+        view_id,
+        name,
+        allow,
+    } = request
+    else {
+        return Err(CallError::new(channel, nodus_wire::NOT_AVAILABLE));
+    };
+    let member = server.auth.login_of(&who);
+    let approved = server
+        .nodus
+        .by(member.as_deref())
+        .views()
+        .approve(&project_id, &view_id, &name, allow)
+        .await;
+    let run = approved
+        .as_ref()
+        .ok()
+        .and_then(|()| server.nodus.views().command_line(&project_id, &view_id, &name));
+    approved.map_err(|err| CallError::new(err.channel, err.message))?;
+    server.auth.record(
+        &who,
+        if allow {
+            "view.command-approved"
+        } else {
+            "view.command-denied"
+        },
+        json!({ "projectId": project_id, "viewId": view_id, "name": name, "run": run }),
+    );
+    Ok(Value::Null)
 }
 
 fn give<T: Serialize>(value: T) -> Result<Value, String> {

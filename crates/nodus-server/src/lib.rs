@@ -42,10 +42,12 @@ mod http;
 mod manifest;
 mod net;
 mod pool;
+mod presence;
 mod serve;
 mod setup;
 mod socket;
 mod store;
+mod terminals;
 
 use std::io::Write;
 use std::path::PathBuf;

@@ -11,7 +11,8 @@ use serde_json::{Map, Value};
 
 use crate::board::{BoardLink, BoardNode, BoardNote, BoardSection, BoardShape, InkStroke};
 use crate::project::Project;
-use crate::view::BoardView;
+use crate::session::{MessageRole, TranscriptMessage};
+use crate::view::{BoardView, ViewCommand};
 
 /// The key [`CreatedBy`] keeps a member's login under.
 pub const CREATED_BY: &str = "createdBy";
@@ -206,6 +207,76 @@ impl BoardNode {
     }
 }
 
+/// How many prompts a card keeps the senders of: the latest.
+pub const PROMPTS_KEPT: usize = 200;
+
+/// How far apart a prompt's hook and its turn in the transcript may be to
+/// be the same prompt.
+const SAME_PROMPT_MS: f64 = 10_000.0;
+
+/// A prompt a server session was given, and the member who sent it
+/// (SRV-142): whose client last wrote to its terminal before Claude's
+/// `UserPromptSubmit` hook, else whoever started the card.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PromptBy {
+    /// When the hook came, in milliseconds since the epoch.
+    pub at: u64,
+    /// Their GitHub login.
+    pub by: String,
+}
+
+impl BoardNode {
+    /// Who sent the card's prompts, oldest first: `prompts` (SRV-142).
+    pub fn prompts(&self) -> Vec<PromptBy> {
+        read(&self.extra, "prompts").unwrap_or_default()
+    }
+
+    /// Records one more, keeping the last [`PROMPTS_KEPT`].
+    pub fn push_prompt(&mut self, prompt: PromptBy) {
+        let mut prompts = self.prompts();
+        prompts.push(prompt);
+        let over = prompts.len().saturating_sub(PROMPTS_KEPT);
+        prompts.drain(..over);
+        write(&mut self.extra, "prompts", Some(&prompts));
+    }
+}
+
+/// Puts each user turn's sender on it (SRV-142): the prompt recorded
+/// nearest the turn's time, within 10 seconds, each prompt for one turn
+/// only. Claude's own notes in the transcript aren't anyone's.
+pub fn attribute_turns(messages: &mut [TranscriptMessage], prompts: &[PromptBy]) {
+    let mut used = vec![false; prompts.len()];
+    for message in messages {
+        if message.role != MessageRole::User || message.notice == Some(true) {
+            continue;
+        }
+        let nearest = prompts
+            .iter()
+            .enumerate()
+            .filter(|(i, p)| !used[*i] && (p.at as f64 - message.timestamp).abs() <= SAME_PROMPT_MS)
+            .min_by(|(_, a), (_, b)| {
+                let off = |p: &PromptBy| (p.at as f64 - message.timestamp).abs();
+                off(a).total_cmp(&off(b))
+            });
+        if let Some((i, prompt)) = nearest {
+            used[i] = true;
+            message.by = Some(prompt.by.clone());
+        }
+    }
+}
+
+impl ViewCommand {
+    /// The member who allowed the command line (SRV-145): `approvedBy`.
+    /// Any member may; the server's audit log records it too (SRV-210).
+    pub fn approved_by(&self) -> Option<&str> {
+        self.extra.get("approvedBy").and_then(Value::as_str)
+    }
+
+    pub fn set_approved_by(&mut self, login: Option<&str>) {
+        set(&mut self.extra, "approvedBy", login.map(Value::from));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -277,6 +348,85 @@ mod tests {
         node.set_preview_live(false);
         node.set_setup(None);
         assert!(!node.preview_live() && node.setup().is_none());
+    }
+
+    /// SRV-142
+    #[test]
+    fn keeps_the_last_prompts_senders() {
+        let mut node = node();
+        assert!(node.prompts().is_empty());
+        for at in 0..(PROMPTS_KEPT as u64 + 5) {
+            node.push_prompt(PromptBy { at, by: "alice".into() });
+        }
+        let prompts = node.prompts();
+        assert_eq!(prompts.len(), PROMPTS_KEPT);
+        assert_eq!(prompts[0].at, 5);
+        let mut short = self::node();
+        short.push_prompt(PromptBy {
+            at: 1_700_000_000_000,
+            by: "octo".into(),
+        });
+        assert!(
+            crate::json::to_string(&short)
+                .unwrap()
+                .ends_with(r#""prompts":[{"at":1700000000000,"by":"octo"}]}"#)
+        );
+    }
+
+    /// SRV-142
+    #[test]
+    fn a_turn_is_sent_by_the_prompt_nearest_it() {
+        let turn = |role: MessageRole, timestamp: f64| TranscriptMessage {
+            role,
+            text: "x".into(),
+            timestamp,
+            tools: None,
+            calls: None,
+            notice: None,
+            by: None,
+        };
+        let mut messages = vec![
+            turn(MessageRole::User, 100_000.0),
+            turn(MessageRole::Assistant, 101_000.0),
+            turn(MessageRole::User, 200_000.0),
+            turn(MessageRole::User, 300_000.0),
+            TranscriptMessage {
+                notice: Some(true),
+                ..turn(MessageRole::User, 300_500.0)
+            },
+        ];
+        let prompts = [
+            PromptBy {
+                at: 100_400,
+                by: "alice".into(),
+            },
+            // Nothing near the second turn: a dev token's, say.
+            PromptBy {
+                at: 299_000,
+                by: "octo".into(),
+            },
+            PromptBy {
+                at: 300_200,
+                by: "alice".into(),
+            },
+        ];
+        attribute_turns(&mut messages, &prompts);
+        let by: Vec<_> = messages.iter().map(|m| m.by.as_deref()).collect();
+        assert_eq!(by, [Some("alice"), None, None, Some("alice"), None]);
+    }
+
+    /// SRV-145
+    #[test]
+    fn a_command_keeps_who_allowed_it() {
+        let mut cmd: ViewCommand = serde_json::from_value(json!({ "name": "test", "run": "npm test" })).unwrap();
+        cmd.set_approved_by(Some("alice"));
+        assert_eq!(cmd.approved_by(), Some("alice"));
+        assert_eq!(
+            crate::json::to_string(&cmd).unwrap(),
+            r#"{"name":"test","run":"npm test","approvedBy":"alice"}"#
+        );
+        cmd.set_approved_by(None);
+        assert_eq!(cmd.approved_by(), None);
     }
 
     #[test]

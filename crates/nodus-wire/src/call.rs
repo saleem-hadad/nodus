@@ -120,8 +120,14 @@ calls! {
     BoardSaveNote = "board:save-note" { project_id: String, note: BoardNote },
     /// `null`.
     BoardRemoveNotes = "board:remove-notes" { project_id: String, note_ids: Vec<String> },
-    /// `null`.
+    /// `null`. The whole list: local boards save ink this way. A server
+    /// board's app sends single strokes instead (SRV-184).
     BoardSaveInk = "board:save-ink" { project_id: String, strokes: Vec<InkStroke> },
+    /// `null`: strokes added, or changed by id, on top of the board's ink as
+    /// it is, so two people drawing at once keep both (SRV-184).
+    BoardAddInk = "board:add-ink" { project_id: String, strokes: Vec<InkStroke> },
+    /// `null`: these strokes, by id, gone from the board's ink (SRV-184).
+    BoardRemoveInk = "board:remove-ink" { project_id: String, ids: Vec<String> },
     /// `null`.
     BoardSaveShapes = "board:save-shapes" { project_id: String, shapes: Vec<BoardShape> },
     /// `null`.

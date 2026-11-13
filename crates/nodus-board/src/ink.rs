@@ -102,3 +102,28 @@ fn clean_stroke(item: &Map<String, Value>, seen: &HashSet<String>) -> Option<Ink
 pub fn save_ink(board: &mut BoardState, raw: &Value) {
     board.ink = Some(clean_ink(raw));
 }
+
+/// `board:add-ink` (SRV-184): strokes added on top of the board's ink as
+/// it is, or changed in place where one with the same id is there already,
+/// cleaned as [`save_ink`] cleans them. Past [`INK_MAX_STROKES`] the oldest
+/// go first. A server board's ink changes this way, a stroke at a time, so
+/// two people drawing at once keep both. The caller saves.
+pub fn add_ink(board: &mut BoardState, raw: &Value) {
+    let ink = board.ink.get_or_insert_with(Vec::new);
+    for stroke in clean_ink(raw) {
+        match ink.iter_mut().find(|s| s.id == stroke.id) {
+            Some(existing) => *existing = stroke,
+            None => ink.push(stroke),
+        }
+    }
+    let over = ink.len().saturating_sub(INK_MAX_STROKES);
+    ink.drain(..over);
+}
+
+/// `board:remove-ink` (SRV-184): these strokes, by id, off the board's ink.
+/// The caller saves.
+pub fn remove_ink(board: &mut BoardState, ids: &[String]) {
+    if let Some(ink) = board.ink.as_mut() {
+        ink.retain(|s| !ids.contains(&s.id));
+    }
+}

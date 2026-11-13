@@ -139,6 +139,7 @@ impl SessionsApi<'_> {
             return route.send(&Request::SessionWrite { session_id, data });
         }
         let inner = &self.nodus.inner;
+        self.wrote(session_id);
         // Before the write: an interrupt would otherwise end the run's turn and remove it.
         if launch::is_takeover(data, inner.status.status(session_id)) {
             inner.board.claim_run(session_id);
@@ -162,6 +163,7 @@ impl SessionsApi<'_> {
                 })
                 .await;
         }
+        self.wrote(session_id);
         self.nodus
             .on_core(async {
                 let launcher = CoreLauncher(std::sync::Arc::downgrade(&self.nodus.inner));
@@ -230,6 +232,14 @@ impl SessionsApi<'_> {
         match self.nodus.route_session(session_id) {
             Some(_) => Err(CommandError::new(channel, QUEUE_ON_SERVER)),
             None => Ok(()),
+        }
+    }
+
+    /// SRV-142: on a server, the member writing is the session's last writer,
+    /// whom its next prompt is recorded as sent by.
+    fn wrote(&self, session_id: &str) {
+        if let (Some(by), Some(hosted)) = (self.by, self.nodus.inner.hosted()) {
+            hosted.writers.wrote(session_id, by);
         }
     }
 
@@ -341,11 +351,13 @@ impl SessionsApi<'_> {
         }
         self.nodus
             .on_core(async {
-                self.nodus
-                    .inner
+                let inner = &self.nodus.inner;
+                let mut messages = inner
                     .board
                     .transcript(project_id, session_id)
-                    .on("session:transcript")
+                    .on("session:transcript")?;
+                inner.attribute_transcript(project_id, session_id, &mut messages);
+                Ok(messages)
             })
             .await
     }

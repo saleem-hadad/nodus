@@ -264,6 +264,43 @@ impl BoardApi<'_> {
             .await;
     }
 
+    /// `board:add-ink` (SRV-184): strokes added on top of the board's ink,
+    /// or changed by id, rather than the whole list replaced, so two people
+    /// drawing on a server board at once keep both. A new stroke is the
+    /// member's who drew it (SRV-183).
+    pub async fn add_ink(&self, project_id: &str, strokes: &[InkStroke]) {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, strokes) = (project_id.to_owned(), strokes.to_vec());
+            return route.run(Request::BoardAddInk { project_id, strokes }).await;
+        }
+        self.nodus
+            .on_core(async {
+                let ids: Vec<&str> = strokes.iter().map(|s| s.id.as_str()).collect();
+                let before = self.creators(project_id, &ids, |b, id| {
+                    let ink = b.ink.as_deref().unwrap_or_default();
+                    ink.iter().find(|s| s.id == id).map(|s| s.created_by())
+                });
+                self.nodus.inner.board.add_ink(project_id, &to_json(&strokes));
+                self.attribute(project_id, &ids, &before, |b, id| {
+                    b.ink.as_mut()?.iter_mut().find(|s| s.id == id).map(as_created)
+                });
+            })
+            .await;
+    }
+
+    /// `board:remove-ink` (SRV-184): strokes gone, by id, leaving the rest.
+    pub async fn remove_ink(&self, project_id: &str, ids: &[String]) {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, ids) = (project_id.to_owned(), ids.to_vec());
+            return route.run(Request::BoardRemoveInk { project_id, ids }).await;
+        }
+        self.nodus
+            .on_core(async {
+                self.nodus.inner.board.remove_ink(project_id, ids);
+            })
+            .await;
+    }
+
     /// `board:save-shapes` (added after 0.9.4): creates or updates shapes.
     pub async fn save_shapes(&self, project_id: &str, shapes: &[BoardShape]) {
         if let Some(route) = self.nodus.route_project(project_id) {

@@ -115,6 +115,8 @@ pub(crate) struct Hosted {
     /// Cards whose worktree is still being set up, by session id: their
     /// process waits for it (SRV-123).
     preparing: std::sync::Mutex<HashMap<String, watch::Receiver<bool>>>,
+    /// Whose client last wrote to each session (SRV-142).
+    pub(crate) writers: crate::prompts::Writers,
 }
 
 impl Hosted {
@@ -123,6 +125,7 @@ impl Hosted {
             hosting,
             jobs: std::sync::Mutex::default(),
             preparing: std::sync::Mutex::default(),
+            writers: crate::prompts::Writers::default(),
         }
     }
 }

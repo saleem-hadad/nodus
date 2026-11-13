@@ -248,6 +248,10 @@ pub struct TranscriptMessage {
     /// A note from Claude Code rather than a message, such as a background task finishing.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notice: Option<bool>,
+    /// On a server session, the member who sent this user turn, by GitHub
+    /// login (SRV-142).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub by: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

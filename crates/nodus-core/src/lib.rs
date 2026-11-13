@@ -67,6 +67,7 @@ mod nodus;
 mod notifications;
 mod pool;
 mod projects;
+mod prompts;
 mod realpath;
 mod routing;
 mod servers;

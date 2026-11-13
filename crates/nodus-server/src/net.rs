@@ -98,20 +98,30 @@ pub(crate) fn bind_address(requested: Option<&str>, tailscale: Option<Ipv4Addr>)
 
 /// SRV-021: the names a request may call this server by, so a web page
 /// whose own name resolves to this machine (DNS rebinding) is turned away.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Hosts(Vec<String>);
+#[derive(Debug)]
+pub(crate) struct Hosts(std::sync::RwLock<Vec<String>>);
 
 impl Hosts {
     /// `localhost`, `127.0.0.1`, the Tailscale address and names, and the
     /// address the server listens on.
     pub(crate) fn new(tailscale: &Tailscale, listening: IpAddr) -> Self {
-        let mut names = vec!["localhost".to_owned(), Ipv4Addr::LOCALHOST.to_string()];
+        let hosts = Self(std::sync::RwLock::new(vec![
+            "localhost".to_owned(),
+            Ipv4Addr::LOCALHOST.to_string(),
+        ]));
+        hosts.add(tailscale, listening);
+        hosts
+    }
+
+    /// Answers to these too: Tailscale's, once it's up after the server
+    /// started (`serve`'s follow-up to SRV-020).
+    pub(crate) fn add(&self, tailscale: &Tailscale, listening: IpAddr) {
+        let mut names = self.0.write().unwrap_or_else(std::sync::PoisonError::into_inner);
         names.extend(tailscale.ip.map(|ip| ip.to_string()));
         names.extend(tailscale.names.iter().cloned());
         names.push(listening.to_string());
         names.sort_unstable();
         names.dedup();
-        Self(names)
     }
 
     /// Whether a request's `Host` names this server, with or without a port.
@@ -125,7 +135,10 @@ impl Hosts {
             None => host.rsplit_once(':').map_or(host, |(name, _)| name),
         };
         let name = name.trim_end_matches('.').to_ascii_lowercase();
-        self.0.contains(&name)
+        self.0
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .contains(&name)
     }
 }
 

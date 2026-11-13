@@ -11,8 +11,8 @@
 //! server answers it with [`NOT_AVAILABLE`].
 
 use nodus_domain::{
-    BoardLink, BoardNote, BoardSection, BoardShape, CreateSessionOptions, CreateViewOptions, GitFileChange, GroupPatch,
-    InkStroke, NodePatch, ProjectPatch, Rect, ViewPatch, ViewReport, Viewport,
+    BoardLink, BoardNote, BoardSection, BoardShape, CreateSessionOptions, CreateViewOptions, FolderColor,
+    GitFileChange, GroupPatch, InkStroke, NodePatch, ProjectPatch, Rect, ViewPatch, ViewReport, Viewport,
 };
 use serde_json::{Map, Value};
 
@@ -68,6 +68,17 @@ calls! {
         repo_path: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         name: Option<String>,
+    },
+    /// `Project`: a repository one of the App's installations reaches,
+    /// cloned on the server and added (SRV-120). The name and colour
+    /// default from the repository. Answered once it's cloned; a
+    /// repository already added is given back as it is.
+    ProjectsAddGithub = "projects:add-github" {
+        full_name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        color: Option<FolderColor>,
     },
     /// `Project`.
     ProjectsUpdate = "projects:update" { id: String, patch: ProjectPatch },
@@ -261,6 +272,9 @@ calls! {
     /// `GithubApp`: a new private key for the App, checked against GitHub
     /// before it replaces the old one (SRV-063).
     GithubReplaceKey = "github:replace-key" { pem: String },
+    /// `GithubRepo[]`: every repository the App's installations reach,
+    /// which projects can be added from (SRV-120).
+    GithubRepos = "github:repos" {},
 }
 
 /// The calls a setup token may make: wizard steps 1 and 2 (SRV-060). The
@@ -284,6 +298,8 @@ impl Request {
                 | Self::ServerInfo {}
                 | Self::GithubInstallations {}
                 | Self::GithubReplaceKey { .. }
+                | Self::GithubRepos {}
+                | Self::ProjectsAddGithub { .. }
         )
     }
 }

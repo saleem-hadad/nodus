@@ -168,6 +168,11 @@ impl Auth {
         self.member(*github_id).map(|member| member.login)
     }
 
+    /// The GitHub App, once there is one.
+    pub(crate) fn app(&self) -> Option<AppConfig> {
+        self.lock().config.github.clone()
+    }
+
     /// A member by their GitHub id.
     pub(crate) fn member(&self, github_id: u64) -> Option<Member> {
         self.lock()
@@ -402,7 +407,7 @@ impl Auth {
     }
 
     /// The App's key and id, to speak as it.
-    fn app_key(&self) -> Result<(AppKey, u64), String> {
+    pub(crate) fn app_key(&self) -> Result<(AppKey, u64), String> {
         let app_id = self
             .lock()
             .config

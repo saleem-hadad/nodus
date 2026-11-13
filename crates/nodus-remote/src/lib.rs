@@ -60,9 +60,11 @@ const MAX_BACKOFF: Duration = Duration::from_secs(30);
 /// draft) take minutes; views may run commands; the rest are quick.
 pub fn timeout_for(request: &Request) -> Duration {
     match request {
-        Request::BoardNameSection { .. } | Request::SessionSummarize { .. } | Request::ActionsDraft { .. } => {
-            Duration::from_secs(600)
-        }
+        // A clone takes as long as the repository's size (SRV-120).
+        Request::BoardNameSection { .. }
+        | Request::SessionSummarize { .. }
+        | Request::ActionsDraft { .. }
+        | Request::ProjectsAddGithub { .. } => Duration::from_secs(600),
         Request::ViewsCreate { .. }
         | Request::ViewsCall { .. }
         | Request::ViewsRefresh { .. }

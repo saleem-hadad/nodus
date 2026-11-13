@@ -13,6 +13,7 @@ use tokio::net::TcpListener;
 
 use crate::auth::Auth;
 use crate::data::{self, ServerEnv};
+use crate::hosting::ServerHosting;
 use crate::http;
 use crate::net::{self, Hosts, Tailscale};
 
@@ -37,7 +38,13 @@ pub(crate) struct Server {
     /// The data folder (SRV-003): uploads are kept in it (SRV-163).
     pub data: PathBuf,
     /// Members, devices, tokens, the GitHub App and the audit log.
-    pub auth: Auth,
+    pub auth: Arc<Auth>,
+    /// Sessions' tokens, commit identities and installation tokens, and
+    /// the repositories projects come from (SRV-080, SRV-120, SRV-143).
+    pub hosting: Arc<ServerHosting>,
+    /// The sessions' home: projects are cloned into its `projects/`
+    /// (SRV-003).
+    pub run_home: PathBuf,
     pub hosts: Hosts,
     /// Each session's project, once looked up: a session never moves.
     sessions: Mutex<HashMap<String, String>>,
@@ -84,7 +91,8 @@ async fn run(options: ServeOptions, log: &Logger) -> Result<(), String> {
     let data = data::data_dir().ok_or("No data folder: set NODUS_USER_DATA or HOME")?;
     nodus_host_proto::ensure_private_dir(&data).map_err(|err| format!("Can't make {}: {err}", data.display()))?;
     let _lock = data::lock(&data)?;
-    let env = data::server_env(&data.join("env"), options.run_home.as_deref())?;
+    let mut env = data::server_env(&data.join("env"), options.run_home.as_deref())?;
+    data::add_session_env(&mut env);
     let tailscale = Tailscale::detect().await;
     let address = net::bind_address(options.bind.as_deref(), tailscale.ip)?;
     if options.dev_token.is_some() && !address.ip().is_loopback() {
@@ -93,20 +101,28 @@ async fn run(options: ServeOptions, log: &Logger) -> Result<(), String> {
             address.ip()
         ));
     }
-    let auth = Auth::open(&data, options.dev_token, machine_name())?;
+    let auth = Arc::new(Auth::open(&data, options.dev_token, machine_name())?);
+    let hosting = Arc::new(ServerHosting::open(&data, Arc::clone(&auth))?);
     let listener = TcpListener::bind(address)
         .await
         .map_err(|err| format!("Can't listen on {address}: {err}"))?;
     let address = listener.local_addr().map_err(|err| err.to_string())?;
-    let nodus = start_core(&data, env, options.host_socket).await?;
+    let run_home = env.home.clone();
+    let nodus = start_core(&data, env, options.host_socket, Arc::clone(&hosting) as _).await?;
 
     let server = Arc::new(Server {
         nodus: nodus.clone(),
         data: data.clone(),
         auth,
+        hosting,
+        run_home,
         hosts: Hosts::new(&tailscale, address.ip()),
         sessions: Mutex::new(HashMap::new()),
     });
+    // Tailscale may come up after the server at boot: it's looked for
+    // until it's there, and listened on then too.
+    let late_tailscale = (options.bind.is_none() && tailscale.ip.is_none())
+        .then(|| tokio::spawn(listen_on_tailscale_once_up(Arc::clone(&server), log.clone())));
     log.log(&["data in", &data.to_string_lossy()]);
     if server.auth.needs_setup() {
         log.log(&["not set up yet", "run nodus-server setup-code for a setup code"]);
@@ -115,6 +131,9 @@ async fn run(options: ServeOptions, log: &Logger) -> Result<(), String> {
     tokio::select! {
         () = http::accept(Arc::clone(&server), listener) => {}
         () = stopped() => {}
+    }
+    if let Some(late) = late_tailscale {
+        late.abort();
     }
     // Sessions keep running in the host, to be adopted when the server
     // starts again (SRV-004, PLAT-033).
@@ -129,7 +148,12 @@ async fn run(options: ServeOptions, log: &Logger) -> Result<(), String> {
 /// (SRV-185 comes later); the voice key nowhere to be kept, and the app's
 /// updater off. Then the sessions a running host has are adopted, without
 /// starting one.
-async fn start_core(data: &Path, env: ServerEnv, host_socket: Option<PathBuf>) -> Result<Nodus, String> {
+async fn start_core(
+    data: &Path,
+    env: ServerEnv,
+    host_socket: Option<PathBuf>,
+    hosting: Arc<dyn nodus_core::Hosting>,
+) -> Result<Nodus, String> {
     let ServerEnv { vars, home } = env;
     let env = nodus_platform::Env::with_vars(vars, Some(&home)).await;
     let (host, runner) = host_mode(host_socket);
@@ -140,6 +164,7 @@ async fn start_core(data: &Path, env: ServerEnv, host_socket: Option<PathBuf>) -
         runner,
         updates: Some(Arc::new(NoAppUpdates)),
         secrets: Some(Arc::new(SafeStorage::unavailable())),
+        hosting: Some(hosting),
         ..NodusConfig::new(data, tokio::runtime::Handle::current())
     })
     .map_err(|err| format!("Can't open the data in {}: {err}", data.display()))?;
@@ -196,6 +221,31 @@ impl System for NoAppUpdates {
     }
     fn spawn_detached(&self, _: &Path, _: Vec<String>) -> io::Result<()> {
         Err(io::Error::other("no app updates on a server"))
+    }
+}
+
+/// How often a server that started before Tailscale looks for it again.
+const TAILSCALE_RETRY: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// A server started on loopback because tailscaled wasn't up yet, as at
+/// boot, looks every few seconds until Tailscale has an address, then
+/// listens there too (port 7420) and answers to its names, without a
+/// restart. Loopback stays, for an SSH tunnel.
+async fn listen_on_tailscale_once_up(server: Arc<Server>, log: Logger) {
+    loop {
+        tokio::time::sleep(TAILSCALE_RETRY).await;
+        let tailscale = Tailscale::detect().await;
+        let Some(ip) = tailscale.ip else { continue };
+        let address = std::net::SocketAddr::new(std::net::IpAddr::V4(ip), nodus_wire::PORT);
+        match TcpListener::bind(address).await {
+            Ok(listener) => {
+                server.hosts.add(&tailscale, address.ip());
+                log.log(&["listening", &format!("http://{address}")]);
+                http::accept(server, listener).await;
+                return;
+            }
+            Err(err) => log.log(&["can't listen on Tailscale yet", &format!("{address}: {err}")]),
+        }
     }
 }
 

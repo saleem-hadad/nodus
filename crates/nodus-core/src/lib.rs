@@ -87,7 +87,7 @@ pub use error::{CommandError, CommandResult};
 pub use feedback::{AreaShot, FeedbackApi};
 pub use git::GitApi;
 pub use groups::GroupsApi;
-pub use hosting::{GitIdentity, Hosting, PREVIEW_PORTS, TokenScope, branch_name};
+pub use hosting::{BoxFuture as HostingFuture, GitIdentity, Hosting, PREVIEW_PORTS, TokenScope, branch_name};
 pub use local_storage::LocalStorageApi;
 pub use menu::MenuApi;
 pub use nodus::{

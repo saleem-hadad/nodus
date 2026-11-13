@@ -17,8 +17,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use nodus_domain::{
-    BoardPoint, BoardSnapshot, CreatedBy, Event, InkStroke, Presence, Project, SessionCard, TranscriptMessage,
-    Viewport, presence_color,
+    BoardPoint, BoardSnapshot, CreatedBy, Event, InkStroke, OpenSessionResult, Presence, Project, SessionCard,
+    TranscriptMessage, Viewport, presence_color,
 };
 use nodus_wire::client::{Client, Events};
 use nodus_wire::{AuditLine, Member, PresenceFrame, Request};
@@ -326,9 +326,10 @@ async fn new_card(client: &Client, project: &Project) -> String {
     card.node.session_id
 }
 
-async fn open(client: &Client, project: &Project, session_id: &str, (cols, rows): (f64, f64)) {
-    client
-        .call(&Request::SessionOpen {
+/// Opens it, and gives what it had printed before (the open's replay).
+async fn open(client: &Client, project: &Project, session_id: &str, (cols, rows): (f64, f64)) -> String {
+    let opened: OpenSessionResult = client
+        .call_as(&Request::SessionOpen {
             project_id: project.id.clone(),
             session_id: session_id.into(),
             cols,
@@ -336,6 +337,7 @@ async fn open(client: &Client, project: &Project, session_id: &str, (cols, rows)
         })
         .await
         .unwrap();
+    opened.replay
 }
 
 async fn write(client: &Client, session_id: &str, data: &str) {
@@ -563,9 +565,12 @@ async fn the_terminal_follows_whoever_typed_last() {
     let id = new_card(&octo, &project).await;
 
     // The first to open sizes it, and is told so.
-    open(&octo, &project, &id, (100.0, 30.0)).await;
+    let replay = open(&octo, &project, &id, (100.0, 30.0)).await;
     assert_eq!(sized(&mut octo_hears, &id).await, (100.0, 30.0));
-    printed(&mut octo_hears, &id, "stand-in ready").await;
+    // Ready before the open answered (in its replay), or after.
+    if !replay.contains("stand-in ready") {
+        printed(&mut octo_hears, &id, "stand-in ready").await;
+    }
     // Alice opens it smaller: it keeps Octo's size, and she's told it.
     open(&alice, &project, &id, (80.0, 24.0)).await;
     assert_eq!(sized(&mut alice_hears, &id).await, (100.0, 30.0));

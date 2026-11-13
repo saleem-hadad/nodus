@@ -7,6 +7,7 @@
 //! the app's appearance (so native menus and dialogs follow it too), and each
 //! window re-themes when its effective appearance changes.
 
+pub mod ai;
 pub mod fonts;
 pub mod motion;
 pub mod tokens;

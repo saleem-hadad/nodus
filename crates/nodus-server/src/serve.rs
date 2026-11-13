@@ -36,6 +36,8 @@ pub(crate) struct Server {
     pub token: String,
     pub hosts: Hosts,
     pub hello: Hello,
+    /// The data folder: uploads are kept in it (SRV-163).
+    pub data: PathBuf,
     /// Each session's project, once looked up: a session never moves.
     sessions: Mutex<HashMap<String, String>>,
 }
@@ -102,6 +104,7 @@ async fn run(options: ServeOptions, log: &Logger) -> Result<(), String> {
             protocol: PROTOCOL,
             needs_setup: false,
         },
+        data: data.clone(),
         sessions: Mutex::new(HashMap::new()),
     });
     log.log(&["data in", &data.to_string_lossy()]);

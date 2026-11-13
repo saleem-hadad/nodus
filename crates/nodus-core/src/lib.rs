@@ -80,6 +80,7 @@ pub mod zoom;
 pub use actions::ActionsApi;
 pub use app::AppApi;
 pub use board::BoardApi;
+pub use board::images_dir as board_images_dir;
 pub use capture::{CaptureApi, CaptureSystem, WindowSize};
 pub use error::{CommandError, CommandResult};
 pub use feedback::{AreaShot, FeedbackApi};

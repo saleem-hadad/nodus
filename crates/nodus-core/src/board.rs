@@ -301,8 +301,8 @@ impl BoardApi<'_> {
     }
 }
 
-/// `board-images` in the data folder.
-pub(crate) fn images_dir(user_data: &Path) -> PathBuf {
+/// `board-images` in the data folder: where a board's pictures are kept.
+pub fn images_dir(user_data: &Path) -> PathBuf {
     user_data.join("board-images")
 }
 

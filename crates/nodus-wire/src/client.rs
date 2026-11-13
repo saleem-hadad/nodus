@@ -130,6 +130,75 @@ pub async fn hello(address: &str) -> Result<Hello, ConnectError> {
     nodus_domain::json::from_str(body).map_err(|err| ConnectError::Protocol(err.to_string()))
 }
 
+/// What a files route answered: its status, headers and body.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileBody {
+    pub status: u16,
+    /// Names in lower case.
+    pub headers: Vec<(String, String)>,
+    pub body: Vec<u8>,
+}
+
+impl FileBody {
+    /// A header's value, by its name in any case.
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(name))
+            .map(|(_, v)| v.as_str())
+    }
+}
+
+/// `PUT /api/uploads` (SRV-163): keeps `bytes` on the server under a name
+/// it picks; `name` goes along as a label. Fails with the HTTP status the
+/// server answered (413 over [`crate::MAX_UPLOAD`], 401 for the token).
+pub async fn upload(address: &str, token: &str, name: &str, bytes: &[u8]) -> Result<crate::Upload, ConnectError> {
+    let target = format!("{}?name={}", crate::UPLOADS_PATH, crate::files::encode_name(name));
+    let answer = http(address, "PUT", &target, token, bytes).await?;
+    if answer.status != 200 {
+        return Err(ConnectError::Refused(answer.status));
+    }
+    serde_json::from_slice(&answer.body).map_err(|err| ConnectError::Protocol(err.to_string()))
+}
+
+/// `GET /api/files/<id>` (SRV-163): an upload, a board picture or a view's
+/// page, whatever the status.
+pub async fn download(address: &str, token: &str, id: &str) -> Result<FileBody, ConnectError> {
+    http(address, "GET", &format!("{}{id}", crate::FILES_PATH), token, &[]).await
+}
+
+/// One HTTP/1.1 request with the token, the connection closed after it.
+async fn http(address: &str, method: &str, target: &str, token: &str, body: &[u8]) -> Result<FileBody, ConnectError> {
+    let authority = authority(address)?;
+    let mut stream = TcpStream::connect(&authority).await?;
+    let head = format!(
+        "{method} {target} HTTP/1.1\r\nHost: {authority}\r\nAuthorization: Bearer {token}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    stream.write_all(head.as_bytes()).await?;
+    stream.write_all(body).await?;
+    let mut answer = Vec::new();
+    stream.read_to_end(&mut answer).await?;
+    let not_http = || ConnectError::Protocol("The server's answer wasn't HTTP".into());
+    let split = answer.windows(4).position(|w| w == b"\r\n\r\n").ok_or_else(not_http)?;
+    let head = String::from_utf8_lossy(&answer[..split]).into_owned();
+    let mut lines = head.split("\r\n");
+    let status = lines
+        .next()
+        .and_then(|line| line.get(9..12))
+        .and_then(|code| code.parse().ok())
+        .ok_or_else(not_http)?;
+    let headers = lines
+        .filter_map(|line| line.split_once(':'))
+        .map(|(name, value)| (name.trim().to_ascii_lowercase(), value.trim().to_owned()))
+        .collect();
+    Ok(FileBody {
+        status,
+        headers,
+        body: answer[split + 4..].to_vec(),
+    })
+}
+
 impl Client {
     /// Opens the WebSocket at `address` (`http://host:port`, or `host:port`;
     /// port 7420 when it has none), with `token` as `Authorization: Bearer`,

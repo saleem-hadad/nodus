@@ -2,8 +2,9 @@
 //! served to the apps that connect over one WebSocket, and the session host.
 //!
 //! ```text
-//! nodus-server serve [--bind <address>] [--dev-token <token>] [--run-home <folder>]
+//! nodus-server serve [--bind <address>] [--dev-token <token>] [--run-home <folder>] [--host-socket <path>]
 //! nodus-server host <socket> <key>
+//! nodus-server host --socket <path>
 //! nodus-server project add <path or git URL> [--name <name>] [--server <address>] --token <token>
 //! ```
 //!
@@ -12,7 +13,8 @@
 //!   address or loopback (SRV-020…023), answering the calls `nodus-wire`
 //!   lists (SRV-024, SRV-025) and sending each connection the events it
 //!   asked for (SRV-026).
-//! - `host`: the session host, as the app runs it (`Nodus host …`), so one
+//! - `host`: the session host, as the app runs it (`Nodus host …`), or on
+//!   its own with `--socket` as `nodus-host.service` runs it (SRV-004), so one
 //!   binary covers both.
 //! - `project add`: adds a folder, or clones a repository and adds that,
 //!   through a running server. For development until projects come from the
@@ -30,8 +32,9 @@ use std::io::Write;
 use std::path::PathBuf;
 
 const USAGE: &str = "Usage:
-  nodus-server serve [--bind <address>] [--dev-token <token>] [--run-home <folder>]
+  nodus-server serve [--bind <address>] [--dev-token <token>] [--run-home <folder>] [--host-socket <path>]
   nodus-server host <socket> <key>
+  nodus-server host --socket <path>
   nodus-server project add <path or git URL> [--name <name>] [--server <address>] --token <token>";
 
 /// Runs the command `args` names (without the program's own name), and
@@ -40,11 +43,12 @@ pub fn main(args: &[String]) -> i32 {
     match args.first().map(String::as_str) {
         // Before anything else, as the app does (HOST-035).
         Some("host") => nodus_host::main(&args[1..]),
-        Some("serve") => match Flags::parse(&args[1..], &["bind", "dev-token", "run-home"]) {
+        Some("serve") => match Flags::parse(&args[1..], &["bind", "dev-token", "run-home", "host-socket"]) {
             Ok(flags) if flags.positional.is_empty() => serve::serve(serve::ServeOptions {
                 bind: flags.value("bind"),
                 dev_token: flags.value("dev-token"),
                 run_home: flags.value("run-home").map(PathBuf::from),
+                host_socket: flags.value("host-socket").map(PathBuf::from),
             }),
             Ok(_) => usage("serve takes no arguments"),
             Err(err) => usage(&err),

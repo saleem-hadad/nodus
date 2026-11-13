@@ -814,6 +814,29 @@ mod tests {
     }
 
     #[test]
+    fn a_removed_members_accounts_can_go_with_them() {
+        let by = |github_id: u64, login: &str| {
+            Some(AuditMember {
+                github_id,
+                login: login.into(),
+            })
+        };
+        let mut alices = account("a", None, None);
+        alices.added_by = by(1, "alice");
+        let mut alices_too = account("b", None, None);
+        alices_too.added_by = by(1, "alice");
+        let mut bobs = account("c", None, None);
+        bobs.added_by = by(2, "bob");
+        let (dir, pool) = pool(vec![alices, bobs, alices_too]);
+        pool.remove_added_by(&Who::Dev, 1);
+        let left: Vec<String> = pool.list_raw().into_iter().map(|a| a.id).collect();
+        assert_eq!(left, ["c"]);
+        let audit = std::fs::read_to_string(dir.path().join(crate::audit::AUDIT_FILE)).unwrap();
+        assert_eq!(audit.matches("account.removed").count(), 2);
+        assert!(!audit.contains("tok-"), "{audit}");
+    }
+
+    #[test]
     fn a_limit_lasts_until_the_window_resets_or_an_hour() {
         let now = 1_000_000.0;
         let mut a = account("a", Some(100.0), None);

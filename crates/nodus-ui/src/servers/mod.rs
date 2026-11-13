@@ -99,6 +99,9 @@ pub struct ServersDialog {
     name: Entity<InputState>,
     org: Entity<InputState>,
     invite: Entity<InputState>,
+    /// A Claude account's label and token, on the wizard's step 4.
+    account_label: Entity<InputState>,
+    account_token: Entity<InputState>,
     /// The App goes under an organization rather than the person's account.
     for_org: bool,
     /// "Let sessions change GitHub Actions workflows" (SRV-062).
@@ -111,11 +114,15 @@ pub struct ServersDialog {
     copied: bool,
     /// The members so far, on the wizard's Members step.
     members: Vec<Member>,
+    /// The Claude accounts so far, on its Claude accounts step.
+    accounts: Vec<nodus_core::hosted::ClaudeAccount>,
     /// Avatars by address: the file once fetched, none until then.
     avatars: HashMap<String, Option<PathBuf>>,
     /// Empties the invite field on the next draw, and focuses it.
     clear_invite: bool,
     focus_invite: bool,
+    /// Empties the Claude account's fields on the next draw.
+    clear_account: bool,
     /// Something is being asked of the server.
     connecting: bool,
     /// Why the last step failed, as the core said it.
@@ -151,7 +158,18 @@ impl ServersDialog {
         let name = new_input("", "Box", false, window, cx);
         let org = new_input("", "Organization’s GitHub name", false, window, cx);
         let invite = new_input("", "octocat", false, window, cx);
-        for field in [&address, &token, &code, &name, &org, &invite] {
+        let account_label = new_input("", "Saleem’s Max", false, window, cx);
+        let account_token = new_input("", "sk-ant-oat01-…", true, window, cx);
+        for field in [
+            &address,
+            &token,
+            &code,
+            &name,
+            &org,
+            &invite,
+            &account_label,
+            &account_token,
+        ] {
             cx.subscribe_in(field, window, |this, _, e: &InputEvent, window, cx| {
                 if let InputEvent::PressEnter { .. } = e {
                     this.primary(window, cx);
@@ -181,15 +199,19 @@ impl ServersDialog {
             name,
             org,
             invite,
+            account_label,
+            account_token,
             for_org: false,
             workflows: false,
             app_page: None,
             poll: 0,
             copied: false,
             members: Vec::new(),
+            accounts: Vec::new(),
             avatars: HashMap::new(),
             clear_invite: false,
             focus_invite: false,
+            clear_account: false,
             connecting: false,
             error: None,
             listings: HashMap::new(),
@@ -913,7 +935,7 @@ pub(crate) fn field(state: &Entity<InputState>, window: &Window, cx: &App, t: To
 
 /// A checkbox: an accent square with a check when ticked, a hairline
 /// square when not; a spinner's place while it changes.
-fn checkbox(ticked: bool, busy: bool, t: Tokens) -> gpui::Div {
+pub(crate) fn checkbox(ticked: bool, busy: bool, t: Tokens) -> gpui::Div {
     div()
         .flex_none()
         .size(px(16.))

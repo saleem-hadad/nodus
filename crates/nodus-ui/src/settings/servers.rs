@@ -1,17 +1,23 @@
-//! Settings → Servers, one server's people and GitHub (SRV-165, SRV-029,
-//! SRV-063, SRV-210; UI-323…UI-327): its members, its devices, its GitHub
-//! App and installations, and its recent activity, each as the server
-//! answers it now. Removing and revoking ask first, in place.
+//! Settings → Servers, one server's people, Claude accounts and GitHub
+//! (SRV-165, SRV-029, SRV-063, SRV-105, SRV-210; UI-323…UI-327,
+//! UI-330…UI-332): its members, its devices, its pool of Claude accounts,
+//! its GitHub App and installations, and its recent activity, each as the
+//! server answers it now. Removing and revoking ask first, in place.
+
+mod accounts;
+
+pub use accounts::TOKEN_HELP;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 
 use gpui::component::input::{InputEvent, InputState};
+use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Context, Entity, FontWeight, Global, InteractiveElement, IntoElement, ParentElement, Render,
     SharedString, StatefulInteractiveElement, Styled, Window, div, px,
 };
-use nodus_core::hosted::{AuditLine, Device, Installation, Member, ServerDetails, install_url};
+use nodus_core::hosted::{AuditLine, ClaudeAccount, Device, Installation, Member, ServerDetails, install_url};
 use nodus_domain::{ServerInfo, ServerState};
 
 use super::{group, plain_row, row_text};
@@ -43,6 +49,7 @@ enum Load<T> {
 enum Confirm {
     Member(u64),
     Device(String),
+    Account(String),
 }
 
 pub struct ServerManager {
@@ -66,6 +73,25 @@ pub struct ServerManager {
     avatars: HashMap<String, Option<PathBuf>>,
     /// Empties the invite field on the next draw.
     clear_invite: bool,
+    /// The pool of Claude accounts (SRV-105).
+    accounts: Load<Vec<ClaudeAccount>>,
+    /// The `accounts-changed` count last asked after.
+    accounts_seen: u64,
+    account_label: Entity<InputState>,
+    account_token: Entity<InputState>,
+    /// The Add form is open, and a token is being tried.
+    adding_account: bool,
+    checking: bool,
+    /// Why the last add, rename or removal of an account failed.
+    account_error: Option<String>,
+    /// An account being renamed, and its field.
+    renaming: Option<(String, Entity<InputState>)>,
+    /// Removing a member removes the accounts they added too (SRV-040).
+    with_accounts: bool,
+    /// Empties the Add form, and gives a field the keyboard, on the next draw.
+    clear_account_form: bool,
+    focus_account_label: bool,
+    focus_rename: bool,
 }
 
 impl ServerManager {
@@ -78,6 +104,17 @@ impl ServerManager {
             cx.notify();
         })
         .detach();
+        let account_label = new_input("", "Saleem’s Max", false, window, cx);
+        let account_token = new_input("", "sk-ant-oat01-…", true, window, cx);
+        for field in [&account_label, &account_token] {
+            cx.subscribe_in(field, window, |this, _, e: &InputEvent, _, cx| {
+                if let InputEvent::PressEnter { .. } = e {
+                    this.add_account(cx);
+                }
+                cx.notify();
+            })
+            .detach();
+        }
         cx.observe(&state, |this, _, cx| this.follow(cx)).detach();
         let mut manager = Self {
             state,
@@ -96,6 +133,18 @@ impl ServerManager {
             all_activity: false,
             avatars: HashMap::new(),
             clear_invite: false,
+            accounts: Load::Loading,
+            accounts_seen: 0,
+            account_label,
+            account_token,
+            adding_account: false,
+            checking: false,
+            account_error: None,
+            renaming: None,
+            with_accounts: true,
+            clear_account_form: false,
+            focus_account_label: false,
+            focus_rename: false,
         };
         manager.follow(cx);
         manager
@@ -110,11 +159,23 @@ impl ServerManager {
             .cloned()
     }
 
-    /// Asks the server again whenever it comes (back) up.
+    /// Asks the server again whenever it comes (back) up, and for its
+    /// Claude accounts whenever they change (`accounts-changed`).
     fn follow(&mut self, cx: &mut Context<'_, Self>) {
         let connected = self.server(cx).is_some_and(|s| s.state == ServerState::Connected);
+        let changed = self
+            .state
+            .read(cx)
+            .accounts_changed
+            .get(&self.server_id)
+            .copied()
+            .unwrap_or(0);
         if connected && !self.asked_connected {
+            self.accounts_seen = changed;
             self.reload(cx);
+        } else if connected && changed != self.accounts_seen {
+            self.accounts_seen = changed;
+            self.reload_accounts(cx);
         }
         self.asked_connected = connected;
     }
@@ -136,6 +197,11 @@ impl ServerManager {
             let devices = servers.devices(&id).await;
             let _ = this.update(cx, |m, cx| {
                 m.devices = loaded(devices);
+                cx.notify();
+            });
+            let accounts = servers.accounts(&id).await;
+            let _ = this.update(cx, |m, cx| {
+                m.accounts = loaded(accounts);
                 cx.notify();
             });
             let info = servers.info(&id).await;
@@ -207,14 +273,19 @@ impl ServerManager {
             return;
         };
         self.error = None;
+        self.account_error = None;
         cx.notify();
         let nodus = self.state.read(cx).nodus.clone();
         let id = self.server_id.clone();
         let state = self.state.clone();
+        // SRV-040: the accounts they added go too, when that's ticked.
+        let with_accounts = matches!(confirm, Confirm::Member(github_id) if self.accounts_added_by(github_id) > 0)
+            && self.with_accounts;
         cx.spawn(async move |this, cx| {
             let done = match &confirm {
-                Confirm::Member(github_id) => nodus.servers().remove_member(&id, *github_id).await,
+                Confirm::Member(github_id) => nodus.servers().remove_member(&id, *github_id, with_accounts).await,
                 Confirm::Device(device) => nodus.servers().revoke_device(&id, device).await,
+                Confirm::Account(account) => nodus.servers().remove_account(&id, account).await,
             };
             let gone = nodus.servers().status(&id).is_none();
             if gone {
@@ -225,9 +296,10 @@ impl ServerManager {
                 return;
             }
             let _ = this.update(cx, |m, cx| {
-                match done {
-                    Ok(()) => m.reload(cx),
-                    Err(err) => m.error = Some(err.message),
+                match (done, &confirm) {
+                    (Ok(()), _) => m.reload(cx),
+                    (Err(err), Confirm::Account(_)) => m.account_error = Some(err.message),
+                    (Err(err), _) => m.error = Some(err.message),
                 }
                 cx.notify();
             });
@@ -303,6 +375,22 @@ impl Render for ServerManager {
             self.clear_invite = false;
             self.invite.update(cx, |f, cx| f.set_value("", window, cx));
         }
+        if self.clear_account_form {
+            self.clear_account_form = false;
+            for field in [&self.account_label, &self.account_token] {
+                field.update(cx, |f, cx| f.set_value("", window, cx));
+            }
+        }
+        if self.focus_account_label {
+            self.focus_account_label = false;
+            crate::components::text_field::focus_all(&self.account_label, window, cx);
+        }
+        if self.focus_rename {
+            self.focus_rename = false;
+            if let Some((_, field)) = &self.renaming {
+                crate::components::text_field::focus_all(field, window, cx);
+            }
+        }
         let Some(server) = self.server(cx) else {
             return div().into_any_element();
         };
@@ -318,6 +406,7 @@ impl Render for ServerManager {
         body = body
             .child(self.members_group(&server, window, cx, t))
             .child(self.devices_group(cx, t))
+            .child(self.accounts_group(window, cx, t))
             .child(self.github_group(cx, t))
             .child(self.activity_group(cx, t));
         body.into_any_element()
@@ -361,7 +450,14 @@ impl ServerManager {
                         } else {
                             format!("Remove @{}? Their devices are signed out.", member.login)
                         };
-                        self.confirm_row(question, "Remove", cx, t)
+                        // SRV-040: and the Claude accounts they added, if any.
+                        let theirs = self.accounts_added_by(member.github_id);
+                        div()
+                            .flex()
+                            .flex_col()
+                            .child(self.confirm_row(question, "Remove", cx, t))
+                            .when(theirs > 0, |d| d.child(self.with_accounts_row(theirs, you, cx, t)))
+                            .into_any_element()
                     } else {
                         let this = cx.entity();
                         let github_id = member.github_id;
@@ -374,6 +470,7 @@ impl ServerManager {
                                     .on_click(move |_, _, cx| {
                                         this.update(cx, |m, cx| {
                                             m.confirm = Some(Confirm::Member(github_id));
+                                            m.with_accounts = true;
                                             cx.notify();
                                         });
                                     })
@@ -776,6 +873,27 @@ fn describe(line: &AuditLine) -> String {
             someone(),
             detail("name").unwrap_or_else(|| "a device".into())
         ),
+        // SRV-210: the pool's.
+        "account.added" => format!(
+            "{} added the Claude account {}",
+            someone(),
+            detail("label").unwrap_or_default()
+        ),
+        "account.renamed" => format!(
+            "{} renamed the Claude account {} to {}",
+            someone(),
+            detail("was").unwrap_or_default(),
+            detail("label").unwrap_or_default()
+        ),
+        "account.removed" => format!(
+            "{} removed the Claude account {}",
+            someone(),
+            detail("label").unwrap_or_default()
+        ),
+        "account.failed" => format!(
+            "{}’s Claude account stopped working",
+            detail("label").unwrap_or_else(|| "A".into())
+        ),
         other => {
             let words = other.replace(['.', '-'], " ");
             match who {
@@ -837,6 +955,18 @@ mod tests {
                 "The server was named Box",
             ),
             (line("server.updated", None, json!({})), "server updated"),
+            (
+                line("account.added", Some("octo"), json!({ "label": "Team Max" })),
+                "@octo added the Claude account Team Max",
+            ),
+            (
+                line(
+                    "account.failed",
+                    None,
+                    json!({ "label": "Team Max", "error": "billing_error" }),
+                ),
+                "Team Max’s Claude account stopped working",
+            ),
         ];
         for (line, words) in cases {
             assert_eq!(describe(&line), words);

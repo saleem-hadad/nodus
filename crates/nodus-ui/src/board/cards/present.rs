@@ -65,13 +65,31 @@ pub fn started_by(card: &SessionCard) -> Option<String> {
     card.node.created_by().map(|login| format!("Started by {login}"))
 }
 
-/// The card's title as its tooltip shows it: who started it under it, on
-/// a server (CARD-054).
+/// CARD-058: `Claude account: <label>`, on a server card whose process
+/// took an account from the pool (SRV-101).
+pub fn claude_account(card: &SessionCard) -> Option<String> {
+    card.node
+        .account_label()
+        .map(|label| format!("Claude account: {label}"))
+}
+
+/// CARD-059: what the card's account did last (SRV-104): `Moved to <label>`,
+/// or that it waits for one, and whether it's the waiting.
+pub fn account_note(card: &SessionCard) -> Option<(String, bool)> {
+    let note = card.node.account_note()?;
+    let waiting = note.starts_with("Waiting");
+    Some((note, waiting))
+}
+
+/// The card's title as its tooltip shows it: who started it and the
+/// Claude account it runs on under it, on a server (CARD-054, CARD-058).
 pub fn title_tooltip(card: &SessionCard) -> String {
-    match started_by(card) {
-        Some(by) => format!("{}\n{by}", title(card)),
-        None => title(card),
+    let mut text = title(card);
+    for line in [started_by(card), claude_account(card)].into_iter().flatten() {
+        text.push('\n');
+        text.push_str(&line);
     }
+    text
 }
 
 /// CARD-034, CARD-057: the branch the footer shows: the transcript's, else
@@ -1041,6 +1059,25 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(note_author(&note).as_deref(), Some("Written by bob"));
+    }
+
+    #[test]
+    fn card_058_059_a_server_cards_claude_account_and_where_it_moved() {
+        use serde_json::json;
+        let local = card(&json!({ "title": "Fix it" }));
+        assert_eq!((claude_account(&local), account_note(&local)), (None, None));
+        let moved = card(&json!({
+            "title": "Fix it", "createdBy": "alice",
+            "account": "a2", "accountLabel": "Team Max", "accountNote": "Moved to Team Max"
+        }));
+        assert_eq!(claude_account(&moved).as_deref(), Some("Claude account: Team Max"));
+        assert_eq!(
+            title_tooltip(&moved),
+            "Fix it\nStarted by alice\nClaude account: Team Max"
+        );
+        assert_eq!(account_note(&moved), Some(("Moved to Team Max".to_owned(), false)));
+        let waiting = card(&json!({ "accountNote": "Waiting for a Claude account until 14:05 UTC" }));
+        assert!(account_note(&waiting).is_some_and(|(_, waiting)| waiting));
     }
 
     #[test]

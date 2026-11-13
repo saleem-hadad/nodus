@@ -97,6 +97,12 @@ impl World {
             "devices.json",
             &json!([device("d-octo", OCTO_TOKEN, 1), device("d-alice", ALICE_TOKEN, 100)]).to_string(),
         );
+        // A Claude account in the pool, which every Claude card takes (SRV-101).
+        private(
+            "claude-accounts.json",
+            &json!([{ "id": "acct-1", "label": "Studio", "token": "sk-ant-oat01-stand-in", "addedAt": 1, "state": "ok" }])
+                .to_string(),
+        );
     }
 
     fn command(&self) -> Command {

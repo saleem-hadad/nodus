@@ -212,7 +212,7 @@ Everything here is UI-free and lands in `nodus-sessions`, `nodus-transcripts` an
 - **SESS-133 · Brain args** — A view's brain gets `--append-system-prompt <brainPrompt(view)>` every time it starts or resumes, via `session:open`, `session:send` and 04's `startBrain`/`askBrain`; no args when the view is gone.
 - **SESS-134 · Brain launches** — 04 starts a brain with node `{ title: "View: <view title>", createdByApp: true, viewOf, autoMode: true, x/y of the view }`, `resume: false`, permission `auto`, optional first prompt; and resumes one with `resume` = transcript exists, the asked prompt as first prompt, permission `auto`. Neither passes `--name`.
 
-### On a server (`nodus serve`, spec 17's SRV-120…145)
+### On a server (`nodus serve`, spec 18's SRV-120…145)
 
 None of this runs in the app: it's what a server's core does, given the server's `Hosting`. The app's sessions launch exactly as above.
 

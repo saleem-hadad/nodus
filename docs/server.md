@@ -1,6 +1,6 @@
 # Running a Nodus server
 
-A Nodus server runs your projects' boards and Claude Code sessions on a Linux machine your team shares. The app connects to it and shows the server's projects in your grid beside your own, and they open like any other project. How it's built is in [How it works](how-it-works.md#running-on-a-server), and every behavior is in [spec 17](specs/17-hosted.md).
+A Nodus server runs your projects' boards and Claude Code sessions on a Linux machine your team shares. The app connects to it and shows the server's projects in your grid beside your own, and they open like any other project. How it's built is in [How it works](how-it-works.md#running-on-a-server), and every behavior is in [spec 18](specs/18-hosted.md).
 
 ## What a server is for
 

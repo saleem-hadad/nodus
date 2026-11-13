@@ -210,7 +210,7 @@ A Nodus server runs the same core with no window on a Linux machine: `nodus-serv
 
 On the server, two Unix users split the work. `nodus` runs `nodus serve` and keeps the secrets: the GitHub App's key, the Claude accounts, the members and their devices. `nodus-run` runs the session host, and through it every process that touches a repository: Claude Code, terminals, git, view commands and setup scripts. The core never starts those itself. It hands each one to a `Runner`, which on a Mac spawns it as before, and on a server sends it to the host as an `exec` message. Each session gets a token of its own for its hooks and its git credentials, and git gets a token for that session's repository only, minted with the App's key, which never leaves `nodus`.
 
-[Running a server](server.md) covers installing and using one, and [spec 17](specs/17-hosted.md) has every behavior.
+[Running a server](server.md) covers installing and using one, and [spec 18](specs/18-hosted.md) has every behavior.
 
 ## Shortcuts
 

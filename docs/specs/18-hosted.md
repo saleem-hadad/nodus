@@ -1,4 +1,4 @@
-# 17 · Hosted Nodus: a server the app connects to
+# 18 · Hosted Nodus: a server the app connects to
 
 Added after 1.0.12; 0.9.4 had none of this. `nodus-server` runs the whole core (projects, boards, sessions, views, git, actions) on a Linux machine with no window. The desktop app connects to it over one WebSocket and shows the server projects each person picks beside their local ones. Every call about a server project goes to its server; everything else stays local. With no server added, none of this runs. Setting one up is in [`docs/server.md`](../server.md).
 

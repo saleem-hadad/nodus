@@ -22,7 +22,7 @@ When you change a behavior, change its entry in the same commit, and say what 0.
 | `14-board-shapes-links.md` | Shapes, stickers, pictures and links on the board, and the dock tools that make them |
 | `15-motion.md` | things arriving and leaving, status changes, and Claude's signature: drawing, working, finishing, building a view, guessing |
 | `16-rich-sessions.md` | Claude cards as a chat: the transcript drawn as messages, charts, forms and pages from Claude, and the prompt queue the Stop hook hands over |
-| `17-hosted.md` | hosted Nodus: the Linux server, its install, the wire, members and sign-in, GitHub, Claude accounts, worktrees, working together, updates, the security model |
+| `18-hosted.md` | hosted Nodus: the Linux server, its install, the wire, members and sign-in, GitHub, Claude accounts, worktrees, working together, updates, the security model |
 
 ## Compatibility with 0.9.4
 

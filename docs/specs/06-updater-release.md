@@ -204,6 +204,17 @@ A Nodus server (`nodus-server`, installed as `/opt/nodus/bin/nodus`) doesn't upd
 - **UPD-094** **The key.** `packaging/server/signing-key.pub.pem` is the release's ed25519 public key, in PEM as `openssl pkey -pubout` writes it, and the server builds it in (`include_str!`). Until `scripts/server-signing-key.sh` makes the key, it holds a `# TODO: placeholder` comment. A debug build reads `NODUS_DEV_UPDATE_KEY` (a PEM public key) instead, so tests can sign with a throwaway key; a release build never reads it.
 - **UPD-095** **The app.** `server:update` goes over the server's connection with a 600 s timeout. A server of another protocol (SRV-027), which the app won't otherwise talk to, gets it over a connection of its own that makes only this call and passes on its `server-update` events; `server:update`'s frame and answer are the same in every protocol, so they must never change. Once the server has answered, the next attempt to connect comes 1.5 s later, whatever the backoff (SRV-028). The answer, or the failure as `error`, is passed on as a `server-update` event too, so the window has the last word even if an event went astray. The window keeps the last status per server until the server is connected again after `restarting` (UI-336).
 
+### What's new (Rust only)
+
+0.9.4 had nothing like it.
+
+- **UPD-096** At launch, a packaged build shows What's new when its version is newer than the one in `localStorage` key `nodus.whatsNewSeen`. With no key, a state with projects shows it (an update from a version before What's new) and one without is a fresh install: its version is stored as seen and nothing shows. A development build never shows it on its own.
+- **UPD-097** Closing the card, with × or `Done`, stores the running version in `nodus.whatsNewSeen`, unless a newer one is stored already. Until then it shows on every launch, and after that only once the app is updated again.
+- **UPD-098** The slides are built into the app (`nodus-ui` `shell/whats_new/slides.rs`), newest version first. Each has the version its feature came in, a short title, one sentence of two lines at most (a shortcut in it written as a Mac writes it, in braces, shows as the platform writes it: `{⌥⌘G}` is Ctrl+Alt+G off a Mac), and a screenshot for each theme (`assets/whats-new/<version>-<name>-{light,dark}.jpg`, JPEG, 600×376). The card shows the slides of the versions after the stored one, up to the running one (every slide with no key), at most 6. With none, there's no card, and nothing is stored.
+- **UPD-099** One slide shows at a time. Over its title, `NEW IN <version> · <n> OF <count>` (`NEW IN <version>` for a single slide). The footer has a dot per slide (none for one), the current one darker, each going to its slide when clicked; `Back` (ghost) from the second slide on; and `Next` (primary), which reads `Done` on the last slide and closes the card.
+- **UPD-100** The card is 300px wide (narrower in a narrower window), 16px from the window's bottom-right corner, with `--radius-lg` corners, a 1px border, the elevated surface and the large shadow. The screenshot fills its top, 188px tall, in the current theme's version, with a hairline under it and a 22px round × (white, on 45% black) 8px from its top-right corner. The words sit 14px in: the eyebrow (10.5px, semibold, tertiary), the title (13.5px, semibold) and the sentence (12px on 17.5px lines, secondary), with room for two lines so the card keeps its height from slide to slide.
+- **UPD-101** It's drawn over the projects grid or the board, the minimap included, and under the session window, Settings, the other dialogs and menus. It rises 8px into place and fades in over 220ms (`--ease-out`); each slide's screenshot and words fade in the same way; and it sinks back as it closes (MOTION-011).
+
 ## Data & formats
 
 ### Constants (src/main/updater.ts)
@@ -852,4 +863,10 @@ No macOS test exists in TypeScript. Recommended Rust additions, marked as such s
 - [x] UPD-093 `ev:server-update` to every member; one audit line per call
 - [x] UPD-094 `signing-key.pub.pem` built in; `NODUS_DEV_UPDATE_KEY` in debug builds only
 - [x] UPD-095 The app: over its connection, or one of its own across protocols; reconnect soon after
+- [x] UPD-096 Packaged launch newer than `nodus.whatsNewSeen` (or no key and projects) shows What's new; a fresh install stores its version
+- [x] UPD-097 × or Done stores the running version (never an older one); shows every launch until then
+- [x] UPD-098 Built-in slides for the versions since the stored one, newest first, at most 6; none, no card
+- [x] UPD-099 One slide at a time: eyebrow, dots, Back, Next / Done
+- [x] UPD-100 300px card in the bottom-right corner, screenshot on top with ×, title and one sentence
+- [x] UPD-101 Over the board/grid, under the session window, dialogs and menus; rises in, fades between slides, sinks out
 - [x] REL-048 One key for the binary and the install script, checked by a test and by sign.sh

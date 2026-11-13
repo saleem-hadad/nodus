@@ -1,6 +1,6 @@
 //! The window's root (`App.tsx`, `app.css`; UI-023…UI-047): the title bar
 //! over the main area, which holds the projects grid or a board with the
-//! project rail, and the layers above both (Settings, menus).
+//! project rail, and the layers above both (What's new, Settings, menus).
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -19,6 +19,7 @@ use crate::projects::rail::ProjectRail;
 use crate::servers::ServersDialog;
 use crate::settings::SettingsDialog;
 use crate::shell::title_bar::{new_project_button, title_bar};
+use crate::shell::whats_new::WhatsNewSlot;
 use crate::state::{AppState, Route};
 use crate::theme::tokens::*;
 use crate::theme::{self, fonts};
@@ -40,6 +41,8 @@ pub struct Shell {
     /// BOARD-002).
     board_key: Option<String>,
     board: Option<Entity<BoardCanvas>>,
+    /// What's new in this version, in the bottom-right corner (UPD-090).
+    pub(crate) whats_new: WhatsNewSlot,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -78,7 +81,7 @@ impl Shell {
                 this.menus.update(cx, |m, cx| m.close(window, cx));
             }),
         ];
-        Self {
+        let mut shell = Self {
             state,
             menus,
             focus,
@@ -90,8 +93,11 @@ impl Shell {
             terminal_layers,
             board_key: None,
             board: None,
+            whats_new: WhatsNewSlot::default(),
             _subscriptions: subscriptions,
-        }
+        };
+        shell.ask_whats_new(cx);
+        shell
     }
 
     /// Keeps the views that belong to the route alive, and only those.
@@ -273,6 +279,7 @@ impl Render for Shell {
             crate::actions::action_rail(&self.state, &self.menus, hooks, window, cx)
         });
         let menus_open = self.menus.read(cx).is_open();
+        let whats_new = self.render_whats_new(window, cx);
 
         let main = div()
             .id("app-main")
@@ -366,6 +373,8 @@ impl Render for Shell {
             )
             .child(bar)
             .child(main)
+            // Under the session window and Settings, which cover it while open.
+            .children(whats_new)
             .child(self.terminal_layers.clone())
             .children(self.settings.clone())
             .children(self.report.clone())

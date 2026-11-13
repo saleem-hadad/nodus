@@ -405,6 +405,11 @@ impl Updater {
             .unwrap_or_else(|_| Err(UNREACHABLE.to_owned()))
     }
 
+    /// Electron's `app.isPackaged`: a development build shows no What's new.
+    pub fn packaged(&self) -> bool {
+        self.system.is_packaged()
+    }
+
     /// UPD-030…UPD-035: downloads a release to `file`, reporting whole
     /// percents as they change, then checks its size and SHA-256.
     async fn download(&self, release: &Release, file: &Path) -> Result<(), Failure> {

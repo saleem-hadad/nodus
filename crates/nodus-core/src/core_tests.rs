@@ -375,6 +375,43 @@ async fn upd_076_078_status_check_and_install() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn upd_096_097_whats_new_shows_after_an_update_until_closed() {
+    let world = world();
+    let updates = world.nodus.updates();
+    let storage = world.nodus.local_storage();
+    // A fresh install has nothing new: its version counts as seen.
+    assert_eq!(updates.whats_new(), None);
+    assert_eq!(storage.get(crate::WHATS_NEW_KEY).as_deref(), Some(crate::VERSION));
+    // After an update, the versions since the one last seen…
+    storage.set(crate::WHATS_NEW_KEY, Some("1.0.10"));
+    let unseen = updates.whats_new().unwrap();
+    assert_eq!(unseen.seen.as_deref(), Some("1.0.10"));
+    assert!(unseen.includes(crate::VERSION));
+    assert!(unseen.includes("1.0.11"));
+    assert!(!unseen.includes("1.0.10"));
+    assert!(!unseen.includes("1.0.9"));
+    assert!(!unseen.includes("999.0.0"));
+    // …on every launch until it's closed.
+    assert!(updates.whats_new().is_some());
+    updates.whats_new_seen();
+    assert_eq!(updates.whats_new(), None);
+    assert_eq!(storage.get(crate::WHATS_NEW_KEY).as_deref(), Some(crate::VERSION));
+    // A newer version seen, then this one opened again: nothing, and the
+    // newer one stays.
+    storage.set(crate::WHATS_NEW_KEY, Some("999.0.0"));
+    assert_eq!(updates.whats_new(), None);
+    updates.whats_new_seen();
+    assert_eq!(storage.get(crate::WHATS_NEW_KEY).as_deref(), Some("999.0.0"));
+    // An update from a version without What's new (projects, but no key):
+    // everything up to this version is new.
+    storage.set(crate::WHATS_NEW_KEY, None);
+    project(&world).await;
+    let unseen = updates.whats_new().unwrap();
+    assert_eq!(unseen.seen, None);
+    assert!(unseen.includes("0.1.0") && unseen.includes(crate::VERSION));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn upd_079_check_for_updates_opens_settings_then_checks() {
     let world = world();
     let mut events = world.nodus.subscribe();

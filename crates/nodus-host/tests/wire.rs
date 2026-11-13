@@ -122,6 +122,11 @@ impl Transcript {
         if msg["type"] == "welcome" {
             assert_eq!(msg["protocol"], json!(self.protocol), "{} got {msg}", conn.name);
             msg["protocol"] = json!(PROTOCOL_0_9_4);
+            // QUEUE-001: the Rust host also says it keeps queues, which
+            // 0.9.4's doesn't; nothing else changes until one is set.
+            let queue = msg.as_object_mut().and_then(|fields| fields.shift_remove("queue"));
+            let expected = (self.protocol == PROTOCOL).then(|| json!(true));
+            assert_eq!(queue, expected, "{} got {msg}", conn.name);
         }
         self.note(format!(
             "{}← {}",

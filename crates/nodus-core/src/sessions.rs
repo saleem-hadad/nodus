@@ -3,15 +3,24 @@
 //! `src/main/ipc.ts`).
 
 use nodus_domain::{
-    AgentInfo, CreateSessionOptions, OpenSessionResult, SessionCard, SessionSearchHit, SummaryResult, TranscriptMessage,
+    AgentInfo, CreateSessionOptions, OpenSessionResult, QueuedPrompt, SessionCard, SessionSearchHit, SummaryResult,
+    TranscriptMessage,
 };
 use nodus_remote::Request;
 use nodus_sessions::launch;
 
 use crate::error::OnChannel;
+use crate::projects::now_ms;
 use crate::routing::Route;
 use crate::wiring::CoreLauncher;
-use crate::{CommandResult, Nodus};
+use crate::{CommandError, CommandResult, Nodus};
+
+/// Queueing isn't offered for a session on a server board yet (QUEUE-013).
+const QUEUE_ON_SERVER: &str = "Prompts can’t be queued for a session on a server yet";
+/// A session that isn't running has no turn to queue behind (QUEUE-013).
+const QUEUE_NOT_RUNNING: &str = "That session isn’t running";
+/// A prompt of nothing but spaces (QUEUE-013).
+const QUEUE_NOTHING: &str = "There’s nothing to queue";
 
 /// `window.api.sessions`.
 pub struct SessionsApi<'a> {
@@ -155,6 +164,64 @@ impl SessionsApi<'_> {
                     .on("session:send")
             })
             .await
+    }
+
+    /// The prompts waiting for a running session's turn to end, first to go
+    /// first (QUEUE-013). When the turn ends the first goes to Claude as the
+    /// user's next message; `Event::Queue` says whenever they change. None
+    /// for a session that isn't running, or one on a server board, where
+    /// queueing isn't offered yet.
+    pub fn queue(&self, session_id: &str) -> Vec<QueuedPrompt> {
+        if self.nodus.route_session(session_id).is_some() {
+            return Vec::new();
+        }
+        self.nodus.inner.host.queue(session_id)
+    }
+
+    /// Replaces a running session's queued prompts, to edit, reorder or
+    /// remove them (QUEUE-013); `Event::Queue` follows when they changed. A
+    /// prompt already on its way to Claude stays gone, whatever `items`
+    /// says (QUEUE-003). Fails with `That session isn’t running`, or, on a
+    /// server board, `Prompts can’t be queued for a session on a server yet`.
+    pub fn set_queue(&self, session_id: &str, items: Vec<QueuedPrompt>) -> CommandResult<()> {
+        const CHANNEL: &str = "session:set-queue";
+        self.queueable(CHANNEL, session_id)?;
+        if !self.nodus.inner.host.set_queue(session_id, items) {
+            return Err(CommandError::new(CHANNEL, QUEUE_NOT_RUNNING));
+        }
+        Ok(())
+    }
+
+    /// Queues a prompt after a running session's others, trimmed as a
+    /// prompt sent from the board is (SESS-141), with a new id and now as
+    /// its time, and gives it back (QUEUE-013); `Event::Queue` follows.
+    /// Fails with `There’s nothing to queue` for a prompt of only spaces,
+    /// and as [`SessionsApi::set_queue`] does.
+    pub fn enqueue(&self, session_id: &str, text: &str) -> CommandResult<QueuedPrompt> {
+        const CHANNEL: &str = "session:enqueue";
+        self.queueable(CHANNEL, session_id)?;
+        let text = nodus_domain::js::trim(text);
+        if text.is_empty() {
+            return Err(CommandError::new(CHANNEL, QUEUE_NOTHING));
+        }
+        let item = QueuedPrompt {
+            id: uuid::Uuid::new_v4().to_string(),
+            text: text.to_owned(),
+            at: now_ms(),
+        };
+        if !self.nodus.inner.host.enqueue(session_id, item.clone()) {
+            return Err(CommandError::new(CHANNEL, QUEUE_NOT_RUNNING));
+        }
+        Ok(item)
+    }
+
+    /// Sessions on a server board can't queue yet: their server has no
+    /// request for it.
+    fn queueable(&self, channel: &'static str, session_id: &str) -> CommandResult<()> {
+        match self.nodus.route_session(session_id) {
+            Some(_) => Err(CommandError::new(channel, QUEUE_ON_SERVER)),
+            None => Ok(()),
+        }
     }
 
     /// Whether a session runs on a server, so files dropped on its terminal

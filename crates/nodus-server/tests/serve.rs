@@ -76,24 +76,32 @@ impl World {
         command
     }
 
-    /// `serve --bind 127.0.0.1:0 --dev-token … --run-home …`.
-    fn serve_command(&self) -> Command {
+    /// `serve --bind 127.0.0.1:0 --dev-token … --run-home …`, then `extra`.
+    fn serve_command(&self, extra: &[&str]) -> Command {
         let home = self.root().join("home");
-        self.command(&[
+        let home = home.to_string_lossy();
+        let mut args = vec![
             "serve",
             "--bind",
             "127.0.0.1:0",
             "--dev-token",
             TOKEN,
             "--run-home",
-            &home.to_string_lossy(),
-        ])
+            &home,
+        ];
+        args.extend_from_slice(extra);
+        self.command(&args)
     }
 
     /// The server, once it's listening.
     fn serve(&self) -> Server {
+        self.serve_with(&[])
+    }
+
+    /// The server with more flags, once it's listening.
+    fn serve_with(&self, extra: &[&str]) -> Server {
         let mut child = self
-            .serve_command()
+            .serve_command(extra)
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
             .spawn()
@@ -345,6 +353,66 @@ async fn get(port: u16, path: &str, headers: &[(&str, &str)]) -> (u16, String) {
 // ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn with_a_host_of_its_own_the_server_runs_everything_there() {
+    let world = World::new();
+    // SRV-004: the host `nodus-host.service` runs, on its own socket, which
+    // the server connects to instead of starting one.
+    let socket = world.root().join("run/host.sock");
+    let socket = socket.to_string_lossy();
+    let mut host = world
+        .command(&["host", "--socket", &socket])
+        .stdout(Stdio::null())
+        .spawn()
+        .unwrap();
+    let server = world.serve_with(&["--host-socket", &socket]);
+    let bare = world.bare_repo("shop");
+    world.add_project(&server, &format!("file://{}", bare.display()));
+
+    let (app, mut events) = server.connect().await;
+    let projects: Vec<Project> = app.call_as(&Request::ProjectsList {}).await.unwrap();
+    let project = projects[0].clone();
+    app.call(&Request::Watch {
+        projects: vec![project.id.clone()],
+    })
+    .await
+    .unwrap();
+
+    // SRV-005: git runs in the host, through its `exec`, and answers as if
+    // it ran here.
+    let git: Value = app
+        .call_as(&Request::GitStatus {
+            project_id: project.id.clone(),
+        })
+        .await
+        .unwrap();
+    assert!(git["branch"].is_string(), "{git}");
+
+    // And sessions run there, as ever.
+    let card: SessionCard = app
+        .call_as(&Request::SessionCreate {
+            project_id: project.id.clone(),
+            opts: serde_json::from_value(json!({ "x": 0, "y": 0, "name": "Look", "initialPrompt": "look" })).unwrap(),
+        })
+        .await
+        .unwrap();
+    let id = card.node.session_id.clone();
+    let opened: OpenSessionResult = app
+        .call_as(&Request::SessionOpen {
+            project_id: project.id.clone(),
+            session_id: id.clone(),
+            cols: 100.0,
+            rows: 30.0,
+        })
+        .await
+        .unwrap();
+    events.output.insert(id.clone(), opened.replay);
+    events.printed(&id, "stand-in ready").await;
+
+    let _ = host.kill();
+    let _ = host.wait();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_session_runs_on_the_server_and_streams_to_the_app() {
     let world = World::new();
     let server = world.serve();
@@ -543,7 +611,7 @@ async fn a_folder_on_the_server_is_added_as_it_is() {
     let printed = world.add_project(&server, &folder.to_string_lossy());
     assert!(printed.starts_with("Added docs ("), "{printed}");
     // One server to a data folder.
-    let second = world.serve_command().output().unwrap();
+    let second = world.serve_command(&[]).output().unwrap();
     assert_eq!(second.status.code(), Some(1));
     let said = String::from_utf8_lossy(&second.stdout);
     assert!(said.contains("Another nodus-server serve is using"), "{said}");

@@ -6,7 +6,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 
-use nodus_core::{EnvSource, HostLauncher, Nodus, NodusConfig, SafeStorage};
+use nodus_core::{EnvSource, HostMode, Nodus, NodusConfig, RunnerSource, SafeStorage};
 use nodus_host::Logger;
 use nodus_updater::{BoxFuture, HttpResponse, Platform, RunOutput, System};
 use nodus_wire::{Hello, PROTOCOL};
@@ -25,6 +25,9 @@ pub(crate) struct ServeOptions {
     pub dev_token: Option<String>,
     /// `--run-home`: the sessions' home, where claude keeps transcripts.
     pub run_home: Option<PathBuf>,
+    /// `--host-socket`: the session host `nodus-host.service` runs as
+    /// `nodus-run`, to connect to instead of starting one (SRV-004).
+    pub host_socket: Option<PathBuf>,
 }
 
 /// What every connection shares.
@@ -85,7 +88,7 @@ async fn run(options: ServeOptions, log: &Logger) -> Result<(), String> {
         .await
         .map_err(|err| format!("Can't listen on {address}: {err}"))?;
     let address = listener.local_addr().map_err(|err| err.to_string())?;
-    let nodus = start_core(&data, env).await?;
+    let nodus = start_core(&data, env, options.host_socket).await?;
 
     let generated = options.dev_token.is_none();
     let token = options.dev_token.unwrap_or_else(random_token);
@@ -123,13 +126,15 @@ async fn run(options: ServeOptions, log: &Logger) -> Result<(), String> {
 /// (SRV-185 comes later); the voice key nowhere to be kept, and the app's
 /// updater off. Then the sessions a running host has are adopted, without
 /// starting one.
-async fn start_core(data: &Path, env: ServerEnv) -> Result<Nodus, String> {
+async fn start_core(data: &Path, env: ServerEnv, host_socket: Option<PathBuf>) -> Result<Nodus, String> {
     let ServerEnv { vars, home } = env;
     let env = nodus_platform::Env::with_vars(vars, Some(&home)).await;
+    let (host, runner) = host_mode(host_socket);
     let nodus = Nodus::start(NodusConfig {
         env: EnvSource::Given(env),
         home,
-        host_launcher: host_launcher(),
+        host,
+        runner,
         updates: Some(Arc::new(NoAppUpdates)),
         secrets: Some(Arc::new(SafeStorage::unavailable())),
         ..NodusConfig::new(data, tokio::runtime::Handle::current())
@@ -140,19 +145,24 @@ async fn start_core(data: &Path, env: ServerEnv) -> Result<Nodus, String> {
     Ok(nodus)
 }
 
-/// How the core reaches the session host: the one place that decides.
+/// How the core reaches the session host, and where it runs every other
+/// process: the one place that decides.
 ///
-/// For now, as the app does: when a session needs a host and none is
-/// running, the core starts this binary as `nodus-server host <socket>
-/// <key>`, detached, so sessions outlive a restart of `serve` (HOST-091).
+/// With `--host-socket`, as on a server (SRV-004, SRV-005): `serve` never
+/// starts the host. It connects to the one `nodus-host.service` runs as
+/// `nodus-run`, retrying every second until it's up, and git, the
+/// background `claude -p` calls and views' commands run there too, so
+/// nothing in a project folder runs as `nodus`.
 ///
-/// SRV-004 replaces this: `serve` never starts the host. It connects to the
-/// one `nodus-host.service` runs as `nodus-run` at `/run/nodus/host.sock`,
-/// retrying every second, and every other process the core starts goes
-/// through it (the `Runner`, SRV-005). That's the core's host-connect mode,
-/// set here once it lands.
-fn host_launcher() -> Option<Arc<dyn HostLauncher>> {
-    None
+/// Without it, for development and tests on one user: as the app does, the
+/// core starts this binary as `nodus-server host <socket> <key>`, detached,
+/// so sessions outlive a restart of `serve` (HOST-091), and runs the rest
+/// itself.
+fn host_mode(host_socket: Option<PathBuf>) -> (HostMode, RunnerSource) {
+    match host_socket {
+        Some(socket) => (HostMode::Connect(socket), RunnerSource::Host),
+        None => (HostMode::Launch, RunnerSource::Local),
+    }
 }
 
 /// The app's own updates, off: a server is updated from the app (SRV-200),

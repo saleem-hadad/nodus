@@ -141,10 +141,12 @@ impl ServersDialog {
         let nodus = self.state.read(cx).nodus.clone();
         cx.spawn_in(window, async move |this, cx| {
             let added = nodus.servers().add(&url, &token).await;
-            let _ = this.update_in(cx, |this, _, cx| {
+            let _ = this.update_in(cx, |this, window, cx| {
                 this.connecting = false;
                 match added {
                     Ok(server) => {
+                        // The fields go; the keyboard stays in the dialog.
+                        window.focus(&this.panel, cx);
                         this.listings.remove(&server.id);
                         this.state.update(cx, |s, cx| {
                             s.refresh_servers(cx);

@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 
 use nodus_domain::{
-    BoardLink, BoardNote, BoardSection, BoardShape, BoardSnapshot, CreatedBy, InkStroke, NodePatch, Rect, Viewport,
+    BoardLink, BoardNote, BoardPoint, BoardSection, BoardShape, BoardSnapshot, CreatedBy, InkStroke, NodePatch, Rect,
+    Viewport,
 };
 use nodus_store::BoardState;
 use serde_json::Value;
@@ -299,6 +300,33 @@ impl BoardApi<'_> {
                 self.nodus.inner.board.remove_ink(project_id, ids);
             })
             .await;
+    }
+
+    /// SRV-180: where this person is on a server board: their pointer, in
+    /// flow units (none while it's off the board), and what they look at
+    /// (the flow point at the centre of their canvas, and their zoom).
+    /// Sent at once, without waiting; the caller sends at most every
+    /// [`nodus_remote::PRESENCE_EVERY`]. Nothing for a local board.
+    pub fn presence(&self, project_id: &str, cursor: Option<BoardPoint>, view: Option<Viewport>) {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            route.presence(&nodus_remote::PresenceFrame {
+                project: Some(project_id.to_owned()),
+                cursor,
+                viewport: view,
+            });
+        }
+    }
+
+    /// SRV-180: off a server board at once, as it closes. Nothing for a
+    /// local board.
+    pub fn leave(&self, project_id: &str) {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            route.presence(&nodus_remote::PresenceFrame {
+                project: None,
+                cursor: None,
+                viewport: None,
+            });
+        }
     }
 
     /// `board:save-shapes` (added after 0.9.4): creates or updates shapes.

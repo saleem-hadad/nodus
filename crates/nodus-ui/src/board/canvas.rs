@@ -375,6 +375,15 @@ impl BoardCanvas {
         self.board.as_ref().is_some_and(|b| b.offline)
     }
 
+    /// The board is a server project's (SRV-160): others may be on it.
+    pub(crate) fn on_server(&self, cx: &App) -> bool {
+        self.state
+            .read(cx)
+            .projects
+            .iter()
+            .any(|p| p.id == self.project_id && p.server.is_some())
+    }
+
     /// Takes in a new snapshot from the store (BOARD-005, BOARD-003), and what
     /// follows the store: the terminal modal closing on a card (BOARD-103)
     /// and runs taken over (BOARD-105).

@@ -115,6 +115,14 @@ impl Route {
         }
     }
 
+    /// Where this person is on the route's board (SRV-180), sent at once;
+    /// dropped while the server isn't connected.
+    pub(crate) fn presence(&self, frame: &nodus_remote::PresenceFrame) {
+        if let Some(remote) = &self.remote {
+            remote.presence(frame);
+        }
+    }
+
     /// Remembers that a session is on this route's server board.
     pub(crate) fn remember(&self, session_id: &str) {
         self.nodus.inner.remotes.remember(session_id, &self.home);

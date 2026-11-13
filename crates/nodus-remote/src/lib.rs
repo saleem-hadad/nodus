@@ -31,7 +31,8 @@ use tokio::task::AbortHandle;
 pub use nodus_wire as wire;
 pub use nodus_wire::client::{DISCONNECTED, FileBody};
 pub use nodus_wire::{
-    CallError, Device, GithubRepo, Hello, MAX_UPLOAD, NOT_AVAILABLE, Notice, PROTOCOL, Request, Upload,
+    CallError, Device, GithubRepo, Hello, MAX_UPLOAD, NOT_AVAILABLE, Notice, PRESENCE_EVERY, PROTOCOL, PresenceFrame,
+    Request, Upload,
 };
 
 /// What a call fails with while the server isn't connected.
@@ -259,6 +260,16 @@ impl Remote {
             }
         });
         true
+    }
+
+    /// Says where this app is on one of the server's boards (SRV-180), or
+    /// that it's on none. Nothing is waited for. False while it isn't
+    /// connected: the server has forgotten it then, and the next frame
+    /// after reconnecting puts it back.
+    pub fn presence(&self, frame: &PresenceFrame) -> bool {
+        self.shared
+            .client()
+            .is_some_and(|client| client.send_text(frame.to_text()))
     }
 
     /// `PUT /api/uploads` (SRV-163): keeps `bytes` on the server under a

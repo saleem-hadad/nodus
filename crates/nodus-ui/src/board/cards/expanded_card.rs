@@ -7,6 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+use gpui::base::TextSelection;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, CursorStyle, DispatchPhase, FontWeight, Global, InteractiveElement, IntoElement, MouseButton,
@@ -214,7 +215,12 @@ pub fn body(
                 .cursor(CursorStyle::IBeam)
         })
         .when(chat, |d| d.bg(t.bg_elevated))
-        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+        .on_mouse_down(MouseButton::Left, move |e, window, cx| {
+            // CHAT-009: a press on the chat's text goes on to the window's
+            // text selection, the node letting it be (`node_mouse_down`).
+            if chat && TextSelection::is_selectable_at(e.position, window, cx) {
+                return;
+            }
             cx.stop_propagation();
             if enabled
                 && !chat

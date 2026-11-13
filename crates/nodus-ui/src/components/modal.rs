@@ -80,7 +80,10 @@ impl Modal {
                     .bg(t.bg_elevated)
                     .shadow(t.modal())
                     .overflow_hidden()
-                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    // A press inside never reaches the backdrop under it. The
+                    // panel blocks the pointer rather than stopping the press,
+                    // which the window's text selection needs to see (CHAT-009).
+                    .occlude()
                     .when(true, |d| d.child(content)),
             );
         deferred(anchored().position(point(px(0.), px(0.))).child(backdrop))

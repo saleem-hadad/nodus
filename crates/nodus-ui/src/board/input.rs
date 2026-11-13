@@ -5,6 +5,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use gpui::base::TextSelection;
 use gpui::{
     Context, KeyDownEvent, KeyUpEvent, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
     PinchEvent, Pixels, Point as GPoint, ScrollDelta, ScrollEvent, Window,
@@ -164,6 +165,10 @@ impl BoardCanvas {
                 self.move_started(cx);
             }
             MouseButton::Left => {
+                // CHAT-009: a press on a chat's text selects it; the card stays put.
+                if TextSelection::is_selectable_at(e.position, window, cx) {
+                    return;
+                }
                 self.focus_board(window, cx);
                 let Some(node) = self.node(id) else { return };
                 let handle = self.on_handle(node, e.position);

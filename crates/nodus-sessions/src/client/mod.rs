@@ -312,15 +312,29 @@ impl HostClient {
     /// them, which tells every app what it made of them (QUEUE-010).
     /// False, and nothing changes, for a session that isn't live.
     pub fn set_queue(&self, session_id: &str, items: Vec<QueuedPrompt>) -> bool {
+        self.change_queue(session_id, |queue| *queue = items)
+    }
+
+    /// Queues a prompt after a live session's others, as
+    /// [`HostClient::set_queue`] would with it added; in one step, so two
+    /// at once both stay. False for a session that isn't live.
+    pub fn enqueue(&self, session_id: &str, item: QueuedPrompt) -> bool {
+        self.change_queue(session_id, |queue| queue.push(item))
+    }
+
+    /// QUEUE-010: changes a live session's queue here and in a host that
+    /// keeps queues, saying `Event::Queue` when it changed.
+    fn change_queue(&self, session_id: &str, change: impl FnOnce(&mut Vec<QueuedPrompt>)) -> bool {
         let _order = self.inner.order();
-        let changed = {
+        let (changed, items) = {
             let mut state = self.inner.lock();
             let keeps_queues = state.keeps_queues;
             let Some(running) = state.running.get_mut(session_id) else {
                 return false;
             };
-            let changed = running.queue != items;
-            running.queue.clone_from(&items);
+            let before = running.queue.clone();
+            change(&mut running.queue);
+            let items = running.queue.clone();
             if keeps_queues {
                 Inner::send(
                     &state,
@@ -330,7 +344,7 @@ impl HostClient {
                     },
                 );
             }
-            changed
+            (before != items, items)
         };
         if changed {
             self.inner.emit(Event::Queue {

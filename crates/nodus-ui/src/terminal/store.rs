@@ -45,6 +45,8 @@ pub enum TerminalsEvent {
 pub struct Terminals {
     pub registry: Arc<Registry>,
     pub nodus: Nodus,
+    /// Each session opened, by its project.
+    projects: Arc<std::sync::Mutex<HashMap<String, String>>>,
     next_container: u64,
     releases: mpsc::UnboundedSender<String>,
     _pump: Task<()>,
@@ -99,11 +101,17 @@ struct OpenRequest {
 struct CoreSessions {
     nodus: Nodus,
     opens: mpsc::UnboundedSender<OpenRequest>,
+    /// Each session opened, by its project: a server's live sessions are
+    /// opened again when it comes back (SRV-028).
+    projects: Arc<std::sync::Mutex<HashMap<String, String>>>,
 }
 
 impl Sessions for CoreSessions {
     fn open(&self, project_id: &str, session_id: &str, cols: usize, rows: usize) -> OpenFuture {
         let (reply, answer) = oneshot::channel();
+        if let Ok(mut projects) = self.projects.lock() {
+            projects.insert(session_id.to_owned(), project_id.to_owned());
+        }
         let _ = self.opens.send(OpenRequest {
             project_id: project_id.to_owned(),
             session_id: session_id.to_owned(),
@@ -174,9 +182,11 @@ impl Terminals {
         let (opens_tx, opens) = mpsc::unbounded_channel();
         let (releases_tx, releases) = mpsc::unbounded_channel();
         let runtime = core_runtime(cx);
+        let projects = Arc::default();
         let sessions = Arc::new(CoreSessions {
             nodus: nodus.clone(),
             opens: opens_tx,
+            projects: Arc::clone(&projects),
         });
         let registry = Registry::new(sessions, Platform::current(), runtime.clone());
         let events = nodus.subscribe();
@@ -190,6 +200,7 @@ impl Terminals {
         Self {
             registry,
             nodus,
+            projects,
             next_container: 1,
             releases: releases_tx,
             _pump: task,
@@ -209,10 +220,59 @@ impl Terminals {
         let _ = self.releases.send(session_id.to_owned());
     }
 
-    /// Destroys a session's terminal (TERM-027).
+    /// Destroys a session's terminal (TERM-027). A server session's output
+    /// stops coming here too (SRV-026); the next open asks for it again.
     pub fn dispose(&mut self, session_id: &str, cx: &mut Context<'_, Self>) {
         self.registry.dispose(session_id);
+        if let Ok(mut projects) = self.projects.lock() {
+            projects.remove(session_id);
+        }
+        self.nodus.sessions().close(session_id);
         cx.emit(TerminalsEvent::Changed(SharedString::from(session_id.to_owned())));
+    }
+
+    /// Opens again every live terminal of these projects' sessions, each
+    /// starting over from its replay (SRV-028): a server is back, and its
+    /// sessions' output stopped coming while it was away.
+    pub fn reopen(&self, project_ids: &[String], cx: &mut Context<'_, Self>) {
+        let sessions: Vec<(String, String)> = match self.projects.lock() {
+            Ok(projects) => projects
+                .iter()
+                .filter(|(_, project)| project_ids.contains(project))
+                .map(|(session, project)| (session.clone(), project.clone()))
+                .collect(),
+            Err(_) => return,
+        };
+        let runtime = core_runtime(cx);
+        for (session, project) in sessions {
+            let registry = Arc::clone(&self.registry);
+            let opening = runtime.spawn(async move {
+                let reopened = registry.reopen(&session, &project).await;
+                (session, reopened)
+            });
+            cx.spawn(async move |this, cx| {
+                let Ok((session, reopened)) = opening.await else { return };
+                if let Err(err) = reopened {
+                    tracing::warn!("[remote] couldn't open {session} again: {err}");
+                }
+                let _ = this.update(cx, |t, cx| {
+                    // Its events held since the open can go in now.
+                    t.release(&session);
+                    cx.emit(TerminalsEvent::Changed(SharedString::from(session)));
+                });
+            })
+            .detach();
+        }
+    }
+}
+
+/// [`Terminals::reopen`] from anywhere; nothing when no terminal was made.
+pub fn reopen(project_ids: &[String], cx: &mut App) {
+    if project_ids.is_empty() {
+        return;
+    }
+    if let Some(terminals) = Terminals::try_global(cx) {
+        terminals.update(cx, |t, cx| t.reopen(project_ids, cx));
     }
 }
 

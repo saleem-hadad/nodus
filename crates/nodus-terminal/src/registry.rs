@@ -355,6 +355,31 @@ impl Registry {
         result
     }
 
+    /// Opens a live session again and starts its terminal over from what
+    /// the open replays: for a server session whose output stopped coming
+    /// while the connection was down (SRV-028). Only a terminal that's
+    /// ready is opened again; one opening or exited waits for its next
+    /// attach, as before. Resolves once the replay is written.
+    pub async fn reopen(&self, session_id: &str, project_id: &str) -> Result<(), String> {
+        let (id, cols, rows, done) = {
+            let mut inner = self.lock();
+            let Some(entry) = inner.entries.get_mut(session_id).filter(|e| e.state == State::Ready) else {
+                return Ok(());
+            };
+            self.trace(&["term-reset", session_id]);
+            entry.terminal.reset();
+            entry.has_output = false;
+            let (done, rx) = watch::channel(None);
+            entry.opening = Some(rx);
+            entry.state = State::Opening;
+            entry.exit_pending = false;
+            (entry.id, entry.terminal.cols(), entry.terminal.rows(), done)
+        };
+        let result = self.open_process(session_id, project_id, id, cols, rows).await;
+        done.send_replace(Some(result.clone()));
+        result
+    }
+
     /// Parks the terminal, keeping everything for the next attach (TERM-003,
     /// TERM-005). With `container`, only if it is still shown there (TERM-004).
     pub fn detach(&self, session_id: &str, container: Option<ContainerId>) {

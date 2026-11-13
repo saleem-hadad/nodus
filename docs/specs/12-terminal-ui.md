@@ -321,6 +321,8 @@ Cursor visibility: the cursor is not drawn until the terminal has been focused o
 - **TERM-107** Wheel over a card body that isn't hosting its terminal (not started, or shown in the session window) pans the board.
 - **TERM-108** Closing the session window leaves a non-archived card expanded on the board, where the terminal then shows (BoardView, spec 09/10).
 - **TERM-109** On the board, ⌘K (Ctrl+K off a Mac) with a terminal focused does not open search: the terminal keeps it.
+- **TERM-110** A server session's terminal (hosted Nodus, added after 1.0.12): disposing it (TERM-027) also tells the server to stop sending its output here (`session:close`, SRV-026); a parked one keeps receiving it, as a local one does (TERM-007).
+- **TERM-111** When a server comes back after being away (SRV-028), every terminal of its projects' sessions that was ready is opened again (`session:open` at its size): it starts over from a clean screen with what the open replays, and output that arrives meanwhile is held and written after, as on a first open (TERM-009, TERM-010). Terminals opening or exited wait for their next attach.
 
 ### Session window (MODAL)
 
@@ -726,6 +728,8 @@ No Vitest exists for the registry, the modal, the preview or the viewer. New Rus
 - [x] TERM-107 wheel over non-hosting card body pans board
 - [x] TERM-108 closing the window leaves the card expanded with the terminal
 - [x] TERM-109 board ⌘K yields to a focused terminal
+- [x] TERM-110 a server terminal's output stops when it's disposed
+- [x] TERM-111 server terminals open again after a reconnect
 - [x] MODAL-001 open condition, one session, rebuild on switch
 - [x] MODAL-002 window/preview/navigation/showCard exclusivity
 - [x] MODAL-003 Esc never closes

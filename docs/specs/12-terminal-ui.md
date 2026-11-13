@@ -323,6 +323,7 @@ Cursor visibility: the cursor is not drawn until the terminal has been focused o
 - **TERM-109** On the board, ⌘K (Ctrl+K off a Mac) with a terminal focused does not open search: the terminal keeps it.
 - **TERM-110** A server session's terminal (hosted Nodus, added after 1.0.12): disposing it (TERM-027) also tells the server to stop sending its output here (`session:close`, SRV-026); a parked one keeps receiving it, as a local one does (TERM-007).
 - **TERM-111** When a server comes back after being away (SRV-028), every terminal of its projects' sessions that was ready is opened again (`session:open` at its size): it starts over from a clean screen with what the open replays, and output that arrives meanwhile is held and written after, as on a first open (TERM-009, TERM-010). Terminals opening or exited wait for their next attach.
+- **TERM-112** Files dropped on a server session's terminal (hosted Nodus, added after 1.0.12) are uploaded to its server first, one by one in the order dropped (`PUT /api/uploads`, at most 50 MB each); what's typed is their paths on the server, quoted as TERM-032 quotes them. Folders and files that can't be read are left out; if an upload fails nothing is typed (SRV-163).
 
 ### Session window (MODAL)
 
@@ -730,6 +731,7 @@ No Vitest exists for the registry, the modal, the preview or the viewer. New Rus
 - [x] TERM-109 board ⌘K yields to a focused terminal
 - [x] TERM-110 a server terminal's output stops when it's disposed
 - [x] TERM-111 server terminals open again after a reconnect
+- [x] TERM-112 files dropped on a server terminal are uploaded first
 - [x] MODAL-001 open condition, one session, rebuild on switch
 - [x] MODAL-002 window/preview/navigation/showCard exclusivity
 - [x] MODAL-003 Esc never closes

@@ -401,6 +401,7 @@ It owns the native application menu on macOS, and the same menu as a popup from 
 | `views/<viewId>/` | a view's page, data and runtime | 04 |
 | `captures/` | screenshots and copied images from capture | 07 |
 | `server-boards/<projectId>.json` | each server board's last snapshot, for opening it read-only while its server is away (SRV-028); added after 1.0.12 | 01 |
+| `server-files/<serverId>/<id>` | a server's files kept here once fetched or uploaded: its boards' pictures (SRV-163); added after 1.0.12 | 01, 14 |
 | `updates/` | downloaded updates | 06 |
 | `Local State` | Chromium JSON; Windows: `os_crypt.encrypted_key` | 01 (read only) |
 | `Preferences` | Chromium JSON; page zoom, spellcheck dictionaries | 01 (read only) |

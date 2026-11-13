@@ -329,7 +329,7 @@ impl ServersDialog {
                     .text_size(TEXT_SM)
                     .line_height(px(16.8))
                     .text_color(t.text_tertiary)
-                    .child("The token nodus-server serve was given with --dev-token, or printed when it started."),
+                    .child("The token nodus-server serve was given with --dev-token."),
             )
             .when_some(self.error.clone(), |d, error| {
                 d.child(

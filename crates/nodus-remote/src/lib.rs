@@ -130,6 +130,12 @@ pub enum CheckError {
 
 /// Checks that `url` is a Nodus server with this app's protocol (SRV-027)
 /// that takes `token`, by connecting once. Gives its hello.
+///
+/// A server that still needs setting up ([`Hello::needs_setup`], SRV-060)
+/// passes when the token gets in, as `--dev-token` does on loopback for
+/// development and tests. A person adding one meets the setup wizard
+/// instead, which claims its setup code and signs in for a device token;
+/// that comes later.
 pub async fn check(url: &str, token: &str) -> Result<Hello, CheckError> {
     match attempt(url, token).await {
         Ok((hello, client, _events)) => {

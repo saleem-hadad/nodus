@@ -210,14 +210,17 @@ fn incoming(msg: &Incoming, cx: &mut App) {
                 loaded: None,
             },
         ),
-        PageMessage::Loaded => nodus.views().report(
-            &project_id,
-            &view_id,
-            &ViewReport {
-                error: None,
-                loaded: Some(version),
-            },
-        ),
+        PageMessage::Loaded => {
+            super::swap::page_loaded(msg.frame, cx);
+            nodus.views().report(
+                &project_id,
+                &view_id,
+                &ViewReport {
+                    error: None,
+                    loaded: Some(version),
+                },
+            );
+        }
         PageMessage::Wheel(w) => {
             // VIEW-047: played on the card as if the frame weren't there; the
             // large window's frame sits outside the board.

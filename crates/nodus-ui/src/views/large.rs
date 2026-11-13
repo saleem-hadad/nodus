@@ -63,6 +63,7 @@ fn render_parts(
         forced: parity,
         passthrough: false,
         edge: 0.0,
+        reveal: false,
     };
     let on_close = move |window: &mut Window, cx: &mut App| close(window, cx);
     let close_x = on_close;

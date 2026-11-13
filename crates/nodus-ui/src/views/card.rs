@@ -39,6 +39,8 @@ pub struct CardUi {
     pub resizing: bool,
     pub ask: Option<parts::AskBar>,
     pub title: Option<parts::TitleEditor>,
+    /// Its first page landing (MOTION-033).
+    pub landing: super::reveal::Landing,
 }
 
 impl CardUi {
@@ -208,6 +210,7 @@ pub fn render(node: ViewNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut
         )
     };
     let framed = view.version > 0 && !board.project_id.is_empty();
+    let revealing = super::reveal::step(&ui, view.version, framed, window, cx);
 
     let caption = caption(
         &view,
@@ -231,6 +234,7 @@ pub fn render(node: ViewNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut
         board,
         &ui,
         framed,
+        revealing,
         working,
         waiting,
         (resizing, state.dragging),
@@ -418,6 +422,7 @@ fn body(
     board: &BoardCx,
     ui: &Entity<CardUi>,
     framed: bool,
+    revealing: Option<super::reveal::Revealing>,
     working: bool,
     waiting: bool,
     (resizing, dragging): (bool, bool),
@@ -438,6 +443,7 @@ fn body(
     // An ink tool is out: strokes draw over the page (INKUI-018, D3).
     let ink = board.ink_tool;
     let parity = crate::parity::frozen(cx);
+    let reveal = revealing.is_some();
     let geometry = {
         move |document: Bounds<Pixels>, clip: Bounds<Pixels>| {
             let marquee = pointer.marquee.is_some_and(|(x, y, w, h)| {
@@ -459,15 +465,29 @@ fn body(
                     || pointer.moving
                     || resizing,
                 edge: 5.0 * z,
+                reveal,
             }
         }
     };
     // The probe paints the page's snapshot while it's behind one. The fill
     // takes the panel's corners: GPUI's overflow clip is square.
-    base.bg(t.bg_elevated)
+    let base = base
+        .bg(t.bg_elevated)
         .when(rounding.top, |d| d.rounded_t(fu(RADIUS)))
-        .when(rounding.bottom, |d| d.rounded_b(fu(RADIUS)))
-        .child(frames::probe(id, Slot::Card, geometry))
+        .when(rounding.bottom, |d| d.rounded_b(fu(RADIUS)));
+    let Some(revealing) = revealing else {
+        return base.child(frames::probe(id, Slot::Card, geometry)).into_any_element();
+    };
+    // MOTION-033: the empty state stays until the page's picture paints
+    // over it, then the picture sharpens out of a blur.
+    base.child(parts::empty_state(view, board, ui, working, waiting, z, window, cx))
+        .child(frames::probe_into(
+            id,
+            Slot::Card,
+            geometry,
+            Some(revealing.painted.clone()),
+        ))
+        .child(super::reveal::overlay(&revealing, rounding, z))
         .into_any_element()
 }
 

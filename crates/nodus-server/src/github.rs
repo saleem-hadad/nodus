@@ -19,6 +19,10 @@ const API_URL: &str = "https://api.github.com";
 const WEB_URL: &str = "https://github.com";
 const WAIT: Duration = Duration::from_secs(30);
 
+/// What signing in says when the App's device flow is off.
+pub(crate) const DEVICE_FLOW_OFF: &str =
+    "Tick Enable Device Flow in the GitHub App's settings on GitHub, then sign in again";
+
 pub(crate) struct GitHub {
     api: String,
     web: String,
@@ -129,6 +133,10 @@ impl GitHub {
             .header("Accept", "application/json")
             .form(&[("client_id", client_id)]);
         let (status, body) = send(request).await?;
+        // SRV-062: the manifest can't turn the device flow on.
+        if body.get("error").and_then(Value::as_str) == Some("device_flow_disabled") {
+            return Err(DEVICE_FLOW_OFF.to_owned());
+        }
         if status != 200 || body.get("error").is_some() {
             return Err(failed(status, &body));
         }

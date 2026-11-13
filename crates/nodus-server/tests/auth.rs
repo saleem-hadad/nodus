@@ -65,6 +65,8 @@ struct Fake {
     conversions: Vec<String>,
     app: Option<App>,
     installations: Vec<Value>,
+    /// Whether nobody ticked Enable Device Flow on the App's page.
+    device_flow_off: bool,
 }
 
 struct Flow {
@@ -95,6 +97,7 @@ impl GitHub {
             conversions: Vec::new(),
             app: None,
             installations: Vec::new(),
+            device_flow_off: false,
         }));
         let serving = Arc::clone(&fake);
         tokio::spawn(async move {
@@ -175,6 +178,9 @@ impl Fake {
             ("POST", "/login/device/code") => {
                 if form.get("client_id").map(String::as_str) != Some(CLIENT_ID) {
                     return (400, json!({ "error": "incorrect_client_credentials" }));
+                }
+                if self.device_flow_off {
+                    return (200, json!({ "error": "device_flow_disabled" }));
                 }
                 self.counter += 1;
                 let device_code = format!("device-{}", self.counter);
@@ -867,6 +873,16 @@ async fn members_are_their_github_id_and_invited_by_login() {
         .await
         .unwrap_err();
     assert!(err.message.contains("isn't a GitHub login"), "{}", err.message);
+
+    // SRV-062: the manifest can't turn the device flow on, and says so.
+    github.fake().device_flow_off = true;
+    let off = start_sign_in(&server.url, None, "Phone").await.unwrap_err();
+    let ConnectError::Answered { status, message } = off else {
+        panic!("{off:?}");
+    };
+    assert_eq!(status, 502);
+    assert!(message.starts_with("Tick Enable Device Flow"), "{message}");
+    github.fake().device_flow_off = false;
 
     // A non-member is refused, in the app's words.
     let refused = sign_in(github, &server, None, "Phone", MALLORY).await;

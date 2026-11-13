@@ -255,17 +255,20 @@ impl Nodus {
         })
     }
 
+    /// Whether a session's process is running in the host.
+    pub fn is_live(&self, session_id: &str) -> bool {
+        self.inner.host.is_live(session_id)
+    }
+
     /// SRV-104: stops a session's process and starts it again, resumed,
     /// which takes an account afresh: with `Continue.` when it was
-    /// mid-turn, else as it was. Fails as the start does.
+    /// mid-turn (as `session:send` resumes one, SESS-145, but leaving an
+    /// action's run its own), else as it was. Fails as the start does.
     pub async fn restart_session(&self, project_id: &str, session_id: &str, busy: bool) -> CommandResult<()> {
         const CHANNEL: &str = "session:restart";
         self.on_core(async {
             let inner = &self.inner;
             inner.host.kill(session_id).await;
-            if busy {
-                return self.sessions().send(project_id, session_id, CONTINUE).await;
-            }
             let project = inner
                 .store
                 .read(|state| state.project(project_id).cloned())
@@ -273,6 +276,19 @@ impl Nodus {
             let node = inner
                 .store
                 .read(|state| state.board(project_id).and_then(|b| b.nodes.get(session_id).cloned()));
+            if busy {
+                let node = node.ok_or_else(|| CommandError::new(CHANNEL, "That session is no longer on the board"))?;
+                let resume = nodus_board::Resume {
+                    has_transcript: inner.board.has_transcript(&project, session_id),
+                    project,
+                    node,
+                    prompt: CONTINUE.to_owned(),
+                };
+                let launcher = crate::wiring::CoreLauncher(Arc::downgrade(&self.inner));
+                return nodus_board::Launcher::resume_with_prompt(&launcher, resume)
+                    .await
+                    .map_err(|err| CommandError::new(CHANNEL, err));
+            }
             let brain_args = node.as_ref().and_then(|node| inner.brain_args(project_id, node));
             let opts = launch::for_open(
                 project_id,

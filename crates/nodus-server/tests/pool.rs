@@ -184,8 +184,8 @@ impl Drop for World {
         let _ = Command::new("pkill")
             .args(["-f", &self.root().to_string_lossy()])
             .status();
+        // POOL_KEEP=1 keeps a world to look at after a failure.
         if std::env::var_os("POOL_KEEP").is_some() {
-            eprintln!("kept {}", self.root().display());
             let dir = std::mem::replace(&mut self.dir, tempfile::tempdir().unwrap());
             let _ = dir.keep();
         }
@@ -385,8 +385,7 @@ impl App {
             .cards
             .into_iter()
             .find(|card| card.node.session_id == session_id)
-            .map(|card| card.node)
-            .unwrap_or_else(|| panic!("no card {session_id}"))
+            .map_or_else(|| panic!("no card {session_id}"), |card| card.node)
     }
 
     /// A Claude card started and opened here.
@@ -581,8 +580,8 @@ async fn a_session_moves_off_an_account_at_its_limit_waits_and_comes_back() {
     // Bravo's limit too: nothing is free, so the card waits, and nothing
     // else starts until Alpha's window resets.
     app.printed(&id, "reported", 2).await;
+    // (The first stand-in may be stopped before it says it hit the limit.)
     app.type_line(&id, "limit").await;
-    app.printed(&id, "hit the limit", 2).await;
     let note = app
         .until("the card waits", async |app| {
             let note = app.card(&project.id, &id).await.account_note().unwrap_or_default();

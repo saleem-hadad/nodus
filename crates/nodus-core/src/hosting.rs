@@ -15,6 +15,8 @@
 //!   Claude Code, with a preview port; removing the card saves what wasn't
 //!   pushed first. All git work runs through the runner, so in the session
 //!   host as `nodus-run` (SRV-005).
+//! - **A pool of Claude accounts** (SRV-100…104): every Claude Code process
+//!   takes one of the server's accounts (`pool.rs`).
 //!
 //! [`NodusConfig::hosting`]: crate::NodusConfig::hosting
 

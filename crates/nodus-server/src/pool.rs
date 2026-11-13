@@ -130,8 +130,9 @@ pub(crate) struct Pool {
     work: mpsc::UnboundedSender<Work>,
     /// Taken by [`run`] once the core is up.
     todo: Mutex<Option<mpsc::UnboundedReceiver<Work>>>,
-    /// Sessions waiting for an account to free up, oldest first (SRV-104).
-    waiting: Mutex<Vec<String>>,
+    /// Sessions waiting for an account to free up, oldest first (SRV-104),
+    /// and whether the pool stopped each itself (a removed account's).
+    waiting: Mutex<Vec<(String, bool)>>,
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -458,12 +459,16 @@ impl Pool {
     /// Takes a session's turn that hit the limit (SRV-104): to another
     /// account when one is free, else it waits, saying until when.
     async fn move_session(&self, nodus: &Nodus, session_id: &str) {
+        // One stopped since isn't started again unasked.
+        if !nodus.is_live(session_id) {
+            return;
+        }
         if !self.has_free() {
-            self.wait(nodus, session_id);
+            self.wait(nodus, session_id, false);
             return;
         }
         if !self.resume_on_another(nodus, session_id, true).await {
-            self.wait(nodus, session_id);
+            self.wait(nodus, session_id, false);
         }
     }
 
@@ -491,11 +496,13 @@ impl Pool {
     }
 
     /// The session waits for an account (SRV-104), and its card says so.
-    fn wait(&self, nodus: &Nodus, session_id: &str) {
+    /// `stopped` when the pool stopped its process itself.
+    fn wait(&self, nodus: &Nodus, session_id: &str, stopped: bool) {
         {
             let mut waiting = lock(&self.waiting);
-            if !waiting.iter().any(|id| id == session_id) {
-                waiting.push(session_id.to_owned());
+            match waiting.iter_mut().find(|(id, _)| id == session_id) {
+                Some(entry) => entry.1 |= stopped,
+                None => waiting.push((session_id.to_owned(), stopped)),
             }
         }
         let note = match self.next_reset() {
@@ -512,12 +519,17 @@ impl Pool {
             if !self.has_free() {
                 return;
             }
-            let Some(session_id) = lock(&self.waiting).first().cloned() else {
+            let Some((session_id, stopped)) = lock(&self.waiting).first().cloned() else {
                 return;
             };
-            lock(&self.waiting).retain(|id| *id != session_id);
+            lock(&self.waiting).retain(|(id, _)| *id != session_id);
+            // Someone stopped it meanwhile: it stays stopped.
+            if !stopped && !nodus.is_live(&session_id) {
+                nodus.note_account(&session_id, None);
+                continue;
+            }
             if !self.resume_on_another(nodus, &session_id, true).await {
-                self.wait(nodus, &session_id);
+                self.wait(nodus, &session_id, stopped);
                 return;
             }
         }
@@ -533,7 +545,7 @@ impl Pool {
             }
             nodus.sessions().kill(&session.session_id).await;
             if session.busy {
-                self.wait(nodus, &session.session_id);
+                self.wait(nodus, &session.session_id, true);
             }
         }
     }
@@ -676,7 +688,7 @@ mod tests {
         }
     }
 
-    fn pool(accounts: Vec<Stored>) -> (tempfile::TempDir, Pool) {
+    fn pool(accounts: &[Stored]) -> (tempfile::TempDir, Pool) {
         let dir = tempfile::tempdir().unwrap();
         let auth = Arc::new(Auth::open(dir.path(), None, "box".into()).unwrap());
         store::write_json(&dir.path().join(ACCOUNTS_FILE), &accounts).unwrap();
@@ -691,7 +703,7 @@ mod tests {
         limited.resets_at = Some(now_ms() + 60_000.0);
         let mut failed = account("failed", None, None);
         failed.state = AccountState::Failed;
-        let (_dir, pool) = pool(vec![
+        let (_dir, pool) = pool(&[
             limited,
             failed,
             account("busy", Some(60.0), None),
@@ -716,7 +728,7 @@ mod tests {
 
     #[test]
     fn says_why_nothing_can_be_picked() {
-        let (_dir, empty) = pool(Vec::new());
+        let (_dir, empty) = pool(&[]);
         assert_eq!(empty.pick().unwrap_err(), NO_ACCOUNTS);
         let now = now_ms();
         let mut a = account("a", None, None);
@@ -725,7 +737,7 @@ mod tests {
         let mut b = a.clone();
         b.id = "b".into();
         b.resets_at = Some(now + 3_600_000.0);
-        let (_dir, limited) = pool(vec![a, b.clone()]);
+        let (_dir, limited) = pool(&[a, b.clone()]);
         let err = limited.pick().unwrap_err();
         assert_eq!(
             err,
@@ -735,7 +747,7 @@ mod tests {
             )
         );
         b.state = AccountState::Failed;
-        let (_dir, failed) = pool(vec![b]);
+        let (_dir, failed) = pool(&[b]);
         assert!(
             failed
                 .pick()
@@ -749,14 +761,14 @@ mod tests {
         let mut a = account("a", None, None);
         a.state = AccountState::Limited;
         a.resets_at = Some(now_ms() - 1.0);
-        let (_dir, pool) = pool(vec![a]);
+        let (_dir, pool) = pool(&[a]);
         assert_eq!(pool.pick().unwrap().id, "a");
         assert_eq!(pool.list_raw()[0].state, AccountState::Ok);
     }
 
     #[test]
     fn reads_usage_and_limits_from_what_sessions_report() {
-        let (dir, pool) = pool(vec![account("a", None, None)]);
+        let (dir, pool) = pool(&[account("a", None, None)]);
         let now = now_ms();
         let resets = (now / 1000.0).floor() + 3600.0;
         pool.session_hook(
@@ -827,7 +839,7 @@ mod tests {
         alices_too.added_by = by(1, "alice");
         let mut bobs = account("c", None, None);
         bobs.added_by = by(2, "bob");
-        let (dir, pool) = pool(vec![alices, bobs, alices_too]);
+        let (dir, pool) = pool(&[alices, bobs, alices_too]);
         pool.remove_added_by(&Who::Dev, 1);
         let left: Vec<String> = pool.list_raw().into_iter().map(|a| a.id).collect();
         assert_eq!(left, ["c"]);

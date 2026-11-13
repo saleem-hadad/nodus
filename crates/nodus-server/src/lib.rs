@@ -18,7 +18,8 @@
 //!   their device (SRV-040…045); `--dev-token` is for development and
 //!   tests only, and only a server on loopback takes one. Projects come
 //!   from the GitHub App's repositories (SRV-120), and each card gets a
-//!   worktree of its own (SRV-122).
+//!   worktree of its own (SRV-122). Sessions run on the members' pool of
+//!   Claude accounts, moving off one that hits its limit (SRV-100…105).
 //! - `setup-code`: a fresh setup code, while the server has no member yet,
 //!   which cancels every earlier code and setup token (SRV-060).
 //! - `host`: the session host, as the app runs it (`Nodus host …`), or on

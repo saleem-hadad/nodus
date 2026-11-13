@@ -366,10 +366,15 @@ pub fn heading(
                 .min_w_0()
                 // `.card-title`: the canvas waits 240ms before opening (BOARD-043).
                 .on_mouse_down(MouseButton::Left, move |_, _, _| actions.press_title())
-                .tooltip(native_tooltip(title.into()))
+                // CARD-054: on a server, who started it too.
+                .tooltip(native_tooltip(present::title_tooltip(card).into()))
                 .child(p)
                 .into_any_element(),
         );
+    }
+    // CARD-059: an open card says it too, beside its title.
+    if expanded && let Some(pill) = account_pill(z, &t, card, id, true) {
+        out.push(pill.into_any_element());
     }
     if card.live && !shell {
         // CARD-019
@@ -384,7 +389,69 @@ pub fn heading(
                 .into_any_element(),
         );
     }
+    // CARD-056: Open preview, while something listens on the card's port.
+    if let Some(url) = present::preview_url(card, env.server_host.as_deref()) {
+        let port = card.node.preview_port().unwrap_or_default();
+        out.push(
+            div()
+                .id(anim::key(id, "open-preview"))
+                .aria_label("Open preview")
+                .flex_none()
+                .flex()
+                .mt(top(3.))
+                .tooltip(native_tooltip(format!("Open preview (port {port})").into()))
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .on_click(move |_, _, cx| {
+                    cx.stop_propagation();
+                    nodus_platform::shell::open_external(&url);
+                })
+                .child(card_icon(CardIcon::AppWindowMac, z.f(13.), 2.0, t.accent))
+                .into_any_element(),
+        );
+    }
     out
+}
+
+/// CARD-059: `Moved to <label>`, or that it waits for an account, as a pill;
+/// `short` in an open card's title bar, where waiting reads `Waiting for an
+/// account` and the tooltip says until when.
+fn account_pill(z: Z, t: &Tokens, card: &SessionCard, id: &str, short: bool) -> Option<gpui::Stateful<gpui::Div>> {
+    let (note, waiting) = present::account_note(card)?;
+    let color = if waiting { t.status_waiting } else { t.accent };
+    let tip = if waiting {
+        format!("{note}. Every Claude account on the server is at its limit; it carries on by itself once one is free.")
+    } else {
+        "Its turn hit its Claude account’s limit, so it carried on on another.".to_owned()
+    };
+    let note = if waiting && short {
+        "Waiting for an account".to_owned()
+    } else {
+        note
+    };
+    Some(
+        div()
+            .id(anim::key(id, "account-note"))
+            .flex()
+            .flex_none()
+            .items_center()
+            .gap(z.px(4.))
+            .h(z.px(19.))
+            .px(z.px(7.))
+            .rounded_full()
+            .bg(fade(color, 0.10))
+            .tooltip(native_tooltip(tip.into()))
+            .child(card_icon(
+                if waiting {
+                    CardIcon::LoaderCircle
+                } else {
+                    CardIcon::ArrowRight
+                },
+                z.f(11.),
+                2.2,
+                color,
+            ))
+            .child(super::text(z, note, 11.0, FontWeight::MEDIUM, color)),
+    )
 }
 
 /// The compact card's body (CARD-001…CARD-042).
@@ -506,8 +573,11 @@ fn compact(
                 t.accent,
             ))
     });
-    let has_chip = chip.is_some();
+    // CARD-059: where its account sent it (SRV-104).
+    let moved = account_pill(z, &t, card, &id, false).map(|pill| pill.self_start().opacity(content));
+    let has_chip = chip.is_some() || moved.is_some();
     body = body.when_some(chip, ParentElement::child);
+    body = body.when_some(moved, ParentElement::child);
 
     // CARD-026…CARD-032: the kinds (CARD-026), 12px secondary collapsed and
     // clamped to 4 (CARD-028), 3 after a chip (CARD-029), the prompt italic
@@ -757,8 +827,8 @@ fn footer(
         .border_color(t.separator)
         .h(z.px(9.0 + 0.5 + 15.4))
         .opacity(content);
-    if let Some(branch) = meta.and_then(|m| m.git_branch.clone()) {
-        // CARD-034
+    if let Some(branch) = present::branch(card) {
+        // CARD-034, CARD-057
         foot = foot.child(
             item()
                 .id(anim::key(&id, "branch"))

@@ -17,7 +17,7 @@ use nodus_board::shapes::{
     LINK_MAX_LABEL, MAX_LINKS, MAX_SHAPES, SHAPE_MAX, SHAPE_MIN, clean_link, clean_shape, drawn_size, holds, item_rect,
     new_id, place_drawing, remove_links, remove_shapes, save_links, save_shapes,
 };
-use nodus_domain::{BoardLink, BoardShape, InkColor, LinkEnd, Rect, ShapeKind, js};
+use nodus_domain::{BoardLink, BoardShape, CreatedBy, InkColor, LinkEnd, Rect, ShapeKind, js};
 use nodus_store::BoardState;
 use serde_json::{Map, Value, json};
 
@@ -476,7 +476,13 @@ fn at_point(args: &Value) -> Result<Option<Point>, String> {
 /// Draws shapes and links for the session `by`, and returns their ids: the
 /// shapes' by key (or by their place in the list), the links' in order, and
 /// the box the drawing took on the board (TOOL-103 to TOOL-106).
-pub(crate) fn draw(board: &mut BoardState, by: &str, args: &Value, now: f64) -> Result<Value, String> {
+pub(crate) fn draw(
+    board: &mut BoardState,
+    by: &str,
+    starter: Option<&str>,
+    args: &Value,
+    now: f64,
+) -> Result<Value, String> {
     let (shape_args, link_args) = (list(args, "shapes")?, list(args, "links")?);
     if shape_args.is_empty() && link_args.is_empty() {
         return Err("Nothing to draw: give shapes, links or both".into());
@@ -576,6 +582,19 @@ pub(crate) fn draw(board: &mut BoardState, by: &str, args: &Value, now: f64) -> 
 
     save_shapes(board, &shapes, now);
     save_links(board, &links, now);
+    // SRV-183: on a server, they're the session's starter's.
+    if starter.is_some() {
+        for shape in &shapes {
+            if let Some(saved) = board.shapes.get_mut(&shape.id) {
+                saved.set_created_by(starter);
+            }
+        }
+        for link in &links {
+            if let Some(saved) = board.links.get_mut(&link.id) {
+                saved.set_created_by(starter);
+            }
+        }
+    }
     let mut out = json!({
         "shapes": out_shapes,
         "links": links.iter().map(|l| l.id.as_str()).collect::<Vec<_>>(),

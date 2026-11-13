@@ -120,6 +120,16 @@ async fn session_status_is_working_through_a_turn_and_done_when_it_stops() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn session_status_ends_a_turn_that_failed_on_an_api_error() {
+    // HOST-146: a server's sessions report `StopFailure` (SRV-103) in place of Stop.
+    let h = Harness::new();
+    let id = h.new_session("s1");
+    h.hook("UserPromptSubmit", &id, &json!({}));
+    h.hook("StopFailure", &id, &json!({ "error": "rate_limit" }));
+    assert_eq!(h.statuses(&id), vec![Done, Working, Done]);
+}
+
+#[tokio::test(start_paused = true)]
 async fn session_status_waits_for_the_user_on_a_permission_prompt_or_a_question() {
     // HOST-142, HOST-143, HOST-144, HOST-145
     let h = Harness::new();
@@ -371,6 +381,27 @@ fn hook_commands_register_every_hook_and_the_status_line_printing_nothing() {
                 .ends_with(">/dev/null 2>&1; exit 0")
         );
     }
+}
+
+#[test]
+fn a_servers_sessions_also_report_turns_that_fail() {
+    // SRV-103: StopFailure after the others, on a server only.
+    let endpoint = HookEndpoint::new();
+    endpoint.set(4000, "secret-token", Some("/tmp/hook.curlrc"));
+    let local: Value = serde_json::from_str(&endpoint.settings(false)).unwrap();
+    assert!(local["hooks"].get("StopFailure").is_none());
+    let server: Value = serde_json::from_str(&endpoint.server_settings(false)).unwrap();
+    let names: Vec<&String> = server["hooks"].as_object().unwrap().keys().collect();
+    assert_eq!(names.last().map(|n| n.as_str()), Some("StopFailure"));
+    let command = server["hooks"]["StopFailure"][0]["hooks"][0]["command"]
+        .as_str()
+        .unwrap();
+    assert!(command.contains("evt=StopFailure&sid=$NODUS_SESSION"), "{command}");
+    assert!(command.contains(r#"-K "$NODUS_HOOK_CONFIG""#));
+    // The rest is the same, byte for byte.
+    let mut without = server.clone();
+    without["hooks"].as_object_mut().unwrap().shift_remove("StopFailure");
+    assert_eq!(without, local);
 }
 
 #[test]

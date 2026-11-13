@@ -391,8 +391,9 @@ fn no_drag(child: impl IntoElement) -> gpui::Div {
 }
 
 /// The grid's New Project button (UI-186), with its menu of the other ways
-/// to add: Connect to Server…, and Show Server Projects… once there's a
-/// server (SRV-060, SRV-161).
+/// to add: Connect to Server…, Add from GitHub on <server>… for each
+/// connected server, and Show Server Projects… once there's a server
+/// (UI-308, UI-329; SRV-060, SRV-120, SRV-161).
 pub fn new_project_button(
     state: &Entity<AppState>,
     menus: &Entity<crate::components::context_menu::MenuLayer>,
@@ -406,6 +407,21 @@ pub fn new_project_button(
     let mut items = vec![MenuItem::item("Connect to Server…", Icon::Server, move |_, cx| {
         connect.update(cx, |s, cx| s.open_server_dialog(ServerDialog::Connect, cx));
     })];
+    // SRV-120: a project from one of a server's GitHub repositories.
+    for server in &state.read(cx).servers {
+        if server.state != nodus_domain::ServerState::Connected {
+            continue;
+        }
+        let (open, server_id) = (state.clone(), server.id.clone());
+        items.push(MenuItem::item(
+            format!("Add from GitHub on {}…", server.name),
+            Icon::FolderPlus,
+            move |_, cx| {
+                let server_id = server_id.clone();
+                open.update(cx, |s, cx| s.open_server_dialog(ServerDialog::Github { server_id }, cx));
+            },
+        ));
+    }
     if !state.read(cx).servers.is_empty() {
         let show = state.clone();
         items.push(MenuItem::item(

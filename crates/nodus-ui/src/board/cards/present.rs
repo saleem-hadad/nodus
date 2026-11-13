@@ -9,7 +9,9 @@
 
 use std::time::{Duration, Instant};
 
-use nodus_domain::{AgentInfo, BoardNote, FolderColor, Project, SessionCard, SessionKind, SessionStatus, js};
+use nodus_domain::{
+    AgentInfo, BoardNote, CreatedBy, FolderColor, Project, SessionCard, SessionKind, SessionStatus, SetupState, js,
+};
 
 use crate::format::{agent_status_label, by_urgency, card_title, format_duration, tilde_path};
 
@@ -58,6 +60,59 @@ pub fn rename_initial(card: &SessionCard) -> String {
         .unwrap_or_default()
 }
 
+/// CARD-054: `Started by <login>`, on a server card a member started.
+pub fn started_by(card: &SessionCard) -> Option<String> {
+    card.node.created_by().map(|login| format!("Started by {login}"))
+}
+
+/// CARD-058: `Claude account: <label>`, on a server card whose process
+/// took an account from the pool (SRV-101).
+pub fn claude_account(card: &SessionCard) -> Option<String> {
+    card.node
+        .account_label()
+        .map(|label| format!("Claude account: {label}"))
+}
+
+/// CARD-059: what the card's account did last (SRV-104): `Moved to <label>`,
+/// or that it waits for one, and whether it's the waiting.
+pub fn account_note(card: &SessionCard) -> Option<(String, bool)> {
+    let note = card.node.account_note()?;
+    let waiting = note.starts_with("Waiting");
+    Some((note, waiting))
+}
+
+/// The card's title as its tooltip shows it: who started it and the
+/// Claude account it runs on under it, on a server (CARD-054, CARD-058).
+pub fn title_tooltip(card: &SessionCard) -> String {
+    let mut text = title(card);
+    for line in [started_by(card), claude_account(card)].into_iter().flatten() {
+        text.push('\n');
+        text.push_str(&line);
+    }
+    text
+}
+
+/// CARD-034, CARD-057: the branch the footer shows: the transcript's, else
+/// the card's worktree's on a server.
+pub fn branch(card: &SessionCard) -> Option<String> {
+    card.meta
+        .as_ref()
+        .and_then(|m| m.git_branch.clone())
+        .or_else(|| card.node.worktree().map(|w| w.branch))
+}
+
+/// CARD-056: where a server card's preview opens, while something listens
+/// on its port: `http://<server's host>:<port>`.
+pub fn preview_url(card: &SessionCard, server_host: Option<&str>) -> Option<String> {
+    let port = card.node.preview_port().filter(|_| card.node.preview_live())?;
+    Some(format!("http://{}:{port}", server_host?))
+}
+
+/// NOTEUI-050: who wrote a note on a server board, for its hover.
+pub fn note_author(note: &BoardNote) -> Option<String> {
+    note.created_by().map(|login| format!("Written by {login}"))
+}
+
 /// CARD-046: the title to save, if the trimmed value changed.
 pub fn rename_commit(value: &str, initial: &str) -> Option<String> {
     let v = js::trim(value);
@@ -80,11 +135,28 @@ pub struct Preview {
 }
 
 /// CARD-026: a terminal's folder, Claude's last reply, the first prompt, or
-/// `No messages yet`.
+/// `No messages yet`. On a server, while its worktree is set up, `Setting
+/// up…` and the setup's last line, or why it failed (CARD-055).
 pub fn preview(card: &SessionCard, repo_path: Option<&str>) -> Preview {
-    if is_terminal(card) {
+    if let Some(setup) = card.node.setup() {
+        let line = setup.line.trim();
+        let text = match setup.state {
+            SetupState::Running if line.is_empty() => "Setting up…".to_owned(),
+            SetupState::Running => format!("Setting up… {line}"),
+            SetupState::Failed if line.is_empty() => "Setup failed".to_owned(),
+            SetupState::Failed => format!("Setup failed: {line}"),
+        };
         return Preview {
-            text: repo_path.filter(|p| !p.is_empty()).map(tilde_path).unwrap_or_default(),
+            text,
+            kind: PreviewKind::Empty,
+        };
+    }
+    if is_terminal(card) {
+        // A server card's own folder is its worktree (CARD-057).
+        let worktree = card.node.worktree().map(|w| w.path);
+        let folder = worktree.as_deref().or(repo_path.filter(|p| !p.is_empty()));
+        return Preview {
+            text: folder.map(tilde_path).unwrap_or_default(),
             kind: PreviewKind::Path,
         };
     }
@@ -952,6 +1024,60 @@ mod tests {
             "toolCount": 0, "startedAt": started, "updatedAt": started + 5000.0
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn card_054_to_057_a_server_cards_starter_setup_branch_and_preview() {
+        use serde_json::json;
+        let local = card(&json!({ "title": "Fix it" }));
+        assert_eq!(started_by(&local), None);
+        assert_eq!(title_tooltip(&local), "Fix it");
+        assert_eq!(branch(&local), None);
+        let server = card(&json!({
+            "title": "Fix it", "createdBy": "alice", "kind": "terminal",
+            "worktree": { "path": "/home/nodus-run/projects/shop/worktrees/abcd1234", "branch": "nodus/fix-it-abcd" },
+            "previewPort": 8100
+        }));
+        assert_eq!(started_by(&server).as_deref(), Some("Started by alice"));
+        assert_eq!(title_tooltip(&server), "Fix it\nStarted by alice");
+        assert_eq!(branch(&server).as_deref(), Some("nodus/fix-it-abcd"));
+        // CARD-057: a terminal's folder is its worktree.
+        let shown = preview(&server, Some(""));
+        assert_eq!(shown.text, "~/projects/shop/worktrees/abcd1234");
+        // CARD-056: Open preview only while something listens.
+        assert_eq!(preview_url(&server, Some("box")), None);
+        let live = card(&json!({ "previewPort": 8100, "previewLive": true }));
+        assert_eq!(preview_url(&live, Some("box")).as_deref(), Some("http://box:8100"));
+        assert_eq!(preview_url(&live, None), None);
+        // CARD-055: setting up, then what failed.
+        let setting_up = card(&json!({ "setup": { "state": "running", "line": "npm install" } }));
+        assert_eq!(preview(&setting_up, None).text, "Setting up… npm install");
+        let failed = card(&json!({ "setup": { "state": "failed", "line": "exit 1" } }));
+        assert_eq!(preview(&failed, None).text, "Setup failed: exit 1");
+        let note: BoardNote = serde_json::from_value(json!({
+            "id": "n", "text": "x", "color": "yellow", "x": 0, "y": 0, "createdAt": 1, "createdBy": "bob"
+        }))
+        .unwrap();
+        assert_eq!(note_author(&note).as_deref(), Some("Written by bob"));
+    }
+
+    #[test]
+    fn card_058_059_a_server_cards_claude_account_and_where_it_moved() {
+        use serde_json::json;
+        let local = card(&json!({ "title": "Fix it" }));
+        assert_eq!((claude_account(&local), account_note(&local)), (None, None));
+        let moved = card(&json!({
+            "title": "Fix it", "createdBy": "alice",
+            "account": "a2", "accountLabel": "Team Max", "accountNote": "Moved to Team Max"
+        }));
+        assert_eq!(claude_account(&moved).as_deref(), Some("Claude account: Team Max"));
+        assert_eq!(
+            title_tooltip(&moved),
+            "Fix it\nStarted by alice\nClaude account: Team Max"
+        );
+        assert_eq!(account_note(&moved), Some(("Moved to Team Max".to_owned(), false)));
+        let waiting = card(&json!({ "accountNote": "Waiting for a Claude account until 14:05 UTC" }));
+        assert!(account_note(&waiting).is_some_and(|(_, waiting)| waiting));
     }
 
     #[test]

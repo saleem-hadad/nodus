@@ -87,6 +87,7 @@ impl World {
                 board_tools: Arc::new(Quiet),
                 prompt: Arc::clone(&asked) as Arc<dyn HostPrompt>,
                 launcher: Arc::new(NeverStarts),
+                server: None,
             },
         );
         Self {

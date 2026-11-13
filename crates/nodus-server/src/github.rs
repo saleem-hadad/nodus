@@ -94,6 +94,24 @@ struct InstallationJson {
     html_url: Option<String>,
 }
 
+/// One repository, as `GET /installation/repositories` lists it.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct RepoJson {
+    pub full_name: String,
+    #[serde(default)]
+    pub private: bool,
+    #[serde(default)]
+    pub default_branch: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ReposJson {
+    #[serde(default)]
+    total_count: u64,
+    #[serde(default)]
+    repositories: Vec<RepoJson>,
+}
+
 /// The App as `GET /app` says it is.
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct AppIdentity {
@@ -233,6 +251,66 @@ impl GitHub {
             return Err(failed(status, &body));
         }
         parse(body)
+    }
+
+    /// `POST /app/installations/<id>/access_tokens` as the App (SRV-080):
+    /// a token for `repositories` (names, without the owner; all the
+    /// installation reaches when none) with only `permissions`.
+    pub(crate) async fn installation_token(
+        &self,
+        key: &AppKey,
+        app_id: u64,
+        installation_id: u64,
+        repositories: Option<&[&str]>,
+        permissions: &Value,
+    ) -> Result<String, String> {
+        let jwt = key.jwt(app_id, now_secs())?;
+        let mut body = serde_json::Map::new();
+        if let Some(repositories) = repositories {
+            body.insert("repositories".into(), serde_json::json!(repositories));
+        }
+        body.insert("permissions".into(), permissions.clone());
+        let request = self
+            .http
+            .post(format!(
+                "{}/app/installations/{installation_id}/access_tokens",
+                self.api
+            ))
+            .header("Accept", "application/vnd.github+json")
+            .header("X-GitHub-Api-Version", "2022-11-28")
+            .bearer_auth(jwt)
+            .header("Content-Type", "application/json")
+            .body(Value::Object(body).to_string());
+        let (status, body) = send(request).await?;
+        if status != 201 && status != 200 {
+            return Err(failed(status, &body));
+        }
+        body.get("token")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .ok_or_else(|| "GitHub gave no token".to_owned())
+    }
+
+    /// `GET /installation/repositories`, every page, with an installation's
+    /// token: the repositories it reaches.
+    pub(crate) async fn installation_repos(&self, token: &str) -> Result<Vec<RepoJson>, String> {
+        let mut repos = Vec::new();
+        for page in 1..=50 {
+            let request = self
+                .api_get(&format!("/installation/repositories?per_page=100&page={page}"))
+                .bearer_auth(token);
+            let (status, body) = send(request).await?;
+            if status != 200 {
+                return Err(failed(status, &body));
+            }
+            let listed: ReposJson = parse(body)?;
+            let count = listed.repositories.len();
+            repos.extend(listed.repositories);
+            if count < 100 || repos.len() as u64 >= listed.total_count {
+                break;
+            }
+        }
+        Ok(repos)
     }
 
     fn api_get(&self, path: &str) -> reqwest::RequestBuilder {

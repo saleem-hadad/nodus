@@ -192,6 +192,7 @@ impl Setup {
                 board_tools: Arc::new(Tools),
                 prompt: Arc::clone(&self.prompt) as Arc<dyn HostPrompt>,
                 launcher,
+                server: None,
             },
         )
     }
@@ -999,6 +1000,7 @@ async fn a_session_runs_in_the_rust_host_and_a_relaunched_app_adopts_it() {
             board_tools: Arc::new(Tools),
             prompt: Arc::clone(&relaunched.prompt) as Arc<dyn HostPrompt>,
             launcher: Arc::new(Nothing),
+            server: None,
         },
     );
     relaunched_client.connect_host(false).await.unwrap();

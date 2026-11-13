@@ -197,12 +197,24 @@ pub fn env(board: &BoardCx, zoom: f32, window: &Window, cx: &mut App) -> Rc<Boar
         .and_then(|s| s.board.as_ref())
         .filter(|b| b.project.id == board.project_id.as_ref())
         .map(|b| b.project.repo_path.clone());
+    // CARD-056: a server project's previews open on its server.
+    let server_host = state.and_then(|s| {
+        let server_id = s
+            .projects
+            .iter()
+            .find(|p| p.id == board.project_id.as_ref())?
+            .server
+            .as_deref()?;
+        let url = &s.servers.iter().find(|server| server.id == server_id)?.url;
+        Some(server_host(url))
+    });
     let viewport = window.viewport_size();
     Rc::new(BoardEnv {
         scale: Z(zoom),
         zoom: board.zoom,
         project_id: board.project_id.to_string(),
         repo_path,
+        server_host,
         renaming: board.renaming.as_ref().map(ToString::to_string),
         archive_hot: board.archive_hot,
         stack: StackView {
@@ -225,6 +237,15 @@ pub fn env(board: &BoardCx, zoom: f32, window: &Window, cx: &mut App) -> Rc<Boar
             project_id: board.project_id.to_string(),
         })),
     })
+}
+
+/// A server's host from its address: `box` in `http://box:7420`.
+fn server_host(url: &str) -> String {
+    let rest = url.trim_start_matches("http://").trim_end_matches('/');
+    match rest.strip_prefix('[') {
+        Some(v6) => format!("[{}]", v6.split(']').next().unwrap_or("")),
+        None => rest.rsplit_once(':').map_or(rest, |(host, _)| host).to_owned(),
+    }
 }
 
 /// The expanded cards' terminals (spec 12's `CardTerminals`), the card's

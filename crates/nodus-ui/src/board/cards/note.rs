@@ -20,7 +20,7 @@ use nodus_domain::BoardNote;
 use super::icons::{CardIcon, card_icon};
 use super::paper::paper;
 use super::para::{Space, para};
-use super::present::{NOTE_MIN, Signature, SignatureTarget, can_start, note_size};
+use super::present::{self, NOTE_MIN, Signature, SignatureTarget, can_start, note_size};
 use super::resize::{Handles, resize_zones};
 use super::{BoardEnv, Resized, Shade, Shadow, anim, ui_font};
 use crate::board::nodes::NoteNode;
@@ -174,6 +174,11 @@ pub fn note(
                 "Drag a note onto the board, or click for one beside the pad".into(),
             ))
         })
+        // NOTEUI-050: on a server board, who wrote it.
+        .when_some(
+            present::note_author(note).filter(|_| !draft && !editing),
+            |d, author| d.tooltip(native_tooltip(author.into())),
+        )
         .on_hover(move |h, window, cx| {
             hs.update(cx, |s, _| *s = *h);
             window.refresh();

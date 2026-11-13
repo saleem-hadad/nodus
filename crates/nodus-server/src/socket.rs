@@ -197,7 +197,8 @@ async fn receive(
             let mut answering: Answering = if request.is_server_call() {
                 Box::pin(calls::answer(Arc::clone(server), who.clone(), request))
             } else {
-                Box::pin(dispatch::answer(server.nodus.clone(), request))
+                let member = server.auth.login_of(who);
+                Box::pin(dispatch::answer(server.nodus.clone(), member, request))
             };
             match poll_once(&mut answering) {
                 Some(result) => answer(outbox, id, result).await,
@@ -271,8 +272,8 @@ impl Forwarder {
 
     /// SRV-026: a session's output only while it's open here; its status,
     /// agents, usage and exit, a board's changes, a view's events and a
-    /// run's end only while its project is watched; the projects changing
-    /// always. The rest is the app's own (SRV-025).
+    /// run's end only while its project is watched; the projects and the
+    /// Claude accounts changing always. The rest is the app's own (SRV-025).
     fn wants(&self, event: &Event) -> bool {
         match event {
             Event::PtyData { session_id, .. } => self.open.contains(session_id),
@@ -283,7 +284,8 @@ impl Forwarder {
             Event::SummarizeProgress(progress) => self.watches_session(&progress.session_id),
             Event::BoardChanged { project_id } | Event::View { project_id, .. } => self.watched.contains(project_id),
             Event::RunFinished(run) => self.watched.contains(&run.project_id),
-            Event::ProjectsChanged => true,
+            // SRV-105: the pool is the whole server's, so every member's.
+            Event::ProjectsChanged | Event::AccountsChanged { .. } => true,
             Event::Menu(_)
             | Event::UpdateStatus(_)
             | Event::OpenCard(_)
@@ -342,7 +344,7 @@ impl Forwarder {
             cols,
             rows,
         };
-        let mut opening: Answering = Box::pin(dispatch::answer(self.server.nodus.clone(), request));
+        let mut opening: Answering = Box::pin(dispatch::answer(self.server.nodus.clone(), None, request));
         match poll_once(&mut opening) {
             // A live session answers at once, and its replay holds all it
             // sent before (HOST-119): its output already waiting here was

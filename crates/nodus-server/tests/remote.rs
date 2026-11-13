@@ -64,6 +64,12 @@ impl World {
             ),
         )
         .unwrap();
+        // SRV-101: one Claude account in the pool, so sessions can start.
+        std::fs::write(
+            world.data().join("claude-accounts.json"),
+            r#"[{"id":"seed","label":"Test","token":"test-token","addedAt":1,"state":"ok"}]"#,
+        )
+        .unwrap();
         world
     }
 
@@ -162,18 +168,23 @@ impl World {
         bare
     }
 
-    /// `project add` against the running server.
-    fn add_project(&self, target: &str) {
-        let added = self
-            .command(&["project", "add", target, "--server", &self.url(), "--token", TOKEN])
-            .output()
-            .unwrap();
-        assert!(
-            added.status.success(),
-            "{}{}",
-            String::from_utf8_lossy(&added.stdout),
-            String::from_utf8_lossy(&added.stderr)
+    /// A clone of `bare` on the server, added with `projects:add`.
+    /// Projects from GitHub are tests/github.rs's.
+    async fn add_project(&self, bare: &Path) {
+        let clone = self.root().join("projects/shop/main");
+        git(
+            &self.root(),
+            &["clone", "-q", &bare.to_string_lossy(), &clone.to_string_lossy()],
         );
+        let (client, _events) = Client::connect(&self.url(), TOKEN).await.unwrap();
+        client
+            .call(&Request::ProjectsAdd {
+                repo_path: clone.to_string_lossy().into_owned(),
+                name: Some("shop".into()),
+            })
+            .await
+            .unwrap();
+        client.close();
     }
 
     /// The app's core, headless, started and launched as the app does it,
@@ -354,7 +365,7 @@ async fn a_server_project_opens_and_runs_like_a_local_one() {
     let world = World::new();
     let server = world.serve();
     let bare = world.bare_repo("shop");
-    world.add_project(&format!("file://{}", bare.display()));
+    world.add_project(&bare).await;
 
     let app = world.app().await;
     let mut heard = Heard::new(app.subscribe());
@@ -564,7 +575,7 @@ async fn a_server_projects_files_go_through_its_server() {
     let world = World::new();
     let server = world.serve();
     let bare = world.bare_repo("shop");
-    world.add_project(&format!("file://{}", bare.display()));
+    world.add_project(&bare).await;
     let app = world.app().await;
     let mut heard = Heard::new(app.subscribe());
     let added = within(app.servers().add(&world.url(), TOKEN)).await.unwrap();

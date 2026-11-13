@@ -9,10 +9,13 @@ use nodus_wire::{CallError, Request};
 use serde::Serialize;
 use serde_json::Value;
 
-/// Answers one call. `watch` and `session:close` change only the
+/// Answers one call, made by `member` (their GitHub login; none for a
+/// development token): what they add on a board records them as its
+/// `createdBy` (SRV-183). `watch` and `session:close` change only the
 /// connection, which sees to them (SRV-026), so here they're done at once.
-pub(crate) async fn answer(nodus: Nodus, request: Request) -> Result<Value, CallError> {
+pub(crate) async fn answer(nodus: Nodus, member: Option<String>, request: Request) -> Result<Value, CallError> {
     let channel = request.name();
+    let by = nodus.by(member.as_deref());
     match request {
         Request::ProjectsList {} => give(channel, nodus.projects().list().await),
         Request::ProjectsAdd { repo_path, name } => {
@@ -66,7 +69,7 @@ pub(crate) async fn answer(nodus: Nodus, request: Request) -> Result<Value, Call
             DONE
         }
         Request::BoardSaveSection { project_id, section } => {
-            nodus.board().save_section(&project_id, &section).await;
+            by.board().save_section(&project_id, &section).await;
             DONE
         }
         Request::BoardRemoveSection { project_id, section_id } => {
@@ -78,7 +81,7 @@ pub(crate) async fn answer(nodus: Nodus, request: Request) -> Result<Value, Call
             session_ids,
         } => done(channel, nodus.board().name_section(&project_id, &session_ids).await),
         Request::BoardSaveNote { project_id, note } => {
-            nodus.board().save_note(&project_id, &note).await;
+            by.board().save_note(&project_id, &note).await;
             DONE
         }
         Request::BoardRemoveNotes { project_id, note_ids } => {
@@ -86,11 +89,11 @@ pub(crate) async fn answer(nodus: Nodus, request: Request) -> Result<Value, Call
             DONE
         }
         Request::BoardSaveInk { project_id, strokes } => {
-            nodus.board().save_ink(&project_id, &strokes).await;
+            by.board().save_ink(&project_id, &strokes).await;
             DONE
         }
         Request::BoardSaveShapes { project_id, shapes } => {
-            nodus.board().save_shapes(&project_id, &shapes).await;
+            by.board().save_shapes(&project_id, &shapes).await;
             DONE
         }
         Request::BoardRemoveShapes { project_id, ids } => {
@@ -98,7 +101,7 @@ pub(crate) async fn answer(nodus: Nodus, request: Request) -> Result<Value, Call
             DONE
         }
         Request::BoardSaveLinks { project_id, links } => {
-            nodus.board().save_links(&project_id, &links).await;
+            by.board().save_links(&project_id, &links).await;
             DONE
         }
         Request::BoardRemoveLinks { project_id, ids } => {
@@ -106,7 +109,7 @@ pub(crate) async fn answer(nodus: Nodus, request: Request) -> Result<Value, Call
             DONE
         }
 
-        Request::SessionCreate { project_id, opts } => done(channel, nodus.sessions().create(&project_id, &opts).await),
+        Request::SessionCreate { project_id, opts } => done(channel, by.sessions().create(&project_id, &opts).await),
         Request::SessionOpen {
             project_id,
             session_id,
@@ -170,7 +173,7 @@ pub(crate) async fn answer(nodus: Nodus, request: Request) -> Result<Value, Call
                 .await,
         ),
 
-        Request::ViewsCreate { project_id, opts } => done(channel, nodus.views().create(&project_id, &opts).await),
+        Request::ViewsCreate { project_id, opts } => done(channel, by.views().create(&project_id, &opts).await),
         Request::ViewsSave { project_id, patch } => done(channel, nodus.views().save(&project_id, &patch).await),
         Request::ViewsRemove { project_id, view_id } => {
             done(channel, nodus.views().remove(&project_id, &view_id).await)
@@ -208,9 +211,26 @@ pub(crate) async fn answer(nodus: Nodus, request: Request) -> Result<Value, Call
         } => done(channel, nodus.views().ask(&project_id, &view_id, &prompt).await),
         Request::ViewsBrain { project_id, view_id } => done(channel, nodus.views().brain(&project_id, &view_id).await),
 
-        Request::GitStatus { project_id } => done(channel, nodus.git().status(&project_id).await),
-        Request::GitDiff { project_id, file } => done(channel, nodus.git().diff(&project_id, &file).await),
-        Request::GitLog { project_id, limit } => done(channel, nodus.git().log(&project_id, limit).await),
+        // SRV-128: a card's own worktree when it's named.
+        Request::GitStatus { project_id, session_id } => {
+            done(channel, nodus.git_for(session_id.as_deref()).status(&project_id).await)
+        }
+        Request::GitDiff {
+            project_id,
+            file,
+            session_id,
+        } => done(
+            channel,
+            nodus.git_for(session_id.as_deref()).diff(&project_id, &file).await,
+        ),
+        Request::GitLog {
+            project_id,
+            limit,
+            session_id,
+        } => done(
+            channel,
+            nodus.git_for(session_id.as_deref()).log(&project_id, limit).await,
+        ),
 
         Request::ActionsGlobal {} => give(channel, nodus.actions().global().await),
         Request::ActionsSave { project_id, action } => done(channel, nodus.actions().save(&project_id, &action).await),
@@ -237,7 +257,13 @@ pub(crate) async fn answer(nodus: Nodus, request: Request) -> Result<Value, Call
         | Request::AuditList {}
         | Request::ServerInfo {}
         | Request::GithubInstallations {}
-        | Request::GithubReplaceKey { .. } => Err(CallError::new(channel, nodus_wire::NOT_AVAILABLE)),
+        | Request::GithubReplaceKey { .. }
+        | Request::GithubRepos {}
+        | Request::ProjectsAddGithub { .. }
+        | Request::AccountsList {}
+        | Request::AccountsAdd { .. }
+        | Request::AccountsRename { .. }
+        | Request::AccountsRemove { .. } => Err(CallError::new(channel, nodus_wire::NOT_AVAILABLE)),
     }
 }
 

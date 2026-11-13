@@ -40,6 +40,9 @@ pub enum ServerDialog {
     Connect,
     /// Show Server Projects…: one server's projects, or every server's.
     Projects { server_id: Option<String> },
+    /// Add from GitHub on <server>…: the repositories its GitHub App
+    /// reaches, to add one as a project (SRV-120).
+    Github { server_id: String },
 }
 
 /// How long a toast stays (UI-251).
@@ -76,6 +79,9 @@ pub struct AppState {
     /// The Nodus servers this app connects to, with how each is doing
     /// (SRV-160); empty for local Nodus.
     pub servers: Vec<ServerInfo>,
+    /// How many times each server's pool of Claude accounts has changed
+    /// (`accounts-changed`, SRV-105), for whatever shows it to ask again.
+    pub accounts_changed: std::collections::HashMap<String, u64>,
     /// The server dialog that's up, if any.
     pub server_dialog: Option<ServerDialog>,
 
@@ -137,6 +143,7 @@ impl AppState {
             global_actions: Vec::new(),
             projects_loaded: false,
             servers: Vec::new(),
+            accounts_changed: std::collections::HashMap::new(),
             server_dialog: None,
             board: None,
             board_loading: false,
@@ -198,6 +205,10 @@ impl AppState {
             Event::ProjectsChanged => self.refresh_projects(cx).detach(),
             Event::ServerStatus { server_id, state } => self.server_status(&server_id, state, cx),
             Event::ServerNotice { message, .. } => self.server_notice(message, cx),
+            Event::AccountsChanged { server_id } => {
+                *self.accounts_changed.entry(server_id).or_default() += 1;
+                cx.notify();
+            }
             Event::Menu(command) => self.on_menu(command, cx),
             Event::OpenCard(request) => self.show_card(request, cx),
             Event::RunFinished(run) => cx.emit(StateEvent::RunFinished(run)),

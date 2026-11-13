@@ -139,6 +139,10 @@ pub struct NodusConfig {
     /// Where the xAI key is sealed (0.9.4's safeStorage). None for the
     /// system's: the Keychain on macOS, `Local State` and DPAPI on Windows.
     pub secrets: Option<Arc<SafeStorage>>,
+    /// What only a server gives: sessions' own tokens, git through its
+    /// GitHub App, and a worktree per card ([`crate::hosting`]). None in the
+    /// app, where none of that runs.
+    pub hosting: Option<Arc<dyn crate::Hosting>>,
 }
 
 impl NodusConfig {
@@ -160,6 +164,7 @@ impl NodusConfig {
             runner: RunnerSource::Local,
             updates: None,
             secrets: None,
+            hosting: None,
         }
     }
 }
@@ -171,6 +176,38 @@ struct NeverLaunch;
 impl HostLauncher for NeverLaunch {
     fn start(&self, _paths: &nodus_host_proto::HostPaths) -> std::io::Result<()> {
         Err(std::io::Error::other("The session host runs on its own here"))
+    }
+}
+
+/// The calls a server makes for one member ([`Nodus::by`]).
+pub struct By<'a> {
+    nodus: &'a Nodus,
+    member: Option<&'a str>,
+}
+
+impl<'a> By<'a> {
+    /// [`Nodus::board`], for the member.
+    pub fn board(&self) -> BoardApi<'a> {
+        BoardApi {
+            nodus: self.nodus,
+            by: self.member,
+        }
+    }
+
+    /// [`Nodus::sessions`], for the member.
+    pub fn sessions(&self) -> SessionsApi<'a> {
+        SessionsApi {
+            nodus: self.nodus,
+            by: self.member,
+        }
+    }
+
+    /// [`Nodus::views`], for the member.
+    pub fn views(&self) -> ViewsApi<'a> {
+        ViewsApi {
+            nodus: self.nodus,
+            by: self.member,
+        }
     }
 }
 
@@ -227,6 +264,8 @@ pub(crate) struct Inner {
     pub(crate) remotes: Remotes,
     /// `BOARD_TOOL_RULES`, as arguments.
     board_tool_rules: Vec<String>,
+    /// A server's part ([`crate::hosting`]); none in the app.
+    pub(crate) hosted: Option<crate::hosting::Hosted>,
 }
 
 impl Nodus {
@@ -318,6 +357,10 @@ impl Nodus {
                 board_tools: Arc::new(McpRelay(server)),
                 prompt: Arc::new(ShellPrompt(Arc::clone(&shell))),
                 launcher: host_launcher,
+                server: config
+                    .hosting
+                    .is_some()
+                    .then(|| Arc::new(crate::hosting::CoreServerSessions(core.clone())) as _),
             };
             let host = match &config.host {
                 HostMode::Launch => HostClient::new(&config.user_data, wiring),
@@ -349,6 +392,15 @@ impl Nodus {
                 RunnerSource::Local => Arc::new(LocalRunner),
                 RunnerSource::Host => Arc::new(HostRunner::new(host.clone())),
                 RunnerSource::Given(runner) => runner,
+            };
+            // SRV-101: on a server, Claude Code runs on the pool's accounts.
+            let runner: Arc<dyn Runner> = if config.hosting.is_some() {
+                Arc::new(crate::pool::PoolRunner {
+                    inner: runner,
+                    core: core.clone(),
+                })
+            } else {
+                runner
             };
             let updater = Updater::new(
                 Arc::new(CoreUpdaterApp(core.clone())),
@@ -382,11 +434,16 @@ impl Nodus {
                 secrets,
                 remotes: Remotes::new(&config.user_data),
                 board_tool_rules: nodus_tools::BOARD_TOOL_RULES.iter().map(|&r| r.to_owned()).collect(),
+                hosted: config.hosting.clone().map(crate::hosting::Hosted::new),
             }
         });
         config
             .runtime
             .spawn(follow_status(Arc::downgrade(&inner), status_changes));
+        // SRV-127: on a server, whether cards' previews are up.
+        if inner.hosted.is_some() {
+            config.runtime.spawn(Inner::watch_previews(Arc::downgrade(&inner)));
+        }
         let nodus = Self { inner };
         // PLAT-066 step 2: the Dock badge is recounted whenever settings are
         // applied (nothing until notifications are armed, at launch).
@@ -484,17 +541,26 @@ impl Nodus {
 
     /// `window.api.board`.
     pub fn board(&self) -> BoardApi<'_> {
-        BoardApi { nodus: self }
+        BoardApi { nodus: self, by: None }
     }
 
     /// `window.api.sessions`.
     pub fn sessions(&self) -> SessionsApi<'_> {
-        SessionsApi { nodus: self }
+        SessionsApi { nodus: self, by: None }
     }
 
     /// `window.api.views`, and the pages their frames load.
     pub fn views(&self) -> ViewsApi<'_> {
-        ViewsApi { nodus: self }
+        ViewsApi { nodus: self, by: None }
+    }
+
+    /// The calls a server makes for one of its members (SRV-183): the
+    /// cards, notes, views, shapes, links, sections and ink they add record
+    /// them as `createdBy`, and a card they start makes its commits as them
+    /// (SRV-082). With no member (a development token), the same calls as
+    /// [`Nodus::board`] and the rest make.
+    pub fn by<'a>(&'a self, member: Option<&'a str>) -> By<'a> {
+        By { nodus: self, member }
     }
 
     /// `window.api.updates`.
@@ -525,7 +591,19 @@ impl Nodus {
 
     /// `window.api.git`.
     pub fn git(&self) -> GitApi<'_> {
-        GitApi { nodus: self }
+        GitApi {
+            nodus: self,
+            session_id: None,
+        }
+    }
+
+    /// `window.api.git` for a card: on a server project, its worktree's
+    /// status, diffs and log (SRV-128); with none, the project folder's.
+    pub fn git_for<'a>(&'a self, session_id: Option<&'a str>) -> GitApi<'a> {
+        GitApi {
+            nodus: self,
+            session_id,
+        }
     }
 
     /// `window.api.actions`.
@@ -659,7 +737,29 @@ impl Inner {
     /// and the board tools go only to a host that relays them (HOST-107). A
     /// live session is left as it is, and starts of one session at once share
     /// the first (SESS-130). The error is shown as it is.
-    pub(crate) async fn spawn_session(&self, opts: SpawnOptions) -> Result<(), String> {
+    pub(crate) async fn spawn_session(&self, mut opts: SpawnOptions) -> Result<(), String> {
+        // SRV-123: a card whose worktree is being set up starts after.
+        self.wait_for_setup(&opts.session_id).await;
+        // On a server: the session's own token, git through the App, its
+        // preview port, and its worktree (SRV-122, SRV-143).
+        let mut extras = match self.session_extras(&opts.project_id, &opts.session_id).await {
+            Some((extras, cwd, token)) => {
+                if !cwd.is_empty() {
+                    opts.cwd = cwd;
+                }
+                opts.session_token = token;
+                extras
+            }
+            None => Vec::new(),
+        };
+        // The hook port is the connected host's, which the command below
+        // gets once connected: one read here, before the first connect after
+        // a start, would be 0 and win over it.
+        extras.retain(|(name, _)| name != "NODUS_PORT");
+        // SRV-101: and an account from the pool, whose token reaches the
+        // process only through this spawn.
+        extras.extend(self.take_account(&opts.project_id, &opts.session_id, opts.kind)?);
+        let server = self.hosted().is_some();
         let env = self.env().await;
         let launch_env = launch::LaunchEnv::from_env(&env);
         let powershell = hooks::uses_powershell(&env);
@@ -668,13 +768,18 @@ impl Inner {
         let spawned = self
             .host
             .spawn_session(&opts, move |opts, host| {
-                let settings = endpoint.settings(powershell);
+                // SRV-103: a server's sessions report failed turns too.
+                let settings = if server {
+                    endpoint.server_settings(powershell)
+                } else {
+                    endpoint.settings(powershell)
+                };
                 let hook_env = endpoint.env(&opts.session_id);
                 let tools = host.relays_mcp.then_some(launch::BoardTools {
                     mcp_config: nodus_tools::BOARD_MCP_CONFIG,
                     allowed_tools: &rules,
                 });
-                launch::command_for(
+                let mut command = launch::command_for(
                     opts,
                     &launch_env,
                     launch::Hooks {
@@ -683,7 +788,9 @@ impl Inner {
                     },
                     tools,
                 )
-                .map_err(|err| err.to_string())
+                .map_err(|err| err.to_string())?;
+                command.env.extend(extras);
+                Ok(command)
             })
             .await;
         match spawned {

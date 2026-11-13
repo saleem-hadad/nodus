@@ -276,7 +276,7 @@ impl CaptureHandlers for CoreCapture {
             core.env().await;
             let launcher = CoreLauncher(self.core.clone());
             core.board
-                .create_session(&project_id, &opts, &launcher)
+                .create_session(&project_id, &opts, None, &launcher)
                 .await
                 .map(|card| card.node.session_id)
                 .map_err(|err| err.to_string())

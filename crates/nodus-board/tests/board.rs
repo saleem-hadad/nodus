@@ -670,6 +670,7 @@ async fn creates_a_session_card_before_its_process_starts() {
                 "x": 1.5, "y": 2, "name": "  Fix it  ", "initialPrompt": " go ", "parents": ["a", "b"],
                 "expanded": true, "autoMode": true, "fromView": "v1"
             })),
+            None,
             &launcher,
         )
         .await
@@ -702,6 +703,7 @@ async fn creates_a_session_card_before_its_process_starts() {
         .create_session(
             "p",
             &opts(json!({ "x": 0, "y": 0, "kind": "terminal", "name": " zsh ", "parents": ["a"], "autoMode": true, "fromView": "v1" })),
+            None,
             &launcher,
         )
         .await
@@ -718,6 +720,7 @@ async fn creates_a_session_card_before_its_process_starts() {
         .create_session(
             "p",
             &opts(json!({ "x": 0, "y": 0, "parents": [], "fromView": "nope", "name": "  " })),
+            None,
             &launcher,
         )
         .await
@@ -751,6 +754,7 @@ async fn runs_an_action_by_its_name() {
             .create_session(
                 "p",
                 &opts(json!({ "x": 0, "y": 0, "actionId": id, "name": "ignored" })),
+                None,
                 &launcher,
             )
             .await
@@ -777,7 +781,11 @@ async fn runs_an_action_by_its_name() {
         json!({ "x": 0, "y": 0, "actionId": "gone" }),
         json!({ "x": 0, "y": 0, "actionId": "a1", "kind": "terminal" }),
     ] {
-        let err = f.board.create_session("p", &opts(o), &launcher).await.unwrap_err();
+        let err = f
+            .board
+            .create_session("p", &opts(o), None, &launcher)
+            .await
+            .unwrap_err();
         assert_eq!(err.to_string(), "That action no longer exists");
     }
     assert_eq!(f.board_json()["nodes"].as_object().unwrap().len(), 2);
@@ -789,7 +797,7 @@ async fn takes_the_card_off_again_when_its_process_cant_start() {
     let launcher = FakeLauncher::new(&f.store, Some("The session host stopped"));
     let err = f
         .board
-        .create_session("p", &opts(json!({ "x": 0, "y": 0 })), &launcher)
+        .create_session("p", &opts(json!({ "x": 0, "y": 0 })), None, &launcher)
         .await
         .unwrap_err();
     // SESS-118
@@ -797,7 +805,7 @@ async fn takes_the_card_off_again_when_its_process_cant_start() {
     assert!(f.board_json()["nodes"].as_object().unwrap().is_empty());
     let err = f
         .board
-        .create_session("nope", &opts(json!({ "x": 0, "y": 0 })), &launcher)
+        .create_session("nope", &opts(json!({ "x": 0, "y": 0 })), None, &launcher)
         .await
         .unwrap_err();
     assert_eq!(err.to_string(), "Unknown project nope");

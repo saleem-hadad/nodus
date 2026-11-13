@@ -60,10 +60,12 @@ mod error;
 mod feedback;
 mod git;
 mod groups;
+mod hosting;
 mod local_storage;
 mod menu;
 mod nodus;
 mod notifications;
+mod pool;
 mod projects;
 mod realpath;
 mod routing;
@@ -86,16 +88,22 @@ pub use error::{CommandError, CommandResult};
 pub use feedback::{AreaShot, FeedbackApi};
 pub use git::GitApi;
 pub use groups::GroupsApi;
+pub use hosting::{BoxFuture as HostingFuture, GitIdentity, Hosting, PREVIEW_PORTS, TokenScope, branch_name};
 pub use local_storage::LocalStorageApi;
 pub use menu::MenuApi;
-pub use nodus::{Dialogs, EnvSource, HostMode, Nodus, NodusConfig, PickFolder, QuitAtOnce, RunnerSource, SettingsHook};
+pub use nodus::{
+    By, Dialogs, EnvSource, HostMode, Nodus, NodusConfig, PickFolder, QuitAtOnce, RunnerSource, SettingsHook,
+};
 /// What the windowed app gives capture, and what it answers.
 pub use nodus_capture as capture_service;
 /// Where the xAI key is sealed; tests give a synthetic one.
 pub use nodus_platform::secrets::SafeStorage;
+/// A repository a server's GitHub App reaches (SRV-120).
+pub use nodus_remote::GithubRepo;
 /// What a mic implements and runs, for the window's mics (`VoiceApi::backend`).
 pub use nodus_voice::controller::{VoiceBackend, VoiceController};
 pub use notifications::Notifications;
+pub use pool::{AccountSession, CONTINUE, PoolAccount, TOKEN_VAR as CLAUDE_TOKEN_VAR};
 pub use projects::ProjectsApi;
 pub use servers::{ServersApi, SetupSession, SignIn};
 /// What a Nodus server says of itself and its people, as `nodus.servers()`
@@ -104,9 +112,9 @@ pub use servers::{ServersApi, SetupSession, SignIn};
 pub mod hosted {
     pub use crate::servers::{SETUP_EXPIRED, install_url};
     pub use nodus_remote::wire::{
-        AuditDevice, AuditLine, AuditMember, DEVICE_SIGNED_IN, Device, GithubApp, Hello, Installation, Member, Nonce,
-        ServerInfo as ServerDetails, SetupStatus, SetupStep, SignInStarted, TAILSCALE_TAG, TailscaleIdentity,
-        TailscaleStatus,
+        ACCOUNT_FAILED, AccountState, AuditDevice, AuditLine, AuditMember, ClaudeAccount, DEVICE_SIGNED_IN, Device,
+        GithubApp, Hello, Installation, Member, Nonce, ServerInfo as ServerDetails, SetupStatus, SetupStep,
+        SignInStarted, TAILSCALE_TAG, TailscaleIdentity, TailscaleStatus, UsageWindow,
     };
 }
 pub use sessions::SessionsApi;

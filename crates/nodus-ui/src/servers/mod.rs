@@ -2,7 +2,9 @@
 //! Server…**, which asks for an address, then sets the server up or signs
 //! in with GitHub ([`connect`]), and **Show Server Projects…**, which ticks
 //! the server's projects in or out of the grid. Both open from the grid's
-//! New Project menu and from Settings → Servers.
+//! New Project menu and from Settings → Servers. That menu also has **Add
+//! from GitHub on <server>…** (SRV-120), which clones one of the server's
+//! GitHub App's repositories as a project.
 
 mod connect;
 
@@ -16,6 +18,7 @@ use gpui::{
     IntoElement, KeyBinding, KeyDownEvent, ObjectFit, ParentElement, Render, SharedString, StatefulInteractiveElement,
     Styled, StyledImage as _, Window, actions, div, img, px,
 };
+use nodus_core::GithubRepo;
 use nodus_core::hosted::Member;
 use nodus_domain::{Project, ServerInfo, ServerState};
 
@@ -67,6 +70,20 @@ enum Listing {
     Failed(String),
 }
 
+/// A server's GitHub repositories, as Add from GitHub has them (SRV-120).
+enum Repos {
+    Loading,
+    Loaded(Vec<GithubRepo>),
+    Failed(String),
+}
+
+/// Whether a repository matches what's typed in the search: every word
+/// somewhere in its name, ignoring case.
+pub fn repo_matches(full_name: &str, query: &str) -> bool {
+    let name = full_name.to_lowercase();
+    query.split_whitespace().all(|word| name.contains(&word.to_lowercase()))
+}
+
 pub struct ServersDialog {
     state: Entity<AppState>,
     /// What had focus before, to give it back on close.
@@ -82,6 +99,9 @@ pub struct ServersDialog {
     name: Entity<InputState>,
     org: Entity<InputState>,
     invite: Entity<InputState>,
+    /// A Claude account's label and token, on the wizard's step 4.
+    account_label: Entity<InputState>,
+    account_token: Entity<InputState>,
     /// The App goes under an organization rather than the person's account.
     for_org: bool,
     /// "Let sessions change GitHub Actions workflows" (SRV-062).
@@ -94,11 +114,15 @@ pub struct ServersDialog {
     copied: bool,
     /// The members so far, on the wizard's Members step.
     members: Vec<Member>,
+    /// The Claude accounts so far, on its Claude accounts step.
+    accounts: Vec<nodus_core::hosted::ClaudeAccount>,
     /// Avatars by address: the file once fetched, none until then.
     avatars: HashMap<String, Option<PathBuf>>,
     /// Empties the invite field on the next draw, and focuses it.
     clear_invite: bool,
     focus_invite: bool,
+    /// Empties the Claude account's fields on the next draw.
+    clear_account: bool,
     /// Something is being asked of the server.
     connecting: bool,
     /// Why the last step failed, as the core said it.
@@ -109,6 +133,13 @@ pub struct ServersDialog {
     busy: HashSet<String>,
     /// Why the last link or unlink failed.
     link_error: Option<String>,
+    /// Add from GitHub's search, the repositories by server, the page that
+    /// installs the App on more, the one being added, and why adding failed.
+    search: Entity<InputState>,
+    repos: HashMap<String, Repos>,
+    install_url: HashMap<String, String>,
+    adding: Option<String>,
+    add_error: Option<String>,
     serial: usize,
 }
 
@@ -127,7 +158,18 @@ impl ServersDialog {
         let name = new_input("", "Box", false, window, cx);
         let org = new_input("", "Organization’s GitHub name", false, window, cx);
         let invite = new_input("", "octocat", false, window, cx);
-        for field in [&address, &token, &code, &name, &org, &invite] {
+        let account_label = new_input("", "Saleem’s Max", false, window, cx);
+        let account_token = new_input("", "sk-ant-oat01-…", true, window, cx);
+        for field in [
+            &address,
+            &token,
+            &code,
+            &name,
+            &org,
+            &invite,
+            &account_label,
+            &account_token,
+        ] {
             cx.subscribe_in(field, window, |this, _, e: &InputEvent, window, cx| {
                 if let InputEvent::PressEnter { .. } = e {
                     this.primary(window, cx);
@@ -136,8 +178,13 @@ impl ServersDialog {
             })
             .detach();
         }
-        if state.read(cx).server_dialog == Some(ServerDialog::Connect) {
-            focus_all(&address, window, cx);
+        let search = new_input("", "Search repositories", false, window, cx);
+        cx.subscribe_in(&search, window, |_, _, _: &InputEvent, _, cx| cx.notify())
+            .detach();
+        match state.read(cx).server_dialog {
+            Some(ServerDialog::Connect) => focus_all(&address, window, cx),
+            Some(ServerDialog::Github { .. }) => focus_all(&search, window, cx),
+            _ => {}
         }
         // Servers coming and going, and projects linked, redraw it.
         cx.observe(&state, |_, _, cx| cx.notify()).detach();
@@ -152,22 +199,93 @@ impl ServersDialog {
             name,
             org,
             invite,
+            account_label,
+            account_token,
             for_org: false,
             workflows: false,
             app_page: None,
             poll: 0,
             copied: false,
             members: Vec::new(),
+            accounts: Vec::new(),
             avatars: HashMap::new(),
             clear_invite: false,
             focus_invite: false,
+            clear_account: false,
             connecting: false,
             error: None,
             listings: HashMap::new(),
             busy: HashSet::new(),
             link_error: None,
+            search,
+            repos: HashMap::new(),
+            install_url: HashMap::new(),
+            adding: None,
+            add_error: None,
             serial: 1,
         }
+    }
+
+    /// SRV-120: asks the server for its repositories once, and where the
+    /// App is installed on more.
+    fn load_repos(&mut self, server_id: &str, cx: &mut Context<'_, Self>) {
+        if self.repos.contains_key(server_id) {
+            return;
+        }
+        self.repos.insert(server_id.to_owned(), Repos::Loading);
+        let nodus = self.state.read(cx).nodus.clone();
+        let id = server_id.to_owned();
+        cx.spawn(async move |this, cx| {
+            let listed = nodus.servers().github_repos(&id).await;
+            let install = nodus.servers().github_install_url(&id).await;
+            let _ = this.update(cx, |this, cx| {
+                let repos = match listed {
+                    Ok(repos) => Repos::Loaded(repos),
+                    Err(err) => Repos::Failed(err.message),
+                };
+                this.repos.insert(id.clone(), repos);
+                if let Ok(Some(url)) = install {
+                    this.install_url.insert(id, url);
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// SRV-120: clones the repository on the server, puts it in the grid,
+    /// and opens its board.
+    fn add_repo(&mut self, server_id: String, full_name: String, cx: &mut Context<'_, Self>) {
+        if self.adding.is_some() {
+            return;
+        }
+        self.adding = Some(full_name.clone());
+        self.add_error = None;
+        cx.notify();
+        let nodus = self.state.read(cx).nodus.clone();
+        cx.spawn(async move |this, cx| {
+            let added = nodus.servers().add_from_github(&server_id, &full_name).await;
+            let _ = this.update(cx, |this, cx| {
+                this.adding = None;
+                match added {
+                    Ok(project) => {
+                        this.close(cx);
+                        this.state.update(cx, |s, cx| {
+                            let refresh = s.refresh_projects(cx);
+                            let id = project.id;
+                            cx.spawn(async move |state, cx| {
+                                refresh.await;
+                                let _ = state.update(cx, |s, cx| s.navigate(crate::state::Route::Board(id), cx));
+                            })
+                            .detach();
+                        });
+                    }
+                    Err(err) => this.add_error = Some(err.message),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     fn close(&mut self, cx: &mut Context<'_, Self>) {
@@ -272,9 +390,13 @@ impl ServersDialog {
         .detach();
     }
 
-    /// Tab: the step's next field, round again after its last.
+    /// Tab: the step's next field, round again after its last; Add from
+    /// GitHub has only its search.
     fn focus_next(&mut self, back: bool, window: &mut Window, cx: &mut Context<'_, Self>) {
-        let fields = self.fields();
+        let fields = match self.state.read(cx).server_dialog {
+            Some(ServerDialog::Github { .. }) => vec![self.search.clone()],
+            _ => self.fields(),
+        };
         if fields.is_empty() {
             return;
         }
@@ -320,6 +442,7 @@ impl Render for ServersDialog {
             Some(ServerDialog::Projects { server_id }) => {
                 (480., self.render_projects(server_id.as_deref(), t, window, cx))
             }
+            Some(ServerDialog::Github { server_id }) => (520., self.render_github(&server_id, t, window, cx)),
             _ => {
                 let wide = !matches!(self.step, Step::Address | Step::Token);
                 (if wide { 480. } else { 440. }, self.render_step(t, window, cx))
@@ -537,6 +660,153 @@ impl ServersDialog {
             .into_any_element()
     }
 
+    /// Add from GitHub on <server>… (SRV-120, UI-329): its repositories,
+    /// searched, each added with a click, and a way to install the App on
+    /// more.
+    fn render_github(
+        &mut self,
+        server_id: &str,
+        t: Tokens,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> AnyElement {
+        self.load_repos(server_id, cx);
+        let server_name = self
+            .state
+            .read(cx)
+            .servers
+            .iter()
+            .find(|s| s.id == server_id)
+            .map_or_else(|| "the server".to_owned(), |s| s.name.clone());
+        let query = self.search.read(cx).value().trim().to_owned();
+        let linked: HashSet<String> = self
+            .state
+            .read(cx)
+            .projects
+            .iter()
+            .filter(|p| p.server.as_deref() == Some(server_id))
+            .map(|p| p.name.to_lowercase())
+            .collect();
+        let body: AnyElement = match self.repos.get(server_id) {
+            None | Some(Repos::Loading) => note("Loading its repositories…", t).into_any_element(),
+            Some(Repos::Failed(error)) => div()
+                .id("github-repos-error")
+                .text_color(t.status_waiting)
+                .child(error.clone())
+                .into_any_element(),
+            Some(Repos::Loaded(repos)) => {
+                let shown: Vec<&GithubRepo> = repos.iter().filter(|r| repo_matches(&r.full_name, &query)).collect();
+                if repos.is_empty() {
+                    note("The App isn’t installed on any repository yet.", t).into_any_element()
+                } else if shown.is_empty() {
+                    note("No repository matches.", t).into_any_element()
+                } else {
+                    let rows = shown.into_iter().map(|repo| {
+                        let this = cx.entity();
+                        let (server, full_name) = (server_id.to_owned(), repo.full_name.clone());
+                        let adding = self.adding.as_deref() == Some(repo.full_name.as_str());
+                        let name = repo
+                            .full_name
+                            .rsplit('/')
+                            .next()
+                            .unwrap_or(&repo.full_name)
+                            .to_lowercase();
+                        let added = linked.contains(&name);
+                        div()
+                            .id(SharedString::from(format!("github-repo-{}", repo.full_name)))
+                            .flex()
+                            .items_center()
+                            .gap(px(10.))
+                            .h(px(34.))
+                            .px(px(10.))
+                            .rounded(RADIUS_SM)
+                            .hover(|s| s.bg(t.bg_hover))
+                            .active(|s| s.bg(t.bg_pressed))
+                            .on_click(move |_, _, cx| {
+                                let (server, full_name) = (server.clone(), full_name.clone());
+                                this.update(cx, |d, cx| d.add_repo(server, full_name, cx));
+                            })
+                            .child(icon(Icon::FolderPlus, 15., 2., t.text_secondary))
+                            .child(div().flex_1().min_w_0().truncate().child(repo.full_name.clone()))
+                            .when(repo.private, |d| {
+                                d.child(div().text_size(TEXT_SM).text_color(t.text_tertiary).child("Private"))
+                            })
+                            .when(added && !adding, |d| {
+                                d.child(
+                                    div()
+                                        .text_size(TEXT_SM)
+                                        .text_color(t.text_tertiary)
+                                        .child("In your grid"),
+                                )
+                            })
+                            .when(adding, |d| {
+                                d.child(div().text_size(TEXT_SM).text_color(t.text_secondary).child("Cloning…"))
+                            })
+                    });
+                    div().flex().flex_col().gap(px(1.)).children(rows).into_any_element()
+                }
+            }
+        };
+        let install = self.install_url.get(server_id).cloned();
+        let cancel = cx.entity();
+        div()
+            .flex()
+            .flex_col()
+            .min_h_0()
+            .pt(px(22.))
+            .px(px(22.))
+            .pb(px(18.))
+            .child(heading_owned(format!("Add from GitHub on {server_name}")))
+            .child(
+                div().mt(px(6.)).mb(px(14.)).text_color(t.text_secondary).child(
+                    "Pick a repository to clone on the server. Each card you start in it gets a branch of its own.",
+                ),
+            )
+            .child(field(&self.search, window, cx, t))
+            .child(
+                div()
+                    .id("github-repos")
+                    .mt(px(10.))
+                    .flex()
+                    .flex_col()
+                    .max_h(px(320.))
+                    .overflow_y_scroll()
+                    .child(body),
+            )
+            .when_some(self.add_error.clone(), |d, error| {
+                d.child(
+                    div()
+                        .id("github-add-error")
+                        .mt(px(12.))
+                        .text_size(TEXT_SM)
+                        .line_height(px(16.8))
+                        .text_color(t.status_waiting)
+                        .child(error),
+                )
+            })
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .mt(px(18.))
+                    .when_some(install, |d, url| {
+                        d.child(button("github-install-more").label("Install on more repos").on_click(
+                            move |_, _, _| {
+                                nodus_platform::shell::open_external(&url);
+                            },
+                        ))
+                    })
+                    .child(div().flex_1())
+                    .child(
+                        button("github-cancel")
+                            .label("Cancel")
+                            .on_click(move |_, _, cx| cancel.update(cx, Self::close)),
+                    ),
+            )
+            .into_any_element()
+    }
+
     /// One server's projects, each with its checkbox.
     fn server_projects(
         &self,
@@ -665,7 +935,7 @@ pub(crate) fn field(state: &Entity<InputState>, window: &Window, cx: &App, t: To
 
 /// A checkbox: an accent square with a check when ticked, a hairline
 /// square when not; a spinner's place while it changes.
-fn checkbox(ticked: bool, busy: bool, t: Tokens) -> gpui::Div {
+pub(crate) fn checkbox(ticked: bool, busy: bool, t: Tokens) -> gpui::Div {
     div()
         .flex_none()
         .size(px(16.))
@@ -741,6 +1011,14 @@ mod tests {
             login: None,
             github_id: None,
         }
+    }
+
+    #[test]
+    fn finds_a_repository_by_every_word_typed() {
+        assert!(repo_matches("acme/shop-api", ""));
+        assert!(repo_matches("acme/shop-api", "SHOP"));
+        assert!(repo_matches("acme/shop-api", "acme api"));
+        assert!(!repo_matches("acme/shop-api", "acme web"));
     }
 
     #[test]

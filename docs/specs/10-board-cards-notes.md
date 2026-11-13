@@ -80,6 +80,12 @@ All values below are resolved for **light** and **dark**. The theme follows `nat
 - **CARD-051** A lineage edge (parent → merged child, both active) is a bezier stroke `--border-strong` (light `rgba(0,0,0,0.18)`, dark `rgba(255,255,255,0.18)`) 1.5px wide; while the child's status is `working` it is `--status-working` and dashed `5 5` with the dash offset animating from 10 to 0 every 0.5s linear, infinite.
 - **CARD-052** A view → session edge (session started by a view's page) is 2px, accent at 70% (light `rgba(0,122,255,0.7)`, dark `rgba(10,132,255,0.7)`), dashes `6 4`, round caps, always animated: dash offset 10 → 0 every 1s linear, infinite ("dashes marching out of the view").
 - **CARD-053** When the board moves a card (archive, restore, stack deal-out, layout), its node position glides over 420ms `cubic-bezier(0.2,0.8,0.2,1)`; a card under the pointer's drag follows directly with no glide, and no card glides while the archive or a section is being dragged.
+- **CARD-054** On a server board, a card a member started (`createdBy`) says so: its title's tooltip is the title, a line break and `Started by <login>`, and its menu ends with a separator and a disabled `Started by <login>` row. A card with no `createdBy` (every local card) shows neither.
+- **CARD-055** While a server card's worktree is set up (`setup.state` `running`), its preview reads `Setting up…` and the setup's last line (`Setting up… <line>`), styled as `No messages yet`; once it failed, `Setup failed: <line>` (`Setup failed` with no line). This comes before a terminal's folder and before Claude's reply.
+- **CARD-056** While something listens on a server card's preview port (`previewLive`), its heading ends with an **Open preview** glyph (`AppWindowMac` 13px, stroke 2, `--accent`, tooltip `Open preview (port N)`) and its menu has `Open preview` after the open items; both open `http://<server's host>:<port>` in the browser and never open the card.
+- **CARD-057** A server card's footer shows the transcript's branch, else its worktree's branch, and a server terminal's preview shows its worktree's folder rather than the project's.
+- **CARD-058** A server card that took a Claude account from the pool (`accountLabel`, SRV-101) says which: its title's tooltip adds a line `Claude account: <label>` after `Started by <login>`, and its menu ends with a disabled `Claude account: <label>` row after `Started by`.
+- **CARD-059** A server card with an `accountNote` (SRV-104) shows it as a pill under its heading, where the `merged from` chip goes (after it when both are there, and the preview clamps to 3 lines either way): `Moved to <label>` (or `Resumed on <label>`) in `--accent` on 10% accent with an arrow, tooltip `Its turn hit its Claude account’s limit, so it carried on on another.`; `Waiting for a Claude account until <time>` in `--status-waiting` on 10% of it with a loader, tooltip `<the note>. Every Claude account on the server is at its limit; it carries on by itself once one is free.` An open card's title bar shows the same pill after its title (`Waiting for an account` there, the time in its tooltip).
 
 ### Expanded card — XCARD
 
@@ -242,6 +248,7 @@ All values below are resolved for **light** and **dark**. The theme follows `nat
 - **NOTEUI-047** A single click on the top sheet creates a new note in writing mode at the nearest free spot to (pad right + 32, pad y + 52) (clear of cards, notes, views, archive and pad), gliding there from the pad, and pans it into view; the second click of a double-click does nothing.
 - **NOTEUI-048** Right-clicking the pad or its top sheet offers only `New note` (same as NOTEUI-047) (09).
 - **NOTEUI-049** The pad and its top sheet move with the archive (ARCH-038).
+- **NOTEUI-050** On a server board, hovering a note a member wrote (`createdBy`, the member who saved it first, or the starter of the session whose board tools wrote it) shows the tooltip `Written by <login>`; never on the pad's top sheet or while writing.
 
 ## UI details
 
@@ -730,6 +737,12 @@ Cross-domain dependencies: 09 (node z-order incl. select elevation +1000, drag/d
 - [x] CARD-051 lineage edge stroke + working animation
 - [x] CARD-052 view edge dashed marching
 - [x] CARD-053 card node glide 420ms
+- [x] CARD-054 `Started by` in the title tooltip and the menu (server)
+- [x] CARD-055 `Setting up…` / `Setup failed` preview (server)
+- [x] CARD-056 Open preview glyph and menu item (server)
+- [x] CARD-057 worktree branch and folder (server)
+- [x] CARD-058 `Claude account` in the title tooltip and the menu (server)
+- [x] CARD-059 `Moved to` / `Waiting for a Claude account` pill (server)
 - [x] XCARD-001 expanded condition + default 720×480
 - [x] XCARD-002 expanded surface, clip, no drag scale
 - [x] XCARD-003 title bar 40px layout
@@ -879,4 +892,5 @@ Cross-domain dependencies: 09 (node z-order incl. select elevation +1000, drag/d
 - [x] NOTEUI-046 drop draft back → returns
 - [x] NOTEUI-047 click pad → note beside pad
 - [x] NOTEUI-048 pad menu `New note`
+- [x] NOTEUI-050 `Written by` tooltip (server)
 - [x] NOTEUI-049 pad moves with archive

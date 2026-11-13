@@ -266,6 +266,39 @@ impl Terminals {
     }
 }
 
+impl Terminals {
+    /// An exited terminal of a server session that's live again starts over
+    /// from its replay (SRV-104). A local session is only ever started by
+    /// this app, which opens its terminal as it does.
+    fn revive(&self, session_id: &str, cx: &mut Context<'_, Self>) {
+        if !self.nodus.sessions().on_server(session_id) {
+            return;
+        }
+        let project = match self.projects.lock() {
+            Ok(projects) => projects.get(session_id).cloned(),
+            Err(_) => None,
+        };
+        let Some(project) = project else { return };
+        let registry = Arc::clone(&self.registry);
+        let session = session_id.to_owned();
+        let opening = core_runtime(cx).spawn(async move {
+            let revived = registry.revive(&session, &project).await;
+            (session, revived)
+        });
+        cx.spawn(async move |this, cx| {
+            let Ok((session, revived)) = opening.await else { return };
+            if let Err(err) = revived {
+                tracing::warn!("[remote] couldn't open {session} again: {err}");
+            }
+            let _ = this.update(cx, |t, cx| {
+                t.release(&session);
+                cx.emit(TerminalsEvent::Changed(SharedString::from(session)));
+            });
+        })
+        .detach();
+    }
+}
+
 /// [`Terminals::reopen`] from anywhere; nothing when no terminal was made.
 pub fn reopen(project_ids: &[String], cx: &mut App) {
     if project_ids.is_empty() {
@@ -400,7 +433,10 @@ impl Pump {
             if touched.is_empty() {
                 continue;
             }
-            let ok = this.update(cx, |_, cx| {
+            let ok = this.update(cx, |t, cx| {
+                for id in touched.revive {
+                    t.revive(&id, cx);
+                }
                 for id in touched.output {
                     cx.emit(TerminalsEvent::Output(id.into()));
                 }
@@ -417,6 +453,15 @@ impl Pump {
     fn event(&mut self, event: Event, touched: &mut Touched) {
         let session = match &event {
             Event::PtyData { session_id, .. } | Event::PtyExit { session_id, .. } => session_id.clone(),
+            // SRV-104: a server session whose terminal here shows it exited
+            // is live again (moved to another Claude account): after the
+            // exit, in the same stream, so the terminal knows of it by now.
+            Event::Status {
+                session_id, live: true, ..
+            } if !self.held.contains_key(session_id) && self.registry.is_exited(session_id) => {
+                touched.revive(session_id.clone());
+                return;
+            }
             _ => return,
         };
         if let Some(held) = self.held.get_mut(&session) {
@@ -454,11 +499,19 @@ impl Pump {
 struct Touched {
     output: Vec<String>,
     changed: Vec<String>,
+    /// Exited terminals whose sessions are live again.
+    revive: Vec<String>,
 }
 
 impl Touched {
     fn is_empty(&self) -> bool {
-        self.output.is_empty() && self.changed.is_empty()
+        self.output.is_empty() && self.changed.is_empty() && self.revive.is_empty()
+    }
+
+    fn revive(&mut self, id: String) {
+        if !self.revive.contains(&id) {
+            self.revive.push(id);
+        }
     }
 
     fn output(&mut self, id: String) {

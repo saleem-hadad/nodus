@@ -6,7 +6,8 @@
 //! nodus-server setup-code
 //! nodus-server host <socket> <key>
 //! nodus-server host --socket <path>
-//! nodus-server project add <path or git URL> [--name <name>] [--server <address>] --token <token>
+//! nodus-server git-credential <get|store|erase|gh>
+//! gh …   (as the `gh` shim: a link to this binary named `gh`)
 //! ```
 //!
 //! - [`serve`]: the core, headless, with the environment of `<data>/env`
@@ -15,28 +16,32 @@
 //!   lists (SRV-024, SRV-025) and sending each connection the events it
 //!   asked for (SRV-026). People sign in with GitHub and use the token of
 //!   their device (SRV-040…045); `--dev-token` is for development and
-//!   tests only, and only a server on loopback takes one.
+//!   tests only, and only a server on loopback takes one. Projects come
+//!   from the GitHub App's repositories (SRV-120), and each card gets a
+//!   worktree of its own (SRV-122). Sessions run on the members' pool of
+//!   Claude accounts, moving off one that hits its limit (SRV-100…105).
 //! - `setup-code`: a fresh setup code, while the server has no member yet,
 //!   which cancels every earlier code and setup token (SRV-060).
 //! - `host`: the session host, as the app runs it (`Nodus host …`), or on
 //!   its own with `--socket` as `nodus-host.service` runs it (SRV-004), so one
 //!   binary covers both.
-//! - `project add`: adds a folder, or clones a repository and adds that,
-//!   through a running server. For development until projects come from the
-//!   GitHub App (SRV-120).
+//! - `git-credential`: git's credential helper in sessions, which asks the
+//!   server through the host (SRV-084); and the `gh` shim (SRV-083).
 
 mod app_key;
 mod audit;
 mod auth;
 mod calls;
+mod credential;
 mod data;
 mod dispatch;
 mod files;
 mod github;
+mod hosting;
 mod http;
 mod manifest;
 mod net;
-mod project;
+mod pool;
 mod serve;
 mod setup;
 mod socket;
@@ -51,7 +56,17 @@ const USAGE: &str = "Usage:
   nodus-server setup-code
   nodus-server host <socket> <key>
   nodus-server host --socket <path>
-  nodus-server project add <path or git URL> [--name <name>] [--server <address>] --token <token>";
+  nodus-server git-credential <get|store|erase|gh>";
+
+/// Runs as the program `name` says (`gh`, for the shim), else the command
+/// `args` names; gives the process's exit code.
+pub fn run(name: &str, args: &[String]) -> i32 {
+    // SRV-083: the shim is this binary, linked as `gh`.
+    if name == "gh" {
+        return credential::gh(args);
+    }
+    main(args)
+}
 
 /// Runs the command `args` names (without the program's own name), and
 /// gives the process's exit code.
@@ -71,21 +86,8 @@ pub fn main(args: &[String]) -> i32 {
         },
         Some("setup-code") if args.len() == 1 => setup::print_code(),
         Some("setup-code") => usage("setup-code takes no arguments"),
-        Some("project") if args.get(1).map(String::as_str) == Some("add") => {
-            match Flags::parse(&args[2..], &["name", "server", "token"]) {
-                Ok(flags) => match (flags.positional.as_slice(), flags.value("token")) {
-                    ([target], Some(token)) => project::add(project::AddOptions {
-                        target: target.clone(),
-                        name: flags.value("name"),
-                        server: flags.value("server"),
-                        token,
-                    }),
-                    (_, None) => usage("project add needs the server's --token"),
-                    _ => usage("project add takes one path or git URL"),
-                },
-                Err(err) => usage(&err),
-            }
-        }
+        Some("git-credential") => credential::helper(&args[1..]),
+        Some("gh") => credential::gh(&args[1..]),
         _ => usage(""),
     }
 }
@@ -176,5 +178,6 @@ mod tests {
         assert_eq!(main(&[]), 2);
         assert_eq!(main(&strings(&["serve", "now"])), 2);
         assert_eq!(main(&strings(&["project", "add", "repo"])), 2);
+        assert_eq!(main(&strings(&["git-credential", "fill"])), 2);
     }
 }

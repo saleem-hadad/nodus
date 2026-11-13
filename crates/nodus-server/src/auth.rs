@@ -159,8 +159,40 @@ impl Auth {
         }
     }
 
+    /// The GitHub login of the member a device belongs to: who made what
+    /// they add (SRV-183). None for the dev and setup tokens.
+    pub(crate) fn login_of(&self, who: &Who) -> Option<String> {
+        let Who::Device { github_id, .. } = who else {
+            return None;
+        };
+        self.member(*github_id).map(|member| member.login)
+    }
+
+    /// The GitHub App, once there is one.
+    pub(crate) fn app(&self) -> Option<AppConfig> {
+        self.lock().config.github.clone()
+    }
+
+    /// A member by their GitHub id.
+    pub(crate) fn member(&self, github_id: u64) -> Option<Member> {
+        self.lock()
+            .members
+            .iter()
+            .find(|member| member.github_id == github_id)
+            .cloned()
+    }
+
+    /// A member by their login, as a card records its starter (SRV-082).
+    pub(crate) fn member_by_login(&self, login: &str) -> Option<Member> {
+        self.lock()
+            .members
+            .iter()
+            .find(|member| member.login.eq_ignore_ascii_case(login))
+            .cloned()
+    }
+
     /// Who did it, for the audit log.
-    fn actor(&self, who: &Who) -> (Option<AuditMember>, Option<AuditDevice>) {
+    pub(crate) fn actor(&self, who: &Who) -> (Option<AuditMember>, Option<AuditDevice>) {
         let Who::Device { id, github_id } = who else {
             return (None, None);
         };
@@ -255,11 +287,11 @@ impl Auth {
         Ok(self.setup_status())
     }
 
-    /// `setup:done`: a step after step 2, finished or skipped. Steps 4 and
-    /// 5 come with the slices that set them up.
+    /// `setup:done`: a step after step 2, finished or skipped: members, or
+    /// Claude accounts (SRV-061). Step 5 comes with what sets it up.
     pub(crate) fn setup_done(&self, step: SetupStep) -> Result<SetupStatus, String> {
-        if step != SetupStep::Members {
-            return Err("Only the members step can be marked done for now".to_owned());
+        if !matches!(step, SetupStep::Members | SetupStep::Accounts) {
+            return Err("Only the members and Claude accounts steps can be marked done for now".to_owned());
         }
         {
             let mut people = self.lock();
@@ -375,7 +407,7 @@ impl Auth {
     }
 
     /// The App's key and id, to speak as it.
-    fn app_key(&self) -> Result<(AppKey, u64), String> {
+    pub(crate) fn app_key(&self) -> Result<(AppKey, u64), String> {
         let app_id = self
             .lock()
             .config
@@ -838,6 +870,14 @@ impl Auth {
     /// What every member's socket is told.
     pub(crate) fn notices(&self) -> broadcast::Receiver<Notice> {
         self.notices.subscribe()
+    }
+
+    /// Tells every member connected now, as a toast (SRV-042, SRV-103).
+    pub(crate) fn notify(&self, kind: &str, message: String) {
+        let _ = self.notices.send(Notice {
+            kind: kind.to_owned(),
+            message,
+        });
     }
 
     // ---- the files

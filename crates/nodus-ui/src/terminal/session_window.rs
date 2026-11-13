@@ -271,7 +271,8 @@ impl SessionWindow {
             .line_height(relative(1.4))
             .text_color(t.text_tertiary)
             .min_w_0()
-            .when_some(repo_path.filter(|_| shell), |d, path| {
+            // A server project's folder is on its server: no path here (SRV-163).
+            .when_some(repo_path.filter(|p| shell && !p.is_empty()), |d, path| {
                 d.child(
                     div()
                         .id("term-cwd")

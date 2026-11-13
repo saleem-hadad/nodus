@@ -33,7 +33,7 @@ use crate::components::text_field::{focus_all, input, new_input};
 use crate::components::tooltip::{TooltipPress, native_tooltip, pressable_tooltip};
 use crate::components::tween::{enter, transition};
 use crate::platform::{Platform, keys};
-use crate::projects::folder_item::{FolderItem, rename_frame};
+use crate::projects::folder_item::{FolderItem, ServerBadge, rename_frame};
 use crate::state::{AppState, Route, group_projects, sort_projects};
 use crate::theme::tokens::*;
 use crate::theme::{self, fonts, motion};
@@ -506,7 +506,8 @@ impl ProjectsView {
                 },
             ));
         }
-        {
+        // SRV-163: a server project has no folder here.
+        if project.server.is_none() {
             let state = state.clone();
             let id = id.clone();
             items.push(MenuItem::item(
@@ -589,6 +590,11 @@ impl ProjectsView {
         let selected = s.selected_id.as_deref() == Some(project.id.as_str());
         let stats = s.stats.get(&project.id).copied();
         let focus_feature = s.focus_feature();
+        // SRV-162: a server project's badge names its server.
+        let server = project.server.as_ref().map(|server_id| ServerBadge {
+            name: s.server_of(project).map_or_else(|| server_id.clone(), |server| server.name.clone()),
+            away: s.server_away(project),
+        });
         let id = SharedString::from(format!("folder-{}", project.id));
         let hovered = window.use_keyed_state((id.clone(), 0usize), cx, |_, _| false);
         let pressed = window.use_keyed_state((id.clone(), 2usize), cx, |_, _| TooltipPress::default());
@@ -633,8 +639,11 @@ impl ProjectsView {
             dimmed: lists.focusing && project.focused != Some(true),
             rename,
             pop,
+            server: server.clone(),
         }
         .render(&id.clone().into(), &hovered, window, cx);
+        // UI-232: the folder's path; a server project has none here.
+        let tip = server.as_ref().map_or_else(|| project.repo_path.clone(), ServerBadge::tooltip);
 
         let state = self.state.clone();
         let select_id = project.id.clone();
@@ -653,7 +662,7 @@ impl ProjectsView {
             .id(id)
             .relative()
             .child(item)
-            .tooltip(pressable_tooltip(project.repo_path.clone().into(), pressed.clone()))
+            .tooltip(pressable_tooltip(tip.into(), pressed.clone()))
             .capture_any_mouse_down({
                 let pressed = pressed.clone();
                 move |_, _, cx| pressed.update(cx, |p, _| p.press())

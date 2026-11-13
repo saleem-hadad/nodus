@@ -20,8 +20,8 @@ use super::agent_deck::{self, DeckHandles};
 use super::icons::{CardIcon, card_icon};
 use super::para::{font, highlight_runs, para};
 use super::present::{
-    self, PreviewKind, StackLook, agents_viewer_tooltip, deck_agents, deck_tooltip, is_expanded, is_terminal, preview,
-    rename_commit, rename_initial, running, running_status, stack_visual, status_label, time_ago, updated_at,
+    self, Preview, PreviewKind, StackLook, agents_viewer_tooltip, deck_agents, deck_tooltip, is_expanded, is_terminal,
+    preview, rename_commit, rename_initial, running, running_status, stack_visual, status_label, time_ago, updated_at,
 };
 use super::status_dot::status_dot;
 use super::sticker::sticker;
@@ -513,7 +513,8 @@ fn compact(
     // clamped to 4 (CARD-028), 3 after a chip (CARD-029), the prompt italic
     // (CARD-030), the empty one tertiary (CARD-031), a path mono 11px (CARD-032).
     let pv = preview(card, env.repo_path.as_deref());
-    let preview_el = match pv.kind {
+    let lines = if has_chip { 3 } else { 4 };
+    let text = |pv: Preview| match pv.kind {
         PreviewKind::Path => para(
             pv.text,
             font(fonts::mono(), FontWeight::NORMAL, false),
@@ -538,14 +539,89 @@ fn compact(
                 color,
             )
             .zoom(z.0)
-            .clamp(if has_chip { 3 } else { 4 })
+            .clamp(lines)
         }
     };
-    body = body.child(div().flex_none().min_h_0().opacity(content).child(preview_el));
+    let still = crate::parity::frozen(cx) || cx.reduce_motion();
+    // MOTION-030: while Claude works, a light passes through what it said
+    // last, on the ambient clock.
+    let thinking = card.status == SessionStatus::Working && !shell && !card.node.archived && !still;
+    let shimmer = thinking.then(|| anim::cycle(window, cx, anim::key(&id, "shimmer"), Duration::from_millis(1800)));
+    // MOTION-014: a new preview rises in as the old one fades up and out.
+    let (before, swap) = if still || card.node.archived {
+        (None, 1.0)
+    } else {
+        preview_swap(&id, &pv, window, cx)
+    };
+    let mut current = text(pv);
+    if let Some(phase) = shimmer {
+        current = current.shimmer(f64::from(phase), t.text_primary);
+    }
+    let rise = motion::ease_out(swap);
+    let preview_el = div()
+        .flex_none()
+        .min_h_0()
+        .opacity(content)
+        .relative()
+        .when(before.is_some(), |d| d.overflow_hidden())
+        .child(
+            div()
+                .when(swap < 1.0, |d| {
+                    d.opacity(rise).translate(px(0.), z.px(6.0 * (1.0 - rise)))
+                })
+                .child(current),
+        )
+        .children(before.map(|old| {
+            div()
+                .absolute()
+                .top_0()
+                .left_0()
+                .right_0()
+                .opacity(1.0 - rise)
+                .translate(px(0.), z.px(-6.0 * rise))
+                .child(text(old))
+        }));
+    body = body.child(preview_el);
 
     body = body.child(footer(env, card, agents, handles, content, window, cx));
     let _ = shell;
     body.into_any_element()
+}
+
+/// MOTION-014: the preview a card showed before this one and how far the
+/// new one has come in (0…1, linear over 280ms); 1 with nothing before.
+fn preview_swap(id: &str, pv: &Preview, window: &mut Window, cx: &mut App) -> (Option<Preview>, f32) {
+    const SWAP_MS: f32 = 280.0;
+    let state = window.use_keyed_state(anim::key(id, "preview-swap"), cx, |_, _| PreviewSwap {
+        shown: pv.clone(),
+        before: None,
+    });
+    let (before, t) = state.update(cx, |s, _| {
+        if s.shown != *pv {
+            s.before = Some((std::mem::replace(&mut s.shown, pv.clone()), Instant::now()));
+        }
+        match &s.before {
+            Some((old, at)) => {
+                let t = at.elapsed().as_secs_f32() * 1000.0 / SWAP_MS;
+                if t < 1.0 {
+                    (Some(old.clone()), t)
+                } else {
+                    s.before = None;
+                    (None, 1.0)
+                }
+            }
+            None => (None, 1.0),
+        }
+    });
+    if before.is_some() {
+        window.request_animation_frame();
+    }
+    (before, t)
+}
+
+struct PreviewSwap {
+    shown: Preview,
+    before: Option<(Preview, Instant)>,
 }
 
 /// A corner button: its part, icon, tooltip and action.

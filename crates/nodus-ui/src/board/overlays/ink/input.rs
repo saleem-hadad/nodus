@@ -436,7 +436,8 @@ impl BoardCanvas {
                 zoom,
             } => {
                 // SHAPE-002: a click puts one down at its usual size, centred.
-                let rect = if distance(start, end) * zoom < MIN_ARROW_PX {
+                let dragged = distance(start, end) * zoom >= MIN_ARROW_PX;
+                let rect = if !dragged {
                     let s = size_at(zoom);
                     let (w, h) = shapes::default_size(kind);
                     let (w, h) = (w * s, h * s);
@@ -451,7 +452,11 @@ impl BoardCanvas {
                 };
                 self.overlays.ink.tool = InkTool::Select;
                 self.overlays.ink.picker = None;
-                self.add_shape(kind, rect, String::new(), None, true, cx);
+                let id = self.add_shape(kind, rect, String::new(), None, true, cx);
+                // MOTION-010: one drawn corner to corner was seen as it grew.
+                if dragged {
+                    self.moments.hush(&id);
+                }
             }
             InkGesture::Link {
                 from,

@@ -1,22 +1,25 @@
 //! Nodus servers in the app (SRV-060, SRV-161, SRV-165): **Connect to
-//! Server…**, which asks for an address and the server's token, and **Show
-//! Server Projects…**, which ticks the server's projects in or out of the
-//! grid. Both open from the grid's New Project menu and from Settings →
-//! Servers.
-//!
-//! Until people sign in (slice 3), the token is the one `nodus-server serve`
-//! was given or printed.
+//! Server…**, which asks for an address, then sets the server up or signs
+//! in with GitHub ([`connect`]), and **Show Server Projects…**, which ticks
+//! the server's projects in or out of the grid. Both open from the grid's
+//! New Project menu and from Settings → Servers.
+
+mod connect;
 
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 
 use gpui::component::input::{Escape, IndentInline, InputEvent, InputState, OutdentInline};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, Context, Corners, Entity, FocusHandle, Focusable as _, FontWeight, InteractiveElement,
-    IntoElement, KeyBinding, KeyDownEvent, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled,
-    Window, actions, div, px,
+    AnyElement, App, Context, Corners, Entity, FocusHandle, Focusable as _, FontWeight, Global, InteractiveElement,
+    IntoElement, KeyBinding, KeyDownEvent, ObjectFit, ParentElement, Render, SharedString, StatefulInteractiveElement,
+    Styled, StyledImage as _, Window, actions, div, img, px,
 };
+use nodus_core::hosted::Member;
 use nodus_domain::{Project, ServerInfo, ServerState};
+
+use connect::Step;
 
 use crate::components::button::button;
 use crate::components::focus_ring::focus_ring;
@@ -69,10 +72,36 @@ pub struct ServersDialog {
     /// What had focus before, to give it back on close.
     pub previous_focus: Option<FocusHandle>,
     panel: FocusHandle,
+    /// Where Connect to Server… is.
+    step: Step,
     address: Entity<InputState>,
     token: Entity<InputState>,
+    /// The setup code, the server's name, the organization that owns its
+    /// App, and a GitHub login to invite.
+    code: Entity<InputState>,
+    name: Entity<InputState>,
+    org: Entity<InputState>,
+    invite: Entity<InputState>,
+    /// The App goes under an organization rather than the person's account.
+    for_org: bool,
+    /// "Let sessions change GitHub Actions workflows" (SRV-062).
+    workflows: bool,
+    /// GitHub's page that makes the App, once opened.
+    app_page: Option<String>,
+    /// Counts steps, so a poll of a step left behind stops.
+    poll: u64,
+    /// The sign-in code was copied.
+    copied: bool,
+    /// The members so far, on the wizard's Members step.
+    members: Vec<Member>,
+    /// Avatars by address: the file once fetched, none until then.
+    avatars: HashMap<String, Option<PathBuf>>,
+    /// Empties the invite field on the next draw, and focuses it.
+    clear_invite: bool,
+    focus_invite: bool,
+    /// Something is being asked of the server.
     connecting: bool,
-    /// Why the last connect failed, as the core said it.
+    /// Why the last step failed, as the core said it.
     error: Option<String>,
     /// Each server's projects, once asked for.
     listings: HashMap<String, Listing>,
@@ -94,10 +123,14 @@ impl ServersDialog {
         window.focus(&panel, cx);
         let address = new_input("", "nodus-box, 100.101.102.103 or 127.0.0.1:7420", false, window, cx);
         let token = new_input("", "The server’s token", true, window, cx);
-        for field in [&address, &token] {
+        let code = new_input("", "K7QM-4RXD", false, window, cx);
+        let name = new_input("", "Box", false, window, cx);
+        let org = new_input("", "Organization’s GitHub name", false, window, cx);
+        let invite = new_input("", "octocat", false, window, cx);
+        for field in [&address, &token, &code, &name, &org, &invite] {
             cx.subscribe_in(field, window, |this, _, e: &InputEvent, window, cx| {
                 if let InputEvent::PressEnter { .. } = e {
-                    this.connect(window, cx);
+                    this.primary(window, cx);
                 }
                 cx.notify();
             })
@@ -112,8 +145,22 @@ impl ServersDialog {
             state,
             previous_focus,
             panel,
+            step: Step::Address,
             address,
             token,
+            code,
+            name,
+            org,
+            invite,
+            for_org: false,
+            workflows: false,
+            app_page: None,
+            poll: 0,
+            copied: false,
+            members: Vec::new(),
+            avatars: HashMap::new(),
+            clear_invite: false,
+            focus_invite: false,
             connecting: false,
             error: None,
             listings: HashMap::new(),
@@ -225,13 +272,22 @@ impl ServersDialog {
         .detach();
     }
 
-    fn focus_next(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
-        let next = if self.address.read(cx).focus_handle(cx).is_focused(window) {
-            &self.token
-        } else {
-            &self.address
+    /// Tab: the step's next field, round again after its last.
+    fn focus_next(&mut self, back: bool, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let fields = self.fields();
+        if fields.is_empty() {
+            return;
+        }
+        let at = fields
+            .iter()
+            .position(|f| f.read(cx).focus_handle(cx).is_focused(window));
+        let next = match (at, back) {
+            (Some(0), true) | (None, true) => fields.len() - 1,
+            (Some(i), true) => i - 1,
+            (Some(i), false) if i + 1 < fields.len() => i + 1,
+            _ => 0,
         };
-        next.update(cx, |f, cx| f.focus(window, cx));
+        fields[next].update(cx, |f, cx| f.focus(window, cx));
     }
 
     fn on_key_down(&mut self, e: &KeyDownEvent, window: &mut Window, cx: &mut Context<'_, Self>) {
@@ -254,15 +310,18 @@ impl Render for ServersDialog {
             Some(ServerDialog::Projects { server_id }) => {
                 (480., self.render_projects(server_id.as_deref(), t, window, cx))
             }
-            _ => (440., self.render_connect(t, window, cx)),
+            _ => {
+                let wide = !matches!(self.step, Step::Address | Step::Token);
+                (if wide { 480. } else { 440. }, self.render_step(t, window, cx))
+            }
         };
         let next = cx.listener(|d, _: &NextField, window, cx| {
             cx.stop_propagation();
-            d.focus_next(window, cx);
+            d.focus_next(false, window, cx);
         });
         let previous = cx.listener(|d, _: &PreviousField, window, cx| {
             cx.stop_propagation();
-            d.focus_next(window, cx);
+            d.focus_next(true, window, cx);
         });
         let panel = div()
             .id("server-dialog")
@@ -277,11 +336,11 @@ impl Render for ServersDialog {
             .on_action(previous)
             .capture_action(cx.listener(|d, _: &IndentInline, window, cx| {
                 cx.stop_propagation();
-                d.focus_next(window, cx);
+                d.focus_next(false, window, cx);
             }))
             .capture_action(cx.listener(|d, _: &OutdentInline, window, cx| {
                 cx.stop_propagation();
-                d.focus_next(window, cx);
+                d.focus_next(true, window, cx);
             }))
             // Esc closes, even from a field.
             .capture_action(cx.listener(|d, _: &Escape, _, cx| {
@@ -299,18 +358,17 @@ impl Render for ServersDialog {
 }
 
 impl ServersDialog {
+    /// UI-309: the address and a development token.
     fn render_connect(&mut self, t: Tokens, window: &mut Window, cx: &mut Context<'_, Self>) -> AnyElement {
         let address = self.address.read(cx).value().trim().is_empty();
         let token = self.token.read(cx).value().trim().is_empty();
         let ready = !address && !token && !self.connecting;
         let this = cx.entity();
         let cancel = this.clone();
+        let github = this.clone();
         div()
             .flex()
             .flex_col()
-            .pt(px(22.))
-            .px(px(22.))
-            .pb(px(18.))
             .child(heading("Connect to Server"))
             .child(
                 div()
@@ -345,9 +403,18 @@ impl ServersDialog {
             .child(
                 div()
                     .flex()
-                    .justify_end()
+                    .items_center()
                     .gap(px(8.))
                     .mt(px(20.))
+                    .child(
+                        div()
+                            .id("server-use-github")
+                            .flex_1()
+                            .text_size(TEXT_SM)
+                            .text_color(t.accent)
+                            .child(div().hover(Styled::underline).child("Sign in with GitHub instead"))
+                            .on_click(move |_, window, cx| github.update(cx, |d, cx| d.go(Step::Address, window, cx))),
+                    )
                     .child(
                         button("server-connect-cancel")
                             .label("Cancel")
@@ -564,7 +631,7 @@ fn note_owned(text: String, t: Tokens) -> gpui::Div {
 
 /// A field framed as Settings frames the xAI key's: a hairline, and the
 /// focus ring in its place while it has the keyboard.
-fn field(state: &Entity<InputState>, window: &Window, cx: &App, t: Tokens) -> gpui::Div {
+pub(crate) fn field(state: &Entity<InputState>, window: &Window, cx: &App, t: Tokens) -> gpui::Div {
     let focused = state.read(cx).focus_handle(cx).is_focused(window);
     div()
         .relative()
@@ -607,6 +674,48 @@ fn checkbox(ticked: bool, busy: bool, t: Tokens) -> gpui::Div {
         .when(ticked, |d| d.child(icon(Icon::Check, 12., 3., t.text_on_accent)))
 }
 
+/// A member's avatar, round: GitHub's picture once the core has fetched it
+/// (SRV-045), their login's first letter until then.
+pub fn avatar(login: &str, file: Option<PathBuf>, size: f32, t: Tokens) -> gpui::Div {
+    let initial = login
+        .chars()
+        .next()
+        .map(|c| c.to_uppercase().to_string())
+        .unwrap_or_default();
+    div()
+        .size(px(size))
+        .flex()
+        .flex_none()
+        .items_center()
+        .justify_center()
+        .rounded_full()
+        .bg(t.bg_selected)
+        .text_size(px(size * 0.45))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(t.text_secondary)
+        .map(|d| match file {
+            Some(file) => d.child(img(file).size(px(size)).rounded_full().object_fit(ObjectFit::Cover)),
+            None => d.child(initial),
+        })
+}
+
+/// The pages a driven app was asked to open, in order (D11).
+#[derive(Default)]
+pub struct OpenedUrls(pub Vec<String>);
+
+impl Global for OpenedUrls {}
+
+/// Opens a page in the browser: GitHub's App and sign-in pages. A driven
+/// app (D11) only notes it, for the driver's `opened`, so a test never
+/// opens the person's browser.
+pub fn open_url(url: &str, cx: &mut App) {
+    if crate::shell::window::quiet() {
+        cx.default_global::<OpenedUrls>().0.push(url.to_owned());
+        return;
+    }
+    nodus_platform::shell::open_external(url);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -619,6 +728,8 @@ mod tests {
             state,
             version: version.map(Into::into),
             error: error.map(Into::into),
+            login: None,
+            github_id: None,
         }
     }
 

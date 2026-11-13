@@ -7,6 +7,7 @@
 //! then its rows render as 0.9.4 renders them before the answer arrives.
 
 pub mod preview;
+pub mod servers;
 
 use std::rc::Rc;
 
@@ -135,6 +136,8 @@ pub struct SettingsDialog {
     scroll: ScrollHandle,
     /// The section drawn last, to scroll a newly shown one to its top.
     shown: Option<Section>,
+    /// Each server's members, devices, GitHub and activity, by its id.
+    managers: Vec<(String, Entity<servers::ServerManager>)>,
     serial: usize,
 }
 
@@ -229,6 +232,7 @@ impl SettingsDialog {
             key_error: None,
             scroll: ScrollHandle::new(),
             shown: None,
+            managers: Vec::new(),
             serial: 0,
         }
     }
@@ -414,6 +418,9 @@ impl Render for SettingsDialog {
         }
         let loaded = settings.is_some();
         self.sync_server_stops(cx);
+        if section == Section::Servers {
+            self.sync_managers(window, cx);
+        }
         let key_value = self.key_field.read(cx).value().to_string();
         let key_blank = key_value.trim().is_empty();
         let stops = self.tab_stops(section, loaded, self.key_source, update_status.as_ref(), key_blank, cx);
@@ -1136,9 +1143,28 @@ impl SettingsDialog {
             .collect();
     }
 
-    /// Servers (SRV-165, basic): each server's address, version and status,
-    /// Show Projects… and Disconnect; then Connect to Server…. Members,
-    /// devices, Claude accounts and updates come in later slices.
+    /// A manager for each server, made when it's first shown (UI-323).
+    fn sync_managers(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let ids: Vec<String> = self.state.read(cx).servers.iter().map(|s| s.id.clone()).collect();
+        let mut managers = std::mem::take(&mut self.managers);
+        self.managers = ids
+            .into_iter()
+            .map(|id| match managers.iter().position(|(known, _)| *known == id) {
+                Some(at) => managers.swap_remove(at),
+                None => {
+                    let state = self.state.clone();
+                    let manager =
+                        gpui::AppContext::new(cx, |cx| servers::ServerManager::new(state, id.clone(), window, cx));
+                    (id, manager)
+                }
+            })
+            .collect();
+    }
+
+    /// Servers (SRV-165): each server's address, version, status and who
+    /// signed in, Show Projects… and Disconnect; then its members, devices,
+    /// GitHub App and recent activity (UI-323…UI-327); last, Connect to
+    /// Server…. Claude accounts and updating the server come later.
     fn servers(&self, ctx: &Ctx, cx: &mut Context<'_, Self>) -> Vec<AnyElement> {
         use crate::state::ServerDialog;
         let t = ctx.t;
@@ -1150,10 +1176,13 @@ impl SettingsDialog {
                 continue;
             };
             let status = crate::servers::status_text(server);
-            let detail = match &server.version {
+            let mut detail = match &server.version {
                 Some(version) => format!("Nodus {version} · {status}"),
                 None => status,
             };
+            if let Some(login) = &server.login {
+                detail.push_str(&format!(" · Signed in as @{login}"));
+            }
             let (show, disconnect) = (self.state.clone(), self.state.clone());
             let (show_id, disconnect_id) = (server.id.clone(), server.id.clone());
             let rows = vec![
@@ -1197,6 +1226,9 @@ impl SettingsDialog {
                 .into_any_element(),
             ];
             body.push(group(Some(&server.name), rows, i == 0, t).into_any_element());
+            if let Some((_, manager)) = self.managers.iter().find(|(id, _)| *id == server.id) {
+                body.push(manager.clone().into_any_element());
+            }
         }
         let connect = self.state.clone();
         let (title, hint) = if servers.is_empty() {

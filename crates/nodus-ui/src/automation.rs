@@ -30,6 +30,9 @@
 //! {"cmd":"window"}                                  the window's number and size
 //! {"cmd":"stub","name":"summarize","phases":["done",null],"results":[{…}]}   what summarize answers (spec 11)
 //! {"cmd":"stub","name":"pickFolder","path":"/…"}   the folder picker answers this at once
+//! {"cmd":"stub","name":"pickFile","path":"/…"}     so does Replace App Key…'s file picker
+//! {"cmd":"opened"}                                  pages the app opened in the browser (it only notes
+//!                                                  them while driven): {urls}
 //! {"cmd":"terminal","action":"open",…}                the terminal's windows (terminal::driver)
 //! {"cmd":"views"}                                   views' frames: live or snapshot, and why
 //! {"cmd":"native-click","x":500,"y":300}            a click AppKit routes (into a page, or GPUI);
@@ -199,6 +202,22 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
                 .map(std::path::PathBuf::from);
             cx.update(|cx| cx.set_global(crate::app::PickFolderStub(path)));
             Ok(Value::Null)
+        }
+        "stub" if command.get("name").and_then(Value::as_str) == Some("pickFile") => {
+            let path = command
+                .get("path")
+                .and_then(Value::as_str)
+                .map(std::path::PathBuf::from);
+            cx.update(|cx| cx.set_global(crate::settings::servers::PickFileStub(path)));
+            Ok(Value::Null)
+        }
+        "opened" => {
+            let urls = cx.update(|cx| {
+                cx.try_global::<crate::servers::OpenedUrls>()
+                    .map(|o| o.0.clone())
+                    .unwrap_or_default()
+            });
+            Ok(json!({ "urls": urls }))
         }
         // As 0.9.4's scenes replaced an IPC handler: what the merge dialog's
         // summarize answers (each source's phase; results, or none: pending).

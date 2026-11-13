@@ -15,7 +15,7 @@ use hyper::{Method, Request, Response, StatusCode};
 use nodus_wire::files::{file_id_ok, is_uuid, name_from_query, upload_ext};
 use nodus_wire::{FILES_PATH, MAX_UPLOAD, UPLOADS_PATH, Upload};
 
-use crate::auth::Who;
+use crate::auth::{SetupUse, Who};
 use crate::net::bearer;
 use crate::serve::Server;
 
@@ -31,7 +31,7 @@ pub(crate) fn handles(path: &str) -> bool {
 /// as `/api/ws` takes it. A setup token is for the wizard's first steps
 /// only (SRV-060), so it gets 403 here.
 pub(crate) async fn route(server: &Server, req: Request<Incoming>) -> Reply {
-    match bearer(req.headers()).and_then(|token| server.auth.authenticate(token)) {
+    match bearer(req.headers()).and_then(|token| server.auth.authenticate(token, SetupUse::Refuse)) {
         Some(Who::Dev | Who::Device { .. }) => {}
         Some(Who::Setup { .. }) => return status(StatusCode::FORBIDDEN),
         None => return status(StatusCode::UNAUTHORIZED),

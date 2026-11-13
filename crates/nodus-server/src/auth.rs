@@ -53,6 +53,14 @@ pub(crate) enum Who {
     Device { id: String, github_id: u64 },
 }
 
+/// Whether a route takes a setup token (SRV-060), so that using it there
+/// keeps it alive, or turns it down.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SetupUse {
+    Take,
+    Refuse,
+}
+
 /// A nonce given and not yet used, and who asked for it.
 struct NonceEntry {
     expires_at: f64,
@@ -115,8 +123,10 @@ impl Auth {
     // ---- who's asking
 
     /// Who a Bearer token is: the dev token, a device's, or a setup token
-    /// while there's no member yet. A device is seen now.
-    pub(crate) fn authenticate(&self, token: &str) -> Option<Who> {
+    /// while there's no member yet. A device is seen now. A setup token is
+    /// used, which keeps it alive another hour, only by a route that takes
+    /// one (`setup`); one that turns it down only learns that it is one.
+    pub(crate) fn authenticate(&self, token: &str, setup: SetupUse) -> Option<Who> {
         if self.dev_token.as_deref().is_some_and(|dev| same_token(token, dev)) {
             return Some(Who::Dev);
         }
@@ -140,10 +150,15 @@ impl Auth {
                 return Some(who);
             }
         }
-        let setup = Who::Setup {
-            token: token.to_owned(),
+        let good = match setup {
+            SetupUse::Take => self.still_good(&Who::Setup {
+                token: token.to_owned(),
+            }),
+            SetupUse::Refuse => self.needs_setup() && setup::peek_token(&self.data, token, now_ms()).unwrap_or(false),
         };
-        self.still_good(&setup).then_some(setup)
+        good.then(|| Who::Setup {
+            token: token.to_owned(),
+        })
     }
 
     /// Whether what a socket signed in with still holds: a setup token

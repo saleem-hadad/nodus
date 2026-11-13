@@ -25,6 +25,7 @@ use tokio_tungstenite::WebSocketStream;
 use tokio_tungstenite::tungstenite::handshake::derive_accept_key;
 use tokio_tungstenite::tungstenite::protocol::{Role, WebSocketConfig};
 
+use crate::auth::SetupUse;
 use crate::manifest;
 use crate::net::bearer;
 use crate::serve::Server;
@@ -148,7 +149,7 @@ async fn claim(server: &Arc<Server>, req: Request<Incoming>) -> Reply {
 /// `POST /api/github/setup/nonce` (SRV-022, SRV-062): with a setup or
 /// device token.
 async fn nonce(server: &Arc<Server>, req: Request<Incoming>) -> Reply {
-    let Some(who) = bearer(req.headers()).and_then(|token| server.auth.authenticate(token)) else {
+    let Some(who) = bearer(req.headers()).and_then(|token| server.auth.authenticate(token, SetupUse::Take)) else {
         return failed(401, "Sign in, or claim the setup code, first");
     };
     let asked: NonceRequest = match read_json_or_default(req).await {
@@ -162,7 +163,7 @@ async fn nonce(server: &Arc<Server>, req: Request<Incoming>) -> Reply {
 /// A device's token, or a setup token for the wizard's first steps.
 fn upgrade(server: &Arc<Server>, mut req: Request<Incoming>) -> Reply {
     // SRV-022: in the Authorization header, and nowhere else.
-    let Some(who) = bearer(req.headers()).and_then(|token| server.auth.authenticate(token)) else {
+    let Some(who) = bearer(req.headers()).and_then(|token| server.auth.authenticate(token, SetupUse::Take)) else {
         return empty(StatusCode::UNAUTHORIZED);
     };
     let Some(key) = websocket_key(req.headers()) else {

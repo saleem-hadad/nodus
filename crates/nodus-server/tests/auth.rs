@@ -1200,9 +1200,21 @@ async fn files_take_a_devices_token_but_never_a_setup_token() {
     let setup = claim_setup(&server.url, &world.setup_code()).await.unwrap().token;
     let (wizard, _) = server.connect(&setup).await;
     let _: SetupStatus = call(&wizard, Request::SetupStatus {}).await;
+    let last_used = || {
+        let file: Value =
+            serde_json::from_str(&std::fs::read_to_string(world.data().join("setup.json")).unwrap()).unwrap();
+        file["tokens"][0]["lastUsedAt"].as_f64().unwrap()
+    };
+    let used = last_used();
+    tokio::time::sleep(Duration::from_millis(20)).await;
     let refused = upload(&server.url, &setup, "a.txt", b"x").await.unwrap_err();
     assert!(matches!(refused, ConnectError::Refused(403)), "{refused:?}");
     assert_eq!(download(&server.url, &setup, "a.txt").await.unwrap().status, 403);
+    // Turned down, it isn't kept alive by trying (SRV-060)…
+    assert_eq!(last_used(), used);
+    // …but the wizard's own calls keep it so.
+    let _: SetupStatus = call(&wizard, Request::SetupStatus {}).await;
+    assert!(last_used() > used);
     drop(wizard);
 
     // A device's token keeps a file and gets it back.

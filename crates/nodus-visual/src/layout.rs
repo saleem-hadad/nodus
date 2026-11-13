@@ -22,6 +22,8 @@ pub const SMALL_SIZE: f32 = 11.0;
 const SMALL_H: f32 = 16.0;
 /// Between tick labels and the plot.
 const LABEL_GAP: f32 = 8.0;
+/// The least room between two labels side by side.
+const LABEL_SPACE: f32 = 10.0;
 /// The thickest a bar gets; the rest of its band is air.
 const BAR_MAX: f32 = 24.0;
 /// Between marks that touch: stacked segments, bars in a group, wedges.
@@ -353,8 +355,12 @@ impl Frame {
         self.x.map(v, self.plot.x, self.plot.right())
     }
 
+    /// Numbers go up the plot; categories go down it, the first on top.
     fn y(&self, v: f64) -> f32 {
-        self.y.map(v, self.plot.bottom(), self.plot.y)
+        match self.y {
+            Axis::Band(_) => self.y.map(v, self.plot.y, self.plot.bottom()),
+            Axis::Num { .. } => self.y.map(v, self.plot.bottom(), self.plot.y),
+        }
     }
 }
 
@@ -498,39 +504,33 @@ fn frame(cx: &mut Ctx<'_>, top: f32, plot_h: f32, xs: &AxisSide, ys: &AxisSide, 
         let ly = plot.bottom() + 6.0 + SMALL_H / 2.0;
         match &f.x {
             Axis::Band(cats) => {
-                let step = f.x.step(plot.x, plot.right());
-                let widths: Vec<f32> = cats
+                // Long labels cut short, then every k-th where they'd touch.
+                let room = LABEL_MAX.min(width);
+                let texts: Vec<String> = cats
                     .iter()
-                    .map(|c| cx.text_w(c, SMALL_SIZE, Weight::Regular).min(LABEL_MAX))
+                    .map(|c| cx.fit(c, SMALL_SIZE, Weight::Regular, room))
                     .collect();
-                let widest = widths.iter().copied().fold(0.0, f32::max);
-                let every = (((widest + 10.0) / step.max(0.1)).ceil() as usize).max(1);
-                let room = (step * every as f32 - 10.0).max(step - 4.0).min(LABEL_MAX);
-                for (i, c) in cats.iter().enumerate().filter(|(i, _)| i % every == 0) {
-                    let text = cx.fit(c, SMALL_SIZE, Weight::Regular, room);
-                    cx.tick(f.x(i as f64), ly, text, Anchor::Middle);
+                let xs_: Vec<f32> = (0..cats.len()).map(|i| f.x(i as f64)).collect();
+                let widths: Vec<f32> = texts
+                    .iter()
+                    .map(|t| cx.text_w(t, SMALL_SIZE, Weight::Regular))
+                    .collect();
+                let every = thin(&xs_, &widths, width);
+                for (i, text) in texts.into_iter().enumerate().step_by(every) {
+                    cx.tick(xs_[i], ly, text, Anchor::Middle);
                 }
             }
             Axis::Num { ticks, labels, .. } => {
-                // Already as many as fit; if two still touch, every other one.
+                // Already as many ticks as fit; if two labels still touch,
+                // every other one.
+                let xs_: Vec<f32> = ticks.iter().map(|&t| f.x(t)).collect();
                 let widths: Vec<f32> = labels
                     .iter()
                     .map(|l| cx.text_w(l, SMALL_SIZE, Weight::Regular))
                     .collect();
-                let mut every = 1;
-                while every < ticks.len()
-                    && !ticks
-                        .iter()
-                        .step_by(every)
-                        .zip(widths.iter().step_by(every))
-                        .collect::<Vec<_>>()
-                        .windows(2)
-                        .all(|p| f.x(*p[1].0) - f.x(*p[0].0) >= (p[0].1 + p[1].1) / 2.0 + 8.0)
-                {
-                    every += 1;
-                }
-                for (t, l) in ticks.iter().zip(labels).step_by(every) {
-                    cx.tick(f.x(*t), ly, l.clone(), Anchor::Middle);
+                let every = thin(&xs_, &widths, width);
+                for (i, l) in labels.iter().enumerate().step_by(every) {
+                    cx.tick(xs_[i], ly, l.clone(), Anchor::Middle);
                 }
             }
         }
@@ -554,6 +554,23 @@ fn frame(cx: &mut Ctx<'_>, top: f32, plot_h: f32, xs: &AxisSide, ys: &AxisSide, 
         bottom: bottom + 2.0,
         ..f
     }
+}
+
+/// How many labels to step by (1 = all of them) so the labels, centred on
+/// `xs` and kept inside `0..width` as they will be drawn, never come closer
+/// than [`LABEL_SPACE`].
+fn thin(xs: &[f32], widths: &[f32], width: f32) -> usize {
+    let span = |i: usize| {
+        let w = widths[i];
+        let left = (xs[i] - w / 2.0).clamp(0.0, (width - w).max(0.0));
+        (left, left + w)
+    };
+    (1..=xs.len().max(1))
+        .find(|&k| {
+            let spans: Vec<(f32, f32)> = (0..xs.len()).step_by(k).map(span).collect();
+            spans.windows(2).all(|p| p[1].0 - p[0].1 >= LABEL_SPACE)
+        })
+        .unwrap_or(1)
 }
 
 // -- The legend -------------------------------------------------------------------
@@ -2151,10 +2168,15 @@ mod tests {
         assert_eq!(bars[0].x, bars[1].x);
         assert!((bars[0].w / bars[1].w - 4.0).abs() < 0.05);
         assert!(bars[0].y < bars[1].y);
-        // Category labels end left of the bars.
+        // Category labels end left of their own bars, the first on top.
         let rust = texts(&s).into_iter().find(|t| t.text == "Rust").unwrap();
         assert_eq!(rust.anchor, Anchor::End);
         assert!(rust.x < bars[0].x);
+        assert!(
+            (rust.y - (bars[0].y + bars[0].h / 2.0)).abs() < 0.5,
+            "{rust:?} {:?}",
+            bars[0]
+        );
         assert!(has_text(&s, "1.2k"));
         assert_inside(&s);
     }
@@ -2318,6 +2340,27 @@ mod tests {
         );
         assert_no_overlap(&s);
         assert_inside(&s);
+    }
+
+    #[test]
+    fn labels_are_thinned_only_where_they_touch() {
+        // Short labels beside a long one all fit.
+        let values: Vec<Value> = ["unit", "integration", "e2e", "visual"]
+            .iter()
+            .map(|k| json!({"k": k, "v": 1}))
+            .collect();
+        let s = lay(
+            json!({"mark": "bar", "data": {"values": values}, "encoding": {"x": {"field": "k"}, "y": {"field": "v"}}}),
+            300.0,
+        );
+        for k in ["unit", "integration", "e2e", "visual"] {
+            assert!(has_text(&s, k), "{k}");
+        }
+        // Every k-th once they would touch, kept inside the bounds.
+        assert_eq!(thin(&[10.0, 30.0, 50.0], &[15.0, 15.0, 15.0], 100.0), 2);
+        assert_eq!(thin(&[10.0, 40.0, 70.0], &[15.0, 15.0, 15.0], 100.0), 1);
+        // The first label held inside the left edge runs into the second.
+        assert_eq!(thin(&[2.0, 30.0], &[30.0, 10.0], 100.0), 2);
     }
 
     #[test]

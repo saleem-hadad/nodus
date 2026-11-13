@@ -249,7 +249,9 @@ impl Render for ServersDialog {
         let t = theme::tokens(cx);
         let dialog = self.state.read(cx).server_dialog.clone();
         let (width, content) = match dialog {
-            Some(ServerDialog::Projects { server_id }) => (480., self.render_projects(server_id, t, window, cx)),
+            Some(ServerDialog::Projects { server_id }) => {
+                (480., self.render_projects(server_id.as_deref(), t, window, cx))
+            }
             _ => (440., self.render_connect(t, window, cx)),
         };
         let next = cx.listener(|d, _: &NextField, window, cx| {
@@ -362,7 +364,7 @@ impl ServersDialog {
 
     fn render_projects(
         &mut self,
-        server_id: Option<String>,
+        server_id: Option<&str>,
         t: Tokens,
         window: &mut Window,
         cx: &mut Context<'_, Self>,
@@ -372,7 +374,7 @@ impl ServersDialog {
             let servers: Vec<ServerInfo> = s
                 .servers
                 .iter()
-                .filter(|server| server_id.as_ref().is_none_or(|id| &server.id == id))
+                .filter(|server| server_id.is_none_or(|id| server.id == id))
                 .cloned()
                 .collect();
             let linked: HashSet<String> = s
@@ -384,7 +386,7 @@ impl ServersDialog {
             (servers, linked)
         };
         self.load(&servers, cx);
-        let title = match (&server_id, servers.first()) {
+        let title = match (server_id, servers.first()) {
             (Some(_), Some(server)) => format!("Projects on {}", server.name),
             _ => "Server Projects".to_owned(),
         };
@@ -407,7 +409,7 @@ impl ServersDialog {
                         button("server-picker-connect")
                             .label("Connect to Server…")
                             .on_click(move |_, _, cx| {
-                                state.update(cx, |s, cx| s.open_server_dialog(ServerDialog::Connect, cx))
+                                state.update(cx, |s, cx| s.open_server_dialog(ServerDialog::Connect, cx));
                             }),
                     )
                     .into_any_element(),

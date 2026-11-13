@@ -803,6 +803,7 @@ impl ProjectsView {
         let confirm_view = view.clone();
         let target_id = target.id.clone();
         let state = self.state.clone();
+        let server = target.server.is_some();
         let body = div()
             .flex()
             .flex_col()
@@ -828,13 +829,13 @@ impl ProjectsView {
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .child(format!("Remove “{}”?", target.name)),
                             )
-                            .child(
-                                div()
-                                    .mb(px(8.))
-                                    .text_color(t.text_secondary)
-                                    .child("The project and its board layout are removed from Nodus. The repository and its Claude session transcripts stay on disk, untouched."),
-                            )
-                            .child(
+                            .child(div().mb(px(8.)).text_color(t.text_secondary).child(if server {
+                                // SRV-161: only this grid's link goes.
+                                "It leaves your grid. The project, its board and its sessions stay on its server, and Show Server Projects… brings it back."
+                            } else {
+                                "The project and its board layout are removed from Nodus. The repository and its Claude session transcripts stay on disk, untouched."
+                            }))
+                            .when(!server, |d| d.child(
                                 // UI-008: the path is selectable.
                                 div()
                                     .mb(px(8.))
@@ -850,7 +851,7 @@ impl ProjectsView {
                                         window,
                                         cx,
                                     )),
-                            ),
+                            )),
                     ),
             )
             .child(

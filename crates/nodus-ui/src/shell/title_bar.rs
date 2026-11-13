@@ -413,7 +413,7 @@ pub fn new_project_button(
             Icon::Folders,
             move |_, cx| {
                 show.update(cx, |s, cx| {
-                    s.open_server_dialog(ServerDialog::Projects { server_id: None }, cx)
+                    s.open_server_dialog(ServerDialog::Projects { server_id: None }, cx);
                 });
             },
         ));

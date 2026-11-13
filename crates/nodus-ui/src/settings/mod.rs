@@ -1166,7 +1166,7 @@ impl SettingsDialog {
                             .on_click(move |_, _, cx| {
                                 let server_id = Some(show_id.clone());
                                 show.update(cx, |s, cx| {
-                                    s.open_server_dialog(ServerDialog::Projects { server_id }, cx)
+                                    s.open_server_dialog(ServerDialog::Projects { server_id }, cx);
                                 });
                             })
                             .into_any_element(),

@@ -763,6 +763,10 @@ finish() {
 		printf '\n  It listens on this machine only, until it joins Tailscale (--tailscale).\n'
 		printf '  From your computer, tunnel to it first: ssh -N -L %s:127.0.0.1:%s <you>@<this server>\n' "$PORT" "$PORT"
 	fi
+	if [ -n "$LOCAL_BINARY" ]; then
+		printf '\n  TESTING ONLY: this server runs %s, unsigned. Run the script without\n' "$LOCAL_BINARY"
+		printf '  --local-binary to put a release on it.\n'
+	fi
 	printf '\n  Logs: journalctl -u nodus -u nodus-host    Install log: %s\n' "$LOG"
 	printf '  Give this VM no cloud instance role, and add your provider'"'"'s firewall if it has one.\n\n'
 }

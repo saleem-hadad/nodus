@@ -53,6 +53,8 @@ pub(super) enum Step {
     },
     /// Wizard step 3, inviting members (UI-321).
     Members { server_id: String, name: String },
+    /// Wizard step 4, Claude accounts (UI-333).
+    Accounts { server_id: String, name: String },
     /// Set up (UI-322).
     Done { server_id: String, name: String },
 }
@@ -75,14 +77,15 @@ impl Step {
             Self::Github { .. } => Some(1),
             Self::SignIn { setup: Some(_), .. } => Some(2),
             Self::Members { .. } => Some(3),
-            Self::Done { .. } => Some(4),
+            Self::Accounts { .. } => Some(4),
+            Self::Done { .. } => Some(5),
             _ => None,
         }
     }
 }
 
 /// The wizard's steps, as its header names them.
-const WIZARD: [&str; 4] = ["Name", "GitHub", "Sign In", "Members"];
+const WIZARD: [&str; 5] = ["Name", "GitHub", "Sign In", "Members", "Claude"];
 
 impl ServersDialog {
     /// Goes to `step`: fields it shows get the keyboard, the error goes,
@@ -99,6 +102,7 @@ impl ServersDialog {
             Step::Code { .. } => Some(&self.code),
             Step::Name { .. } => Some(&self.name),
             Step::Members { .. } => Some(&self.invite),
+            Step::Accounts { .. } => Some(&self.account_label),
             _ => None,
         };
         match field {
@@ -118,6 +122,10 @@ impl ServersDialog {
             Step::Members { server_id, .. } => {
                 let server_id = server_id.clone();
                 self.load_members(server_id, cx);
+            }
+            Step::Accounts { server_id, .. } => {
+                let server_id = server_id.clone();
+                self.load_accounts(server_id, cx);
             }
             _ => {}
         }
@@ -160,6 +168,11 @@ impl ServersDialog {
                 let server_id = server_id.clone();
                 self.finish_members(server_id, window, cx);
             }
+            Step::Accounts { .. } if self.account_typed(cx) => self.add_account(cx),
+            Step::Accounts { server_id, .. } => {
+                let server_id = server_id.clone();
+                self.finish_accounts(server_id, window, cx);
+            }
             Step::Done { server_id, .. } => {
                 let server_id = server_id.clone();
                 self.state.update(cx, |s, cx| {
@@ -188,6 +201,7 @@ impl ServersDialog {
                 phase: Phase::Create, ..
             } if self.for_org => vec![self.org.clone()],
             Step::Members { .. } => vec![self.invite.clone()],
+            Step::Accounts { .. } => vec![self.account_label.clone(), self.account_token.clone()],
             _ => Vec::new(),
         }
     }
@@ -247,10 +261,18 @@ impl ServersDialog {
                     .setup_status(&server.id)
                     .await
                     .ok()
-                    .filter(|status| status.step == SetupStep::Members),
+                    .filter(|status| matches!(status.step, SetupStep::Members | SetupStep::Accounts)),
                 None => None,
             };
             let _ = this.update_in(cx, |d, window, cx| match (here, members) {
+                (Some(server), Some(status)) if status.step == SetupStep::Accounts => d.go(
+                    Step::Accounts {
+                        server_id: server.id,
+                        name: hello.name,
+                    },
+                    window,
+                    cx,
+                ),
                 (Some(server), Some(_)) => d.go(
                     Step::Members {
                         server_id: server.id,
@@ -611,7 +633,7 @@ impl ServersDialog {
         .detach();
     }
 
-    /// Step 3 is done or skipped: `setup:done members`.
+    /// Step 3 is done or skipped: `setup:done members`, then Claude accounts.
     fn finish_members(&mut self, server_id: String, window: &mut Window, cx: &mut Context<'_, Self>) {
         self.connecting = true;
         cx.notify();
@@ -619,6 +641,74 @@ impl ServersDialog {
         let name = self.server_name(cx);
         cx.spawn_in(window, async move |this, cx| {
             let done = nodus.servers().finish_step(&server_id, SetupStep::Members).await;
+            let _ = this.update_in(cx, |d, window, cx| match done {
+                Ok(_) => d.go(Step::Accounts { server_id, name }, window, cx),
+                Err(err) => d.failed(err.message, cx),
+            });
+        })
+        .detach();
+    }
+
+    fn load_accounts(&mut self, server_id: String, cx: &mut Context<'_, Self>) {
+        let nodus = self.state.read(cx).nodus.clone();
+        cx.spawn(async move |this, cx| {
+            let accounts = nodus.servers().accounts(&server_id).await;
+            let _ = this.update(cx, |d, cx| {
+                match accounts {
+                    Ok(accounts) => d.accounts = accounts,
+                    Err(err) => d.error = Some(err.message),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Whether both of a Claude account's fields hold something.
+    fn account_typed(&self, cx: &gpui::App) -> bool {
+        !self.account_label.read(cx).value().trim().is_empty() && !self.account_token.read(cx).value().trim().is_empty()
+    }
+
+    /// UI-333: adds the account, once the server has tried its token.
+    fn add_account(&mut self, cx: &mut Context<'_, Self>) {
+        let Step::Accounts { server_id, .. } = &self.step else {
+            return;
+        };
+        if !self.account_typed(cx) || self.connecting {
+            return;
+        }
+        let server_id = server_id.clone();
+        let label = self.account_label.read(cx).value().trim().to_owned();
+        let token = self.account_token.read(cx).value().trim().to_owned();
+        self.connecting = true;
+        self.error = None;
+        cx.notify();
+        let nodus = self.state.read(cx).nodus.clone();
+        cx.spawn(async move |this, cx| {
+            let added = nodus.servers().add_account(&server_id, &label, &token).await;
+            let _ = this.update(cx, |d, cx| {
+                d.connecting = false;
+                match added {
+                    Ok(account) => {
+                        d.accounts.push(account);
+                        d.clear_account = true;
+                    }
+                    Err(err) => d.error = Some(err.message),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Step 4 is done or skipped: `setup:done accounts`.
+    fn finish_accounts(&mut self, server_id: String, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.connecting = true;
+        cx.notify();
+        let nodus = self.state.read(cx).nodus.clone();
+        let name = self.server_name(cx);
+        cx.spawn_in(window, async move |this, cx| {
+            let done = nodus.servers().finish_step(&server_id, SetupStep::Accounts).await;
             let _ = this.update_in(cx, |d, window, cx| match done {
                 Ok(_) => d.go(Step::Done { server_id, name }, window, cx),
                 Err(err) => d.failed(err.message, cx),
@@ -665,6 +755,7 @@ impl ServersDialog {
             Step::Code { name, .. }
             | Step::SignIn { name, .. }
             | Step::Members { name, .. }
+            | Step::Accounts { name, .. }
             | Step::Done { name, .. } => name.clone(),
             _ => {
                 let typed = self.name.read(cx).value().trim().to_owned();
@@ -679,6 +770,13 @@ impl ServersDialog {
         if self.clear_invite {
             self.clear_invite = false;
             self.invite.update(cx, |f, cx| f.set_value("", window, cx));
+        }
+        if self.clear_account {
+            self.clear_account = false;
+            for field in [&self.account_label, &self.account_token] {
+                field.update(cx, |f, cx| f.set_value("", window, cx));
+            }
+            super::focus_all(&self.account_label, window, cx);
         }
         if self.focus_invite {
             self.focus_invite = false;
@@ -705,6 +803,10 @@ impl ServersDialog {
             Step::Members { name, .. } => {
                 let name = name.clone();
                 self.render_members(&name, t, window, cx)
+            }
+            Step::Accounts { name, .. } => {
+                let name = name.clone();
+                self.render_accounts(&name, t, window, cx)
             }
             Step::Done { name, .. } => {
                 let name = name.clone();
@@ -1164,6 +1266,101 @@ impl ServersDialog {
             .into_any_element()
     }
 
+    /// UI-333: step 4, Claude accounts.
+    fn render_accounts(
+        &mut self,
+        name: &str,
+        t: Tokens,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> AnyElement {
+        let ready = self.account_typed(cx) && !self.connecting;
+        let this = cx.entity();
+        let (add, done) = (this.clone(), this.clone());
+        let none = self.accounts.is_empty();
+        let rows = self.accounts.iter().map(|account| {
+            div()
+                .flex()
+                .items_center()
+                .gap(px(10.))
+                .h(px(32.))
+                .px(px(4.))
+                .child(icon(Icon::Check, 14., 2.5, t.status_done))
+                .child(div().font_weight(FontWeight::MEDIUM).child(account.label.clone()))
+                .when_some(account.added_by.as_ref(), |d, by| {
+                    d.child(
+                        div()
+                            .text_color(t.text_tertiary)
+                            .child(format!("added by @{}", by.login)),
+                    )
+                })
+        });
+        div()
+            .flex()
+            .flex_col()
+            .child(heading_owned("Add Claude Accounts".into()))
+            .child(intro_owned(
+                format!("Sessions on {name} run on Claude accounts members share. Each session takes the least used one, and moves to another when it hits its limit."),
+                t,
+            ))
+            .child(note(crate::settings::servers::TOKEN_HELP, t))
+            .child(div().mt(px(12.)).child(label("Label", t)))
+            .child(field(&self.account_label, window, cx, t))
+            .child(div().mt(px(10.)).child(label("Token", t)))
+            .child(
+                div()
+                    .flex()
+                    .gap(px(8.))
+                    .child(div().flex_1().child(field(&self.account_token, window, cx, t)))
+                    .child(
+                        button("server-account-add")
+                            .label(if self.connecting { "Trying…" } else { "Add" })
+                            .disabled(!ready)
+                            .on_click(move |_, _, cx| add.update(cx, ServersDialog::add_account)),
+                    ),
+            )
+            .child(self.error_line(t))
+            .child(
+                div()
+                    .id("server-accounts")
+                    .mt(px(10.))
+                    .flex()
+                    .flex_col()
+                    .max_h(px(130.))
+                    .overflow_y_scroll()
+                    .children(rows),
+            )
+            .when(none, |d| {
+                d.child(
+                    div()
+                        .mt(px(8.))
+                        .text_size(TEXT_SM)
+                        .line_height(px(16.8))
+                        .text_color(t.status_working)
+                        .child("Sessions can’t start on this server until it has a Claude account. You can add one later in Settings → Servers."),
+                )
+            })
+            .child(footer(
+                None,
+                vec![
+                    button("server-accounts-done")
+                        .primary()
+                        .label(if none { "Skip for Now" } else { "Continue" })
+                        .disabled(self.connecting)
+                        .on_click(move |_, window, cx| {
+                            done.update(cx, |d, cx| {
+                                if let Step::Accounts { server_id, .. } = &d.step {
+                                    let server_id = server_id.clone();
+                                    d.finish_accounts(server_id, window, cx);
+                                }
+                            });
+                        })
+                        .into_any_element(),
+                ],
+            ))
+            .into_any_element()
+    }
+
     fn render_done(&mut self, name: &str, t: Tokens, cx: &mut Context<'_, Self>) -> AnyElement {
         let this = cx.entity();
         div()
@@ -1182,7 +1379,7 @@ impl ServersDialog {
             )
             .child(heading_owned(format!("{name} Is Ready")))
             .child(intro(
-                "Members, devices and its GitHub App are in Settings → Servers. Claude accounts and a first project come with a later update of Nodus.",
+                "Members, devices, Claude accounts and its GitHub App are in Settings → Servers. Add a first project with Add from GitHub in the projects grid.",
                 t,
             ))
             .child(footer(

@@ -259,7 +259,11 @@ pub(crate) async fn answer(nodus: Nodus, member: Option<String>, request: Reques
         | Request::GithubInstallations {}
         | Request::GithubReplaceKey { .. }
         | Request::GithubRepos {}
-        | Request::ProjectsAddGithub { .. } => Err(CallError::new(channel, nodus_wire::NOT_AVAILABLE)),
+        | Request::ProjectsAddGithub { .. }
+        | Request::AccountsList {}
+        | Request::AccountsAdd { .. }
+        | Request::AccountsRename { .. }
+        | Request::AccountsRemove { .. } => Err(CallError::new(channel, nodus_wire::NOT_AVAILABLE)),
     }
 }
 

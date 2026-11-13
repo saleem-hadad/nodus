@@ -126,6 +126,11 @@ pub trait ServerSessions: Send + Sync {
     fn accepts(&self, session_id: &str, token: Option<&str>) -> bool;
     /// What a credential helper gets: its credential, or `{ "error": … }`.
     fn credential(&self, session_id: Option<String>, token: String, request: Value) -> BoxFuture<Value>;
+    /// A hook or status line [`ServerSessions::accepts`] took, after the
+    /// status machine has seen it: the server's pool follows a session's
+    /// usage and failed turns (SRV-102, SRV-103). Called with the client's
+    /// order held, so it only takes note.
+    fn hook(&self, _session_id: &str, _event: &str, _payload: &Value) {}
 }
 
 /// What the client needs from the rest of the app.
@@ -981,6 +986,9 @@ impl Inner {
                     return;
                 }
                 self.wiring.status.hook(&event, &session_id, &payload, None);
+                if let Some(server) = &self.wiring.server {
+                    server.hook(&session_id, &event, &payload);
+                }
                 // QUEUE-011: the main thread's turn ended.
                 if event == STOP_EVENT && !from_agent(&payload) {
                     self.type_next_queued(&session_id);

@@ -87,6 +87,14 @@ pub enum Event {
         kind: String,
         message: String,
     },
+    /// `ev:accounts-changed`: a server's pool of Claude accounts changed
+    /// (SRV-105): one was added, renamed, removed, taken, limited, freed or
+    /// failed, or its usage moved. A server sends it without `serverId`;
+    /// the app names the server it came from.
+    AccountsChanged {
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        server_id: String,
+    },
 }
 
 /// `Partial<CaptureContext>`: the parts of the context that arrived late.
@@ -200,6 +208,12 @@ mod tests {
             ),
             (Event::ProjectsChanged, r#"{"ev":"projects-changed"}"#),
             (Event::Menu(MenuCommand::Settings), r#"{"ev":"menu","p":"settings"}"#),
+            (
+                Event::AccountsChanged {
+                    server_id: String::new(),
+                },
+                r#"{"ev":"accounts-changed","p":{}}"#,
+            ),
             (
                 Event::ServerStatus {
                     server_id: "srv1".into(),

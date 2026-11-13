@@ -181,7 +181,7 @@ Rule 4 of the plan applies throughout: the Rust host and client must be **wire-c
 - HOST-135 **Process start.** When a session's process starts or is adopted, its interrupt timer is cancelled, the main thread takes the initial status, its agents are forgotten, its status is emitted with live = true, and its usage resumes (HOST-172).
 - HOST-136 **Process end.** When a session's process exits, its interrupt timer is cancelled, the main thread becomes `done`, its agents are forgotten, its status is emitted with live = false, and its usage pauses (HOST-172).
 - HOST-137 **Forget.** `forgetStatus(sessionId)` (card removed, run finished, brain stopped) drops the session's main status, last emitted pair, last hook time, agents, usage and usage key; a pending interrupt timer is left to fire harmlessly.
-- HOST-138 **Known events.** Only `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PermissionRequest`, `Notification`, `Stop`, `SessionEnd`, `SubagentStart` and `SubagentStop` drive status; `StatusLine` drives usage; any other event is ignored.
+- HOST-138 **Known events.** Only `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PermissionRequest`, `Notification`, `Stop`, `SessionEnd`, `SubagentStart` and `SubagentStop` drive status, and `StopFailure`, which only a server's sessions send (HOST-226); `StatusLine` drives usage; any other event is ignored.
 - HOST-139 **Agent hooks.** A hook whose payload has a non-empty string `agent_id` drives that agent only, and doesn't count as a main-thread hook.
 - HOST-140 **Last hook time.** Every other known hook records its time as the session's last main-thread hook time.
 - HOST-141 **Working.** `UserPromptSubmit` and `PostToolUse` set the main thread `working`.
@@ -189,7 +189,7 @@ Rule 4 of the plan applies throughout: the Rust host and client must be **wire-c
 - HOST-143 **Permission.** `PermissionRequest` sets it `waiting`.
 - HOST-144 **Notification.** `Notification` sets it `waiting` only when it is about permission (HOST-145) and no agent is waiting; otherwise it changes nothing.
 - HOST-145 **About permission.** A notification is about permission when `String(notification_type ?? '')` is `permission_prompt` or `elicitation_dialog`, or `String(message ?? '')` contains `permission` in any case.
-- HOST-146 **Stop.** `Stop` sets the main thread `done`.
+- HOST-146 **Stop.** `Stop` sets the main thread `done`, and so does `StopFailure` (a turn that ended on an API error).
 - HOST-147 **SessionStart.** `SessionStart` sets it `done` unless it is `working`.
 - HOST-148 **SessionEnd.** `SessionEnd` with `reason` `clear` sets it `done`; with any other reason it sets it `done` and emits live = false, though the process may still be running.
 - HOST-149 **Subagent events without an agent.** `SubagentStart` and `SubagentStop` without `agent_id` change no status (they only record the hook time).
@@ -234,6 +234,7 @@ Rule 4 of the plan applies throughout: the Rust host and client must be **wire-c
 - HOST-179 **PowerShell hooks.** On Windows without Git Bash each command is the PowerShell command (token from `$env:NODUS_TOKEN` in an `Authorization` header) with `"shell":"powershell"`, whether or not a config path is set.
 - HOST-180 **Settings JSON.** `hookSettings()` registers each event of HOST-138, in that order, as `[{"hooks":[{"type":"command","command":…,"timeout":5}]}]` (plus `"shell":"powershell"` after `command` for PowerShell), and the status line as `{"type":"command","command":<StatusLine command>,"padding":0}`, byte-identical to Data & formats §10.
 - HOST-181 **Settings cache.** The JSON is built once per (config path set, PowerShell) pair and reused.
+- HOST-226 **A server's hooks (hosted SRV-102, SRV-103).** A server's sessions get the settings of HOST-180 with `StopFailure` registered after `SubagentStop`, its command HOST-177's with `evt=StopFailure` (no matcher, so every `error`); the app's never do. On a server, a `StatusLine` or `StopFailure` the server takes (only with the session's own token, SESS-210) also goes, after the status machine, to its pool of Claude accounts with the account the card records: `rate_limits.five_hour` and `rate_limits.seven_day` (`used_percentage`, `resets_at` in seconds) become the account's usage; `StopFailure` with `error` `rate_limit` makes it `limited` and moves the session (03 SESS-214), and with `authentication_failed`, `account_on_hold` or `billing_error` makes it `failed`. One without the session's own token, or for another session, changes nothing.
 - HOST-182 **Silent hooks.** Every hook and status-line command prints nothing and exits 0 whatever happens (UserPromptSubmit output would reach Claude's context; an empty status line leaves the terminal its row).
 
 ### Agents (agents.ts)
@@ -1006,3 +1007,4 @@ Risks:
 - [x] HOST-223 Write path
 - [x] HOST-224 Resize and kill
 - [x] HOST-225 Quitting
+- [x] HOST-226 A server's hooks: StopFailure, and reports to the pool

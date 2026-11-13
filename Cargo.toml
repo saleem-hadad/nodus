@@ -38,6 +38,7 @@ nodus-transcripts = { path = "crates/nodus-transcripts" }
 nodus-ui = { path = "crates/nodus-ui" }
 nodus-updater = { path = "crates/nodus-updater" }
 nodus-views = { path = "crates/nodus-views" }
+nodus-visual = { path = "crates/nodus-visual" }
 nodus-voice = { path = "crates/nodus-voice" }
 nodus-wire = { path = "crates/nodus-wire" }
 

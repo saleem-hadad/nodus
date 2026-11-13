@@ -133,7 +133,7 @@ impl CapturePanel {
                     .text_size(px(12.))
                     .line_height(px(17.))
                     .text_color(t.text_secondary)
-                    .child(div().mt(px(6.)).child(who_dot(t, false, true)))
+                    .child(div().mt(px(6.)).child(who_dot(t, None)))
                     .child(div().flex_1().min_w_0().child(style::spans(
                         window,
                         &[

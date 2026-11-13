@@ -2,15 +2,15 @@
 //! its header, field, tiles and footer, the banner and the recents. The
 //! menu is in `menu.rs`, the receipt in `receipt.rs`.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use gpui::component::Sizable as _;
 use gpui::component::input::Textarea;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, Context, Div, ExternalPaths, FontWeight, InteractiveElement, IntoElement,
-    ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Transformation, Window, canvas, div, img,
-    percentage, px, relative,
+    Animation, AnimationExt as _, AnyElement, App, Context, Div, ExternalPaths, FontWeight, HighlightStyle,
+    InteractiveElement, IntoElement, ParentElement, Render, Rgba, SharedString, StatefulInteractiveElement, Styled,
+    StyledText, Transformation, Window, canvas, div, img, percentage, px, relative,
 };
 use nodus_core::capture_service::page::{self, bytes, host, kind_copy};
 use nodus_domain::{
@@ -21,6 +21,7 @@ use nodus_voice::controller::{MICROPHONE_SETTINGS_LABEL, Phase};
 use super::icons::{CapIcon, cap_icon};
 use super::panel::CapturePanel;
 use super::style::{self, Inks};
+use crate::components::ambient;
 use crate::components::folder_icon::folder_hues;
 use crate::components::icon::{Icon, icon};
 use crate::components::tooltip::native_tooltip;
@@ -28,7 +29,7 @@ use crate::components::tween::{enter, transition};
 use crate::parity;
 use crate::platform::Platform;
 use crate::theme::tokens::{DUR_FAST, DUR_MED, Tokens, inset_shadow, shadow};
-use crate::theme::{self, fonts, motion};
+use crate::theme::{self, ai, fonts, motion};
 
 /// The stage's padding (`40px 56px 64px`): the room the card's shadow takes.
 pub const STAGE_TOP: f32 = 40.0;
@@ -180,6 +181,22 @@ impl CapturePanel {
         let thinking = self.guess.guessing && self.guess.guess.is_none() && self.choice.is_none();
         let frozen = parity::frozen(cx);
         let ink = style::inks(&t);
+        // MOTION-034: a route Claude's guess puts in the header, new since
+        // the last frame, eases its words in; held still in parity shots and
+        // with reduced motion.
+        let landed = (has_text && targets_loaded && !thinking && self.choice.is_none() && self.guess.guess.is_some())
+            .then(|| route.clone());
+        if landed != self.guess_shown {
+            if landed.is_some() {
+                self.guess_epoch += 1;
+            }
+            self.guess_shown = landed.clone();
+        }
+        let reveal = (landed.is_some() && !frozen && !cx.reduce_motion()).then(|| {
+            let key = ("cap-guess-reveal", self.guess_epoch as usize);
+            let start = *window.use_keyed_state(key, cx, |_, _| Instant::now()).read(cx);
+            start.elapsed().as_secs_f64() * 1000.0
+        });
 
         // CAP-086
         let content: Vec<AnyElement> = if !has_text || !targets_loaded {
@@ -195,21 +212,7 @@ impl CapturePanel {
                 icon(Icon::ChevronDown, 14., 2., t.text_tertiary).into_any_element(),
             ]
         } else if thinking {
-            vec![
-                pulsing(
-                    "cap-thinking",
-                    1200,
-                    frozen,
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(px(8.))
-                        .text_color(t.text_secondary)
-                        .child(spinner("cap-thinking-spin", 14., t.text_secondary, frozen))
-                        .child("Working out where this goes…"),
-                )
-                .into_any_element(),
-            ]
+            vec![thinking_line(&t, frozen, window, cx).into_any_element()]
         } else {
             let mut parts: Vec<AnyElement> = vec![
                 div()
@@ -229,13 +232,15 @@ impl CapturePanel {
                     .iter()
                     .find(|s| Some(&s.session_id) == route.session_id.as_ref())
                     .map_or("a session".to_owned(), |s| s.title.clone());
+                let words = format!("Into “{title}”");
+                let phrase = Phrase::new(reveal, &[&words], cx);
                 parts.push(
-                    div()
+                    phrase
+                        .words(&words, 0, window)
                         .min_w_0()
                         .overflow_hidden()
                         .text_ellipsis()
                         .font_weight(FontWeight::SEMIBOLD)
-                        .child(SharedString::from(format!("Into “{title}”")))
                         .into_any_element(),
                 );
             } else {
@@ -244,21 +249,24 @@ impl CapturePanel {
                     CaptureKind::View => "View",
                     _ => "New session",
                 };
-                parts.push(div().font_weight(FontWeight::SEMIBOLD).child(label).into_any_element());
+                let on = if route.kind == CaptureKind::Note { "on" } else { "in" };
+                let name = project.as_ref().map(|p| p.name.clone()).unwrap_or_default();
+                // The guess's words as one phrase; the swatch isn't words.
+                let phrase = Phrase::new(reveal, &[label, on, &name], cx);
                 parts.push(
-                    div()
+                    phrase
+                        .words(label, 0, window)
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .into_any_element(),
+                );
+                parts.push(
+                    phrase
+                        .words(on, 1, window)
                         .text_color(t.text_tertiary)
-                        .child(if route.kind == CaptureKind::Note { "on" } else { "in" })
                         .into_any_element(),
                 );
                 parts.push(swatch(project.as_ref().map(|p| p.color)).into_any_element());
-                parts.push(
-                    div()
-                        .child(SharedString::from(
-                            project.as_ref().map(|p| p.name.clone()).unwrap_or_default(),
-                        ))
-                        .into_any_element(),
-                );
+                parts.push(phrase.words(&name, 2, window).into_any_element());
             }
             parts.push(icon(Icon::ChevronDown, 14., 2., t.text_tertiary).into_any_element());
             parts
@@ -303,9 +311,19 @@ impl CapturePanel {
             if self.choice.is_some() {
                 who = who.child("Your choice");
             } else {
-                who = who
-                    .child(who_dot(t, self.guess.guessing, frozen))
-                    .child("Claude's guess");
+                // MOTION-034: twinkling through Claude's colours while it
+                // thinks again; the accent dot, still, otherwise.
+                let glint = (self.guess.guessing && !frozen).then(|| {
+                    let hue = ambient::cycle(window, cx, "cap-who-hue", Duration::from_millis(3200));
+                    let tw = ambient::cycle(
+                        window,
+                        cx,
+                        "cap-who-twinkle",
+                        Duration::from_millis(ai::TWINKLE_MS as u64),
+                    );
+                    (f64::from(hue), ai::twinkle(f64::from(tw)))
+                });
+                who = who.child(who_dot(t, glint)).child("Claude's guess");
             }
             Some(who.child(kbd("Tab", t)).into_any_element())
         } else if !has_text {
@@ -317,7 +335,6 @@ impl CapturePanel {
         } else {
             None
         };
-        let _ = window;
 
         div()
             .flex()
@@ -1136,18 +1153,124 @@ fn who_row(t: &Tokens) -> Div {
         .text_color(t.text_tertiary)
 }
 
-/// `.cap-who-dot`: the accent dot, pulsing while Claude thinks.
-pub(super) fn who_dot(t: Tokens, thinking: bool, frozen: bool) -> AnyElement {
-    let d = div().flex_none().size(px(6.)).rounded_full().bg(t.accent);
-    if thinking {
-        pulsing("cap-who-dot", 900, frozen, d).into_any_element()
-    } else {
-        d.into_any_element()
+/// `.cap-who-dot`: the accent dot; while Claude thinks again, `glint`:
+/// where it is round Claude's colours (0…1) and in its twinkle (MOTION-034).
+pub(super) fn who_dot(t: Tokens, glint: Option<(f64, f32)>) -> AnyElement {
+    let d = div().flex_none().size(px(6.)).rounded_full();
+    match glint {
+        Some((hue, tw)) => ai::twinkling(d.bg(ai::hue(hue)), tw).into_any_element(),
+        None => d.bg(t.accent).into_any_element(),
+    }
+}
+
+/// CAP-086, MOTION-034: Claude working out where the capture goes: the
+/// sparkle twinkling and a light sweeping through the words, on the
+/// ambient clock. At rest in parity shots and with reduced motion.
+fn thinking_line(t: &Tokens, frozen: bool, window: &mut Window, cx: &mut App) -> Div {
+    const TEXT: &str = "Working out where this goes…";
+    let color = t.text_secondary;
+    let row = div().flex().items_center().gap(px(8.)).text_color(color);
+    if frozen || cx.reduce_motion() {
+        return row.child(ai::sparkle(14., 2., ai::SPARKLE, 0.0)).child(TEXT);
+    }
+    let sweep = f64::from(ambient::cycle(
+        window,
+        cx,
+        "cap-thinking-sweep",
+        Duration::from_millis(ai::SWEEP_MS as u64),
+    ));
+    let tw = ai::twinkle(f64::from(ambient::cycle(
+        window,
+        cx,
+        "cap-thinking-twinkle",
+        Duration::from_millis(ai::TWINKLE_MS as u64),
+    )));
+    // Faint at rest, the words' colour as the light passes (`naming-sweep`).
+    let faint = Rgba {
+        a: color.a * 0.45,
+        ..color
+    };
+    let n = TEXT.chars().count();
+    let highlights: Vec<(std::ops::Range<usize>, HighlightStyle)> = TEXT
+        .char_indices()
+        .enumerate()
+        .map(|(i, (b, ch))| {
+            let x = (i as f64 + 0.5) / n as f64;
+            let tint = ai::sweep(ai::sweep_at(x, sweep), faint, color);
+            // A highlight's colour is blended over the text's, keeping its
+            // alpha, so a fainter one can't fade it: an opaque colour faded
+            // out to the tint's alpha is the tint exactly.
+            (
+                b..b + ch.len_utf8(),
+                HighlightStyle {
+                    color: Some(Rgba { a: 1.0, ..tint }.into()),
+                    fade_out: Some(1.0 - tint.a),
+                    ..HighlightStyle::default()
+                },
+            )
+        })
+        .collect();
+    row.child(ai::sparkle(14., 2., ai::SPARKLE, tw))
+        .child(StyledText::new(TEXT).with_highlights(highlights))
+}
+
+/// MOTION-034: the words of a guess that just landed, easing in letter by
+/// letter out of a blur as one phrase across its pieces (as
+/// `theme::ai::letters` eases in one word: 460ms on `--ease-out`, 3px up
+/// and 5px of blur, staggered 28ms within 480ms). Plain words once done.
+struct Phrase {
+    /// Milliseconds since the guess landed, while its words still move.
+    elapsed: Option<f64>,
+    /// Where each piece's first letter falls in the phrase.
+    offsets: Vec<usize>,
+    step: f64,
+    dur: f64,
+}
+
+impl Phrase {
+    fn new(elapsed: Option<f64>, pieces: &[&str], cx: &App) -> Self {
+        let mut offsets = Vec::with_capacity(pieces.len());
+        let mut total = 0;
+        for piece in pieces {
+            offsets.push(total);
+            total += piece.chars().count();
+        }
+        let step = (28.0f64).min(480.0 / 1f64.max(total as f64 - 1.0));
+        let dur = motion::duration(cx, Duration::from_millis(460)).as_secs_f64() * 1000.0;
+        let last = total.saturating_sub(1) as f64 * step + dur;
+        Self {
+            elapsed: elapsed.filter(|&e| e < last),
+            offsets,
+            step,
+            dur,
+        }
+    }
+
+    /// Piece `index` of the phrase, `text`: its letters while they move,
+    /// asking for the next frame; the plain words after.
+    fn words(&self, text: &str, index: usize, window: &mut Window) -> Div {
+        let Some(elapsed) = self.elapsed else {
+            return div().child(SharedString::from(text.to_owned()));
+        };
+        window.request_animation_frame();
+        let from = self.offsets.get(index).copied().unwrap_or(0);
+        div().flex().children(text.chars().enumerate().map(|(i, ch)| {
+            let delay = ((from + i) as f64 * self.step).round();
+            let e = motion::ease_out(((elapsed - delay) / self.dur).clamp(0.0, 1.0) as f32);
+            let letter = div()
+                .flex_none()
+                .whitespace_nowrap()
+                .opacity(e)
+                .translate(px(0.), px(3.0 * (1.0 - e)));
+            let blur = 5.0 * (1.0 - e);
+            let letter = if blur > 0.05 { letter.blur(px(blur)) } else { letter };
+            letter.child(ch.to_string())
+        }))
     }
 }
 
 /// `Loader2` turning once every 0.9 s (`.cap-spin`), held still in parity mode.
-pub(super) fn spinner(id: &'static str, size: f32, color: impl Into<gpui::Rgba>, frozen: bool) -> AnyElement {
+pub(super) fn spinner(id: &'static str, size: f32, color: impl Into<Rgba>, frozen: bool) -> AnyElement {
     let svg = cap_icon(CapIcon::LoaderCircle, size, color);
     if frozen {
         return svg.into_any_element();
@@ -1156,19 +1279,6 @@ pub(super) fn spinner(id: &'static str, size: f32, color: impl Into<gpui::Rgba>,
         svg.with_transformation(Transformation::rotate(percentage(delta)))
     })
     .into_any_element()
-}
-
-/// `cap-pulse`: opacity 1 → 0.55 → 1, ease-in-out, forever.
-fn pulsing(id: &'static str, ms: u64, frozen: bool, element: Div) -> AnyElement {
-    if frozen {
-        return element.into_any_element();
-    }
-    element
-        .with_animation(id, Animation::new(Duration::from_millis(ms)).repeat(), |d, delta| {
-            let half = if delta < 0.5 { delta * 2.0 } else { (1.0 - delta) * 2.0 };
-            d.opacity(1.0 - 0.45 * motion::ease_in_out(half))
-        })
-        .into_any_element()
 }
 
 /// `.cap-tile`: 150 × 70, padded 8 10, sunken with a hairline ring, 12/16.

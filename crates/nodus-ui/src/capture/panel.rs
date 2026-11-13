@@ -82,6 +82,10 @@ pub struct CapturePanel {
     pub(super) route_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
     /// Bumped each time the card is made again (after a receipt), to replay its entrance.
     pub(super) card_epoch: u64,
+    /// The route Claude's guess put in the header when last drawn, and how
+    /// many new ones have landed there: each eases its words in (MOTION-034).
+    pub(super) guess_shown: Option<Route>,
+    pub(super) guess_epoch: u64,
     /// Bumped each time the recents appear.
     pub(super) recents_epoch: u64,
     recents_shown: bool,
@@ -224,6 +228,8 @@ impl CapturePanel {
             menu_bottom: Rc::new(Cell::new(None)),
             route_bounds: Rc::new(Cell::new(None)),
             card_epoch: 0,
+            guess_shown: None,
+            guess_epoch: 0,
             recents_epoch: 0,
             recents_shown: false,
             menu_epoch: 0,

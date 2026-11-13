@@ -40,6 +40,7 @@ mod hosting;
 mod http;
 mod manifest;
 mod net;
+mod pool;
 mod serve;
 mod setup;
 mod socket;

@@ -26,6 +26,7 @@ mod call;
 pub mod client;
 pub mod files;
 mod frame;
+mod pool;
 
 use serde::{Deserialize, Serialize};
 
@@ -33,6 +34,7 @@ pub use auth::*;
 pub use call::{CALLS, NOT_AVAILABLE, Request, SETUP_CALLS};
 pub use files::{FILES_PATH, MAX_UPLOAD, UPLOADS_PATH, Upload};
 pub use frame::{Answer, CallError, CallFrame, Frame, FrameError};
+pub use pool::{ACCOUNT_FAILED, AccountState, ClaudeAccount, UsageWindow};
 
 /// What the wire speaks. A client and a server with different protocols
 /// don't talk (SRV-027).

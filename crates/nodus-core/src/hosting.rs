@@ -89,6 +89,18 @@ pub trait Hosting: Send + Sync {
     /// git's `credential.helper` for sessions: `nodus git-credential`, as a
     /// shell command (SRV-084).
     fn credential_helper(&self) -> String;
+    /// SRV-101: the Claude account a Claude Code process about to start
+    /// takes from the pool (`ok`, the least used in five hours, then the
+    /// least recently used), marked used. None when there's no pool, and
+    /// the process gets no token; Err with what to say when no account can
+    /// take it.
+    fn claude_account(&self) -> Result<Option<crate::PoolAccount>, String> {
+        Ok(None)
+    }
+    /// SRV-102, SRV-103: a status line or `StopFailure` a session sent with
+    /// its own token (SRV-143), and the account its card records. Called
+    /// while the host's messages wait, so it only takes note.
+    fn session_hook(&self, _session_id: &str, _account: Option<&str>, _event: &str, _payload: &Value) {}
 }
 
 /// What the core keeps for a server.
@@ -699,6 +711,24 @@ impl ServerSessions for CoreServerSessions {
             return true;
         };
         token.is_some_and(|token| same(token, &hosted.hosting.session_token(session_id)))
+    }
+
+    /// SRV-102, SRV-103: the pool hears a session's usage and failed
+    /// turns, with the account it runs on.
+    fn hook(&self, session_id: &str, event: &str, payload: &Value) {
+        if event != nodus_sessions::hooks::STATUS_LINE_EVENT && event != nodus_sessions::hooks::STOP_FAILURE_EVENT {
+            return;
+        }
+        let Some(core) = self.0.upgrade() else {
+            return;
+        };
+        let Some(hosted) = core.hosted() else {
+            return;
+        };
+        let account = core.session_account(session_id);
+        hosted
+            .hosting
+            .session_hook(session_id, account.as_deref(), event, payload);
     }
 
     fn credential(&self, session_id: Option<String>, token: String, request: Value) -> ClientFuture<Value> {

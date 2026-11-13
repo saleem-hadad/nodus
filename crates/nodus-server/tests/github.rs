@@ -428,6 +428,12 @@ while IFS= read -r line; do echo "got: $line"; done
             ),
         )
         .unwrap();
+        // SRV-101: one Claude account in the pool, so sessions can start.
+        std::fs::write(
+            self.data().join("claude-accounts.json"),
+            r#"[{"id":"seed","label":"Test","token":"test-token","addedAt":1,"state":"ok"}]"#,
+        )
+        .unwrap();
     }
 
     /// The server as the wizard leaves it: the App and its key, and Alice

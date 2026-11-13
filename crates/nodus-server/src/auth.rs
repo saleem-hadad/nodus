@@ -192,7 +192,7 @@ impl Auth {
     }
 
     /// Who did it, for the audit log.
-    fn actor(&self, who: &Who) -> (Option<AuditMember>, Option<AuditDevice>) {
+    pub(crate) fn actor(&self, who: &Who) -> (Option<AuditMember>, Option<AuditDevice>) {
         let Who::Device { id, github_id } = who else {
             return (None, None);
         };
@@ -287,11 +287,11 @@ impl Auth {
         Ok(self.setup_status())
     }
 
-    /// `setup:done`: a step after step 2, finished or skipped. Steps 4 and
-    /// 5 come with the slices that set them up.
+    /// `setup:done`: a step after step 2, finished or skipped: members, or
+    /// Claude accounts (SRV-061). Step 5 comes with what sets it up.
     pub(crate) fn setup_done(&self, step: SetupStep) -> Result<SetupStatus, String> {
-        if step != SetupStep::Members {
-            return Err("Only the members step can be marked done for now".to_owned());
+        if !matches!(step, SetupStep::Members | SetupStep::Accounts) {
+            return Err("Only the members and Claude accounts steps can be marked done for now".to_owned());
         }
         {
             let mut people = self.lock();
@@ -870,6 +870,14 @@ impl Auth {
     /// What every member's socket is told.
     pub(crate) fn notices(&self) -> broadcast::Receiver<Notice> {
         self.notices.subscribe()
+    }
+
+    /// Tells every member connected now, as a toast (SRV-042, SRV-103).
+    pub(crate) fn notify(&self, kind: &str, message: String) {
+        let _ = self.notices.send(Notice {
+            kind: kind.to_owned(),
+            message,
+        });
     }
 
     // ---- the files

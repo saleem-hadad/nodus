@@ -1,6 +1,7 @@
 //! The calls the server answers itself rather than its core: setup,
-//! members, devices, the audit log, the server and its GitHub App
-//! (SRV-040…063, SRV-210). Every member may make every one (SRV-040).
+//! members, devices, the audit log, the server and its GitHub App, and its
+//! pool of Claude accounts (SRV-040…063, SRV-100…105, SRV-210). Every
+//! member may make every one (SRV-040).
 
 use std::sync::Arc;
 
@@ -21,7 +22,16 @@ pub(crate) async fn answer(server: Arc<Server>, who: Who, request: Request) -> R
         Request::SetupDone { step } => auth.setup_done(step).and_then(give),
         Request::MembersList {} => give(auth.members()),
         Request::MembersInvite { login } => auth.invite(&who, &login).await.and_then(give),
-        Request::MembersRemove { github_id } => auth.remove_member(&who, github_id).map(|()| Value::Null),
+        Request::MembersRemove {
+            github_id,
+            remove_accounts,
+        } => auth.remove_member(&who, github_id).map(|()| {
+            // SRV-040: their Claude accounts too, when asked.
+            if remove_accounts {
+                server.hosting.pool.remove_added_by(&who, github_id);
+            }
+            Value::Null
+        }),
         Request::DevicesList {} => give(auth.devices(&who)),
         Request::DevicesRevoke { id } => auth.revoke(&who, &id).map(|()| Value::Null),
         Request::AuditList {} => give(auth.audit.last()),
@@ -34,6 +44,20 @@ pub(crate) async fn answer(server: Arc<Server>, who: Who, request: Request) -> R
                 .await
                 .and_then(give)
         }
+        // SRV-100, SRV-105: no answer holds a token.
+        Request::AccountsList {} => give(server.hosting.pool.list(&server.nodus)),
+        Request::AccountsAdd { label, token } => server
+            .hosting
+            .pool
+            .add(&server.nodus, &who, &label, &token)
+            .await
+            .and_then(give),
+        Request::AccountsRename { id, label } => server
+            .hosting
+            .pool
+            .rename(&server.nodus, &who, &id, &label)
+            .and_then(give),
+        Request::AccountsRemove { id } => server.hosting.pool.remove(&who, &id).map(|()| Value::Null),
         _ => Err(nodus_wire::NOT_AVAILABLE.to_owned()),
     };
     answered.map_err(|message| CallError::new(channel, message))

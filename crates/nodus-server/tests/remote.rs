@@ -64,6 +64,12 @@ impl World {
             ),
         )
         .unwrap();
+        // SRV-101: one Claude account in the pool, so sessions can start.
+        std::fs::write(
+            world.data().join("claude-accounts.json"),
+            r#"[{"id":"seed","label":"Test","token":"test-token","addedAt":1,"state":"ok"}]"#,
+        )
+        .unwrap();
         world
     }
 

@@ -109,6 +109,8 @@ async fn run(options: ServeOptions, log: &Logger) -> Result<(), String> {
     let address = listener.local_addr().map_err(|err| err.to_string())?;
     let run_home = env.home.clone();
     let nodus = start_core(&data, env, options.host_socket, Arc::clone(&hosting) as _).await?;
+    // SRV-104: the pool moves sessions and frees accounts from now on.
+    tokio::spawn(crate::pool::run(Arc::clone(&hosting.pool), nodus.clone()));
 
     let server = Arc::new(Server {
         nodus: nodus.clone(),

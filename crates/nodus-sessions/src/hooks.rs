@@ -49,6 +49,12 @@ pub const HOOK_EVENTS: [&str; 10] = [
 /// The event the host passes a status line report on as (hostProtocol.ts's `STATUS_LINE_EVENT`).
 pub const STATUS_LINE_EVENT: &str = "StatusLine";
 
+/// Claude Code's hook for a turn that ended on an API error, its `error`
+/// saying which (`rate_limit`, `authentication_failed`, …). Only a server's
+/// sessions register it, after the others: their pool of Claude accounts
+/// follows it (SRV-103). It ends the turn as `Stop` does.
+pub const STOP_FAILURE_EVENT: &str = "StopFailure";
+
 /// How long after Esc or Ctrl+C a turn with no hook since counts as interrupted (HOST-163).
 pub const INTERRUPT_MS: u64 = 1200;
 
@@ -271,7 +277,7 @@ impl StatusMachine {
             let usage = to_usage(payload, at);
             return self.step(|state, events| state.set_usage(session_id, usage, events));
         }
-        if !HOOK_EVENTS.contains(&event) {
+        if !HOOK_EVENTS.contains(&event) && event != STOP_FAILURE_EVENT {
             return;
         }
         let agent_id = str_of(get(payload, "agent_id")).filter(|id| !id.is_empty());
@@ -624,7 +630,7 @@ impl State {
                     self.set_status(session_id, SessionStatus::Waiting, None, events);
                 }
             }
-            "Stop" => self.set_status(session_id, SessionStatus::Done, None, events),
+            "Stop" | STOP_FAILURE_EVENT => self.set_status(session_id, SessionStatus::Done, None, events),
             "SessionStart" => {
                 if current != SessionStatus::Working {
                     self.set_status(session_id, SessionStatus::Done, None, events);
@@ -693,8 +699,9 @@ fn is_ask_user_question(payload: &Value) -> bool {
 #[derive(Debug, Default)]
 pub struct HookEndpoint {
     endpoint: Mutex<Endpoint>,
-    /// HOST-181: the settings JSON by how hooks reach the host, built once each.
-    settings: Mutex<HashMap<(bool, bool), Arc<str>>>,
+    /// HOST-181: the settings JSON by how hooks reach the host, and whether
+    /// it's a server's, built once each.
+    settings: Mutex<HashMap<(bool, bool, bool), Arc<str>>>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -740,11 +747,21 @@ impl HookEndpoint {
     /// outrank the user's, so their own status line makes way for Nodus's.
     /// `powershell` is [`uses_powershell`].
     pub fn settings(&self, powershell: bool) -> Arc<str> {
+        self.settings_for(powershell, false)
+    }
+
+    /// The same on a server, where `StopFailure` is registered after the
+    /// others (SRV-103).
+    pub fn server_settings(&self, powershell: bool) -> Arc<str> {
+        self.settings_for(powershell, true)
+    }
+
+    fn settings_for(&self, powershell: bool, server: bool) -> Arc<str> {
         let via_config = lock(&self.endpoint).config.is_some();
         let mut cache = lock(&self.settings);
         cache
-            .entry((via_config, powershell))
-            .or_insert_with(|| hook_settings(via_config, powershell).into())
+            .entry((via_config, powershell, server))
+            .or_insert_with(|| hook_settings(via_config, powershell, server).into())
             .clone()
     }
 }
@@ -782,8 +799,9 @@ fn powershell_post_command(event: &str) -> String {
     )
 }
 
-/// HOST-180: `JSON.stringify({hooks, statusLine})`.
-fn hook_settings(via_config: bool, powershell: bool) -> String {
+/// HOST-180: `JSON.stringify({hooks, statusLine})`, with `StopFailure`
+/// last on a server (SRV-103).
+fn hook_settings(via_config: bool, powershell: bool, server: bool) -> String {
     let command = |event: &str, last: (&str, Value)| {
         let mut entry = serde_json::Map::new();
         entry.insert("type".into(), json!("command"));
@@ -797,7 +815,8 @@ fn hook_settings(via_config: bool, powershell: bool) -> String {
         Value::Object(entry)
     };
     let mut hooks = serde_json::Map::new();
-    for event in HOOK_EVENTS {
+    let server_events: &[&str] = if server { &[STOP_FAILURE_EVENT] } else { &[] };
+    for &event in HOOK_EVENTS.iter().chain(server_events) {
         // Output must stay empty: UserPromptSubmit stdout is injected into Claude's context.
         hooks.insert(
             event.into(),

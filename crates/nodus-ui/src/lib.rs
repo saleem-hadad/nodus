@@ -13,6 +13,7 @@ pub mod app;
 pub mod automation;
 pub mod board;
 pub mod capture;
+pub mod chat;
 pub mod components;
 pub mod feedback;
 pub mod format;

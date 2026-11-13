@@ -205,11 +205,13 @@ impl ChatView {
                         .text_size(self.px(11.5))
                         .child(
                             div()
+                                .flex_none()
+                                .whitespace_nowrap()
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(t.text_secondary)
                                 .child(SharedString::from(format!("Queued · {}", items.len()))),
                         )
-                        .child(div().text_color(t.text_tertiary).child(head)),
+                        .child(div().flex_1().min_w_0().text_color(t.text_tertiary).child(head)),
                 )
                 .children(rows)
                 .into_any_element(),
@@ -282,6 +284,7 @@ impl ChatView {
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
         let text = match (live, status) {
+            _ if self.dialog => "Claude is asking something in the terminal below",
             (false, _) => "Not running · sending resumes it",
             (true, Some(SessionStatus::Working)) => "Working · ↩ queues · ⌘↩ sends now · Esc stops",
             (true, Some(SessionStatus::Waiting)) => "Claude is asking something below · ↩ queues",

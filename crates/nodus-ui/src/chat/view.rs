@@ -19,6 +19,7 @@ use serde_json::Value;
 use crate::state::AppState;
 use crate::terminal::actions::card;
 use crate::terminal::host::{HostEvent, TerminalHost};
+use crate::terminal::store::{Terminals, TerminalsEvent};
 use crate::theme::{self, fonts};
 
 /// How often the transcript is looked at while the chat is up (CHAT-018).
@@ -149,6 +150,12 @@ pub struct ChatView {
     pub(crate) sending: bool,
     /// Words for the composer that came without a window (the card's mic).
     pending_text: Option<String>,
+    /// Claude shows a dialog in its terminal (a trust check, a permission
+    /// prompt, a picker), so the terminal docks and nothing is typed in.
+    pub(crate) dialog: bool,
+    /// The terminal drew something since the screen was last looked at.
+    screen_dirty: bool,
+    ticks: u32,
     /// The queue as last seen, to give back what an ended session didn't take.
     last_queue: Vec<QueuedPrompt>,
     last_status: Option<SessionStatus>,
@@ -181,12 +188,19 @@ impl ChatView {
             .map(|file| Arc::new(Mutex::new(ChatLog::new(file))));
         let list = ListState::new(0, ListAlignment::Bottom, px(1200.));
         list.set_follow_mode(FollowMode::Tail);
+        let terminals = Terminals::global(cx);
         let subscriptions = vec![
             cx.observe(&state, |this, _, cx| {
                 this.follow_status(cx);
                 cx.notify();
             }),
             cx.subscribe(&terminal, |_, _, _: &HostEvent, cx| cx.notify()),
+            cx.subscribe(&terminals, |this: &mut Self, _, e: &TerminalsEvent, _| match e {
+                TerminalsEvent::Output(id) | TerminalsEvent::Changed(id) if *id == this.session_id => {
+                    this.screen_dirty = true;
+                }
+                _ => {}
+            }),
             cx.subscribe_in(&composer, window, |this, _, e: &InputEvent, _, cx| {
                 if matches!(e, InputEvent::Change) && this.error.is_some() {
                     this.error = None;
@@ -218,6 +232,9 @@ impl ChatView {
             error: None,
             sending: false,
             pending_text: None,
+            dialog: false,
+            screen_dirty: true,
+            ticks: 0,
             last_queue: Vec::new(),
             last_status: None,
             focus: cx.focus_handle(),
@@ -252,6 +269,7 @@ impl ChatView {
                         if changed || first {
                             this.set_entries(entries, cx);
                         }
+                        this.look_at_screen(cx);
                     })
                     .is_err();
                 if gone {
@@ -297,6 +315,44 @@ impl ChatView {
             .get(&self.session_id)
             .cloned()
             .unwrap_or_default()
+    }
+
+    /// CHAT-033: a dialog on Claude's screen (its folder trust check, a
+    /// permission prompt, a picker) docks the terminal until it's answered.
+    fn look_at_screen(&mut self, cx: &mut Context<'_, Self>) {
+        // Output held for a synchronized update lands without an event, so
+        // the screen is looked at every second as well.
+        self.ticks = self.ticks.wrapping_add(1);
+        if !std::mem::take(&mut self.screen_dirty) && !self.ticks.is_multiple_of(4) {
+            return;
+        }
+        let registry = Terminals::global(cx).read(cx).registry.clone();
+        let text = registry
+            .with_terminal(&self.session_id, |t| {
+                let s = t.snapshot();
+                s.cells
+                    .iter()
+                    .map(|row| {
+                        row.iter()
+                            .map(|c| if c.text.is_empty() { " " } else { c.text.as_str() })
+                            .collect::<String>()
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
+            .unwrap_or_default();
+        let dialog = shows_dialog(&text);
+        if dialog == self.dialog {
+            return;
+        }
+        self.dialog = dialog;
+        if dialog && !self.dock.open {
+            self.dock = Dock { open: true, auto: true };
+            self.wake_terminal(cx);
+        } else if !dialog && self.dock.auto && self.card(cx).map(|c| c.status) != Some(SessionStatus::Waiting) {
+            self.dock = Dock::default();
+        }
+        cx.notify();
     }
 
     /// CHAT-024: the terminal docks itself while Claude waits on the user
@@ -414,6 +470,14 @@ impl ChatView {
     pub(crate) fn deliver(&mut self, text: String, now: bool, cx: &mut Context<'_, Self>) {
         let nodus = self.state.read(cx).nodus.clone();
         self.error = None;
+        // CHAT-033: words typed into a dialog would answer it; they wait in
+        // the queue while Claude works, else in the composer.
+        if self.dialog && (now || !self.busy(cx)) {
+            self.pending_text = Some(text);
+            self.error = Some("Claude is asking something in the terminal below. Answer it first.".into());
+            cx.notify();
+            return;
+        }
         // CHAT-025: a slash command may open a picker, which only the terminal shows.
         if text.starts_with('/') && (now || !self.busy(cx)) {
             self.dock = Dock { open: true, auto: true };
@@ -520,13 +584,34 @@ impl Render for ChatView {
         if let Some(text) = self.pending_text.take() {
             self.insert_text(&text, window, cx);
         }
+        let live = self.card(cx).is_some_and(|c| c.live);
+        // CHAT-034: the session window's terminal attaches while the session
+        // runs (to watch its screen) or the dock is up, which resumes it; a
+        // card's terminal follows the card.
+        if !self.in_card {
+            let attach = live || self.dock.open;
+            self.terminal.update(cx, |h, cx| h.set_enabled(attach, cx));
+        }
         let t = theme::tokens(cx);
         let messages = self.render_messages(window, cx);
         let dock = self.dock.open.then(|| self.render_dock(window, cx));
         let composer = self.render_composer(window, cx);
+        // CHAT-034: while it isn't docked, the running session's terminal is
+        // laid out off screen at the dock's size, so its screen can be read.
+        let hidden = (!self.dock.open && live && self.terminal_enabled).then(|| {
+            div()
+                .absolute()
+                .top_0()
+                .left(px(-20000.))
+                .w_full()
+                .when(self.in_card, |d| d.h(relative(0.5)))
+                .when(!self.in_card, |d| d.h(px(320.)))
+                .child(self.terminal.clone())
+        });
         div()
             .id(("chat", cx.entity_id()))
             .track_focus(&self.focus)
+            .relative()
             .size_full()
             .flex()
             .flex_col()
@@ -538,6 +623,7 @@ impl Render for ChatView {
             .child(div().flex_1().min_h_0().relative().child(messages))
             .children(dock)
             .child(composer)
+            .children(hidden)
     }
 }
 
@@ -585,7 +671,7 @@ impl ChatView {
     /// CHAT-024: the terminal, under the chat.
     fn render_dock(&mut self, _window: &mut Window, cx: &mut Context<'_, Self>) -> gpui::AnyElement {
         let t = theme::tokens(cx);
-        let waiting = self.card(cx).is_some_and(|c| c.status == SessionStatus::Waiting);
+        let waiting = self.dialog || self.card(cx).is_some_and(|c| c.status == SessionStatus::Waiting);
         let label = if waiting { "Claude needs you here" } else { "Terminal" };
         let me = cx.entity().downgrade();
         let header = div()
@@ -656,6 +742,28 @@ impl ChatView {
     }
 }
 
+/// CHAT-033: what Claude Code's dialogs say at their foot, or their
+/// highlighted numbered choice.
+pub(crate) fn shows_dialog(screen: &str) -> bool {
+    const FEET: [&str; 7] = [
+        "Enter to confirm",
+        "Enter to select",
+        "Enter to continue",
+        "Esc to cancel",
+        "Esc to exit",
+        "Esc to go back",
+        "Press Enter to",
+    ];
+    FEET.iter().any(|f| screen.contains(f))
+        || screen.lines().any(|line| {
+            let line = line.trim_start();
+            line.strip_prefix('❯').map(str::trim_start).is_some_and(|rest| {
+                rest.split_once(". ")
+                    .is_some_and(|(n, _)| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+            })
+        })
+}
+
 fn rgba_white(a: f32) -> gpui::Rgba {
     theme::tokens::rgba(255, 255, 255, a)
 }
@@ -692,6 +800,16 @@ mod tests {
             at: 0.,
             markdown: "x".into(),
         }
+    }
+
+    #[test]
+    fn chat_033_dialogs_are_seen_on_the_screen() {
+        assert!(shows_dialog(
+            " ❯ No, exit\n   Yes, I trust this folder\n\n Enter to confirm · Esc to cancel"
+        ));
+        assert!(shows_dialog(" Do you want to proceed?\n ❯ 1. Yes\n   2. No"));
+        assert!(!shows_dialog("╭──────╮\n│ >    │\n╰──────╯\n  ? for shortcuts"));
+        assert!(!shows_dialog("❯ fix the tests"));
     }
 
     #[test]

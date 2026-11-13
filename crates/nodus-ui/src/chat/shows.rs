@@ -10,7 +10,7 @@ use gpui::{
 use nodus_visual::{Form, Visual};
 use serde_json::Value;
 
-use super::form::FormView;
+use super::form::{FormView, OnSend};
 use super::view::ChatView;
 use super::visual::visual_element;
 use crate::theme::tokens::Tokens;
@@ -95,7 +95,7 @@ impl ChatView {
     ) -> Entity<FormView> {
         let me = cx.entity().downgrade();
         let (to, title) = (id.to_owned(), form.title.clone());
-        let on_send: Rc<dyn Fn(Value, &mut Window, &mut gpui::App)> = Rc::new(move |answers, _, cx| {
+        let on_send: OnSend = Rc::new(move |answers, _, cx| {
             let _ = me.update(cx, |this, cx| this.send_answers(&to, &title, answers, cx));
         });
         let answered = answered.cloned();

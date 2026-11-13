@@ -2,7 +2,7 @@
 //! `get_view` and `list_views` (VIEW-102 to VIEW-115).
 
 use nodus_board::geometry::{PartialSize, Size, VIEW_H, VIEW_W, clamp_view_size};
-use nodus_domain::{BoardView, ViewEvent, js};
+use nodus_domain::{BoardView, CreatedBy, ViewEvent, js};
 use serde_json::{Map, Value, json};
 
 use crate::ViewError;
@@ -137,7 +137,11 @@ impl Views {
         });
         self.save_runtime(&view.id);
         self.inner.store.update(|state| {
-            state.board_mut(project_id).views.insert(view.id.clone(), view.clone());
+            // SRV-183: on a server, it's the session's starter's.
+            let starter = state.session_starter(self_id).map(str::to_owned);
+            let mut view = view.clone();
+            view.set_created_by(starter.as_deref());
+            state.board_mut(project_id).views.insert(view.id.clone(), view);
         });
         self.board_changed(project_id);
         let page = self.check_page(&view.id, now).await;

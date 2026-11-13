@@ -62,7 +62,8 @@ pub struct ServerRecord {
     #[serde(default)]
     pub token: String,
     /// The GitHub login this device signed in as (SRV-161), for saying who
-    /// "you" are; none for a server added with a token.
+    /// "you" are: the cards it started are the ones whose "needs attention"
+    /// it hears (SRV-185). None for a server added with the dev token.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub login: Option<String>,
     /// That member's GitHub id (SRV-040).
@@ -306,6 +307,16 @@ impl State {
             .iter()
             .find(|(_, board)| board.nodes.contains_key(session_id))
             .map(|(id, _)| id.as_str())
+    }
+
+    /// The member who started a session, on a server board (SRV-183): what
+    /// the session makes with its board tools is theirs too.
+    pub fn session_starter(&self, session_id: &str) -> Option<&str> {
+        use nodus_domain::CreatedBy as _;
+        self.boards
+            .values()
+            .find_map(|board| board.nodes.get(session_id))
+            .and_then(|node| node.created_by())
     }
 }
 

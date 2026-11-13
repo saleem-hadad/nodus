@@ -30,7 +30,7 @@ use tokio::task::AbortHandle;
 /// SRV-060…063) outside a [`Remote`]: its routes, their helpers and types.
 pub use nodus_wire as wire;
 pub use nodus_wire::client::{DISCONNECTED, FileBody};
-pub use nodus_wire::{CallError, Hello, MAX_UPLOAD, NOT_AVAILABLE, Notice, PROTOCOL, Request, Upload};
+pub use nodus_wire::{CallError, Device, Hello, MAX_UPLOAD, NOT_AVAILABLE, Notice, PROTOCOL, Request, Upload};
 
 /// What a call fails with while the server isn't connected.
 pub const OFFLINE: &str = "Not connected to the server";

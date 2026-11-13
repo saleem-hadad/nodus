@@ -174,6 +174,38 @@ impl HostLauncher for NeverLaunch {
     }
 }
 
+/// The calls a server makes for one member ([`Nodus::by`]).
+pub struct By<'a> {
+    nodus: &'a Nodus,
+    member: Option<&'a str>,
+}
+
+impl<'a> By<'a> {
+    /// [`Nodus::board`], for the member.
+    pub fn board(&self) -> BoardApi<'a> {
+        BoardApi {
+            nodus: self.nodus,
+            by: self.member,
+        }
+    }
+
+    /// [`Nodus::sessions`], for the member.
+    pub fn sessions(&self) -> SessionsApi<'a> {
+        SessionsApi {
+            nodus: self.nodus,
+            by: self.member,
+        }
+    }
+
+    /// [`Nodus::views`], for the member.
+    pub fn views(&self) -> ViewsApi<'a> {
+        ViewsApi {
+            nodus: self.nodus,
+            by: self.member,
+        }
+    }
+}
+
 /// The user chose Quit when sessions from another version were running: the
 /// app leaves at once, with code 0 and without its quit path (HOST-103).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -484,17 +516,26 @@ impl Nodus {
 
     /// `window.api.board`.
     pub fn board(&self) -> BoardApi<'_> {
-        BoardApi { nodus: self }
+        BoardApi { nodus: self, by: None }
     }
 
     /// `window.api.sessions`.
     pub fn sessions(&self) -> SessionsApi<'_> {
-        SessionsApi { nodus: self }
+        SessionsApi { nodus: self, by: None }
     }
 
     /// `window.api.views`, and the pages their frames load.
     pub fn views(&self) -> ViewsApi<'_> {
-        ViewsApi { nodus: self }
+        ViewsApi { nodus: self, by: None }
+    }
+
+    /// The calls a server makes for one of its members (SRV-183): the
+    /// cards, notes, views, shapes, links, sections and ink they add record
+    /// them as `createdBy`, and a card they start makes its commits as them
+    /// (SRV-082). With no member (a development token), the same calls as
+    /// [`Nodus::board`] and the rest make.
+    pub fn by<'a>(&'a self, member: Option<&'a str>) -> By<'a> {
+        By { nodus: self, member }
     }
 
     /// `window.api.updates`.

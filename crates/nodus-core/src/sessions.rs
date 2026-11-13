@@ -16,6 +16,9 @@ use crate::{CommandResult, Nodus};
 /// `window.api.sessions`.
 pub struct SessionsApi<'a> {
     pub(crate) nodus: &'a Nodus,
+    /// The member a server makes these calls for: the cards they start are
+    /// theirs (SRV-183, [`Nodus::by`]).
+    pub(crate) by: Option<&'a str>,
 }
 
 impl SessionsApi<'_> {
@@ -35,7 +38,7 @@ impl SessionsApi<'_> {
                 self.nodus
                     .inner
                     .board
-                    .create_session(project_id, opts, &launcher)
+                    .create_session(project_id, opts, self.by, &launcher)
                     .await
                     .on(CHANNEL)
             })

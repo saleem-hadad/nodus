@@ -2,7 +2,7 @@
 //! their brains (`views:*` in `src/main/ipc.ts`), and the pages their frames
 //! load (`nodus-view://`).
 
-use nodus_domain::{BoardView, CommandResult as CommandRunResult, CreateViewOptions, ViewPatch, ViewReport};
+use nodus_domain::{BoardView, CommandResult as CommandRunResult, CreateViewOptions, CreatedBy, ViewPatch, ViewReport};
 use nodus_remote::Request;
 use nodus_views::PageResponse;
 use serde_json::Value;
@@ -13,6 +13,8 @@ use crate::{CommandResult, Nodus};
 /// `window.api.views`.
 pub struct ViewsApi<'a> {
     pub(crate) nodus: &'a Nodus,
+    /// The member a server makes these calls for (SRV-183, [`Nodus::by`]).
+    pub(crate) by: Option<&'a str>,
 }
 
 impl ViewsApi<'_> {
@@ -33,7 +35,30 @@ impl ViewsApi<'_> {
             return Ok(view);
         }
         self.nodus
-            .on_core(async { self.nodus.inner.views.create(project_id, opts).await.on("views:create") })
+            .on_core(async {
+                let mut view = self
+                    .nodus
+                    .inner
+                    .views
+                    .create(project_id, opts)
+                    .await
+                    .on("views:create")?;
+                if let Some(by) = self.by {
+                    // SRV-183: the view, and its brain, are the member's.
+                    view.set_created_by(Some(by));
+                    self.nodus.inner.store.update(|state| {
+                        let board = state.board_mut(project_id);
+                        if let Some(stored) = board.views.get_mut(&view.id) {
+                            stored.set_created_by(Some(by));
+                        }
+                        let brain = view.session_id.as_deref().and_then(|id| board.nodes.get_mut(id));
+                        if let Some(brain) = brain {
+                            brain.set_created_by(Some(by));
+                        }
+                    });
+                }
+                Ok(view)
+            })
             .await
     }
 

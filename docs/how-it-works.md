@@ -349,6 +349,8 @@ Releases are made by `.github/workflows/release.yml`, which you start by hand: s
 
 Without **publish** ticked it stops there, and the packages are the run's artifacts to try by hand. With it ticked, and only once every check has passed, it makes the release `v<version>` as a draft, uploads the four files, checks each one's digest and publishes it. The README's download links point at `releases/latest/download/`, so they pick up each new release.
 
+The same run builds the Linux server for x64 and arm64 and signs both archives and `packaging/server/install-server.sh` with the ed25519 key in the `NODUS_SERVER_SIGNING_KEY` secret. Once the app's release is published, it adds `nodus-server-linux-{x64,arm64}.tar.gz` and `install-server.sh` to it, each with a `.sha256` and a `.sig`. That part never holds the app's release up: when it fails, the release goes out without them. The key is made once with `scripts/server-signing-key.sh`, which sets the secret and writes the public key into the install script.
+
 Installed copies update themselves from `releases/latest`. They look for `Nodus-arm64.dmg`, `Nodus-x64.dmg`, `Nodus-Setup-x64.exe` and `Nodus-Setup-arm64.exe` by name, so keep those names, and don't publish a release before its files are ready to go out.
 
 ### Troubleshooting installs

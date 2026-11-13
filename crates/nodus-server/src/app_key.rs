@@ -13,6 +13,8 @@ pub(crate) const NOT_A_KEY: &str = "That isn't a GitHub App private key: it's th
 const BACKDATE_SECS: u64 = 60;
 const LIFETIME_SECS: u64 = 9 * 60;
 
+// On Windows, where a server doesn't run, no key is ever read.
+#[cfg_attr(windows, allow(dead_code))]
 pub(crate) struct AppKey {
     #[cfg(not(windows))]
     pair: ring::signature::RsaKeyPair,

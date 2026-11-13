@@ -567,7 +567,7 @@ impl Auth {
         drop(token);
         let user = user?;
         let tailscale = whois(peer).await;
-        self.signed_in(user, pending, tailscale)
+        self.signed_in(&user, &pending, tailscale)
     }
 
     /// The person GitHub vouched for: a member gets a new device, the
@@ -575,8 +575,8 @@ impl Auth {
     /// refused (SRV-040, SRV-041).
     fn signed_in(
         &self,
-        user: GitHubUser,
-        pending: PendingSignIn,
+        user: &GitHubUser,
+        pending: &PendingSignIn,
         tailscale: Option<TailscaleIdentity>,
     ) -> Result<SignInPoll, Refusal> {
         let now = now_ms();
@@ -778,8 +778,7 @@ impl Auth {
                     .members
                     .iter()
                     .find(|member| member.github_id == device.github_id)
-                    .map(|member| member.login.as_str())
-                    .unwrap_or("");
+                    .map_or("", |member| member.login.as_str());
                 public_device(device, login, current)
             })
             .collect()
@@ -922,7 +921,12 @@ async fn whois(peer: IpAddr) -> Option<TailscaleIdentity> {
         return None;
     }
     let out = tailscale(&["whois", "--json", &peer.to_string()]).await?;
-    let found: Value = serde_json::from_str(&out).ok()?;
+    parse_whois(&out)
+}
+
+/// The user's login and the machine's name in `tailscale whois --json`.
+fn parse_whois(out: &str) -> Option<TailscaleIdentity> {
+    let found: Value = serde_json::from_str(out).ok()?;
     let text = |value: &Value| value.as_str().filter(|s| !s.is_empty()).map(str::to_owned);
     let identity = TailscaleIdentity {
         user: text(&found["UserProfile"]["LoginName"]),
@@ -977,6 +981,20 @@ mod tests {
         for wrong in ["", "-a", "a-", "a--b", "a/b", "../x", "a b", &"x".repeat(40)] {
             assert!(!is_login(wrong), "{wrong}");
         }
+    }
+
+    #[test]
+    fn reads_who_tailscale_says_a_device_is() {
+        let out = r#"{"Node":{"Name":"studio.tail1234.ts.net.","ComputedName":"studio"},"UserProfile":{"LoginName":"octo@example.com","DisplayName":"Octo"}}"#;
+        assert_eq!(
+            parse_whois(out),
+            Some(TailscaleIdentity {
+                user: Some("octo@example.com".into()),
+                node: Some("studio".into()),
+            })
+        );
+        assert_eq!(parse_whois("{}"), None);
+        assert_eq!(parse_whois("no such peer"), None);
     }
 
     #[test]

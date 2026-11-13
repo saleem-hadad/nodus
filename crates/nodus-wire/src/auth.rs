@@ -177,6 +177,8 @@ pub struct SignInPollRequest {
 
 /// Where a sign-in stands. `pending` and `signed-in` are HTTP 200,
 /// `refused` and `denied` 403, `expired` 410.
+// One answer to one poll: its size doesn't matter.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "status", rename_all = "kebab-case")]
 pub enum SignInPoll {

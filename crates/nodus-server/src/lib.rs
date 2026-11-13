@@ -47,6 +47,7 @@ use std::path::PathBuf;
 
 const USAGE: &str = "Usage:
   nodus-server serve [--bind <address>] [--dev-token <token>] [--run-home <folder>] [--host-socket <path>]
+      --dev-token: for development and tests only, on loopback only
   nodus-server setup-code
   nodus-server host <socket> <key>
   nodus-server host --socket <path>

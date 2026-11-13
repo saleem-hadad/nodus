@@ -89,7 +89,7 @@ async fn route(server: &Arc<Server>, req: Request<Incoming>, peer: SocketAddr) -
             let setup_token = bearer(req.headers()).map(str::to_owned);
             let start: SignInStart = match read_json(req).await {
                 Ok(start) => start,
-                Err(reply) => return reply,
+                Err(reply) => return *reply,
             };
             match auth.start_sign_in(setup_token.as_deref(), &start.device_name).await {
                 Ok(started) => json(&started),
@@ -99,7 +99,7 @@ async fn route(server: &Arc<Server>, req: Request<Incoming>, peer: SocketAddr) -
         (Method::POST, SIGN_IN_POLL_PATH) => {
             let poll: SignInPollRequest = match read_json(req).await {
                 Ok(poll) => poll,
-                Err(reply) => return reply,
+                Err(reply) => return *reply,
             };
             match auth.poll_sign_in(&poll.handle, peer.ip()).await {
                 Ok(polled) => {
@@ -123,7 +123,7 @@ async fn claim(server: &Arc<Server>, req: Request<Incoming>) -> Reply {
     let auth = &server.auth;
     let claim: SetupClaim = match read_json(req).await {
         Ok(claim) => claim,
-        Err(reply) => return reply,
+        Err(reply) => return *reply,
     };
     if !auth.needs_setup() {
         return failed(409, "This server is set up already: sign in with GitHub");
@@ -153,7 +153,7 @@ async fn nonce(server: &Arc<Server>, req: Request<Incoming>) -> Reply {
     };
     let asked: NonceRequest = match read_json_or_default(req).await {
         Ok(asked) => asked,
-        Err(reply) => return reply,
+        Err(reply) => return *reply,
     };
     json(&server.auth.new_nonce(&who, asked.workflows))
 }
@@ -254,25 +254,25 @@ fn html(status: u16, page: String) -> Reply {
 }
 
 /// A JSON body of at most [`MAX_BODY`] bytes, or the reply saying why not.
-async fn read_json<T: DeserializeOwned>(req: Request<Incoming>) -> Result<T, Reply> {
+async fn read_json<T: DeserializeOwned>(req: Request<Incoming>) -> Result<T, Box<Reply>> {
     let bytes = read_body(req).await?;
     nodus_domain::json::from_str(&String::from_utf8_lossy(&bytes))
-        .map_err(|err| failed(400, &format!("Bad request: {err}")))
+        .map_err(|err| Box::new(failed(400, &format!("Bad request: {err}"))))
 }
 
 /// [`read_json`], with an empty body read as `T`'s default.
-async fn read_json_or_default<T: DeserializeOwned + Default>(req: Request<Incoming>) -> Result<T, Reply> {
+async fn read_json_or_default<T: DeserializeOwned + Default>(req: Request<Incoming>) -> Result<T, Box<Reply>> {
     let bytes = read_body(req).await?;
     if bytes.iter().all(u8::is_ascii_whitespace) {
         return Ok(T::default());
     }
     nodus_domain::json::from_str(&String::from_utf8_lossy(&bytes))
-        .map_err(|err| failed(400, &format!("Bad request: {err}")))
+        .map_err(|err| Box::new(failed(400, &format!("Bad request: {err}"))))
 }
 
-async fn read_body(req: Request<Incoming>) -> Result<Bytes, Reply> {
+async fn read_body(req: Request<Incoming>) -> Result<Bytes, Box<Reply>> {
     match Limited::new(req.into_body(), MAX_BODY).collect().await {
         Ok(body) => Ok(body.to_bytes()),
-        Err(_) => Err(failed(413, "The request is too big")),
+        Err(_) => Err(Box::new(failed(413, "The request is too big"))),
     }
 }

@@ -18,11 +18,11 @@ const APP_NAME_CHARS: usize = 34;
 /// the browser called this server by, already one of its own names
 /// (SRV-021), so GitHub sends it back to an address it reaches.
 pub(crate) fn start(auth: &Auth, query: &HashMap<String, String>, host: &str) -> (u16, String) {
-    let nonce = query.get("nonce").map(String::as_str).unwrap_or("");
+    let nonce = query.get("nonce").map_or("", String::as_str);
     let Some(workflows) = auth.peek_nonce(nonce) else {
         return (400, refused_page());
     };
-    let owner = query.get("owner").map(|owner| owner.trim()).unwrap_or("");
+    let owner = query.get("owner").map_or("", |owner| owner.trim());
     if !owner.is_empty() && !is_login(owner) {
         return (
             400,
@@ -83,12 +83,12 @@ pub(crate) fn manifest(server_name: &str, redirect_url: &str, workflows: bool) -
 /// code is exchanged for the App, which is kept, and the page says what's
 /// next. No secret is in the page.
 pub(crate) async fn callback(auth: &Auth, query: &HashMap<String, String>) -> (u16, String) {
-    let state = query.get("state").map(String::as_str).unwrap_or("");
+    let state = query.get("state").map_or("", String::as_str);
     // Used up before anything else, so the same state can't come twice.
     let Some((workflows, who)) = auth.take_nonce(state) else {
         return (400, refused_page());
     };
-    let code = query.get("code").map(String::as_str).unwrap_or("");
+    let code = query.get("code").map_or("", String::as_str);
     if code.is_empty()
         || code.len() > 128
         || !code

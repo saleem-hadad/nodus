@@ -166,7 +166,7 @@ pub(crate) fn finish(data: &Path) -> Result<(), String> {
 /// `K7QM-4RXD`, `k7qm4rxd` and ` K7QM 4RXD ` are the same code.
 fn normalize(code: &str) -> String {
     code.chars()
-        .filter(|c| c.is_ascii_alphanumeric())
+        .filter(char::is_ascii_alphanumeric)
         .map(|c| c.to_ascii_uppercase())
         .collect()
 }

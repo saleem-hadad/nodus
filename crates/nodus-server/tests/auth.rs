@@ -289,7 +289,8 @@ impl Fake {
             .unwrap()
             .as_secs();
         if header["alg"] != "RS256"
-            || claims["iss"] != APP_ID.to_string()
+            // The App's id, as a string.
+            || claims["iss"].as_str().and_then(|iss| iss.parse().ok()) != Some(APP_ID)
             || claims["exp"].as_u64().is_none_or(|exp| exp <= now || exp > now + 600)
             || claims["iat"].as_u64().is_none_or(|iat| iat > now)
         {
@@ -735,7 +736,7 @@ async fn the_wizard_claims_the_code_makes_the_app_and_its_first_member() {
     // SRV-042: the device's token gets in; only its hash is kept.
     let (app, _) = server.connect(&token).await;
     let members: Vec<Member> = call(&app, Request::MembersList {}).await;
-    assert_eq!(members, [octo.clone()]);
+    assert_eq!(members, std::slice::from_ref(&octo));
     let status: SetupStatus = call(&app, Request::SetupStatus {}).await;
     assert_eq!(status.step, SetupStep::Members);
     assert_eq!(status.done, [SetupStep::Name, SetupStep::Github]);
@@ -802,7 +803,7 @@ async fn a_callback_needs_the_state_of_an_unused_nonce() {
         "/github/setup/callback?code=made-1".to_owned(),
         "/github/setup/callback?code=made-1&state=".to_owned(),
         "/github/setup/callback?code=made-1&state=0123456789abcdef0123456789abcdef".to_owned(),
-        format!("/github/setup/callback?code=made-1&state={}x", nonce),
+        format!("/github/setup/callback?code=made-1&state={nonce}x"),
     ] {
         let (status, page) = server.get(&path).await;
         assert_eq!(status, 400, "{path}");

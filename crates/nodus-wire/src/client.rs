@@ -197,8 +197,7 @@ async fn post<T: DeserializeOwned>(
 /// A route's failure, in its own words when it gave some.
 fn answered(status: u16, body: &str) -> ConnectError {
     let message = nodus_domain::json::from_str::<HttpError>(body)
-        .map(|err| err.message)
-        .unwrap_or_else(|_| format!("The server answered {status}"));
+        .map_or_else(|_| format!("The server answered {status}"), |err| err.message);
     ConnectError::Answered { status, message }
 }
 

@@ -116,6 +116,9 @@ async fn run(options: ServeOptions, log: &Logger) -> Result<(), String> {
     nodus_host_proto::ensure_private_dir(&data).map_err(|err| format!("Can't make {}: {err}", data.display()))?;
     let _lock = data::lock(&data)?;
     let mut env = data::server_env(&data.join("env"), options.run_home.as_deref())?;
+    if data::strip_pool_token(&mut env) {
+        log.log(&["warning", data::POOL_TOKEN_IGNORED]);
+    }
     data::add_session_env(&mut env);
     let tailscale = Tailscale::detect().await;
     let address = net::bind_address(options.bind.as_deref(), tailscale.ip)?;

@@ -99,6 +99,17 @@ pub(crate) fn add_session_env(env: &mut ServerEnv) {
     }
 }
 
+/// SRV-101: the pool gives every Claude Code process its account's token
+/// as `CLAUDE_CODE_OAUTH_TOKEN`, so one in the env file would put sessions
+/// and background jobs on that account instead. It's dropped from what they
+/// start with; true when there was one, for `serve` to warn once.
+pub(crate) fn strip_pool_token(env: &mut ServerEnv) -> bool {
+    env.vars.remove(nodus_core::CLAUDE_TOKEN_VAR).is_some()
+}
+
+/// What `serve` warns when the env file had a Claude token.
+pub(crate) const POOL_TOKEN_IGNORED: &str = "CLAUDE_CODE_OAUTH_TOKEN in the env file is ignored: sessions and background jobs use the server's Claude accounts (Settings → Servers)";
+
 /// Holds `<data>/serve.lock` for as long as it's kept, so a second `serve`
 /// can't share the data folder: two cores writing one state.json would
 /// each undo what the other saved.
@@ -195,6 +206,24 @@ mod tests {
         let run = server_env(&file, Some(Path::new("/home/nodus-run"))).unwrap();
         assert_eq!(run.home, Path::new("/home/nodus-run"));
         assert_eq!(run.vars["HOME"], "/home/nodus-run");
+    }
+
+    /// SRV-101
+    #[test]
+    fn drops_a_claude_token_from_the_env_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("env");
+        std::fs::write(
+            &file,
+            "LANG=C.UTF-8\nCLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-mine\nTZ=UTC\n",
+        )
+        .unwrap();
+        let mut env = server_env(&file, None).unwrap();
+        assert!(strip_pool_token(&mut env));
+        assert!(!env.vars.contains_key("CLAUDE_CODE_OAUTH_TOKEN"));
+        assert_eq!(env.vars["LANG"], "C.UTF-8");
+        assert_eq!(env.vars["TZ"], "UTC");
+        assert!(!strip_pool_token(&mut env));
     }
 
     #[test]

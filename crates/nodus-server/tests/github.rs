@@ -796,7 +796,11 @@ async fn projects_come_from_the_apps_repositories_and_clone_through_the_host() {
         ]
     );
 
-    let project = world.shop(&alice).await;
+    // Two members adding it at the same moment clone it once.
+    let (bob, _b) = server.connect(BOB_TOKEN).await;
+    let (project, same) = tokio::join!(world.shop(&alice), world.shop(&bob));
+    assert_eq!(project.id, same.id);
+    assert!(!world.root().join("run/projects/shop-2").exists());
     let main = world.root().join("run/projects/shop/main");
     assert_eq!(project.name, "shop");
     assert_eq!(Path::new(&project.repo_path).canonicalize().unwrap(), main);

@@ -42,6 +42,8 @@ pub(crate) struct ServerHosting {
     bot: Mutex<Option<(u64, GitIdentity)>>,
     /// The Claude accounts sessions run on (SRV-100…105).
     pub(crate) pool: Arc<Pool>,
+    /// A lock per repository being added, by its lowercased `owner/name`.
+    adding: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
 }
 
 impl ServerHosting {
@@ -65,7 +67,15 @@ impl ServerHosting {
             tokens: Mutex::default(),
             bot: Mutex::default(),
             pool,
+            adding: Mutex::default(),
         })
+    }
+
+    /// The lock adding `full_name` takes: one per repository, whatever its
+    /// case, as GitHub names it.
+    fn adding(&self, full_name: &str) -> Arc<tokio::sync::Mutex<()>> {
+        let mut adding = self.adding.lock().unwrap_or_else(PoisonError::into_inner);
+        Arc::clone(adding.entry(full_name.to_ascii_lowercase()).or_default())
     }
 
     /// `github:repos` (SRV-120): every repository every installation
@@ -275,6 +285,10 @@ pub(crate) async fn add_github(
     color: Option<FolderColor>,
 ) -> Result<Project, String> {
     let repo = server.hosting.repo(full_name).await?;
+    // Two members adding the same repository at once clone it once: the
+    // second waits, then gets the first's project.
+    let adding = server.hosting.adding(&repo.full_name);
+    let _adding = adding.lock().await;
     let name = name
         .map(|n| n.trim().to_owned())
         .filter(|n| !n.is_empty())

@@ -417,12 +417,17 @@ mod tests {
                 "id": "p1", "name": "Shop", "repoPath": "", "color": "blue", "createdAt": 1,
                 "server": "s1", "later": true
             }],
-            "servers": [{ "id": "s1", "url": "http://nodus:7420", "name": "nodus", "token": "djEw", "login": "sam" }],
+            "servers": [{
+                "id": "s1", "url": "http://nodus:7420", "name": "nodus", "token": "djEw", "login": "sam",
+                "githubId": 7, "later": 1
+            }],
             "serverBoards": { "p1": { "viewport": { "x": 1, "y": 2, "zoom": 0.5 }, "expanded": ["c1"] } }
         });
         let state = State::from_json(raw.clone()).unwrap();
         assert_eq!(state.project_server("p1"), Some("s1"));
-        assert_eq!(state.server("s1").unwrap().extra["login"], "sam");
+        let server = state.server("s1").unwrap();
+        assert_eq!((server.login.as_deref(), server.github_id), (Some("sam"), Some(7)));
+        assert_eq!(server.extra["later"], 1);
         assert_eq!(state.server_boards["p1"].expanded, ["c1"]);
         assert_eq!(state.projects[0].extra["later"], true);
         let written: Value = serde_json::to_value(&state).unwrap();

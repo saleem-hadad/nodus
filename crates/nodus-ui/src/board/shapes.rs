@@ -61,6 +61,100 @@ pub fn at(c: &[Point; 4], t: f64) -> Point {
     }
 }
 
+/// The curve's first `t` (0…1), as a curve of its own (de Casteljau): a
+/// link Claude is drawing (MOTION-022).
+pub fn part(c: &[Point; 4], t: f64) -> [Point; 4] {
+    let lerp = |a: Point, b: Point| Point {
+        x: a.x + (b.x - a.x) * t,
+        y: a.y + (b.y - a.y) * t,
+    };
+    let (p01, p12, p23) = (lerp(c[0], c[1]), lerp(c[1], c[2]), lerp(c[2], c[3]));
+    let (p012, p123) = (lerp(p01, p12), lerp(p12, p23));
+    [c[0], p01, p012, lerp(p012, p123)]
+}
+
+/// How much of a rectangle, ellipse or diamond Claude has drawn `p` (0…1)
+/// through it (MOTION-021): its outline first, then its fill and words.
+pub fn drawn_share(p: f32) -> (f32, f32, f32) {
+    use crate::theme::motion::{ease_in_out, ease_out};
+    let outline = ease_in_out((p / 0.7).min(1.0));
+    let fill = ease_out(((p - 0.45) / 0.4).clamp(0.0, 1.0));
+    let words = ((p - 0.55) / 0.45).clamp(0.0, 1.0);
+    (outline, fill, words)
+}
+
+/// A rectangle's (10-unit corners), ellipse's or diamond's outline as a
+/// line, clockwise from where Claude starts it: the top-left corner's end
+/// of the top edge, or the top.
+pub fn outline_line(kind: ShapeKind, r: Rect) -> Vec<Point> {
+    let (x, y, w, h) = (r.x, r.y, r.w, r.h);
+    let pt = |x: f64, y: f64| Point { x, y };
+    match kind {
+        ShapeKind::Ellipse => {
+            let (cx, cy, rx, ry) = (x + w / 2.0, y + h / 2.0, w / 2.0, h / 2.0);
+            (0..=72)
+                .map(|i| {
+                    let a = -std::f64::consts::FRAC_PI_2 + std::f64::consts::TAU * f64::from(i) / 72.0;
+                    pt(cx + rx * a.cos(), cy + ry * a.sin())
+                })
+                .collect()
+        }
+        ShapeKind::Diamond => vec![
+            pt(x + w / 2.0, y),
+            pt(x + w, y + h / 2.0),
+            pt(x + w / 2.0, y + h),
+            pt(x, y + h / 2.0),
+            pt(x + w / 2.0, y),
+        ],
+        _ => {
+            use std::f64::consts::{FRAC_PI_2, PI};
+            let rad = 10.0f64.min(w / 2.0).min(h / 2.0);
+            let arc = |cx: f64, cy: f64, from: f64| {
+                (1..=8).map(move |i| {
+                    let a = from + FRAC_PI_2 * f64::from(i) / 8.0;
+                    pt(cx + rad * a.cos(), cy + rad * a.sin())
+                })
+            };
+            let mut line = vec![pt(x + rad, y), pt(x + w - rad, y)];
+            line.extend(arc(x + w - rad, y + rad, -FRAC_PI_2));
+            line.push(pt(x + w, y + h - rad));
+            line.extend(arc(x + w - rad, y + h - rad, 0.0));
+            line.push(pt(x + rad, y + h));
+            line.extend(arc(x + rad, y + h - rad, FRAC_PI_2));
+            line.push(pt(x, y + rad));
+            line.extend(arc(x + rad, y + rad, PI));
+            line
+        }
+    }
+}
+
+/// The first `t` (0…1) of a line's length, and the point it ends at.
+pub fn line_part(line: &[Point], t: f64) -> (Vec<Point>, Point) {
+    let Some(&first) = line.first() else {
+        return (Vec::new(), Point { x: 0.0, y: 0.0 });
+    };
+    let len = |a: Point, b: Point| (b.x - a.x).hypot(b.y - a.y);
+    let total: f64 = line.windows(2).map(|w| len(w[0], w[1])).sum();
+    let mut left = total * t.clamp(0.0, 1.0);
+    let mut out = vec![first];
+    for w in line.windows(2) {
+        let l = len(w[0], w[1]);
+        if left <= l {
+            let k = if l > 0.0 { left / l } else { 0.0 };
+            let end = Point {
+                x: w[0].x + (w[1].x - w[0].x) * k,
+                y: w[0].y + (w[1].y - w[0].y) * k,
+            };
+            out.push(end);
+            return (out, end);
+        }
+        left -= l;
+        out.push(w[1]);
+    }
+    let end = *out.last().unwrap_or(&first);
+    (out, end)
+}
+
 /// The curve as a line of `steps` pieces.
 pub fn flatten(c: &[Point; 4], steps: usize) -> Vec<Point> {
     (0..=steps).map(|i| at(c, i as f64 / steps as f64)).collect()

@@ -22,6 +22,7 @@ use super::canvas::{BoardCanvas, Gesture, Glide};
 use super::edges;
 use super::hud::rgba_mix;
 use super::layout::{note_pad_rect, pad_sheet_spot};
+use super::moments::{self, Arrival};
 use super::node_view::{self, NodeView};
 use super::nodes::{
     ArchiveNode, BoardCx, CardNode, NodeRenderers, NodeState, NoteNode, PadNode, ShapeNode, StackPlace, StackStyle,
@@ -30,7 +31,7 @@ use super::nodes::{
 use super::scene::{FlowNode, NodeKind, paint_order};
 use super::section::SectionProps;
 use super::units::zoomed;
-use crate::theme::{self, motion, tokens::Tokens};
+use crate::theme::{self, ai, motion, tokens::Tokens};
 
 /// Whether a node may keep last frame's drawing.
 #[derive(Clone, Copy)]
@@ -39,6 +40,78 @@ struct NodeCache {
     partial: bool,
     /// The node is on the canvas.
     visible: bool,
+}
+
+/// Where a node is in a moment (spec 15): arriving, raised, ringed.
+#[derive(Clone, Copy, Default)]
+struct NodeMoment {
+    arrival: Option<Arrival>,
+    /// MOTION-013: board units up (negative) while a card raises its hand.
+    lift: f32,
+    /// MOTION-031: 0…1 through the ring round a card whose long run finished.
+    ring: Option<f32>,
+    /// MOTION-035: 0…1 through the glow of a card a finished child's pulse reached.
+    news: Option<f32>,
+}
+
+impl NodeMoment {
+    /// The node's box, moved for its moment: a pop (MOTION-010), a note or
+    /// view Claude put down (MOTION-023), a card raised (MOTION-013).
+    fn apply<E: Styled>(self, el: E, kind: &NodeKind, z: f32) -> E {
+        let (mut ty, mut scale, mut turn, mut opacity) = (self.lift, 1.0, 0.0, 1.0);
+        match (self.arrival, kind) {
+            (Some(Arrival::Pop(p)), _) => (scale, opacity) = moments::pop_at(p),
+            (Some(Arrival::Drawing(p)), NodeKind::Note { .. } | NodeKind::View { .. }) => {
+                let (down, placed) = (motion::ease_out(p), motion::ease_spring(p));
+                ty += -14.0 * (1.0 - down);
+                scale = 1.08 - 0.08 * placed;
+                opacity = motion::ease_out((p / 0.35).min(1.0));
+                if matches!(kind, NodeKind::Note { .. }) {
+                    turn = -4.0 * (1.0 - down);
+                }
+            }
+            _ => {}
+        }
+        let mut el = el;
+        if ty != 0.0 || scale != 1.0 || turn != 0.0 {
+            el = el
+                .transform_origin(0.5, 0.5)
+                .translate(px(0.), px(ty * z))
+                .rotate(gpui::radians(turn.to_radians()))
+                .scale(scale);
+        }
+        if opacity < 1.0 {
+            el = el.group_opacity(opacity.max(0.0));
+        }
+        el
+    }
+}
+
+/// MOTION-031: Claude's colours once round a compact card (corners of 14),
+/// `t` through the ring, for a node `w`×`h` px at `z`.
+fn done_ring(t: f32, w: f32, h: f32, z: f32) -> AnyElement {
+    let (angle, opacity) = moments::ring_at(t);
+    card_glow(angle, opacity, w, h, z)
+}
+
+/// MOTION-035: the parent's edge lighting up as the pulse reaches it, then
+/// fading, `t` through it.
+fn news_glow(t: f32, w: f32, h: f32, z: f32) -> AnyElement {
+    card_glow(0.0, 0.9 * (1.0 - motion::ease_out(t)), w, h, z)
+}
+
+/// Claude's glow round a compact card, turned to `angle`.
+fn card_glow(angle: f64, opacity: f32, w: f32, h: f32, z: f32) -> AnyElement {
+    let out = 1.5 * z;
+    div()
+        .absolute()
+        .left(px(-out))
+        .top(px(-out))
+        .w(px(w + 2.0 * out))
+        .h(px(h + 2.0 * out))
+        .group_opacity(opacity)
+        .children(ai::glow_layers(angle, 14.0 * z + out, z))
+        .into_any_element()
 }
 
 /// How a node's drawn box follows its place (`transition` in board.css).
@@ -147,6 +220,44 @@ impl BoardCanvas {
         (current, !previous.done(now))
     }
 
+    /// Where a node is in its moment this frame (spec 15).
+    fn node_moment(&self, node: &FlowNode, now: Instant) -> NodeMoment {
+        if !self.moments.active() {
+            return NodeMoment::default();
+        }
+        let active_card = matches!(node.kind, NodeKind::Card { stack: None, .. });
+        let arrives = matches!(
+            node.kind,
+            NodeKind::Card { stack: None, .. }
+                | NodeKind::Note { index: Some(_) }
+                | NodeKind::View { .. }
+                | NodeKind::Shape { .. }
+        );
+        NodeMoment {
+            arrival: arrives.then(|| self.moments.arrival(&node.id, now)).flatten(),
+            lift: if active_card {
+                self.moments.lift(&node.id, now)
+            } else {
+                0.0
+            },
+            ring: active_card.then(|| self.moments.ring(&node.id, now)).flatten(),
+            news: if active_card { self.news(&node.id, now) } else { None },
+        }
+    }
+
+    /// MOTION-035: how far through its glow a card is that a finished
+    /// child's pulse just reached up a lineage edge.
+    fn news(&self, parent: &str, now: Instant) -> Option<f32> {
+        let travel = moments::PULSE_TRAVEL_MS;
+        self.edges
+            .iter()
+            .filter(|e| !e.view && e.source == parent)
+            .filter_map(|e| self.moments.pulse(&e.target, now))
+            .filter(|ms| *ms >= travel)
+            .map(|ms| ((ms - travel) / (moments::PULSE_MS - travel)) as f32)
+            .reduce(f32::min)
+    }
+
     /// A node's box on screen, with its contents.
     #[allow(clippy::too_many_arguments)]
     fn render_node(
@@ -157,6 +268,7 @@ impl BoardCanvas {
         board: &BoardCx,
         renderers: &Rc<dyn NodeRenderers>,
         cache: NodeCache,
+        moment: NodeMoment,
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
@@ -277,6 +389,10 @@ impl BoardCanvas {
                         node: state,
                         shape,
                         image,
+                        drawing: match moment.arrival {
+                            Some(Arrival::Drawing(p)) => Some(p),
+                            _ => None,
+                        },
                     },
                     board,
                     window,
@@ -343,7 +459,10 @@ impl BoardCanvas {
             .h(px(h))
             // `grabbing` while dragged; otherwise `default` (board.css).
             .when(node.dragging, |d| d.cursor(CursorStyle::ClosedHand))
+            .children(moment.ring.map(|t| done_ring(t, w, h, z)))
+            .children(moment.news.map(|t| news_glow(t, w, h, z)))
             .child(content);
+        let wrapper = moment.apply(wrapper, &node.kind, z);
         let wrapper = if click_through {
             wrapper.into_any_element()
         } else {
@@ -499,6 +618,7 @@ impl BoardCanvas {
         let rect_of = |id: &str| self.node(id).filter(|n| !n.hidden).map(FlowNode::rect);
         let view = self.visible_rect();
         let only_visible = self.board.as_ref().is_some_and(|b| b.cards.len() > VISIBLE_ONLY_ABOVE);
+        let now = Instant::now();
         self.edges
             .iter()
             .filter_map(|e| {
@@ -512,6 +632,7 @@ impl BoardCanvas {
                     Point { x, y }
                 });
                 let z = vp.zoom;
+                let pulse = (!e.view).then(|| self.moments.pulse(&e.target, now)).flatten();
                 Some(if e.view {
                     EdgePaint {
                         pts,
@@ -519,6 +640,7 @@ impl BoardCanvas {
                         width: 2.0 * z,
                         dash: Some((6.0 * z, 4.0 * z, 1000.0)),
                         round: true,
+                        pulse,
                     }
                 } else if e.animated {
                     EdgePaint {
@@ -527,6 +649,7 @@ impl BoardCanvas {
                         width: 1.5 * z,
                         dash: Some((5.0 * z, 5.0 * z, 500.0)),
                         round: false,
+                        pulse,
                     }
                 } else {
                     EdgePaint {
@@ -535,6 +658,7 @@ impl BoardCanvas {
                         width: 1.5 * z,
                         dash: None,
                         round: false,
+                        pulse,
                     }
                 })
             })
@@ -581,6 +705,8 @@ struct EdgePaint {
     /// Dash on, off, and the ms one period of `dashdraw` takes.
     dash: Option<(f64, f64, f64)>,
     round: bool,
+    /// MOTION-035: ms since the child finished and sent its pulse up.
+    pulse: Option<f64>,
 }
 
 fn bezier(p: &[Point; 4], t: f64) -> Point {
@@ -675,6 +801,53 @@ fn paint_edge(edge: &EdgePaint, origin: gpui::Point<Pixels>, phase: f64, window:
     }
 }
 
+/// MOTION-035: a light running up a lineage edge from the session that
+/// finished (the edge's end) to its parent (its start) in Claude's colours,
+/// trailing a fading tail, then going out at the parent (whose card glows).
+fn paint_pulse(edge: &EdgePaint, origin: gpui::Point<Pixels>, ms: f64, zoom: f64, window: &mut Window) {
+    let at = |p: Point| point(origin.x + px(p.x as f32), origin.y + px(p.y as f32));
+    let dot = |c: Point, r: f64, color: gpui::Rgba, window: &mut Window| {
+        let b = Bounds::new(
+            at(Point { x: c.x - r, y: c.y - r }),
+            size(px((2.0 * r) as f32), px((2.0 * r) as f32)),
+        );
+        window.paint_quad(fill(b, color).corner_radii(px(r as f32)));
+    };
+    let hue = ai::hue(ms / 1200.0);
+    let travel = moments::PULSE_TRAVEL_MS;
+    if ms < travel {
+        let head = f64::from(motion::ease_in_out((ms / travel) as f32));
+        for k in (0..8).rev() {
+            let t = (head - f64::from(k) * 0.025).max(0.0);
+            let share = 1.0 - f64::from(k) / 8.0;
+            let c = bezier(&edge.pts, 1.0 - t);
+            dot(
+                c,
+                (1.0 + 2.5 * share) * zoom,
+                hue.with_alpha(0.55 * share as f32),
+                window,
+            );
+        }
+        let c = bezier(&edge.pts, 1.0 - head);
+        dot(c, 8.0 * zoom, hue.with_alpha(0.22), window);
+        dot(c, 3.5 * zoom, hue, window);
+    } else {
+        let t = ((ms - travel) / (moments::PULSE_MS - travel)).clamp(0.0, 1.0);
+        let e = f64::from(motion::ease_out(t as f32));
+        dot(edge.pts[0], 3.5 * zoom * (1.0 - e), hue, window);
+    }
+}
+
+trait WithAlpha {
+    fn with_alpha(self, a: f32) -> Self;
+}
+
+impl WithAlpha for gpui::Rgba {
+    fn with_alpha(self, a: f32) -> Self {
+        gpui::Rgba { a, ..self }
+    }
+}
+
 /// The dotted background (`Background` variant Dots, gap 22, size 1.6).
 fn paint_dots(bounds: Bounds<Pixels>, vp: nodus_domain::Viewport, color: gpui::Rgba, window: &mut Window) {
     let gap = {
@@ -718,6 +891,11 @@ impl Render for BoardCanvas {
         if self.auto_pan_step(cx) {
             window.request_animation_frame();
         }
+        // Spec 15: moments run at the display's rate, and only while they last.
+        self.moments.tick(Instant::now());
+        if self.moments.active() {
+            window.request_animation_frame();
+        }
         self.init_viewport(cx);
         self.take_open_request(cx);
         if let Some(id) = self.pending_link_label.take() {
@@ -752,11 +930,16 @@ impl Render for BoardCanvas {
         for node in &nodes {
             let (drawn, moving) = self.drawn(node, now, cx);
             gliding |= moving;
+            // MOTION-020: what Claude hasn't drawn yet isn't there.
+            let moment = self.node_moment(node, now);
+            if moment.arrival == Some(Arrival::Waiting) {
+                continue;
+            }
             let cache = NodeCache {
                 partial,
                 visible: overlaps(drawn, view),
             };
-            let el = self.render_node(node, drawn, &snapshot, &board_cx, &renderers, cache, window, cx);
+            let el = self.render_node(node, drawn, &snapshot, &board_cx, &renderers, cache, moment, window, cx);
             if node.z_drawn() < 0 {
                 below.push(el);
             } else if node.z_drawn() >= super::overlays::INK_Z_BELOW {
@@ -843,6 +1026,9 @@ impl Render for BoardCanvas {
                         _ => 0.0,
                     };
                     paint_edge(edge, bounds.origin, phase, window);
+                    if let Some(ms) = edge.pulse {
+                        paint_pulse(edge, bounds.origin, ms, vp.zoom, window);
+                    }
                 }
             },
         )
@@ -869,6 +1055,8 @@ impl Render for BoardCanvas {
         let confirm = self.render_confirm(window, cx);
         let ink_input = self.render_ink_input(cx);
         let ink_layer = self.render_ink_layer(window, cx);
+        // MOTION-024: Claude's pens, over what they draw.
+        let pens = self.render_pens(Instant::now());
         let ink_hitbox = self.render_ink_hitbox(cx);
         // SHAPE-008: pictures dropped from Finder go up where they land,
         // over the nodes too (which hide the board's own box from a drop).
@@ -938,6 +1126,7 @@ impl Render for BoardCanvas {
             .children(above)
             .child(ink_layer)
             .children(raised)
+            .children(pens)
             .children(selection)
             .children(marquee)
             .child(ink_hitbox)

@@ -69,6 +69,8 @@ pub struct Frame {
     pub zoom_changed: Option<Instant>,
     /// When the body last changed size: the page lays out again first.
     pub resized: Option<Instant>,
+    /// The page posted `loaded` for this version.
+    pub loaded: bool,
 }
 
 /// Where a frame was drawn, and what for.
@@ -87,6 +89,9 @@ pub struct Geometry {
     pub passthrough: bool,
     /// The resize handles' reach into the page.
     pub edge: f32,
+    /// Its first page is being revealed (MOTION-033): hidden until it has
+    /// loaded and been pictured, then shown as that picture.
+    pub reveal: bool,
 }
 
 /// Which of the page's corners round, and by how much (px): the top ones
@@ -306,6 +311,9 @@ pub fn sync_board(canvas: &mut BoardCanvas, window: &mut Window, cx: &mut Contex
                     if theme_changed {
                         fr.web.set_dark(t.dark);
                     }
+                    if fr.version != view.version {
+                        fr.loaded = false;
+                    }
                     fr.version = view.version;
                     fr.title.clone_from(&view.title);
                     fr.dirty = true;
@@ -353,6 +361,7 @@ pub fn sync_board(canvas: &mut BoardCanvas, window: &mut Window, cx: &mut Contex
                         tooltip: false,
                         zoom_changed: None,
                         resized: None,
+                        loaded: false,
                     }),
                     Err(err) => tracing::warn!("[views] couldn't make a webview: {err}"),
                 }
@@ -393,6 +402,8 @@ pub fn describe(cx: &App) -> serde_json::Value {
                     "hovered": fr.hovered,
                     "keyboard": fr.web.has_keyboard(),
                     "forced": g.map(|g| g.forced),
+                    "reveal": g.map(|g| g.reveal),
+                    "loaded": fr.loaded,
                     "passthrough": g.map(|g| g.passthrough),
                     "zoom": g.map(|g| g.zoom),
                     "document": g.map(|g| [
@@ -416,13 +427,33 @@ pub fn probe(
     slot: Slot,
     geometry: impl Fn(Bounds<Pixels>, Bounds<Pixels>) -> Geometry + 'static,
 ) -> impl IntoElement {
+    probe_into(view_id, slot, geometry, None)
+}
+
+/// The picture a probe painted this frame, for what's drawn over it, and
+/// when it first painted one.
+pub type Painted = Rc<RefCell<Option<(Arc<RenderImage>, Instant)>>>;
+
+/// [`probe`], handing the snapshot it paints to `painted` as well.
+pub fn probe_into(
+    view_id: String,
+    slot: Slot,
+    geometry: impl Fn(Bounds<Pixels>, Bounds<Pixels>) -> Geometry + 'static,
+    painted: Option<Painted>,
+) -> impl IntoElement {
     canvas(
         |bounds, window, _| window.insert_hitbox(bounds, HitboxBehavior::Normal),
         move |bounds, hitbox, window, cx| {
             let g = geometry(bounds, window.content_mask().bounds);
-            if let Some(image) = super::swap::placed(&view_id, slot, g, hitbox, window, cx) {
+            let image = super::swap::placed(&view_id, slot, g, hitbox, window, cx);
+            if let Some(image) = &image {
                 // `object-fit: fill`, with the page's rounded corners.
-                let _ = window.paint_image(bounds, bounds, g.rounding.corners(), image, 0, false);
+                let _ = window.paint_image(bounds, bounds, g.rounding.corners(), image.clone(), 0, false);
+            }
+            if let Some(painted) = &painted {
+                let mut painted = painted.borrow_mut();
+                let first = painted.as_ref().map_or_else(Instant::now, |p| p.1);
+                *painted = image.map(|image| (image, first));
             }
         },
     )

@@ -12,11 +12,10 @@ use gpui::{
 };
 use nodus_domain::{BoardView, SessionStatus, ViewCommand};
 
-use super::card::{CardUi, shadows, spinning, tip_over_page};
+use super::card::{CardUi, shadows, tip_over_page};
 use super::icons::{ViewIcon, view_icon};
 use crate::board::nodes::BoardCx;
 use crate::board::units::fu;
-use crate::components::icon::{Icon, icon};
 use crate::components::tooltip::TooltipPress;
 use crate::theme::{self, Tokens, fonts};
 
@@ -421,12 +420,9 @@ pub fn empty_state(
     };
     let mut children: Vec<AnyElement> = Vec::new();
     if working {
-        children.push(spinning(
-            icon(Icon::Loader2, 18.0 * z, 2.0, t.text_secondary),
-            ElementId::Name(format!("view-empty-spin-{id}").into()),
-            cx,
-        ));
-        children.push(title("Claude is building this view…").into_any_element());
+        // MOTION-032: the page being built, where 0.9.4 spun a loader.
+        children.push(super::building::skeleton(&id, z, window, cx));
+        children.push(super::building::title(&id, z, window, cx));
         children.push(card_btn(
             Some((board, &id)),
             format!("view-watch-{id}"),

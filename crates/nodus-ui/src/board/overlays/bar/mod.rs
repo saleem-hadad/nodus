@@ -21,6 +21,14 @@ use crate::board::bar::Submission;
 use crate::board::canvas::BoardCanvas;
 use crate::board::layout::card_title;
 
+/// What's open above the pill: the slash menu with its commands and the
+/// one highlighted, or the colour picker.
+#[derive(Clone, PartialEq)]
+pub(crate) enum Popover {
+    Menu(Vec<SlashCommand>, usize),
+    Picker,
+}
+
 /// The bar's state, per board mount (BAR-041).
 pub(crate) struct Bar {
     pub field: Option<Entity<TextareaState>>,
@@ -43,6 +51,8 @@ pub(crate) struct Bar {
     pub picking: bool,
     /// The colour picker's and the note swatch's boxes, as last drawn.
     pub picker_area: [Option<gpui::Bounds<gpui::Pixels>>; 2],
+    /// The popover, sinking away once closed (MOTION-011).
+    pub popover: crate::components::presence::Presence<Popover>,
     pub sending: bool,
     /// The board's `/` key asked for the keyboard, with `/` typed.
     pub focus_request: Option<Option<String>>,
@@ -75,6 +85,7 @@ impl Default for Bar {
             last_into: None,
             picking: false,
             picker_area: [None, None],
+            popover: Default::default(),
             sending: false,
             focus_request: None,
             mic: None,

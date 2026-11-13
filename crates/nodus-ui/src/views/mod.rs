@@ -14,6 +14,7 @@
 //! - [`relay`]: what pages ask for, and what the board tells them.
 //! - [`large`], [`dialog`]: the large window and the New view dialog.
 
+mod building;
 pub mod card;
 pub mod dialog;
 pub mod frames;
@@ -28,6 +29,7 @@ mod mac_ink;
 mod parts;
 pub mod relay;
 mod resize;
+mod reveal;
 pub mod shell;
 pub mod swap;
 mod webview;

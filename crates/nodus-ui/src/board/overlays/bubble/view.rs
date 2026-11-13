@@ -22,6 +22,7 @@ use crate::board::canvas::BoardCanvas;
 use crate::board::hud::rgba_mix;
 use crate::components::frosted::frosted;
 use crate::components::icon::{Icon, icon};
+use crate::components::presence::{self, inert};
 use crate::components::tooltip::native_tooltip;
 use crate::components::tween::enter;
 use crate::theme::tokens::{DUR_FAST, TEXT_SM, Tokens};
@@ -95,30 +96,57 @@ impl BoardCanvas {
 
     /// BUBBLE-004: the bubble beside its spot, above and to the right of it,
     /// or below or to the left where the board runs out, with a dot on the
-    /// spot.
+    /// spot; MOTION-011: a bubble closed or sent fades from its spot.
     fn render_bubble_card(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> Vec<AnyElement> {
+        let mut out = Vec::new();
+        let leaving = presence::step(&mut self.overlays.bubble_leaving, window).map(|l| (l.what.clone(), l.shown()));
+        if let Some((look, shown)) = leaving {
+            out.extend(self.draw_bubble(&look, None, shown, cx));
+        }
         // BUBBLE-003: the keyboard went elsewhere, as the frame has it (the
         // field's blur doesn't fire for a focus given from outside). An
         // empty bubble goes; one with words stays.
         let Some(bubble) = self.overlays.bubble.as_mut() else {
-            return Vec::new();
+            return out;
         };
         let focused = bubble.field.read(cx).focus_handle(cx).is_focused(window);
         bubble.had_focus |= focused;
         if !focused && bubble.had_focus && js::trim(&bubble.text).is_empty() {
             self.close_bubble(None, cx);
-            return Vec::new();
+            // Its exit starts this frame.
+            if let Some(leaving) = &self.overlays.bubble_leaving {
+                let (look, shown) = (leaving.what.clone(), leaving.shown());
+                window.request_animation_frame();
+                out.extend(self.draw_bubble(&look, None, shown, cx));
+            }
+            return out;
         }
         let Some(bubble) = self.overlays.bubble.as_ref() else {
-            return Vec::new();
+            return out;
         };
-        let t = theme::tokens(cx);
-        let key = bubble.key;
+        let look = bubble.look();
         let field = bubble.field.clone();
-        let typed = !js::trim(&bubble.text).is_empty();
+        let rise = enter(window, cx, ("bubble-in", look.key), DUR_FAST, motion::ease_out);
+        out.extend(self.draw_bubble(&look, Some(field), rise, cx));
+        out
+    }
+
+    /// A bubble `rise` of the way in: with its field while it's open, else
+    /// its words as they were, inert, as it leaves.
+    fn draw_bubble(
+        &mut self,
+        look: &super::BubbleLook,
+        field: Option<gpui::Entity<gpui::component::input::TextareaState>>,
+        rise: f32,
+        cx: &mut Context<'_, Self>,
+    ) -> Vec<AnyElement> {
+        let t = theme::tokens(cx);
+        let live = field.is_some();
+        let key = look.key;
+        let typed = !js::trim(&look.text).is_empty();
         let (w, h) = self.canvas_size();
         let (w, h) = (w as f32, h as f32);
-        let (sx, sy) = self.on_canvas(bubble.at);
+        let (sx, sy) = self.on_canvas(look.at);
         let above = sy - OFFSET - ONE_LINE_H >= MARGIN;
         let right = sx + OFFSET + WIDTH <= w - MARGIN;
         let left = if right {
@@ -126,7 +154,6 @@ impl BoardCanvas {
         } else {
             (sx - OFFSET - WIDTH).max(MARGIN)
         };
-        let rise = enter(window, cx, ("bubble-in", key), DUR_FAST, motion::ease_out);
         let me = cx.entity().downgrade();
         let hint = div()
             .flex()
@@ -147,7 +174,7 @@ impl BoardCanvas {
             )
             .when(typed, |d| d.child(kbd(&t, "↵")));
         let card = div()
-            .id(("bubble", key))
+            .id(if live { ("bubble", key) } else { ("bubble-leaving", key) })
             .absolute()
             .left(px(left))
             .map(|d| {
@@ -189,25 +216,46 @@ impl BoardCanvas {
                     });
                 }
             })
-            .capture_key_down(cx.listener(|this, e: &gpui::KeyDownEvent, window, cx| {
-                if this.bubble_key_down(e, window, cx) {
-                    cx.stop_propagation();
-                }
-            }))
-            .child(
+            .when(live, |d| {
+                d.capture_key_down(cx.listener(|this, e: &gpui::KeyDownEvent, window, cx| {
+                    if this.bubble_key_down(e, window, cx) {
+                        cx.stop_propagation();
+                    }
+                }))
+            })
+            .child(match field {
                 // XSmall's editor insets are 4px across: taken back.
-                div().mx(px(-4.)).child(
-                    Textarea::new(&field)
-                        .appearance(false)
-                        .xsmall()
-                        .text_size(px(14.))
-                        .line_height(px(20.))
-                        .py(px(4.))
-                        .px(px(0.)),
-                ),
-            )
+                Some(field) => div()
+                    .mx(px(-4.))
+                    .child(
+                        Textarea::new(&field)
+                            .appearance(false)
+                            .xsmall()
+                            .text_size(px(14.))
+                            .line_height(px(20.))
+                            .py(px(4.))
+                            .px(px(0.)),
+                    )
+                    .into_any_element(),
+                // The words as the field showed them (it went as it closed).
+                None => div()
+                    .py(px(4.))
+                    .text_size(px(14.))
+                    .line_height(px(20.))
+                    .text_color(if typed { t.text_primary } else { t.text_tertiary })
+                    .child(if typed {
+                        look.text.clone()
+                    } else {
+                        "Ask Claude, jot a note, or describe a view".to_owned()
+                    })
+                    .into_any_element(),
+            })
             .child(hint);
-        vec![spot_dot(sx, sy, t.accent, rise), card.into_any_element()]
+        let dot = spot_dot(sx, sy, t.accent, rise);
+        if live {
+            return vec![dot, card.into_any_element()];
+        }
+        vec![inert(dot).into_any_element(), inert(card).into_any_element()]
     }
 
     /// BUBBLE-030: each ask waiting on Claude, as a dot on its spot and a

@@ -200,6 +200,9 @@ pub struct BoardCanvas {
     pub(crate) held: HashMap<String, Rect>,
     pub(crate) raised: HashSet<String>,
     pub(crate) glides: HashMap<String, Glide>,
+    /// What just happened that motion marks: arrivals, Claude drawing, runs
+    /// finishing (spec 15).
+    pub(crate) moments: super::moments::Moments,
     /// Cards and notes, each its own cached view (`node_view`).
     pub(crate) node_views: HashMap<String, Entity<super::node_view::NodeView>>,
 
@@ -308,6 +311,7 @@ impl BoardCanvas {
             held: HashMap::new(),
             raised: HashSet::new(),
             glides: HashMap::new(),
+            moments: super::moments::Moments::default(),
             node_views: HashMap::new(),
             renaming: None,
             archive_hot: false,
@@ -525,6 +529,7 @@ impl BoardCanvas {
         let Some(board) = self.board.clone() else {
             self.nodes.clear();
             self.edges.clear();
+            self.moments.reset();
             return;
         };
         let stack = self.stack_view();
@@ -547,6 +552,12 @@ impl BoardCanvas {
             }
         }
         self.edges = edges::edges(&board);
+        // Spec 15: what's new, and how runs went, since the last rebuild.
+        let still = crate::parity::frozen(cx) || cx.reduce_motion();
+        let now_ms = crate::parity::now_ms(cx);
+        let nodes = &self.nodes;
+        let rect_of = |id: &str| nodes.iter().find(|n| n.id == id).map(FlowNode::rect);
+        self.moments.observe(&board, Instant::now(), now_ms, still, &rect_of);
         self.sync_selection(cx);
         self.flight_timer = scene::next_landing(&self.flights).map(|until| {
             let wait = (until - now).max(0.0) + 20.0;

@@ -7,8 +7,10 @@ use gpui::{App, Div, ElementId, IntoElement, ParentElement, Styled, Window, div}
 use nodus_domain::SessionStatus;
 
 use super::{Z, anim, fade};
+use crate::components::child_id;
 use crate::components::status_dot::{breathe_at, pulse_at};
-use crate::theme;
+use crate::components::tween::transition;
+use crate::theme::{self, motion};
 
 /// A 10px dot, or 7px when `small`.
 pub fn status_dot(
@@ -20,7 +22,16 @@ pub fn status_dot(
     cx: &mut App,
 ) -> Div {
     let t = theme::tokens(cx);
-    let color = t.status(status);
+    let key: ElementId = key.into();
+    // MOTION-012: from one status's colour to the next, not at once.
+    let color = transition(
+        window,
+        cx,
+        child_id(key.clone(), "color"),
+        t.status(status),
+        Duration::from_millis(300),
+        motion::ease,
+    );
     let size = if small { 7.0 } else { 10.0 };
     let (spread, share) = match status {
         // CARD-013: no ring, still.

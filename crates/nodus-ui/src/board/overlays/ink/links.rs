@@ -6,6 +6,7 @@ use nodus_domain::{BoardLink, Rect};
 
 use super::draw::paint_dashed_rect;
 use super::*;
+use crate::board::moments::Arrival;
 use crate::board::shapes::{self, LINK_HEAD, LINK_WIDTH};
 
 /// A label's words: the UI font, semibold, 13 board units, a line 22 tall
@@ -62,6 +63,8 @@ pub(crate) struct LinkPaint {
     pub dashed: bool,
     /// The selected link shows its ends, to take elsewhere.
     pub handles: bool,
+    /// How much of it Claude has drawn, 0…1 (MOTION-022); 1 when it's there.
+    pub grow: f64,
 }
 
 impl BoardCanvas {
@@ -91,7 +94,15 @@ impl BoardCanvas {
         };
         let mut out = Vec::new();
         let mut target = None;
+        let now = std::time::Instant::now();
         for link in self.links() {
+            // MOTION-022: one Claude is drawing grows from its start; one it
+            // will draw isn't there yet.
+            let grow = match self.moments.arrival(&link.id, now) {
+                Some(Arrival::Waiting) => continue,
+                Some(Arrival::Drawing(p)) => f64::from(motion::ease_in_out(p)),
+                _ => 1.0,
+            };
             let mut shown = link.clone();
             if let Some(InkGesture::Reattach {
                 id,
@@ -124,6 +135,7 @@ impl BoardCanvas {
                 color,
                 dashed: false,
                 handles: selected,
+                grow,
             });
         }
         if let Some(InkGesture::Link {
@@ -154,6 +166,7 @@ impl BoardCanvas {
                     color: ink_rgba(t, live.color),
                     dashed: over.is_none(),
                     handles: false,
+                    grow: 1.0,
                 });
             }
             target = over.as_deref().and_then(|id| self.attach_rect(id));
@@ -233,10 +246,15 @@ impl BoardCanvas {
         let measure = link_label_measure(window);
         let editing = self.overlays.ink.link_label.as_ref().map(|d| d.id.clone());
         let mut out = Vec::new();
+        let now = std::time::Instant::now();
         for link in self.links() {
             let Some(curve) = self.link_curve(link) else { continue };
             let is_editing = editing.as_deref() == Some(link.id.as_str());
             if link.label.is_empty() && !is_editing {
+                continue;
+            }
+            // MOTION-022: a label comes once Claude has drawn its link.
+            if self.moments.arrival(&link.id, now).is_some() {
                 continue;
             }
             let text = match (&self.overlays.ink.link_label, is_editing) {
@@ -315,7 +333,11 @@ pub(crate) fn paint_link(
 ) {
     let p = |q: Point| at([q.x, q.y]);
     let width = (LINK_WIDTH * zoom) as f32;
-    let c = &link.curve;
+    if link.grow <= 0.0 {
+        return;
+    }
+    let grown = shapes::part(&link.curve, link.grow);
+    let c = if link.grow < 1.0 { &grown } else { &link.curve };
     let head = shapes::head(c, LINK_HEAD);
     // The line stops short of the tip, under the head.
     let options = StrokeOptions::default()

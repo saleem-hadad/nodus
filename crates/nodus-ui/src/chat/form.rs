@@ -213,6 +213,7 @@ impl Render for FormView {
             .bg(t.bg_elevated)
             .border_1()
             .border_color(t.border)
+            .shadow(t.sm())
             .font_family(fonts::UI)
             .text_color(t.text_primary)
             // FORM-030: typing stays in the form. Keys are marked, not

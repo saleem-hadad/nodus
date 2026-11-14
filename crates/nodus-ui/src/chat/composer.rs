@@ -1,6 +1,8 @@
 //! The composer under the chat: the prompts waiting in the queue, the field,
 //! and the buttons that send, queue or stop (CHAT-020…CHAT-023).
 
+use std::time::Duration;
+
 use gpui::component::Sizable as _;
 use gpui::component::input::Textarea;
 use gpui::prelude::FluentBuilder as _;
@@ -10,13 +12,18 @@ use gpui::{
 };
 use nodus_domain::SessionStatus;
 
+use super::look;
 use super::view::ChatView;
 use crate::board::overlays::icons::{OvIcon, ov_icon};
 use crate::board::overlays::spinner;
 use crate::components::icon::{Icon, icon};
 use crate::components::tooltip::native_tooltip;
-use crate::theme::tokens::{Tokens, alpha};
-use crate::theme::{self};
+use crate::components::tween::transition;
+use crate::theme::tokens::{Tokens, rgba, shadow};
+use crate::theme::{self, ai, motion};
+
+/// The composer's corners.
+const RADIUS: f32 = 22.;
 
 /// The widest the composer gets in the session window, as the column above.
 const COMPOSER_W: f32 = 780.;
@@ -63,7 +70,7 @@ impl ChatView {
                 .child(SharedString::from(e))
         });
         let mic = self.mic(window, cx);
-        let send = self.send_button(&t, busy, cx);
+        let send = self.send_button(&t, busy, window, cx);
         let stop = busy.then(|| self.stop_button(&t, cx));
         let field = Textarea::new(&self.composer)
             .appearance(false)
@@ -72,17 +79,40 @@ impl ChatView {
             .line_height(self.px(20.))
             .py(self.px(6.))
             .px(self.px(0.));
+        // CHAT-041: the field lifts off the chat, and a little more while
+        // it has the keyboard.
+        let focused = self.composer_handle(cx).is_focused(window);
+        let id = cx.entity_id();
+        let focus = transition(
+            window,
+            cx,
+            ("chat-focus", id),
+            if focused { 1f32 } else { 0. },
+            Duration::from_millis(160),
+            motion::ease_out,
+        );
+        let mut shadows = t.md();
+        if focus > 0.01 {
+            shadows.push(shadow(
+                0.,
+                6. * self.scale,
+                22. * self.scale,
+                0.,
+                rgba(0, 0, 0, focus * if t.dark { 0.3 } else { 0.07 }),
+            ));
+        }
         let pill = div()
             .flex()
             .items_end()
             .gap(self.px(6.))
-            .pl(self.px(12.))
-            .pr(self.px(6.))
-            .py(self.px(5.))
-            .rounded(self.px(16.))
+            .pl(self.px(16.))
+            .pr(self.px(7.))
+            .py(self.px(7.))
+            .rounded(self.px(RADIUS))
             .border_1()
-            .border_color(t.border_strong)
-            .bg(t.bg_window)
+            .border_color(ai::lerp(t.border, t.border_strong, focus))
+            .bg(look::field_bg(&t))
+            .shadow(shadows)
             .child(div().flex_1().min_w_0().child(field))
             .child(mic)
             .children(stop)
@@ -94,7 +124,7 @@ impl ChatView {
             .flex()
             .justify_center()
             .px(self.px(side))
-            .pt(self.px(6.))
+            .pt(self.px(4.))
             .pb(self.px(if self.in_card { 10. } else { 18. }))
             .on_key_down(cx.listener(Self::composer_key))
             .child(
@@ -103,7 +133,7 @@ impl ChatView {
                     .max_w(self.px(COMPOSER_W))
                     .flex()
                     .flex_col()
-                    .gap(self.px(6.))
+                    .gap(self.px(8.))
                     .children(queue)
                     .children(error)
                     .child(pill)
@@ -140,14 +170,20 @@ impl ChatView {
                     .items_center()
                     .gap(self.px(8.))
                     .px(self.px(6.))
-                    .py(self.px(3.))
-                    .rounded(self.px(6.))
+                    .py(self.px(4.))
+                    .rounded(self.px(8.))
                     .child(
                         div()
                             .flex_none()
-                            .w(self.px(14.))
-                            .text_color(t.text_tertiary)
-                            .text_size(self.px(11.))
+                            .size(self.px(18.))
+                            .rounded_full()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .bg(t.bg_hover)
+                            .text_color(t.text_secondary)
+                            .text_size(self.px(10.5))
+                            .font_weight(FontWeight::SEMIBOLD)
                             .child(SharedString::from((n + 1).to_string())),
                     )
                     .child(
@@ -192,10 +228,10 @@ impl ChatView {
                 .flex_col()
                 .gap(self.px(1.))
                 .p(self.px(6.))
-                .rounded(self.px(12.))
+                .rounded(self.px(16.))
                 .border_1()
-                .border_color(t.border)
-                .bg(alpha(t.bg_window, 0.6))
+                .border_color(t.separator)
+                .bg(t.bg_sunken)
                 .text_size(self.px(12.5))
                 .child(
                     div()
@@ -241,10 +277,29 @@ impl ChatView {
         )
     }
 
-    fn send_button(&mut self, t: &Tokens, busy: bool, cx: &mut Context<'_, Self>) -> AnyElement {
+    /// CHAT-041: the accent once there's something to send, springing up
+    /// as it fills; grey while the field is empty.
+    fn send_button(&mut self, t: &Tokens, busy: bool, window: &mut Window, cx: &mut Context<'_, Self>) -> AnyElement {
         let empty = self.composer.read(cx).value().trim().is_empty();
-        let bg = if empty { t.bg_pressed } else { t.accent };
-        let fg = if empty { t.text_tertiary } else { t.text_on_accent };
+        let id = cx.entity_id();
+        let target = if empty { 0f32 } else { 1. };
+        let ready = transition(
+            window,
+            cx,
+            ("chat-send-ready", id),
+            target,
+            Duration::from_millis(180),
+            motion::ease_out,
+        );
+        let pop = transition(
+            window,
+            cx,
+            ("chat-send-pop", id),
+            target,
+            Duration::from_millis(420),
+            motion::ease_spring,
+        );
+        let fg = ai::lerp(t.text_tertiary, t.text_on_accent, ready);
         let glyph = if self.sending {
             spinner("chat-send-spin", 14. * self.scale, 2., fg, cx)
         } else {
@@ -264,7 +319,8 @@ impl ChatView {
             .flex()
             .items_center()
             .justify_center()
-            .bg(bg)
+            .bg(ai::lerp(t.bg_pressed, t.accent, ready))
+            .when((pop - 1.).abs() > 1e-3, |d| d.scale(0.9 + 0.1 * pop))
             .when(!empty, Styled::cursor_pointer)
             .child(glyph)
             .tooltip(native_tooltip(tip.into()))
@@ -275,8 +331,10 @@ impl ChatView {
             .into_any_element()
     }
 
+    /// CHAT-041: stop, a solid round button with a square on it.
     fn stop_button(&mut self, t: &Tokens, cx: &mut Context<'_, Self>) -> AnyElement {
         let me = cx.entity().downgrade();
+        let square = if t.dark { t.bg_elevated } else { rgba(255, 255, 255, 1.) };
         div()
             .id("chat-stop")
             .flex_none()
@@ -286,10 +344,9 @@ impl ChatView {
             .items_center()
             .justify_center()
             .cursor_pointer()
-            .border_1()
-            .border_color(t.border_strong)
-            .hover(|d| d.bg(t.bg_hover))
-            .child(icon(Icon::Square, 11. * self.scale, 2.6, t.text_secondary))
+            .bg(t.text_primary)
+            .hover(|d| d.opacity(0.82))
+            .child(div().size(self.px(10.)).rounded(self.px(2.5)).bg(square))
             .tooltip(native_tooltip("Stop Claude (Esc)".into()))
             .on_click(move |_, _, cx| {
                 let _ = me.update(cx, ChatView::interrupt);

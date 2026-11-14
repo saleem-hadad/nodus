@@ -3,7 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, PoisonError};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use gpui::component::input::{InputEvent, TextareaState};
 use gpui::prelude::FluentBuilder as _;
@@ -140,6 +140,12 @@ pub struct ChatView {
     pub(crate) shows: super::shows::Shows,
     /// Tool runs shown in full, by their first call's id.
     pub(crate) opened: HashSet<String>,
+    /// When entries that came in while the chat was up arrived, by id, so
+    /// they move in (CHAT-040).
+    pub(crate) born: HashMap<String, Instant>,
+    /// When Claude's turn started, as this chat saw it: the clock its
+    /// working motion runs on (CHAT-019).
+    pub(crate) working_since: Option<Instant>,
     pub(crate) dock: Dock,
     /// Everything draws this many times its size (a card on a zoomed board).
     pub(crate) scale: f32,
@@ -234,6 +240,8 @@ impl ChatView {
             composer,
             shows: super::shows::Shows::default(),
             opened: HashSet::new(),
+            born: HashMap::new(),
+            working_since: None,
             dock: Dock::default(),
             scale: 1.0,
             in_card,
@@ -298,6 +306,19 @@ impl ChatView {
             .zip(entries.iter())
             .position(|(a, b)| a != b)
             .unwrap_or_else(|| self.entries.len().min(entries.len()));
+        // CHAT-040: what's new since the chat opened moves in; what it opened
+        // with is already there.
+        if self.loaded {
+            let now = Instant::now();
+            self.born
+                .retain(|_, at| now.duration_since(*at) < Duration::from_secs(5));
+            let known: HashSet<&str> = self.entries.iter().map(ChatEntry::id).collect();
+            for entry in entries.iter() {
+                if !known.contains(entry.id()) {
+                    self.born.insert(entry.id().to_owned(), now);
+                }
+            }
+        }
         let rows = rows_of(&entries);
         let from = self
             .rows
@@ -368,6 +389,14 @@ impl ChatView {
     /// there, and goes again when it stops waiting.
     fn follow_status(&mut self, cx: &mut Context<'_, Self>) {
         let status = self.card(cx).map(|c| c.status);
+        let working = self
+            .card(cx)
+            .is_some_and(|c| c.live && c.status == SessionStatus::Working);
+        if !working {
+            self.working_since = None;
+        } else if self.working_since.is_none() {
+            self.working_since = Some(Instant::now());
+        }
         let waiting = status == Some(SessionStatus::Waiting);
         let was_waiting = self.last_status == Some(SessionStatus::Waiting);
         if waiting && !was_waiting && !self.dock.open {
@@ -629,7 +658,14 @@ impl Render for ChatView {
             .text_color(t.text_primary)
             .text_size(self.px(13.5))
             .line_height(self.px(20.))
-            .child(div().flex_1().min_h_0().relative().child(messages))
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .relative()
+                    .child(messages)
+                    .children(self.render_edges(window, cx)),
+            )
             .children(dock)
             .child(composer)
             .children(hidden)
@@ -653,6 +689,7 @@ impl ChatView {
             } else {
                 ("No messages yet", "Send a message to start this session.")
             };
+            // CHAT-035: Claude's mark over the words, once there's something to say.
             return div()
                 .size_full()
                 .flex()
@@ -660,9 +697,12 @@ impl ChatView {
                 .items_center()
                 .justify_center()
                 .gap(self.px(4.))
+                .when(self.loaded, |d| {
+                    d.child(super::look::avatar(40. * self.scale, None, &t).mb(self.px(10.)))
+                })
                 .child(
                     div()
-                        .text_size(self.px(15.))
+                        .text_size(self.px(16.))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .child(title),
                 )
@@ -675,6 +715,86 @@ impl ChatView {
         )
         .size_full()
         .into_any_element()
+    }
+
+    /// CHAT-036: the list's edges fade into the chat, and a button takes the
+    /// list back to the newest row once it's been scrolled up from it.
+    fn render_edges(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> Vec<gpui::AnyElement> {
+        if self.rows.is_empty() {
+            return Vec::new();
+        }
+        let t = theme::tokens(cx);
+        let fade = |top: bool, h: f32| {
+            let (from, to) = (theme::tokens::alpha(t.bg_elevated, 0.), gpui::Hsla::from(t.bg_elevated));
+            div()
+                .absolute()
+                .left_0()
+                .right_0()
+                .h(self.px(h))
+                .when(top, Styled::top_0)
+                .when(!top, Styled::bottom_0)
+                .bg(gpui::linear_gradient(
+                    if top { 0. } else { 180. },
+                    gpui::linear_color_stop(from, 0.),
+                    gpui::linear_color_stop(to, 1.),
+                ))
+                .into_any_element()
+        };
+        let away = !self.list.is_following_tail() && self.list.is_scrolled_to_end() == Some(false);
+        let id = cx.entity_id();
+        let shown = crate::components::tween::transition(
+            window,
+            cx,
+            ("chat-latest", id),
+            if away { 1f32 } else { 0. },
+            Duration::from_millis(180),
+            theme::motion::ease_out,
+        );
+        let mut edges = vec![fade(true, 14.), fade(false, 22.)];
+        if shown > 0.01 {
+            let me = cx.entity().downgrade();
+            edges.push(
+                div()
+                    .absolute()
+                    .left_0()
+                    .right_0()
+                    .bottom(self.px(10.))
+                    .flex()
+                    .justify_center()
+                    .child(
+                        div()
+                            .id("chat-latest")
+                            .size(self.px(32.))
+                            .rounded_full()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .cursor_pointer()
+                            .bg(super::look::field_bg(&t))
+                            .border_1()
+                            .border_color(t.border)
+                            .shadow(t.md())
+                            .hover(|d| d.bg(t.bg_hover))
+                            .opacity(shown)
+                            .translate(px(0.), self.px(6. * (1. - shown)))
+                            .child(crate::components::icon::icon(
+                                crate::components::icon::Icon::ChevronDown,
+                                15. * self.scale,
+                                2.2,
+                                t.text_secondary,
+                            ))
+                            .tooltip(crate::components::tooltip::native_tooltip("Jump to the latest".into()))
+                            .on_click(move |_, _, cx| {
+                                let _ = me.update(cx, |this, cx| {
+                                    this.list.set_follow_mode(FollowMode::Tail);
+                                    cx.notify();
+                                });
+                            }),
+                    )
+                    .into_any_element(),
+            );
+        }
+        edges
     }
 
     /// CHAT-024: the terminal, under the chat.

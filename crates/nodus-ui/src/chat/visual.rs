@@ -54,6 +54,7 @@ pub fn visual_element(id: impl Into<ElementId>, visual: Rc<Visual>, scale: f32, 
         .bg(t.bg_elevated)
         .border_1()
         .border_color(t.border)
+        .shadow(t.sm())
         .font_family(fonts::UI)
         .text_color(t.text_primary)
         .when_some(title, |d, title| {

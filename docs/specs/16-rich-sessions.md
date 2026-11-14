@@ -11,7 +11,7 @@ Sources:
 - `crates/nodus-core/src/sessions.rs` (`transcript_file`, `queue`, `set_queue`, `enqueue`, `deliver`)
 - `crates/nodus-tools/src/chat.rs`, `schema.rs` (`show_visual`, `ask`, `show_page`)
 - `crates/nodus-views/src/views.rs` (`nodus.submit`), `page/bridge.js`
-- `crates/nodus-ui/src/chat/` (the view, its rows, the composer, visuals and forms)
+- `crates/nodus-ui/src/chat/` (the view, its rows, the composer, visuals and forms; `look.rs`, the chat's look and arrivals)
 
 ## Summary
 
@@ -26,8 +26,8 @@ The chat is a view of the transcript, never a second record: everything it shows
 - **CHAT-005** What the user typed shows as their message: slash commands as `/name args`, pasted blocks with their tags dropped, system reminders and tooling noise left out (SESS-014…020), and `[1 image]` / `[N images]` for pictures.
 - **CHAT-006** A prompt the session host handed over through the Stop hook (QUEUE-005) shows as the user's message, marked `Queued while Claude worked`, with the host's lead line taken off.
 - **CHAT-007** A message that is a `<nodus-answers to="…" title="…">` envelope shows as an answers card (the title, then each answer as `key: value`), and marks what it answers (a form by its id, a page by its view's id) answered.
-- **CHAT-008** A tool's result finishes its call's line: a tick when it succeeded, a red cross when it failed. A call still running has a spinner.
-- **CHAT-009** Claude's words show as Markdown (selectable), its fenced `visual` and `questions` blocks taken out and shown as what they describe, in place. A run of tool calls is one row of lines (`name  detail`), the last 3 shown with `Show N earlier calls` above to show the rest, and `Show fewer` to fold them again. Claude's first row after the user's message carries `Claude` and the time.
+- **CHAT-008** A tool's result finishes its call's line: a quiet tick at its end when it succeeded, a red cross when it failed. A call still running has a spinner in place of the tool's glyph.
+- **CHAT-009** Claude's words show as Markdown (selectable), its fenced `visual` and `questions` blocks taken out and shown as what they describe, in place. A run of tool calls is one card of lines (`glyph  name  detail`, CHAT-038), the last 3 shown with `Show N earlier calls` above to show the rest, and `Show fewer` to fold them again. Claude's first row after the user's message carries Claude's mark, `Claude` and the time (CHAT-035).
 - **CHAT-010** `mcp__nodus__show_visual` shows its `visual`, `mcp__nodus__ask` its form, and `mcp__nodus__show_page` / `create_view` a page card. One the board turned down (its result an error) is a failed tool line instead, with the error's first line. Every other tool is a line.
 - **CHAT-011** Thinking isn't shown.
 - **CHAT-012** `[Request interrupted…]` is a notice: `Interrupted`.
@@ -37,7 +37,7 @@ The chat is a view of the transcript, never a second record: everything it shows
 - **CHAT-016** An API error Claude Code recorded is a notice with its text.
 - **CHAT-017** A compaction is a notice: `Earlier messages were summarized to free up context`.
 - **CHAT-018** While the chat is up, it looks at the transcript every 250 ms, off the main thread. The list follows the newest row while it's scrolled to the bottom, and stays put while the user reads further up.
-- **CHAT-019** Under the last row: `Working…` with a spinner while Claude works, and `Claude needs you below` while it waits on the user.
+- **CHAT-019** Under the last row, while Claude works: Claude's mark with its sparkle twinkling (CHAT-035) and a light passing through `Thinking…` while the last row is still the user's, `Working…` once Claude has said or done something since. While it waits on the user: `Claude needs you below` beside a red dot. The line rises 6px into place over 320ms when Claude's turn starts.
 - **CHAT-020** The composer: Return sends, ⇧Return is a new line, ⌘Return (Ctrl+Return) sends at once, and Esc stops Claude while it works. Its placeholder says what Return will do: `Message Claude…`, `Queue a message for when Claude is done…`, or `Message Claude to resume this session…`. Under it a line says the same in short: `↩ sends · ⇧↩ new line`, `Working · ↩ queues · ⌘↩ sends now · Esc stops`, `Claude is asking something below · ↩ queues`, or `Not running · sending resumes it`.
 - **CHAT-021** While Claude works or waits on the user, what's sent is queued (QUEUE-001). The queue shows above the field, numbered, each prompt with `Edit` (back into the field, out of the queue) and `Remove`.
 - **CHAT-022** ⌘Return, and anything sent while Claude is idle, is typed in at the prompt as a paste and Return (SESS-141…145): a running Claude takes it at its next step. A session that isn't running resumes with it. Esc and the stop button send Esc.
@@ -46,13 +46,25 @@ The chat is a view of the transcript, never a second record: everything it shows
 - **CHAT-025** Sending a slash command docks the terminal too, as it may open a picker only the terminal shows.
 - **CHAT-026** `Terminal` under the composer docks the terminal by hand.
 - **CHAT-027** A form's answers are sent as a `<nodus-answers>` envelope (`Answers::to_message`) the way CHAT-021/022 send anything.
-- **CHAT-028** A page card shows the page's title and `Putting it on the board…`, `On the board, beside this session` or `On the board · Answered`, with `Show on board`, which closes the session window, selects the view and pans the board to it.
+- **CHAT-028** A page card shows a tile with the page's glyph, the page's title and `Putting it on the board…`, `On the board, beside this session` or `On the board · Answered`, with `Show on board` (a round-ended button), which closes the session window, selects the view and pans the board to it.
 - **CHAT-029** Claude cards show the chat in the session window and in the expanded card, where it draws at the board's zoom; the start, loading and error overlays are the dock's now. The session window's Resume docks the terminal, which attaches and resumes the session. A shell card keeps its terminal, and so does a card on a server board, whose transcript isn't on this computer.
 - **CHAT-030** The mic sits in the composer, right of the field and left of Send (05's VOICE-041), not in the card's or window's title bar. Words said into it, or typed in from elsewhere, go into the composer at the caret, and a wake focuses the composer rather than the terminal.
 - **CHAT-031** A view's page can call `nodus.submit(answers)`: the answers (any JSON) go to the session that put the view up, as an answers envelope `to` the view's id, sent or queued as CHAT-021/022. A view no session put up can't submit.
 - **CHAT-032** A session that stops with prompts still queued (QUEUE-012) gives them back to the composer, one after another, and says `Claude stopped before your queued messages went out. They’re back in the box.`
 - **CHAT-033** While Claude shows a dialog in its terminal, the terminal docks and nothing is typed into it. A dialog is a screen that says `Enter to confirm`, `Enter to select`, `Enter to continue`, `Esc to cancel`, `Esc to exit`, `Esc to go back` or `Press Enter to`, or has a line starting `❯ <number>.`: Claude Code's folder trust check, a permission prompt, a question, a picker. The screen is looked at when the terminal draws and every second. While one shows, the dock reads `Claude needs you here`, the line under the composer `Claude is asking something in the terminal below`, and a message that would be typed stays in the composer with `Claude is asking something in the terminal below. Answer it first.` (one that would be queued is queued). The dock goes again when the dialog does, unless the user opened it or Claude still waits on the user.
 - **CHAT-034** While the session runs and the dock is down, its terminal is laid out off screen at the dock's size, so its screen can be read and docking it doesn't resize it. The session window's terminal attaches only while the session runs or the dock is up (so opening a stopped session's window no longer resumes it); a card's follows the card (XCARD-019…XCARD-026).
+
+### The chat's look
+
+The chat stays in the theme's neutrals: depth, spacing and motion lift it, not colour. The accent is on Send alone, once there's something to send.
+
+- **CHAT-035** Claude's mark is the sparkle, in the secondary text colour, on a round tile of the sunken surface with a hairline: 22px beside `Claude` (semibold, the text colour) at the head of a reply, 20px on the working line, 40px over the empty chat's words. While Claude works, the working line's sparkle twinkles (MOTION-038).
+- **CHAT-036** The list's top 14px and bottom 22px fade into the chat's background. Scrolled up away from the newest row, a round button with a chevron rises over the list's foot (180ms); it takes the list back to the newest row and following it again (CHAT-018).
+- **CHAT-037** The user's message is a bubble of the hover surface, corners of 18px but 6px at the bottom right, at most 82% of the column wide, with `Queued while Claude worked` above it when it was queued. An answers card (CHAT-007) is the same bubble, its title after a tick.
+- **CHAT-038** A run of tool calls sits on a card (the sunken surface, a hairline, corners of 12px). Each line has the tool's glyph (a terminal for `Bash`, an eye for `Read`, a pencil for `Edit`/`Write`, a magnifier for `Grep`/`Glob`, a globe for web tools, a robot for `Task`/`Agent`, the sparkle for anything else), the name and the detail in mono, and the outcome at its end (CHAT-008). The line of a call still running sits on the hover surface and a light passes through its name. Charts, layouts, forms and page cards carry the small shadow (`--shadow-sm`), which lifts them off the chat.
+- **CHAT-039** A notice is a rounded pill in the middle, between hairlines that reach to the column's sides.
+- **CHAT-040** What arrives while the chat is up moves in; what the chat opened with is already there. The user's bubble pops up from its bottom-right corner (420ms: rising 10px, scaling from 90% on `--ease-spring`). Claude's words show from the top down behind a soft edge a third of their height deep (900ms on `--ease-out`), rising 4px. A chart, form or page lifts 12px into place from 98% (480ms), and a notice or a run of tools fades up 4px (280ms). Each tool line slides in 8px from the left as its call arrives (320ms). Parity shots and reduced motion show every row in place.
+- **CHAT-041** The composer is a field with corners of 22px, lifted off the chat by a shadow (white on the light theme, `#323236` on the dark). With the keyboard, its edge darkens and its shadow deepens (160ms). Send is a 30px circle, grey while the field is empty; with something to send it turns the accent (180ms) and springs from 90% to full size (420ms, `--ease-spring`). Stop is a solid 30px circle in the text colour with a rounded square on it. A queued prompt's number sits in a small round tile.
 
 ## The board tools that show things in the chat (TOOLCHAT)
 

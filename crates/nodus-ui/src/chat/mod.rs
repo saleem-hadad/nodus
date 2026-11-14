@@ -8,6 +8,7 @@
 mod composer;
 mod entries;
 pub mod form;
+mod look;
 mod shows;
 mod view;
 pub mod visual;

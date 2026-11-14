@@ -8,6 +8,7 @@ Sources:
 - `crates/nodus-ui/src/views/building.rs`, `reveal.rs`, `card.rs`, `frames.rs`, `swap.rs`; `crates/nodus-views/src/page/theme.css` and `guide-2.txt` (a view's page)
 - `crates/nodus-ui/src/capture/render.rs`
 - `crates/nodus-ui/src/components/presence.rs` and the overlays that leave
+- `crates/nodus-ui/src/chat/look.rs`, `entries.rs`, `composer.rs` (the chat's motion)
 
 ## Claude's signature
 
@@ -45,6 +46,7 @@ Sources:
 
 - **MOTION-036** A view's page moves as the app does. Its theme (VIEW-026) carries the app's motion: `--nodus-fast` 120ms, `--nodus-med` 220ms, `--nodus-slow` 420ms, `--nodus-ease`, `--nodus-ease-out`, `--nodus-ease-in` (exits) and `--nodus-ease-spring`, and `nodus-enter` fades what just arrived in from 4px down over `--nodus-med`. Its controls change colour over `--nodus-fast`. The guide (VIEW-121) tells Claude to move a page only to show a change, with these, and never to bounce, loop or spin for decoration. When the OS asks for reduced motion, every animation and transition on the page ends at once and Claude's look holds still.
 - **MOTION-037** Claude's look in a page: `nodus-sparkle` is the sparkle (14px, `#bf5af2`, twinkling every 1.6s), and `nodus-thinking` words carry the light passing through them every 1.8s, `--nodus-text-3` at rest, `--nodus-text` as it passes and the sparkle's colour at its middle (MOTION-001). The guide tells Claude to show them, rather than a spinner, while the page waits on it (after `nodus.ask`, or a refresh it asked for), and for nothing else. They're the only gradient a page may show.
+- **MOTION-038** The chat (spec 16) moves as the board does, in its neutrals rather than Claude's colours. Rows that arrive while it's up move in (CHAT-040): Claude's words show from the top down behind a soft edge, the user's bubble pops from its corner, cards lift into place, tool lines slide in. While Claude works, the working line's sparkle twinkles and a light passes through `Thinking…`/`Working…` and through the name of a running tool, in the text colour, without the sweep's purple (CHAT-019, CHAT-038). The composer lifts as it takes the keyboard, and Send springs up as the field fills (CHAT-041).
 
 ## Known limits
 

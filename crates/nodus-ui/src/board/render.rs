@@ -19,7 +19,7 @@ use nodus_board::geometry::Point;
 use nodus_domain::{BoardNote, BoardSnapshot, FolderColor, Rect};
 
 use super::canvas::{BoardCanvas, Gesture, Glide};
-use super::edges;
+use super::edges::{self, EdgeKind};
 use super::hud::rgba_mix;
 use super::layout::{note_pad_rect, pad_sheet_spot};
 use super::moments::{self, Arrival};
@@ -50,7 +50,8 @@ struct NodeMoment {
     lift: f32,
     /// MOTION-031: 0…1 through the ring round a card whose long run finished.
     ring: Option<f32>,
-    /// MOTION-035: 0…1 through the glow of a card a finished child's pulse reached.
+    /// MOTION-035, MOTION-044: 0…1 through the glow of a card a finished
+    /// child's pulse, or a message, reached.
     news: Option<f32>,
 }
 
@@ -94,8 +95,8 @@ fn done_ring(t: f32, w: f32, h: f32, z: f32) -> AnyElement {
     card_glow(angle, opacity, w, h, z)
 }
 
-/// MOTION-035: the parent's edge lighting up as the pulse reaches it, then
-/// fading, `t` through it.
+/// MOTION-035, MOTION-044: the edge of the card a pulse or a message
+/// reached lighting up, then fading, `t` through it.
 fn news_glow(t: f32, w: f32, h: f32, z: f32) -> AnyElement {
     card_glow(0.0, 0.9 * (1.0 - motion::ease_out(t)), w, h, z)
 }
@@ -259,14 +260,29 @@ impl BoardCanvas {
         }
     }
 
-    /// MOTION-035: how far through its glow a card is that a finished
-    /// child's pulse just reached up a lineage edge.
-    fn news(&self, parent: &str, now: Instant) -> Option<f32> {
+    /// MOTION-035, MOTION-044: how far through its glow a card is that a
+    /// finished child's pulse just reached up a lineage edge, or a message
+    /// from another session reached along the line between them.
+    fn news(&self, card: &str, now: Instant) -> Option<f32> {
         let travel = moments::PULSE_TRAVEL_MS;
-        self.edges
+        let finished = self
+            .edges
             .iter()
-            .filter(|e| !e.view && e.source == parent)
-            .filter_map(|e| self.moments.pulse(&e.target, now))
+            .filter(|e| e.kind == EdgeKind::Lineage && e.source == card)
+            .filter_map(|e| self.moments.pulse(&e.target, now));
+        let messages = self
+            .moments
+            .messages(now)
+            .filter(|(m, _)| {
+                m.to == card
+                    && self
+                        .edges
+                        .iter()
+                        .any(|e| e.kind != EdgeKind::View && e.joins(&m.from, &m.to))
+            })
+            .map(|(_, ms)| ms);
+        finished
+            .chain(messages)
             .filter(|ms| *ms >= travel)
             .map(|ms| ((ms - travel) / (moments::PULSE_MS - travel)) as f32)
             .reduce(f32::min)
@@ -653,34 +669,42 @@ impl BoardCanvas {
                     Point { x, y }
                 });
                 let z = vp.zoom;
-                let pulse = (!e.view).then(|| self.moments.pulse(&e.target, now)).flatten();
-                Some(if e.view {
-                    EdgePaint {
-                        pts,
-                        color: rgba_mix(t.accent, 0.7),
-                        width: 2.0 * z,
-                        dash: Some((6.0 * z, 4.0 * z, 1000.0)),
-                        round: true,
-                        pulse,
+                let mut pulses = Vec::new();
+                if e.kind == EdgeKind::Lineage
+                    && let Some(ms) = self.moments.pulse(&e.target, now)
+                {
+                    pulses.push(Pulse { ms, backwards: true });
+                }
+                // MOTION-044: messages between its ends run along it; the line
+                // between two that just started talking draws in behind the first.
+                let mut span = (0.0, 1.0);
+                if e.kind != EdgeKind::View {
+                    for (m, ms) in self.moments.messages(now).filter(|(m, _)| e.joins(&m.from, &m.to)) {
+                        let backwards = m.from == e.target;
+                        pulses.push(Pulse { ms, backwards });
+                        if m.opens && e.kind == EdgeKind::Talk && ms < moments::PULSE_TRAVEL_MS {
+                            let head = f64::from(motion::ease_in_out((ms / moments::PULSE_TRAVEL_MS) as f32));
+                            span = if backwards { (1.0 - head, 1.0) } else { (0.0, head) };
+                        }
                     }
-                } else if e.animated {
-                    EdgePaint {
-                        pts,
-                        color: t.status_working,
-                        width: 1.5 * z,
-                        dash: Some((5.0 * z, 5.0 * z, 500.0)),
-                        round: false,
-                        pulse,
+                }
+                let (color, width, dash, round) = match e.kind {
+                    EdgeKind::View => (rgba_mix(t.accent, 0.7), 2.0 * z, Some((6.0 * z, 4.0 * z, 1000.0)), true),
+                    EdgeKind::Lineage if e.animated => {
+                        (t.status_working, 1.5 * z, Some((5.0 * z, 5.0 * z, 500.0)), false)
                     }
-                } else {
-                    EdgePaint {
-                        pts,
-                        color: t.border_strong,
-                        width: 1.5 * z,
-                        dash: None,
-                        round: false,
-                        pulse,
-                    }
+                    EdgeKind::Lineage => (t.border_strong, 1.5 * z, None, false),
+                    // BOARD-184: dotted, holding still.
+                    EdgeKind::Talk => (t.border_strong, 1.5 * z, Some((1.0 * z, 4.5 * z, 0.0)), true),
+                };
+                Some(EdgePaint {
+                    pts,
+                    color,
+                    width,
+                    dash,
+                    round,
+                    span,
+                    pulses,
                 })
             })
             .collect()
@@ -723,11 +747,23 @@ struct EdgePaint {
     pts: [Point; 4],
     color: gpui::Rgba,
     width: f64,
-    /// Dash on, off, and the ms one period of `dashdraw` takes.
+    /// Dash on, off, and the ms one period of `dashdraw` takes (0: still).
     dash: Option<(f64, f64, f64)>,
     round: bool,
-    /// MOTION-035: ms since the child finished and sent its pulse up.
-    pulse: Option<f64>,
+    /// The part of the curve drawn, 0…1 along it (MOTION-044 draws one in).
+    span: (f64, f64),
+    /// MOTION-035, MOTION-044: lights running along it.
+    pulses: Vec<Pulse>,
+}
+
+/// A light running along an edge.
+#[derive(Clone, Copy)]
+struct Pulse {
+    /// Since it set off.
+    ms: f64,
+    /// From the edge's end to its start: a finished child's news going up
+    /// to its parent, or a message from the target.
+    backwards: bool,
 }
 
 fn bezier(p: &[Point; 4], t: f64) -> Point {
@@ -739,30 +775,60 @@ fn bezier(p: &[Point; 4], t: f64) -> Point {
     }
 }
 
+/// The curve from `from` to `to` (0…1 along it) as a line through points.
+fn flatten(p: &[Point; 4], from: f64, to: f64) -> Vec<Point> {
+    const STEPS: f64 = 96.0;
+    let steps = ((STEPS * (to - from)).ceil() as usize).max(1);
+    (0..=steps)
+        .map(|i| bezier(p, from + (to - from) * i as f64 / steps as f64))
+        .collect()
+}
+
+/// A line's length.
+fn length(pts: &[Point]) -> f64 {
+    pts.windows(2)
+        .map(|w| ((w[1].x - w[0].x).powi(2) + (w[1].y - w[0].y).powi(2)).sqrt())
+        .sum()
+}
+
 /// Paints an edge; `phase` (0…1) is how far the dashes have marched.
 fn paint_edge(edge: &EdgePaint, origin: gpui::Point<Pixels>, phase: f64, window: &mut Window) {
     let at = |p: Point| point(origin.x + px(p.x as f32), origin.y + px(p.y as f32));
     let width = px(edge.width as f32);
+    let (from, to) = edge.span;
+    if to <= from {
+        return;
+    }
     let Some((on, off, _)) = edge.dash else {
         let mut path = PathBuilder::stroke(width);
-        path.move_to(at(edge.pts[0]));
-        path.cubic_bezier_to(at(edge.pts[3]), at(edge.pts[1]), at(edge.pts[2]));
+        if (from, to) == (0.0, 1.0) {
+            path.move_to(at(edge.pts[0]));
+            path.cubic_bezier_to(at(edge.pts[3]), at(edge.pts[1]), at(edge.pts[2]));
+        } else {
+            let pts = flatten(&edge.pts, from, to);
+            path.move_to(at(pts[0]));
+            for p in &pts[1..] {
+                path.line_to(at(*p));
+            }
+        }
         if let Ok(path) = path.build() {
             window.paint_path(path, edge.color);
         }
         return;
     };
     // Flatten, then cut into dashes along the length: `stroke-dashoffset`
-    // runs 10 → 0 (in flow units, scaled) over a period.
-    const STEPS: usize = 96;
-    let pts: Vec<Point> = (0..=STEPS)
-        .map(|i| bezier(&edge.pts, i as f64 / STEPS as f64))
-        .collect();
+    // runs 10 → 0 (in flow units, scaled) over a period. Dashes keep their
+    // places along the whole curve while only part of it is drawn.
+    let pts = flatten(&edge.pts, from, to);
     let period = on + off;
     let offset = period * (1.0 - phase);
     let mut path = PathBuilder::stroke(width);
     let mut ends: Vec<Point> = Vec::new();
-    let mut s = 0.0;
+    let mut s = if from > 0.0 {
+        length(&flatten(&edge.pts, 0.0, from))
+    } else {
+        0.0
+    };
     let mut drawing = false;
     for pair in pts.windows(2) {
         let (a, b) = (pair[0], pair[1]);
@@ -822,10 +888,13 @@ fn paint_edge(edge: &EdgePaint, origin: gpui::Point<Pixels>, phase: f64, window:
     }
 }
 
-/// MOTION-035: a light running up a lineage edge from the session that
-/// finished (the edge's end) to its parent (its start) in Claude's colours,
-/// trailing a fading tail, then going out at the parent (whose card glows).
-fn paint_pulse(edge: &EdgePaint, origin: gpui::Point<Pixels>, ms: f64, zoom: f64, window: &mut Window) {
+/// MOTION-035, MOTION-044: a light running along an edge in Claude's
+/// colours, trailing a fading tail, then going out at the far end (whose
+/// card glows): up a lineage edge from the session that finished (its end)
+/// to its parent (its start), or from a session to one it messaged.
+fn paint_pulse(edge: &EdgePaint, origin: gpui::Point<Pixels>, pulse: Pulse, zoom: f64, window: &mut Window) {
+    let Pulse { ms, backwards } = pulse;
+    let along = |t: f64| if backwards { 1.0 - t } else { t };
     let at = |p: Point| point(origin.x + px(p.x as f32), origin.y + px(p.y as f32));
     let dot = |c: Point, r: f64, color: gpui::Rgba, window: &mut Window| {
         let b = Bounds::new(
@@ -841,7 +910,7 @@ fn paint_pulse(edge: &EdgePaint, origin: gpui::Point<Pixels>, ms: f64, zoom: f64
         for k in (0..8).rev() {
             let t = (head - f64::from(k) * 0.025).max(0.0);
             let share = 1.0 - f64::from(k) / 8.0;
-            let c = bezier(&edge.pts, 1.0 - t);
+            let c = bezier(&edge.pts, along(t));
             dot(
                 c,
                 (1.0 + 2.5 * share) * zoom,
@@ -849,13 +918,14 @@ fn paint_pulse(edge: &EdgePaint, origin: gpui::Point<Pixels>, ms: f64, zoom: f64
                 window,
             );
         }
-        let c = bezier(&edge.pts, 1.0 - head);
+        let c = bezier(&edge.pts, along(head));
         dot(c, 8.0 * zoom, hue.with_alpha(0.22), window);
         dot(c, 3.5 * zoom, hue, window);
     } else {
         let t = ((ms - travel) / (moments::PULSE_MS - travel)).clamp(0.0, 1.0);
         let e = f64::from(motion::ease_out(t as f32));
-        dot(edge.pts[0], 3.5 * zoom * (1.0 - e), hue, window);
+        let end = if backwards { edge.pts[0] } else { edge.pts[3] };
+        dot(end, 3.5 * zoom * (1.0 - e), hue, window);
     }
 }
 
@@ -986,7 +1056,9 @@ impl Render for BoardCanvas {
         let frozen = crate::parity::frozen(cx);
         // Marching dashes move on the ambient clock, while one is in view.
         let (cw, ch) = self.canvas_size();
-        let marching = edge_paths.iter().any(|e| e.dash.is_some() && on_canvas(&e.pts, cw, ch));
+        let marching = edge_paths
+            .iter()
+            .any(|e| e.dash.is_some_and(|(_, _, period)| period > 0.0) && on_canvas(&e.pts, cw, ch));
         if marching && !frozen {
             crate::components::ambient::request_frame(window, cx);
         }
@@ -1049,12 +1121,12 @@ impl Render for BoardCanvas {
             move |bounds, _, window, _| {
                 for edge in &edge_paths {
                     let phase = match edge.dash {
-                        Some((_, _, period)) if !frozen => (elapsed % period) / period,
+                        Some((_, _, period)) if !frozen && period > 0.0 => (elapsed % period) / period,
                         _ => 0.0,
                     };
                     paint_edge(edge, bounds.origin, phase, window);
-                    if let Some(ms) = edge.pulse {
-                        paint_pulse(edge, bounds.origin, ms, vp.zoom, window);
+                    for pulse in &edge.pulses {
+                        paint_pulse(edge, bounds.origin, *pulse, vp.zoom, window);
                     }
                 }
             },

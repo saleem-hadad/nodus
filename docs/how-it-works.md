@@ -152,6 +152,8 @@ The double tap is heard through a global key hook (an event tap on a Mac, low-le
 
 Cards are read from Claude Code's transcripts in `~/.claude/projects/<encoded-repo-path>/`. Titles use your custom title first, then Claude's generated title, then the first prompt. Parsing is incremental and cached, so large histories load quickly.
 
+When sessions message each other (with Claude Code's SendMessage, for example when you ask one to tell another what it changed), a dotted line joins their cards, and each message runs along it as a light from the sender to the receiver. The app reads this from both transcripts. When only one of them is on the board, it asks Claude Code's list of running sessions who is at the other end.
+
 ## New session from context
 
 For each selected session the app runs `claude -p --resume <id> --fork-session --no-session-persistence`, at most three at a time. The fork writes a handoff summary and is then thrown away, so the original session is never touched. You review and edit the combined summaries, and they become the new session's first prompt.

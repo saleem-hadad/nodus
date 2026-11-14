@@ -1,9 +1,23 @@
-//! Lineage edges and the dashed view edge (BOARD-025…BOARD-031,
+//! Lineage edges, the dashed view edge and the dotted line between sessions
+//! that message each other (BOARD-025…BOARD-031, BOARD-184,
 //! `LineageEdge.tsx`): which edges exist, where they attach and their
 //! Bézier path (React Flow's `getBezierPath`, curvature 0.25).
 
+use std::collections::HashSet;
+
 use nodus_board::geometry::Point;
 use nodus_domain::{BoardSnapshot, Rect, SessionStatus};
+
+/// What an edge joins.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EdgeKind {
+    /// From a session to one started from it (BOARD-025).
+    Lineage,
+    /// From a view to a session it started (`view-edge`, BOARD-027).
+    View,
+    /// Between two sessions that messaged each other (BOARD-184).
+    Talk,
+}
 
 /// One edge, by node ids.
 #[derive(Debug, Clone, PartialEq)]
@@ -13,12 +27,19 @@ pub struct Edge {
     pub target: String,
     /// Dashes moving: the child is working (lineage), always (view edge).
     pub animated: bool,
-    /// From a view to a session it started (`view-edge`).
-    pub view: bool,
+    pub kind: EdgeKind,
 }
 
-/// The edges for a board (BOARD-025…BOARD-027): lineage between active
-/// cards, then each active card a view started back to that view.
+impl Edge {
+    /// Joins these two nodes, either way round.
+    pub fn joins(&self, a: &str, b: &str) -> bool {
+        (self.source == a && self.target == b) || (self.source == b && self.target == a)
+    }
+}
+
+/// The edges for a board (BOARD-025…BOARD-027, BOARD-184): lineage between
+/// active cards, each active card a view started back to that view, then a
+/// line between active cards that messaged each other.
 pub fn edges(board: &BoardSnapshot) -> Vec<Edge> {
     let active: Vec<&str> = board
         .cards
@@ -39,7 +60,7 @@ pub fn edges(board: &BoardSnapshot) -> Vec<Edge> {
                     target: child.node.session_id.clone(),
                     // BOARD-026: dashes march while the child works.
                     animated: child.status == SessionStatus::Working,
-                    view: false,
+                    kind: EdgeKind::Lineage,
                 });
             }
         }
@@ -54,9 +75,30 @@ pub fn edges(board: &BoardSnapshot) -> Vec<Edge> {
                 source: view.to_owned(),
                 target: card.node.session_id.clone(),
                 animated: true,
-                view: true,
+                kind: EdgeKind::View,
             });
         }
+    }
+    // BOARD-184: one line a pair, from the first to message the other. A
+    // pair lineage already joins has its messages run along that.
+    let mut pairs: HashSet<(&str, &str)> = HashSet::new();
+    for talk in &board.talks {
+        let (from, to) = (talk.from.as_str(), talk.to.as_str());
+        if !active.contains(&from) || !active.contains(&to) {
+            continue;
+        }
+        let pair = if from < to { (from, to) } else { (to, from) };
+        if pairs.contains(&pair) || out.iter().any(|e| e.kind == EdgeKind::Lineage && e.joins(from, to)) {
+            continue;
+        }
+        pairs.insert(pair);
+        out.push(Edge {
+            id: format!("{}<->{}", pair.0, pair.1),
+            source: from.to_owned(),
+            target: to.to_owned(),
+            animated: false,
+            kind: EdgeKind::Talk,
+        });
     }
     out
 }
@@ -160,6 +202,44 @@ mod tests {
         w: 288.0,
         h: 216.0,
     };
+
+    fn board(talks: &serde_json::Value) -> BoardSnapshot {
+        let card = |id: &str, archived: bool, parents: serde_json::Value| {
+            serde_json::json!({ "sessionId": id, "x": 0.0, "y": 0.0, "archived": archived, "parents": parents, "createdAt": 0.0,
+                "status": "done", "live": false })
+        };
+        serde_json::from_value(serde_json::json!({
+            "project": { "id": "p", "name": "p", "repoPath": "/r", "color": "blue", "createdAt": 0.0 },
+            "cards": [
+                card("a", false, serde_json::Value::Null),
+                card("b", false, serde_json::json!(["a"])),
+                card("c", false, serde_json::Value::Null),
+                card("gone", true, serde_json::Value::Null),
+            ],
+            "archive": { "x": 0.0, "y": 0.0, "w": 344.0, "h": 362.0 },
+            "sections": [], "notes": [], "views": [], "ink": [],
+            "talks": talks,
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn draws_one_line_between_sessions_that_talked() {
+        let talk = |id: &str, from: &str, to: &str| serde_json::json!({ "id": id, "from": from, "to": to, "at": 0.0 });
+        let out = edges(&board(&serde_json::json!([
+            talk("1", "c", "a"),
+            talk("2", "a", "c"),
+            // Lineage joins a and b already.
+            talk("3", "b", "a"),
+            // Archived.
+            talk("4", "gone", "c"),
+        ])));
+        let ids: Vec<(&str, EdgeKind)> = out.iter().map(|e| (e.id.as_str(), e.kind)).collect();
+        assert_eq!(ids, vec![("a->b", EdgeKind::Lineage), ("a<->c", EdgeKind::Talk)]);
+        let talk = &out[1];
+        assert_eq!((talk.source.as_str(), talk.target.as_str()), ("c", "a"));
+        assert!(talk.joins("a", "c") && talk.joins("c", "a") && !talk.joins("a", "b"));
+    }
 
     #[test]
     fn attaches_to_the_facing_sides() {

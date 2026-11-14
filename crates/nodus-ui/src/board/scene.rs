@@ -615,6 +615,7 @@ mod tests {
             shapes: vec![],
             links: vec![],
             groups: vec![],
+            talks: vec![],
             viewport: None,
             offline: false,
         }

@@ -172,6 +172,7 @@ Connections (`nodesConnectable={false}`), edge selection/focus, React Flow's del
 - **BOARD-029** Each edge attaches to the midpoint of the side of each node that faces the other: with centres a, b and the source's size (w, h), if `|dx|/w > |dy|/h` the right (dx > 0) or left side, else the bottom (dy > 0) or top; the same rule from the target's side with the target's size.
 - **BOARD-030** The edge path is a cubic Bézier from source anchor S to target anchor T with control points offset along each anchor's side normal by `0.5·d` when the other end lies ahead on that axis (`d` = distance along the normal) or `0.25 × 25 × √(−d)` when it lies behind (React Flow `getBezierPath`, curvature 0.25).
 - **BOARD-031** Anchors use the nodes' logical positions and measured sizes: an edge jumps straight to a card's new position while the card itself glides there over 420ms (edges don't animate with node glides).
+- **BOARD-184** Two active cards whose sessions messaged each other with Claude Code's SendMessage are joined by a dotted line (id `<a><-><b>`, the ids in order), one per pair, from the first to send to the first to receive. A pair a lineage edge already joins gets no line; their messages run along the lineage edge. A message is read from both transcripts: SendMessage's result in the sender's (`msg_id`) and the `origin` (`kind: "peer"`, `msg_id`, `from`, `verifiedPeerPid`) of the line it came in on in the receiver's, a `user` line or, while the receiver was busy, a `queued_command` attachment. The two meet by `msg_id`. When only one end's transcript is on the board, the other end is looked up in Claude Code's registry of running sessions (`~/.claude/sessions/<pid>.json`: `sessionId`, `messagingSocketPath`, `name`, `startedAt`, `nameSince`): by socket or pid for a message taken in, by `uds:` socket or name for one sent, and only a session that was running under that name when the message went. Messages a session sent itself, and those to or from subagents or sessions not on the board, draw nothing. Like any card change, a new message shows once the transcript watcher sees it (500ms after, at most every 1.5s).
 
 ### Viewport commands
 
@@ -456,7 +457,7 @@ Section hue = `FOLDER_HUES[color].backBottom`: blue `#1d8be0`, purple `#8b5bd9`,
 
 ### Edges
 
-As in Behaviors › Edges. Lineage stroke `--border-strong` 1.5; animated: stroke `--status-working`, dash 5 on 5 off, offset 10 → 0 every 0.5s linear (forward along source → target). View edge: accent 70%, width 2, dash 6/4, round caps, 1s per cycle. No arrowheads. (Visual duplicate of 10 › Edges.)
+As in Behaviors › Edges. Lineage stroke `--border-strong` 1.5; animated: stroke `--status-working`, dash 5 on 5 off, offset 10 → 0 every 0.5s linear (forward along source → target). View edge: accent 70%, width 2, dash 6/4, round caps, 1s per cycle. The line between sessions that messaged each other (BOARD-184): `--border-strong`, width 1.5, dash 1 on 4.5 off with round caps (dots), still. No arrowheads. (Visual duplicate of 10 › Edges.)
 
 ### Marquee and selection rectangle
 
@@ -806,6 +807,7 @@ New Rust tests to add in `nodus-board` (pure functions, ported from layout.ts/se
 - [x] BOARD-029 Each edge attaches to the midpoint of the side of each node that faces the other: with centres a, b and the source's…
 - [x] BOARD-030 The edge path is a cubic Bézier from source anchor S to target anchor T with control points offset along each…
 - [x] BOARD-031 Anchors use the nodes' logical positions and measured sizes: an edge jumps straight to a card's new position while…
+- [x] BOARD-184 Two active cards whose sessions messaged each other with Claude Code's SendMessage are joined by a dotted line…
 - [x] BOARD-032 `fitActive(duration = 320)`: if the board has any active cards, free notes (notes without `sessionId`) or views, fit…
 - [x] BOARD-033 The zoom pill's fit button calls `fitActive` with the click event as its argument, which is not a number, so that…
 - [x] BOARD-034 `ensureVisible(p, size = 288×216)`: if the rect is already fully inside the visible flow rect (canvas size / zoom)…

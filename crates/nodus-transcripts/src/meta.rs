@@ -18,6 +18,7 @@ use serde_json::Value;
 use crate::lines::{Json, read_lines};
 use crate::parse::{assistant_parts, prompt_summary, time_of, truncate, user_text};
 use crate::paths::{list_session_files, mtime_ms};
+use crate::peers::Peers;
 use crate::value::{field, strict_eq, truthy};
 
 /// Over this, a transcript is read only at its head and tail (SESS-042).
@@ -35,6 +36,8 @@ pub struct DiscoveredSession {
     pub has_content: bool,
     /// When the user last sent a prompt; agents that finished before it belong to an earlier run.
     pub last_prompt_at: Option<f64>,
+    /// Messages to and from other sessions (BOARD-184).
+    pub peers: Peers,
 }
 
 /// What has been read of a transcript so far.
@@ -59,6 +62,7 @@ struct ParseState {
     has_assistant: bool,
     created_at: Option<f64>,
     updated_at: Option<f64>,
+    peers: Peers,
 }
 
 impl ParseState {
@@ -85,6 +89,7 @@ impl ParseState {
         if let Some(branch) = line.get("gitBranch").and_then(Value::as_str).filter(|b| !b.is_empty()) {
             self.git_branch = Some(branch.to_owned());
         }
+        self.peers.apply(line);
         let trimmed = |key: &str| {
             line.get(key)
                 .and_then(Value::as_str)
@@ -200,6 +205,7 @@ impl ParseState {
             eligible: self.sidechain != Some(true) && self.prompts > 0 && self.has_assistant,
             has_content: self.prompts > 0 || set(&self.custom_title).is_some() || set(&self.ai_title).is_some(),
             last_prompt_at: self.last_prompt_at,
+            peers: self.peers.clone(),
         }
     }
 }

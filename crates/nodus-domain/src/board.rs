@@ -340,6 +340,21 @@ impl BoardLink {
     }
 }
 
+/// A message one session on the board sent another with Claude Code's
+/// SendMessage, read from their transcripts (BOARD-184).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BoardTalk {
+    /// Claude Code's `msg_id`, the same at both ends.
+    pub id: String,
+    /// The session that sent it.
+    pub from: String,
+    /// The session it went to.
+    pub to: String,
+    /// When it was sent, or taken in when the sender's side isn't known (ms).
+    pub at: f64,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BoardSnapshot {
@@ -360,6 +375,9 @@ pub struct BoardSnapshot {
     /// Groups, oldest first (spec 17).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub groups: Vec<BoardGroup>,
+    /// Messages between the board's sessions, oldest first (BOARD-184).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub talks: Vec<BoardTalk>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub viewport: Option<Viewport>,
     /// A server board's last snapshot, given while the server can't be

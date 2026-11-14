@@ -123,7 +123,7 @@ pub mod hosted {
 pub use sessions::{Delivery, SessionsApi};
 pub use settings::SettingsApi;
 pub use shell::{AppShell, BoxFuture, Headless, ReplaceChoice};
-pub use updates::{RestartOutcome, StopSessionsQuestion, UpdatesApi};
+pub use updates::{RestartOutcome, StopSessionsQuestion, Unseen, UpdatesApi, WHATS_NEW_KEY};
 pub use views::ViewsApi;
 pub use voice::VoiceApi;
 pub use zoom::ZoomApi;

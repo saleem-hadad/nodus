@@ -34,6 +34,8 @@
 //! {"cmd":"stub","name":"pickFile","path":"/…"}     so does Replace App Key…'s file picker
 //! {"cmd":"opened"}                                  pages the app opened in the browser (it only notes
 //!                                                  them while driven): {urls}
+//! {"cmd":"whats-new","seen":"1.0.15"}              What's new with the slides since that version
+//!                                                  (every slide without "seen"): {slides}
 //! {"cmd":"terminal","action":"open",…}                the terminal's windows (terminal::driver)
 //! {"cmd":"views"}                                   views' frames: live or snapshot, and why
 //! {"cmd":"native-click","x":500,"y":300}            a click AppKit routes (into a page, or GPUI);
@@ -211,6 +213,26 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
                 .map(std::path::PathBuf::from);
             cx.update(|cx| cx.set_global(crate::settings::servers::PickFileStub(path)));
             Ok(Value::Null)
+        }
+        // What's new, which only a packaged build shows, after an update
+        // (UPD-096): every slide, or those new since `seen`.
+        "whats-new" => {
+            use crate::shell::whats_new::slides::SLIDES;
+            let seen = command.get("seen").and_then(Value::as_str).map(str::to_owned);
+            let slides: Vec<_> = match seen {
+                Some(seen) => {
+                    let unseen = nodus_core::Unseen { seen: Some(seen) };
+                    SLIDES.iter().filter(|s| unseen.includes(s.version)).collect()
+                }
+                None => SLIDES.iter().collect(),
+            };
+            let count = slides.len();
+            cx.update(|cx| {
+                if let Some(shell) = window::main_shell(cx) {
+                    shell.update(cx, |shell, cx| shell.show_whats_new(slides, cx));
+                }
+            });
+            Ok(json!({ "slides": count }))
         }
         "opened" => {
             let urls = cx.update(|cx| {

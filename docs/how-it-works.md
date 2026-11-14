@@ -184,6 +184,8 @@ Nodus updates itself from GitHub releases. A little after launch, and every few 
 
 The swap happens after the app has exited: the old app moves aside, the new one takes its place, and the old one is deleted. If the new one can't go in, the old one goes back, and Nodus won't download that version again unless you ask. Sessions keep running in the session host the whole time.
 
+After an update, a small **What’s new** card in the bottom-right corner shows what the new version brought, a slide at a time: a screenshot, a title and a line each, with **Next** to go on. It shows on each launch until you close it, and a fresh install doesn't show it.
+
 Settings shows the version you're on and how the update is going. **Check Now**, and **Nodus › Check for Updates…**, check right away. Turn off **Download updates automatically** to stop the checks. Nodus can only replace itself in a folder you can write to, so a copy run straight from the DMG doesn't update; move it to Applications first. The downloads live in `updates/` in the app's data folder until they're installed.
 
 ## Your data
@@ -364,6 +366,8 @@ Without **publish** ticked it stops there, and the packages are the run's artifa
 The same run builds the Linux server for x64 and arm64 and signs both archives and `packaging/server/install-server.sh` with the ed25519 key in the `NODUS_SERVER_SIGNING_KEY` secret. Once the app's release is published, it adds `nodus-server-linux-{x64,arm64}.tar.gz` and `install-server.sh` to it, each with a `.sha256` and a `.sig`. That part never holds the app's release up: when it fails, the release goes out without them. The key is made once with `scripts/server-signing-key.sh`, which sets the secret and writes the public key into the install script and `packaging/server/signing-key.pub.pem`, the copy the server builds in to check its own updates ([Running a server](server.md#for-maintainers-the-release-signing-key)).
 
 Installed copies update themselves from `releases/latest`. They look for `Nodus-arm64.dmg`, `Nodus-x64.dmg`, `Nodus-Setup-x64.exe` and `Nodus-Setup-arm64.exe` by name, so keep those names, and don't publish a release before its files are ready to go out.
+
+Give a release that brings something people will notice a What's new slide or two, in the same PR as the feature: add the slide to `crates/nodus-ui/src/shell/whats_new/slides.rs` (newest first) with a short title, one sentence (shortcuts in braces as a Mac writes them, `{⌘G}`), and a screenshot of the feature in each theme in `crates/nodus-ui/assets/whats-new/` (JPEG, 600×376, a 16:10 crop of a 2x driver screenshot). Its `version` is the release it ships in.
 
 ### Troubleshooting installs
 

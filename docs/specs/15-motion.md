@@ -37,6 +37,7 @@ Sources:
 - **MOTION-030** While a Claude session works, the light passes through its compact card's preview every 1.8s, from the preview's colour to `--text-primary`, tinted with the sparkle at its middle. Not a terminal's card, nor an archived one.
 - **MOTION-031** When a run that lasted at least 30s finishes (working or waiting → done, timed from when the session last left done) on a card that isn't expanded, Claude's colours go once round the card over 1.7s, the turn eased in and out, fading in over the first 15% and out over the last 35%: the naming glow (a ring and its blurred halo, 1.5 units outside the card).
 - **MOTION-035** When a session finishes, a light runs up each of its lineage edges (BOARD-025) to its parent over 900ms, eased in and out, in Claude's colours with a fading tail of eight dots. It goes out at the parent over 350ms, as the parent's edge glows in Claude's colours and fades.
+- **MOTION-044** When a session on the board messages another (BOARD-184), the same light runs from the sender's card to the receiver's along the line between them (or the lineage edge that joins them), and goes out at the receiver as its card's edge glows and fades. The first message between two sessions draws their line in behind the light as it goes. Messages between the same two set off at least 300ms apart, one after another; at most 12 run at once. Only messages sent in the last 15s run: those already there when the board opened, or read late, just show their line.
 
 ## Views, the capture panel
 

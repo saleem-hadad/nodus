@@ -223,6 +223,7 @@ impl Board {
                 shapes: board.shapes.values().cloned().collect(),
                 links: board.links.values().cloned().collect(),
                 groups: board.groups.values().cloned().collect(),
+                talks: Vec::new(),
                 viewport: board.viewport,
                 offline: false,
             };
@@ -241,7 +242,19 @@ impl Board {
                 card
             })
             .collect();
-        Ok(BoardSnapshot { cards, ..snapshot })
+        // BOARD-184: the messages its sessions sent each other.
+        let peers: Vec<(&str, &nodus_transcripts::peers::Peers)> = nodes
+            .iter()
+            .filter_map(|n| disk.get(&n.session_id).map(|f| (n.session_id.as_str(), &f.peers)))
+            .collect();
+        let talks = nodus_transcripts::peers::talks(&peers, || {
+            nodus_transcripts::peers::Registry::read(self.transcripts.home())
+        });
+        Ok(BoardSnapshot {
+            cards,
+            talks,
+            ..snapshot
+        })
     }
 
     /// The project's sessions as the board tools and views see them, leaving

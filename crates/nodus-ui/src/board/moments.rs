@@ -1,7 +1,8 @@
 //! What just happened on the board that motion marks (spec 15): something
 //! new arriving (MOTION-010), Claude drawing (MOTION-020…MOTION-025), a
 //! session stopping to ask (MOTION-013), a long run finishing (MOTION-031)
-//! and the news running up a lineage edge (MOTION-035). The canvas shows it
+//! the news running up a lineage edge (MOTION-035) and a message running
+//! from one session to another (MOTION-044). The canvas shows it
 //! each board it rebuilds from; the nodes, links, edges and the pen ask it
 //! where each thing is in its moment.
 
@@ -24,6 +25,10 @@ pub const RING_MS: f64 = 1700.0;
 /// The pulse up a lineage edge (MOTION-035): along it, then a ring at the parent.
 pub const PULSE_TRAVEL_MS: f64 = 900.0;
 pub const PULSE_MS: f64 = 1250.0;
+/// Messages between the same two sessions set off this far apart (MOTION-044).
+const MESSAGE_GAP_MS: u64 = 300;
+/// At most this many messages run at once; more just arrive.
+const MAX_MESSAGES: usize = 12;
 /// A run this long gets the ring when it finishes (MOTION-031).
 const LONG_RUN: Duration = Duration::from_secs(30);
 /// What Claude made this recently is drawn; older (⌘Z bringing it back, a
@@ -159,6 +164,17 @@ struct Run {
     since: Option<Instant>,
 }
 
+/// A message running from one session to another (MOTION-044).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Message {
+    pub from: String,
+    pub to: String,
+    /// When it sets off: later than now for one queued behind another.
+    pub at: Instant,
+    /// The first between them: the line between them draws in behind it.
+    pub opens: bool,
+}
+
 /// Something new from Claude, waiting to be put in its session's drawing.
 struct New {
     id: String,
@@ -181,6 +197,10 @@ pub struct Moments {
     rings: HashMap<String, Instant>,
     pulses: HashMap<String, Instant>,
     pub drawings: Vec<Drawing>,
+    /// Messages between sessions seen so far, and the pairs that talked.
+    talks: HashSet<String>,
+    pairs: HashSet<(String, String)>,
+    messages: Vec<Message>,
 }
 
 impl Moments {
@@ -213,6 +233,42 @@ impl Moments {
         }
         self.known = ids;
         self.statuses(board, now, first || still);
+        self.talks(board, now, now_ms, first || still);
+    }
+
+    /// MOTION-044: a message one session just sent another runs from its
+    /// card to the other's. Only ones sent in the last 15s: older ones were
+    /// there before (a board opened later, a transcript read late).
+    fn talks(&mut self, board: &BoardSnapshot, now: Instant, now_ms: f64, still: bool) {
+        for talk in &board.talks {
+            let pair = if talk.from < talk.to {
+                (talk.from.clone(), talk.to.clone())
+            } else {
+                (talk.to.clone(), talk.from.clone())
+            };
+            let opens = self.pairs.insert(pair.clone());
+            if !self.talks.insert(talk.id.clone())
+                || still
+                || (now_ms - talk.at).abs() >= FRESH_MS
+                || self.messages.len() >= MAX_MESSAGES
+            {
+                continue;
+            }
+            // One after another between the same two, after any still running.
+            let at = self
+                .messages
+                .iter()
+                .filter(|m| (m.from == pair.0 && m.to == pair.1) || (m.from == pair.1 && m.to == pair.0))
+                .map(|m| m.at + Duration::from_millis(MESSAGE_GAP_MS))
+                .max()
+                .map_or(now, |next| next.max(now));
+            self.messages.push(Message {
+                from: talk.from.clone(),
+                to: talk.to.clone(),
+                at,
+                opens,
+            });
+        }
     }
 
     fn arrivals(
@@ -438,6 +494,7 @@ impl Moments {
         self.lifts.retain(|_, at| within(at, LIFT_MS));
         self.rings.retain(|_, at| within(at, RING_MS));
         self.pulses.retain(|_, at| within(at, PULSE_MS));
+        self.messages.retain(|m| within(&m.at, PULSE_MS));
         self.drawings.retain(|d| d.ms(now) < d.end_ms());
     }
 
@@ -447,6 +504,7 @@ impl Moments {
             && self.lifts.is_empty()
             && self.rings.is_empty()
             && self.pulses.is_empty()
+            && self.messages.is_empty()
             && self.drawings.is_empty())
     }
 
@@ -491,6 +549,16 @@ impl Moments {
         let at = self.pulses.get(child)?;
         let ms = since(*at, now);
         (ms < PULSE_MS).then_some(ms)
+    }
+
+    /// The messages running between sessions now (MOTION-044), each with
+    /// the ms since it set off.
+    pub fn messages(&self, now: Instant) -> impl Iterator<Item = (&Message, f64)> {
+        self.messages
+            .iter()
+            .filter(move |m| m.at <= now)
+            .map(move |m| (m, since(m.at, now)))
+            .filter(|(_, ms)| *ms < PULSE_MS)
     }
 }
 
@@ -580,6 +648,7 @@ mod tests {
             shapes,
             links: vec![],
             groups: vec![],
+            talks: vec![],
             viewport: None,
             offline: false,
         }
@@ -650,6 +719,52 @@ mod tests {
         let now = Instant::now();
         m.observe(&board(vec![]), now, 0.0, true, &|_| None);
         m.observe(&board(vec![shape("a", Some("s"), 0.0)]), now, 0.0, true, &|_| None);
+        assert!(!m.active());
+    }
+
+    fn talk(id: &str, from: &str, to: &str, at: f64) -> nodus_domain::BoardTalk {
+        nodus_domain::BoardTalk {
+            id: id.into(),
+            from: from.into(),
+            to: to.into(),
+            at,
+        }
+    }
+
+    #[test]
+    fn a_message_runs_from_one_session_to_the_other() {
+        let mut m = Moments::default();
+        let now = Instant::now();
+        let old = BoardSnapshot {
+            talks: vec![talk("m0", "a", "b", 0.0)],
+            ..board(vec![])
+        };
+        m.observe(&old, now, 100_000.0, false, &|_| None);
+        assert_eq!(m.messages(now).count(), 0, "what was said before the board opened");
+        let next = BoardSnapshot {
+            talks: vec![
+                talk("m0", "a", "b", 0.0),
+                talk("m1", "b", "a", 99_000.0),
+                talk("m2", "b", "a", 99_500.0),
+                talk("m3", "a", "c", 99_600.0),
+                // Read late: long since sent.
+                talk("m4", "c", "b", 10_000.0),
+            ],
+            ..board(vec![])
+        };
+        m.observe(&next, now, 100_000.0, false, &|_| None);
+        let running: Vec<(&str, &str, bool)> = m
+            .messages(now)
+            .map(|(msg, _)| (msg.from.as_str(), msg.to.as_str(), msg.opens))
+            .collect();
+        assert_eq!(running, vec![("b", "a", false), ("a", "c", true)]);
+        // The second between a and b waits its turn behind the first.
+        let later = now + Duration::from_millis(MESSAGE_GAP_MS);
+        assert_eq!(m.messages(later).count(), 3);
+        m.observe(&next, later, 100_300.0, false, &|_| None);
+        assert_eq!(m.messages(later).count(), 3, "each message runs once");
+        let done = now + Duration::from_secs(5);
+        m.tick(done);
         assert!(!m.active());
     }
 

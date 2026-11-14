@@ -205,6 +205,7 @@ mod tests {
             eligible: true,
             has_content: true,
             last_prompt_at: None,
+            peers: Default::default(),
         }
     }
 

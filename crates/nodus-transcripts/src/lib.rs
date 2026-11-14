@@ -19,6 +19,7 @@ pub mod naming;
 mod nodeerr;
 pub mod parse;
 pub mod paths;
+pub mod peers;
 pub mod preview;
 pub mod search;
 pub mod slash;

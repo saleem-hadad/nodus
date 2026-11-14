@@ -685,7 +685,7 @@ async fn creates_a_session_card_before_its_process_starts() {
         json!({
             "sessionId": id, "x": 1.5, "y": 2.0, "archived": false, "title": "Fix it", "parents": ["a", "b"],
             "createdByApp": true, "expanded": true, "autoMode": true, "fromView": "v1", "createdAt": NOW,
-            "h": 960.0
+            "h": 750.0
         })
     );
     // SESS-119: the launcher gets what the window sent.
@@ -713,7 +713,7 @@ async fn creates_a_session_card_before_its_process_starts() {
         (Some(SessionKind::Terminal), Some("zsh"))
     );
     assert_eq!((&node.parents, node.auto_mode, &node.from_view), (&None, None, &None));
-    assert_eq!(node.h, Some(960.0));
+    assert_eq!(node.h, Some(750.0));
     // An unknown view, and empty parents, are left out.
     let card = f
         .board

@@ -45,19 +45,22 @@ pub(crate) fn clock(window: &mut Window, cx: &App) -> f64 {
 }
 
 /// The cells of the 3×3 grid, row by row, in the order the snake's head
-/// visits them: round the ring clockwise from the top left, through the
-/// middle, and back to the start.
-const SNAKE: [usize; 9] = [0, 1, 2, 5, 8, 7, 6, 3, 4];
+/// visits them: round the ring of eight clockwise from the top left, each a
+/// neighbour of the last, so the lap has no start or end. The middle rests.
+const SNAKE: [usize; 8] = [0, 1, 2, 5, 8, 7, 6, 3];
 /// One lap of the snake.
 const SNAKE_MS: f64 = 1600.;
 /// How many cells the snake's tail trails behind its head.
-const TAIL: f64 = 3.4;
+const TAIL: f64 = 3.2;
 
 /// How lit grid cell `cell` is (0…1) with the snake's head `head` cells
 /// along its path: full at the head, fading over the tail behind it and
 /// over the one cell ahead, so the light glides from dot to dot.
 fn snake_light(cell: usize, head: f64) -> f32 {
-    let at = SNAKE.iter().position(|&c| c == cell).unwrap_or(0) as f64;
+    let Some(at) = SNAKE.iter().position(|&c| c == cell) else {
+        return 0.;
+    };
+    let at = at as f64;
     let n = SNAKE.len() as f64;
     let behind = (head - at).rem_euclid(n);
     let ahead = (at - head).rem_euclid(n);
@@ -227,11 +230,14 @@ pub(crate) fn settle() -> TextViewMotion {
         .with_stream_fade_stagger(Duration::from_millis(28))
 }
 
-/// One lap of the light round the composer.
-const LIGHT_MS: f64 = 2600.;
+/// One lap of the light round the composer: slow, so it doesn't pull the eye.
+const LIGHT_MS: f64 = 4500.;
+/// How strong the light is at its head, of `color`'s own alpha: barely more
+/// than the field's border, a hint that Claude is busy and no more.
+const LIGHT_STRENGTH: f32 = 0.3;
 
-/// A faint light circling the composer while Claude works (MOTION-043): a
-/// head of `color` and a tail fading behind it, along the edge of a field
+/// A very faint light circling the composer while Claude works (MOTION-043):
+/// a head of `color` and a tail fading behind it, along the edge of a field
 /// with corners of `radius`, `lit` (0…1) of full strength. It fills the
 /// field it's put in. None in parity shots or under reduced motion.
 pub(crate) fn light(radius: f32, lit: f32, color: Rgba, window: &mut Window, cx: &App) -> Option<AnyElement> {
@@ -254,10 +260,10 @@ pub(crate) fn light(radius: f32, lit: f32, color: Rgba, window: &mut Window, cx:
 
 /// Paints the light as a run of small dots along the middle of the field's
 /// 1px border, half a pixel out from the padding box `bounds`: a soft front
-/// a fifth as long as the tail, which reaches at most a quarter of the way
-/// round, or 300px.
+/// a fifth as long as the tail, which reaches at most 15% of the way round,
+/// or 180px.
 fn paint_light(bounds: Bounds<Pixels>, radius: f32, head: f32, lit: f32, color: Rgba, window: &mut Window) {
-    const DOT: f32 = 1.6;
+    const DOT: f32 = 1.2;
     let edge = bounds.dilate(px(0.5));
     let (w, h) = (f32::from(edge.size.width), f32::from(edge.size.height));
     let r = (radius - 0.5).max(0.).min(w / 2.).min(h / 2.);
@@ -265,7 +271,7 @@ fn paint_light(bounds: Bounds<Pixels>, radius: f32, head: f32, lit: f32, color: 
     if around <= 0. {
         return;
     }
-    let tail = (0.25f32).min(300. / around);
+    let tail = (0.15f32).min(180. / around);
     let front = tail * 0.2;
     let count = ((tail + front) * around).ceil().min(480.) as usize;
     for k in 0..count {
@@ -278,7 +284,7 @@ fn paint_light(bounds: Bounds<Pixels>, radius: f32, head: f32, lit: f32, color: 
             (1. - back / tail).powi(2)
         };
         let at = ai::outline(edge, r, head - back);
-        let alpha = color.a * lit * strength;
+        let alpha = color.a * LIGHT_STRENGTH * lit * strength;
         window.paint_quad(
             fill(
                 Bounds::new(point(at.x - px(DOT / 2.), at.y - px(DOT / 2.)), size(px(DOT), px(DOT))),
@@ -324,6 +330,32 @@ pub(crate) fn field_bg(t: &Tokens) -> Rgba {
     if t.dark { hex(0x323236) } else { t.bg_elevated }
 }
 
+/// The purple of code's keywords and of searches (CHAT-047), the page
+/// theme's `--nodus-purple`; not Claude's sparkle.
+pub(crate) fn purple(t: &Tokens) -> Rgba {
+    if t.dark { hex(0xa371f7) } else { hex(0x8250df) }
+}
+
+/// A tool's glyph colour by what it does (CHAT-047): reading blue, searching
+/// purple, editing orange, running green, anything else quiet.
+pub(crate) fn tool_tone(name: &str, t: &Tokens) -> Rgba {
+    match name {
+        "Read" | "NotebookRead" | "WebFetch" | "WebSearch" => t.accent,
+        "Grep" | "Glob" | "LS" | "ToolSearch" => purple(t),
+        "Edit" | "MultiEdit" | "Write" | "NotebookEdit" => t.status_working,
+        "Bash" | "BashOutput" | "KillShell" | "KillBash" => t.diff_add,
+        _ => t.text_tertiary,
+    }
+}
+
+/// The user's bubble (CHAT-037, CHAT-047): a light wash of the accent.
+pub(crate) fn your_bubble(t: &Tokens) -> Rgba {
+    Rgba {
+        a: if t.dark { 0.2 } else { 0.11 },
+        ..t.accent
+    }
+}
+
 /// A tool's glyph by its name, as Claude Code names it.
 pub(crate) fn tool_icon(name: &str) -> Icon {
     match name {
@@ -365,14 +397,14 @@ pub(crate) fn rise(el: Div, e: f32, dy: f32) -> Div {
     el.opacity(e).translate(px(0.), px(dy * (1.0 - e)))
 }
 
-/// A tool's mark at the end of its line: a quiet tick, or a red cross. `p`
+/// A tool's mark at the end of its line: a green tick, or a red cross. `p`
 /// (0…1) into its arrival, it springs in from a fifth of its size, turned
 /// back 25° (MOTION-042).
 pub(crate) fn outcome(failed: bool, size: f32, p: f32, t: &Tokens) -> Div {
     let (glyph, color) = if failed {
         (Icon::X, t.status_waiting)
     } else {
-        (Icon::Check, t.text_tertiary)
+        (Icon::Check, t.diff_add)
     };
     let mark = div().flex_none().child(icon(glyph, size, 2.4, color));
     if p >= 1.0 {
@@ -391,16 +423,25 @@ mod tests {
     #[test]
     fn lights_the_snake_from_its_head_back() {
         // The head on the top-left cell: it's full, the cells behind it on
-        // the path (the middle, then the left) fade, and the far ones rest.
+        // the ring (the left, then the bottom left) fade, and the far ones
+        // and the middle rest.
         assert!((snake_light(0, 0.) - 1.).abs() < 1e-6);
-        assert!(snake_light(4, 0.) > snake_light(3, 0.));
-        assert!(snake_light(3, 0.) > 0.);
+        assert!(snake_light(3, 0.) > snake_light(6, 0.));
+        assert!(snake_light(6, 0.) > 0.);
         assert_eq!(snake_light(8, 0.), 0.);
+        assert_eq!(snake_light(4, 0.), 0.);
         // Halfway to the next cell, the light is on both, more on the one it left.
         let (left, next) = (snake_light(0, 0.5), snake_light(1, 0.5));
         assert!(left > next && next > 0.);
-        // A lap later it's where it started.
-        assert_eq!(snake_light(5, 3.), snake_light(5, 12.));
+        // A lap later it's where it started, and the lap's end flows into
+        // its start: no dot jumps.
+        assert_eq!(snake_light(5, 3.), snake_light(5, 11.));
+        for cell in 0..9 {
+            assert!(
+                (snake_light(cell, 7.999) - snake_light(cell, 0.)).abs() < 0.01,
+                "{cell}"
+            );
+        }
     }
 
     #[test]

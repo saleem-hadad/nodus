@@ -969,6 +969,7 @@ mod tests {
             detail: String::new(),
             failed: false,
             done: true,
+            changes: None,
         }
     }
 

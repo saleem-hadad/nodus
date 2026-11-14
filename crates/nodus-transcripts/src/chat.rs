@@ -13,7 +13,7 @@ use std::fs::{self, File};
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock};
 
-use nodus_domain::{Answers, ChatEntry, js, queued_text};
+use nodus_domain::{Answers, ChatEntry, LineChanges, js, queued_text};
 use nodus_visual::{Segment, split_fences};
 use regex::Regex;
 use serde_json::Value;
@@ -392,6 +392,7 @@ impl ChatLog {
             },
             _ => {
                 let call = describe_tool_use(block);
+                let changes = line_changes(&call.name, &input);
                 ChatEntry::Tool {
                     id,
                     at,
@@ -399,6 +400,7 @@ impl ChatLog {
                     detail: call.detail.unwrap_or_default(),
                     failed: false,
                     done: false,
+                    changes,
                 }
             }
         };
@@ -429,6 +431,7 @@ impl ChatLog {
                     detail: first_line(result),
                     failed: true,
                     done: true,
+                    changes: None,
                 };
             }
             ChatEntry::Page { view_id, .. } => {
@@ -483,6 +486,62 @@ fn first_line(text: &str) -> String {
     crate::parse::truncate(line, 160)
 }
 
+/// CHAT-047: the lines an `Edit`, `MultiEdit` or `Write` adds and takes
+/// away, from its input: each edit's old and new text compared line by line,
+/// and every line of a write added.
+fn line_changes(name: &str, input: &Value) -> Option<LineChanges> {
+    let (added, removed) = match name {
+        "Edit" => diff_lines(as_str(input.get("old_string"))?, as_str(input.get("new_string"))?),
+        "MultiEdit" => input.get("edits")?.as_array()?.iter().fold((0, 0), |(a, r), edit| {
+            let (added, removed) = diff_lines(
+                as_str(edit.get("old_string")).unwrap_or_default(),
+                as_str(edit.get("new_string")).unwrap_or_default(),
+            );
+            (a + added, r + removed)
+        }),
+        "Write" => (as_str(input.get("content"))?.lines().count() as u32, 0),
+        _ => return None,
+    };
+    Some(LineChanges { added, removed })
+}
+
+/// How many lines `new` adds to `old` and takes from it: the lines left
+/// once their common start and end are set aside, less those the two still
+/// share in order (their longest common run, when that's quick to find).
+fn diff_lines(old: &str, new: &str) -> (u32, u32) {
+    let old: Vec<&str> = old.lines().collect();
+    let new: Vec<&str> = new.lines().collect();
+    let start = old.iter().zip(&new).take_while(|(a, b)| a == b).count();
+    let (old, new) = (&old[start..], &new[start..]);
+    let end = old
+        .iter()
+        .rev()
+        .zip(new.iter().rev())
+        .take_while(|(a, b)| a == b)
+        .count();
+    let (old, new) = (&old[..old.len() - end], &new[..new.len() - end]);
+    let shared = if old.len() * new.len() <= 1_000_000 {
+        common_lines(old, new)
+    } else {
+        0
+    };
+    ((new.len() - shared) as u32, (old.len() - shared) as u32)
+}
+
+/// The length of the longest run of lines `a` and `b` share in order.
+fn common_lines(a: &[&str], b: &[&str]) -> usize {
+    let mut row = vec![0usize; b.len() + 1];
+    for x in a {
+        let mut diagonal = 0;
+        for (j, y) in b.iter().enumerate() {
+            let above = row[j + 1];
+            row[j + 1] = if x == y { diagonal + 1 } else { above.max(row[j]) };
+            diagonal = above;
+        }
+    }
+    row[b.len()]
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Write as _;
@@ -490,6 +549,30 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn chat_047_counts_the_lines_an_edit_changes() {
+        let edit = json!({"old_string": "a\nb\nc\nd", "new_string": "a\nB\nc\nd\ne"});
+        assert_eq!(line_changes("Edit", &edit), Some(LineChanges { added: 2, removed: 1 }));
+        let same = json!({"old_string": "x", "new_string": "x"});
+        assert_eq!(line_changes("Edit", &same), Some(LineChanges { added: 0, removed: 0 }));
+        let multi = json!({"edits": [
+            {"old_string": "one", "new_string": "uno"},
+            {"old_string": "two\nthree", "new_string": ""},
+        ]});
+        assert_eq!(
+            line_changes("MultiEdit", &multi),
+            Some(LineChanges { added: 1, removed: 3 })
+        );
+        let write = json!({"file_path": "/x", "content": "1\n2\n3\n"});
+        assert_eq!(
+            line_changes("Write", &write),
+            Some(LineChanges { added: 3, removed: 0 })
+        );
+        assert_eq!(line_changes("Bash", &json!({"command": "ls"})), None);
+        // Moved lines count once each way; shared lines in between don't.
+        assert_eq!(diff_lines("a\nb\nc", "b\nc\na"), (1, 1));
+    }
 
     struct Transcript {
         _dir: tempfile::TempDir,

@@ -652,6 +652,9 @@ Description=Nodus server
 Documentation=https://github.com/$REPO
 After=network-online.target nodus-host.service tailscaled.service
 Wants=network-online.target nodus-host.service
+# Never give up restarting: if something else holds port 7420 for a while,
+# the server comes back once it's free.
+StartLimitIntervalSec=0
 
 [Service]
 User=$SERVE_USER
@@ -663,6 +666,11 @@ ExecStart=$BIN serve --host-socket $HOST_SOCKET --run-home $RUN_HOME --uploads $
 UMask=0027
 Restart=always
 RestartSec=1
+# $SERVE_USER runs nothing $RUN_USER could have written (SRV-005, SRV-013):
+# not a program in its home, the uploads or a temporary folder.
+NoExecPaths=$RUN_HOME /srv/nodus /tmp /var/tmp /dev/shm
+PrivateTmp=yes
+NoNewPrivileges=yes
 
 [Install]
 WantedBy=multi-user.target" && serve_changed=1

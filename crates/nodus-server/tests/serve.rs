@@ -201,13 +201,14 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?}");
 }
 
-/// The stand-in `claude`: `--version` answers at once; otherwise it turns
-/// on bracketed paste, says it's ready and echoes every line it reads.
+/// The stand-in `claude`: `--version` answers at once, and leaves
+/// `version-asked` in the log folder; otherwise it turns on bracketed
+/// paste, says it's ready and echoes every line it reads.
 fn write_stand_in(file: &Path, log: &Path) {
     use std::os::unix::fs::PermissionsExt;
     let script = format!(
         r#"#!/bin/sh
-if [ "$1" = "--version" ]; then echo "9.9.9 (Claude Code)"; exit 0; fi
+if [ "$1" = "--version" ]; then touch "{log}/version-asked"; echo "9.9.9 (Claude Code)"; exit 0; fi
 env > "{log}/env.$NODUS_SESSION"
 printf '\033[?2004h'
 echo "stand-in ready"
@@ -377,6 +378,9 @@ async fn with_a_host_of_its_own_the_server_runs_everything_there() {
         .spawn()
         .unwrap();
     let server = world.serve_with(&["--host-socket", &socket]);
+    // SRV-005: the server runs no program itself, not even `claude
+    // --version`: the `claude` on the sessions' PATH is theirs to change.
+    assert!(!world.root().join("log/version-asked").exists());
     let bare = world.bare_repo("shop");
     let clone = world.root().join("projects/shop/main");
     world.add_project(&server, &clone, Some(&bare)).await;

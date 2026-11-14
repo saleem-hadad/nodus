@@ -35,7 +35,7 @@ pub(crate) struct ServeOptions {
     pub host_socket: Option<PathBuf>,
     /// `--uploads`: where uploads are kept (SRV-163), a folder sessions can
     /// read, which the data folder isn't: `install-server.sh` passes
-    /// `/srv/nodus/uploads` (2770, `nodus:nodus-run`). Without it they go in
+    /// `/srv/nodus/uploads` (2750, `nodus:nodus-run`). Without it they go in
     /// `<data>/uploads`, for development and tests run as one user.
     pub uploads: Option<PathBuf>,
 }
@@ -200,7 +200,10 @@ async fn start_core(
     hosting: Arc<dyn nodus_core::Hosting>,
 ) -> Result<Nodus, String> {
     let ServerEnv { vars, home } = env;
-    let env = nodus_platform::Env::with_vars(vars, Some(&home)).await;
+    // Never `with_vars`, which asks `claude` its version: the `claude` it
+    // finds is `nodus-run`'s, which a session can replace, and this is
+    // `nodus` (SRV-005).
+    let env = nodus_platform::Env::given(vars, Some(&home));
     let (host, runner) = host_mode(host_socket);
     let nodus = Nodus::start(NodusConfig {
         env: EnvSource::Given(env),

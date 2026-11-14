@@ -1072,7 +1072,8 @@ impl BoardCanvas {
     }
 
     /// The view relay's `startSession` (BOARD-129, VIEW-056…058): beside the
-    /// view, expanded, in auto mode, with what it was asked stuck on it.
+    /// view, expanded, in the view's permission mode (VIEW-155), with what it
+    /// was asked stuck on it.
     pub fn start_view_session(
         &mut self,
         view_id: &str,
@@ -1120,7 +1121,7 @@ impl BoardCanvas {
             name: title.map(|t| js::slice_utf16(&t, 0, 80)).filter(|t| !t.is_empty()),
             initial_prompt: Some(prompt.clone()),
             expanded: Some(true),
-            auto_mode: Some(true),
+            auto_mode: Some(view.runs_in_auto_mode()),
             from_view: Some(view.id.clone()),
             ..CreateSessionOptions::default()
         };

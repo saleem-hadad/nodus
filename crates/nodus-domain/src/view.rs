@@ -46,6 +46,10 @@ pub struct BoardView {
     /// clicks in it. Its brain turns this on when the user asks for it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub starts_sessions: Option<bool>,
+    /// Whether its brain, and the sessions its page starts, run in auto mode
+    /// (VIEW-155). Unset in views saved before it: see [`Self::runs_in_auto_mode`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_mode: Option<bool>,
     /// Every command line the user allowed for this view, or turned down, so one Claude puts back isn't asked about again.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allowed_runs: Option<Vec<String>>,
@@ -76,6 +80,17 @@ pub struct ViewCommand {
     /// Fields this version doesn't know, written back as they were read.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
+}
+
+impl BoardView {
+    /// Whether its brain, and the sessions its page starts, run in auto mode
+    /// (VIEW-155): a view the user made does; one a session put up only when
+    /// that session ran in auto mode, and only until a session that doesn't
+    /// changes it. A view saved before this was recorded counts as the
+    /// user's when no session put it up, and otherwise not.
+    pub fn runs_in_auto_mode(&self) -> bool {
+        self.auto_mode.unwrap_or(self.from.is_none())
+    }
 }
 
 /// Asks a view's brain to bring the view up to date, every so often. Each one costs tokens.

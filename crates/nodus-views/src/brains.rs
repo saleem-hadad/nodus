@@ -21,6 +21,8 @@ pub const BRAIN_IDLE: Duration = Duration::from_millis(5 * 60 * 1000);
 const QUEUED_DELAY: Duration = Duration::from_millis(500);
 /// Return goes this long after a pasted prompt (VIEW-095).
 const RETURN_DELAY: Duration = Duration::from_millis(200);
+/// A brain leaving auto mode whose process hasn't gone yet (VIEW-156).
+const BRAIN_STOPPING: &str = "The view’s brain is still stopping; try again in a moment";
 
 /// Who is asking a brain: the user (the card, the ask bar), the page
 /// (`nodus.ask`), or a refresh schedule, which skips a busy brain.
@@ -67,8 +69,10 @@ impl Views {
         let project = self.project(project_id)?;
         let now = self.now();
         let session_id = uuid::Uuid::new_v4().to_string();
-        let (previous, extra_args) = self.update_view(project_id, view_id, |board, id| {
+        let (previous, extra_args, auto) = self.update_view(project_id, view_id, |board, id| {
             let view = &board.views[id];
+            // VIEW-155
+            let auto = view.runs_in_auto_mode();
             let node = BoardNode {
                 session_id: session_id.clone(),
                 kind: None,
@@ -81,7 +85,7 @@ impl Views {
                 run_of: None,
                 expanded: None,
                 view_of: Some(id.to_owned()),
-                auto_mode: Some(true),
+                auto_mode: auto.then_some(true),
                 from_view: None,
                 created_at: now,
                 w: None,
@@ -93,7 +97,7 @@ impl Views {
             let extra_args = brain_args(board, &node);
             board.nodes.insert(session_id.clone(), node);
             let previous = board.views[id].session_id.replace(session_id.clone());
-            Ok((previous, extra_args))
+            Ok((previous, extra_args, auto))
         })?;
         let spawned = self
             .inner
@@ -104,7 +108,7 @@ impl Views {
                 cwd: project.repo_path,
                 resume: false,
                 initial_prompt: prompt,
-                permission_mode: Some(PermissionMode::Auto),
+                permission_mode: auto.then_some(PermissionMode::Auto),
                 extra_args,
                 ..SpawnOptions::default()
             })
@@ -133,13 +137,43 @@ impl Views {
     /// The view's brain, started idle if it has none (VIEW-092).
     pub async fn ensure_brain(&self, project_id: &str, view_id: &str) -> Result<String, ViewError> {
         let view = self.view(project_id, view_id).ok_or_else(no_view)?;
-        if let Some(id) = self.brain_node(project_id, &view).map(|n| n.session_id) {
-            return Ok(id);
+        if let Some(node) = self.brain_node(project_id, &view) {
+            return Ok(self.settle_brain_mode(project_id, &view, node).await?.session_id);
         }
         self.start_brain(project_id, view_id, None).await
     }
 
-    fn brain_node(&self, project_id: &str, view: &BoardView) -> Option<BoardNode> {
+    /// VIEW-156: a brain whose view isn't in auto mode any more leaves it. A
+    /// process still running in auto mode is stopped, to be resumed in the
+    /// view's mode when it's next needed, and only then does its node stop
+    /// saying `autoMode`, so one that outlives the kill is stopped next time.
+    /// Its transcript stays.
+    pub(crate) async fn settle_brain_mode(
+        &self,
+        project_id: &str,
+        view: &BoardView,
+        mut node: BoardNode,
+    ) -> Result<BoardNode, ViewError> {
+        if node.auto_mode != Some(true) || view.runs_in_auto_mode() {
+            return Ok(node);
+        }
+        let sessions = &self.inner.sessions;
+        if sessions.is_live(&node.session_id) {
+            sessions.kill(&node.session_id).await;
+            if sessions.is_live(&node.session_id) {
+                return Err(ViewError::new(BRAIN_STOPPING));
+            }
+        }
+        node.auto_mode = None;
+        self.inner.store.update(|state| {
+            if let Some(kept) = state.board_mut(project_id).nodes.get_mut(&node.session_id) {
+                kept.auto_mode = None;
+            }
+        });
+        Ok(node)
+    }
+
+    pub(crate) fn brain_node(&self, project_id: &str, view: &BoardView) -> Option<BoardNode> {
         let id = view.session_id.as_deref()?;
         self.inner
             .store
@@ -172,6 +206,7 @@ impl Views {
             self.start_brain(project_id, view_id, Some(text)).await?;
             return Ok(());
         };
+        let node = self.settle_brain_mode(project_id, &view, node).await?;
         let id = node.session_id.clone();
         let sessions = &self.inner.sessions;
         if sessions.is_live(&id) {
@@ -205,7 +240,8 @@ impl Views {
                 cwd: project.repo_path,
                 resume,
                 initial_prompt: Some(text),
-                permission_mode: Some(PermissionMode::Auto),
+                // VIEW-155
+                permission_mode: view.runs_in_auto_mode().then_some(PermissionMode::Auto),
                 extra_args,
                 ..SpawnOptions::default()
             })

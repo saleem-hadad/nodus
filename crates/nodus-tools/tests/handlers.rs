@@ -169,6 +169,7 @@ impl Fixture {
             clock: Arc::new(|| NOW),
             home: Some(home.path().to_owned()),
             on_server,
+            pictures: vec![data.path().join("board-images")],
         });
         Self {
             _data: data,
@@ -811,15 +812,55 @@ async fn refuses_a_drawing_it_cant_make_and_draws_none_of_it() {
     run.run_of = Some("a1".into());
     f.add("p1", run);
     let cases = [
-        (json!({}), "Nothing to draw: give shapes, links or both"),
+        (json!({}), "Nothing to draw: give shapes, links or ink"),
         (json!({ "shapes": "box" }), "shapes must be a list"),
         (
             json!({ "shapes": [{ "kind": "star" }] }),
-            "shapes[0]: kind must be rect, ellipse, diamond, text or sticker",
+            "shapes[0]: kind must be rect, ellipse, diamond, text, sticker or image",
         ),
         (
             json!({ "shapes": [{ "kind": "rect" }, { "kind": "image" }] }),
-            "shapes[1]: pictures can’t be drawn with the board tools; kind must be rect, ellipse, diamond, text or sticker",
+            "shapes[1]: a picture needs path, its file’s absolute path",
+        ),
+        (
+            json!({ "shapes": [{ "kind": "image", "path": "pic.png" }] }),
+            "shapes[0]: path must be absolute",
+        ),
+        (
+            json!({ "ink": [{ "kind": "squiggle" }] }),
+            "ink[0]: kind must be pen, arrow, rect, text, circle, underline",
+        ),
+        (
+            json!({ "ink": [{ "kind": "circle", "around": "nope" }] }),
+            "ink[0]: “nope” isn’t a key from shapes or the id of anything drawn on this board; list_board lists what’s there",
+        ),
+        (
+            json!({ "ink": [{ "kind": "underline" }] }),
+            "ink[0]: under must be what it marks: an id from list_board, a key from shapes, \"self\", or a list of them",
+        ),
+        (
+            json!({ "ink": [{ "kind": "pen", "points": [[0, 0]] }] }),
+            "ink[0]: a pen stroke needs points, 2 to 2000 of them, each [x, y] in board coordinates",
+        ),
+        (
+            json!({ "ink": [{ "kind": "arrow", "from": "s1" }] }),
+            "ink[0]: an arrow needs from and to",
+        ),
+        (
+            json!({ "ink": [{ "kind": "arrow", "from": { "x": 0, "y": 0 }, "to": [3, 4] }] }),
+            "ink[0]: the arrow’s ends are too close together to draw",
+        ),
+        (
+            json!({ "ink": [{ "kind": "text", "text": "hi" }] }),
+            "ink[0]: a text mark needs x and y, or beside",
+        ),
+        (
+            json!({ "ink": [{ "kind": "text", "x": 0, "y": 0 }] }),
+            "ink[0]: a text mark needs some text",
+        ),
+        (
+            json!({ "ink": [{ "kind": "circle", "around": "self", "size": 9 }] }),
+            "ink[0]: size must be between 0.5 and 4",
         ),
         (
             json!({ "shapes": [{ "kind": "text", "text": "  " }] }),
@@ -1148,9 +1189,9 @@ async fn erases_shapes_with_their_links_but_never_cards_notes_or_views() {
         json!({
             "erased": [a, links[2], links[0], links[1]],
             "skipped": [
-                { "id": "s1", "reason": "it is a card; only shapes and links can be erased" },
-                { "id": "n1", "reason": "it is a note; only shapes and links can be erased" },
-                { "id": "v1", "reason": "it is a view; only shapes and links can be erased" },
+                { "id": "s1", "reason": "it is a card; only shapes, links and ink can be erased" },
+                { "id": "n1", "reason": "it is a note; only shapes, links and ink can be erased" },
+                { "id": "v1", "reason": "it is a view; only shapes, links and ink can be erased" },
                 { "id": "nope", "reason": "not on the board" }
             ]
         })
@@ -1169,11 +1210,11 @@ async fn erases_shapes_with_their_links_but_never_cards_notes_or_views() {
     assert!(f.events.take().is_empty());
     assert_eq!(
         err(f.handlers.erase_from_board("p1", "s1", &json!({ "ids": "all" }))),
-        "ids must be a list of the ids of shapes and links, from list_board"
+        "ids must be a list of the ids of shapes, links and ink, from list_board"
     );
     assert_eq!(
         err(f.handlers.erase_from_board("p1", "s1", &json!({ "ids": [] }))),
-        "Nothing to erase: give the ids of shapes and links, from list_board"
+        "Nothing to erase: give the ids of shapes, links and ink, from list_board"
     );
 }
 
@@ -1204,4 +1245,284 @@ async fn draws_and_lists_through_the_server_end_to_end() {
         )
         .await;
     assert_eq!(bad["result"]["isError"], true);
+}
+
+// ---------------------------------------------------------------------------
+// Pictures, ink and the board as a picture (TOOL-111 to TOOL-113)
+
+/// A PNG's first bytes, enough for its kind and size.
+fn png_header(w: u32, h: u32) -> Vec<u8> {
+    let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
+    png.extend_from_slice(&w.to_be_bytes());
+    png.extend_from_slice(&h.to_be_bytes());
+    png.extend_from_slice(&[8, 2, 0, 0, 0]);
+    png
+}
+
+/// A whole 1×1 PNG.
+const DOT_PNG: [u8; 69] = [
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00,
+    0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xde, 0x00, 0x00, 0x00, 0x0c, 0x49,
+    0x44, 0x41, 0x54, 0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00, 0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xdd, 0x8d, 0xb0,
+    0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+];
+
+impl Fixture {
+    fn pictures(&self) -> std::path::PathBuf {
+        self._data.path().join("board-images")
+    }
+
+    fn pictures_kept(&self) -> usize {
+        std::fs::read_dir(self.pictures()).map_or(0, Iterator::count)
+    }
+
+    /// A file in the home folder, by name.
+    fn file(&self, name: &str, bytes: &[u8]) -> String {
+        let path = self.home.path().join(name);
+        std::fs::write(&path, bytes).unwrap();
+        path.to_string_lossy().into_owned()
+    }
+}
+
+#[tokio::test]
+async fn puts_up_a_picture_from_a_file_at_its_own_proportions() {
+    // TOOL-112
+    let f = Fixture::new();
+    let wide = f.file("wide.png", &png_header(1200, 600));
+    let drawn = f
+        .handlers
+        .draw_on_board(
+            "p1",
+            "s1",
+            &json!({ "shapes": [
+                { "key": "shot", "kind": "image", "path": wide },
+                { "kind": "image", "path": wide, "w": 200 }
+            ] }),
+        )
+        .unwrap();
+    let shapes: Vec<BoardShape> = f
+        .store
+        .read(|s| s.board("p1").unwrap().shapes.values().cloned().collect());
+    assert_eq!(shapes.len(), 2);
+    assert_eq!(shapes[0].id, drawn["shapes"]["shot"].as_str().unwrap());
+    assert_eq!(
+        (shapes[0].kind, shapes[0].w, shapes[0].h),
+        (ShapeKind::Image, 480.0, 240.0)
+    );
+    assert_eq!((shapes[1].w, shapes[1].h), (200.0, 100.0));
+    // Each a copy, under a name of its own, kept with the board's pictures.
+    let name = shapes[0].image.clone().unwrap();
+    assert!(name.ends_with(".png") && name != shapes[1].image.clone().unwrap());
+    assert_eq!(std::fs::read(f.pictures().join(&name)).unwrap(), png_header(1200, 600));
+    assert_eq!(shapes[0].by.as_deref(), Some("s1"));
+
+    // What isn't a picture, or isn't there, isn't put up.
+    let text = f.file("notes.txt", b"just words");
+    assert_eq!(
+        err(f
+            .handlers
+            .draw_on_board("p1", "s1", &json!({ "shapes": [{ "kind": "image", "path": text }] }))),
+        format!("shapes[0]: “{text}” isn’t a PNG, JPEG, GIF or WebP picture")
+    );
+    let missing = f.home.path().join("gone.png").to_string_lossy().into_owned();
+    assert_eq!(
+        err(f
+            .handlers
+            .draw_on_board("p1", "s1", &json!({ "shapes": [{ "kind": "image", "path": missing }] }))),
+        format!("shapes[0]: there’s no file at “{missing}”")
+    );
+    // A drawing that fails leaves no copy behind.
+    assert_eq!(f.pictures_kept(), 2);
+    let failed = f.handlers.draw_on_board(
+        "p1",
+        "s1",
+        &json!({ "shapes": [{ "kind": "image", "path": wide }], "links": [{ "from": "0", "to": "nope" }] }),
+    );
+    assert!(failed.is_err());
+    assert_eq!(f.pictures_kept(), 2);
+}
+
+#[tokio::test]
+async fn a_server_puts_up_no_picture_from_a_sessions_file() {
+    // TOOL-112: the session's files aren't the server's to read.
+    let f = Fixture::on_a_server();
+    let wide = f.file("wide.png", &png_header(1200, 600));
+    assert_eq!(
+        err(f
+            .handlers
+            .draw_on_board("p1", "s1", &json!({ "shapes": [{ "kind": "image", "path": wide }] }))),
+        "Pictures can’t be put up from a file on a Nodus server’s board yet"
+    );
+    assert_eq!(f.pictures_kept(), 0);
+}
+
+#[tokio::test]
+async fn draws_ink_marks_on_and_around_what_is_on_the_board() {
+    // TOOL-113: s1's card is at (2000, 0), 288 × 216.
+    let f = Fixture::new();
+    f.furnish();
+    let drawn = f
+        .handlers
+        .draw_on_board(
+            "p1",
+            "s1",
+            &json!({
+                "shapes": [{ "key": "api", "kind": "rect", "text": "API", "x": 0, "y": 0 }],
+                "at": { "x": 2600, "y": 0 },
+                "ink": [
+                    { "kind": "circle", "around": "self", "color": "red" },
+                    { "kind": "underline", "under": "n1" },
+                    { "kind": "arrow", "from": "self", "to": "api", "color": "blue", "size": 2 },
+                    { "kind": "text", "text": "start here", "beside": "api" },
+                    { "kind": "pen", "points": [[0, 0], { "x": 10, "y": 5 }, [20, 0]] },
+                    { "kind": "rect", "around": ["s1", "s2"] }
+                ]
+            }),
+        )
+        .unwrap();
+    let ids = ids(&drawn["ink"]);
+    assert_eq!(ids.len(), 6);
+    let ink = f.store.read(|s| s.board("p1").unwrap().ink.clone().unwrap());
+    let kinds: Vec<&str> = ink.iter().map(|s| s.kind.as_str()).collect();
+    assert_eq!(kinds, ["pen", "pen", "arrow", "text", "pen", "rect"]);
+    assert!(ink.iter().all(|s| s.by() == Some("s1")));
+    // The circle goes round the card; the arrow leaves its right edge for the box.
+    let circle = &ink[0];
+    let xs: Vec<f64> = circle.points.iter().step_by(2).copied().collect();
+    assert!(xs.iter().copied().fold(f64::INFINITY, f64::min) < 2000.0);
+    assert!(xs.iter().copied().fold(f64::NEG_INFINITY, f64::max) > 2288.0);
+    assert_eq!(circle.color, InkColor::Red);
+    let arrow = &ink[2];
+    assert!(
+        arrow.points[0] > 2288.0 && arrow.points[2] < 2600.0,
+        "{:?}",
+        arrow.points
+    );
+    assert_eq!(arrow.size, 2.0);
+    assert_eq!(ink[3].text.as_deref(), Some("start here"));
+    assert_eq!(ink[4].points, [0.0, 0.0, 10.0, 5.0, 20.0, 0.0]);
+    // The box spans both cards, s2 at (600, 0).
+    assert!(ink[5].points[0] < 600.0 && ink[5].points[2] > 2288.0);
+
+    // list_board says what each points at and goes around, and whose it is.
+    let listed = f.handlers.list_board("p1", "s1").unwrap();
+    let listed_ink = listed["ink"].as_array().unwrap();
+    assert_eq!(listed_ink.len(), 6);
+    assert_eq!(
+        listed_ink[0]["around"],
+        json!([{ "id": "s1", "kind": "card", "name": "New session" }])
+    );
+    assert_eq!(listed_ink[2]["from"]["id"], "s1");
+    assert_eq!(listed_ink[2]["to"]["name"], "API");
+    assert_eq!(listed_ink[3]["text"], "start here");
+    assert!(listed_ink.iter().all(|s| s["yours"] == true));
+    let theirs = f.handlers.list_board("p1", "s2").unwrap();
+    assert!(
+        theirs["ink"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|s| s.get("yours").is_none())
+    );
+
+    // Ink isn't changed in place, but it's erased by id.
+    assert_eq!(
+        err(f
+            .handlers
+            .update_drawing("p1", "s1", &json!({ "items": [{ "id": ids[0], "x": 5 }] }))),
+        format!(
+            "items[0]: “{}” is ink, which update_drawing doesn’t change; erase it and draw it again",
+            ids[0]
+        )
+    );
+    let erased = f
+        .handlers
+        .erase_from_board("p1", "s1", &json!({ "ids": [ids[0], ids[1]] }))
+        .unwrap();
+    assert_eq!(erased["erased"], json!([ids[0], ids[1]]));
+    assert_eq!(f.store.read(|s| s.board("p1").unwrap().ink.as_ref().unwrap().len()), 4);
+}
+
+#[tokio::test]
+async fn looks_at_the_board_as_a_picture_tagging_what_is_on_it() {
+    // TOOL-111
+    let f = Fixture::new();
+    f.furnish();
+    std::fs::create_dir_all(f.pictures()).unwrap();
+    std::fs::write(f.pictures().join("dot.png"), DOT_PNG).unwrap();
+    f.store.update(|s| {
+        let board = s.board_mut("p1");
+        let picture: BoardShape = serde_json::from_value(json!({
+            "id": "pic", "kind": "image", "x": 2000, "y": 400, "w": 200, "h": 200,
+            "color": "graphite", "image": "dot.png", "createdAt": 1
+        }))
+        .unwrap();
+        board.shapes.insert("pic".into(), picture);
+    });
+    f.handlers
+        .draw_on_board("p1", "s1", &json!({ "ink": [{ "kind": "circle", "around": "pic" }] }))
+        .unwrap();
+
+    let whole = f.handlers.look_at_board("p1", "s1", &json!({})).unwrap();
+    assert!(whole.png.starts_with(b"\x89PNG\r\n\x1a\n"));
+    let (w, h) = nodus_board::pictures::picture_size(&whole.png).unwrap();
+    assert!(w.max(h) <= 1568 && w.max(h) >= 1500, "{w} × {h}");
+    let tags = whole.key["tags"].as_object().unwrap();
+    let tagged = |id: &str| {
+        tags.iter()
+            .find(|(_, t)| t["id"] == id)
+            .map(|(tag, t)| (tag.clone(), t.clone()))
+    };
+    let (tag, own) = tagged("s1").unwrap();
+    assert!(tag.starts_with('c') && own["this_session"] == true, "{own}");
+    assert_eq!(tagged("s2").unwrap().1["kind"], "card");
+    assert!(tagged("n1").unwrap().0.starts_with('n'));
+    assert!(tagged("v1").unwrap().0.starts_with('v'));
+    assert_eq!(tagged("pic").unwrap().0, "p1");
+    assert_eq!(tagged("pic").unwrap().1["kind"], "picture");
+    assert!(tags.iter().any(|(tag, t)| tag.starts_with('i') && t["kind"] == "ink"));
+
+    // Around something: its box and the margin, and only what's in it.
+    let near = f
+        .handlers
+        .look_at_board("p1", "s1", &json!({ "around": "pic", "margin": 50 }))
+        .unwrap();
+    assert_eq!(
+        near.key["area"],
+        json!({ "x": 1950.0, "y": 350.0, "w": 300.0, "h": 300.0 })
+    );
+    assert_eq!(near.key["scale"], 2.0);
+    assert!(near.key["tags"].as_object().unwrap().values().all(|t| t["id"] != "s2"));
+    let area = f
+        .handlers
+        .look_at_board("p1", "s1", &json!({ "area": { "x": 0, "y": 0, "w": 3136, "h": 100 } }))
+        .unwrap();
+    assert_eq!(area.key["scale"], 0.5);
+    assert_eq!(nodus_board::pictures::picture_size(&area.png), Some((1568, 50)));
+
+    let cases = [
+        (
+            json!({ "area": { "x": 0, "y": 0, "w": 10, "h": 10 }, "around": "s1" }),
+            "give area or around, not both",
+        ),
+        (
+            json!({ "area": { "x": 0, "y": 0, "w": 0, "h": 10 } }),
+            "area must be {\"x\": …, \"y\": …, \"w\": …, \"h\": …} in board coordinates as list_board gives them, w and h above 0",
+        ),
+        (
+            json!({ "around": "nope" }),
+            "“nope” isn’t drawn on this board; list_board lists what’s there",
+        ),
+        (
+            json!({ "around": 5 }),
+            "around must be an id from list_board, a list of them, or \"self\"",
+        ),
+        (
+            json!({ "margin": -1 }),
+            "margin must be a number of board units, 0 or more",
+        ),
+    ];
+    for (args, message) in cases {
+        assert_eq!(err(f.handlers.look_at_board("p1", "s1", &args)), message, "{args}");
+    }
 }

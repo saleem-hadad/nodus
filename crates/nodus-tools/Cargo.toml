@@ -10,11 +10,15 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+base64.workspace = true
 nodus-board.workspace = true
 nodus-domain.workspace = true
 nodus-sessions.workspace = true
 nodus-store.workspace = true
 nodus-visual.workspace = true
+# Draws the board as a picture for look_at_board (TOOL-111): its text in
+# the system's fonts, and the pictures on it.
+resvg = { workspace = true, features = ["text", "system-fonts", "memmap-fonts", "raster-images"] }
 serde_json.workspace = true
 
 [dev-dependencies]

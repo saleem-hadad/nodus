@@ -6,7 +6,7 @@
 use std::collections::HashSet;
 
 use nodus_domain::js;
-use nodus_domain::{InkColor, InkKind, InkStroke};
+use nodus_domain::{INK_BY, InkColor, InkKind, InkStroke};
 use nodus_store::BoardState;
 use serde_json::{Map, Value};
 
@@ -86,6 +86,15 @@ fn clean_stroke(item: &Map<String, Value>, seen: &HashSet<String>) -> Option<Ink
     if kind == InkKind::Text && text.is_empty() {
         return None;
     }
+    // The session that drew it, kept as it moves (TOOL-113).
+    let mut extra = Map::new();
+    if let Some(by) = item
+        .get(INK_BY)
+        .and_then(Value::as_str)
+        .filter(|by| !by.is_empty() && js::utf16_len(by) <= 64)
+    {
+        extra.insert(INK_BY.to_owned(), Value::from(by));
+    }
     Some(InkStroke {
         id: id.to_owned(),
         kind,
@@ -93,7 +102,7 @@ fn clean_stroke(item: &Map<String, Value>, seen: &HashSet<String>) -> Option<Ink
         points: kept.into_iter().map(round).collect(),
         size: clamp_size(item.get("size")),
         text: (!text.is_empty()).then_some(text),
-        extra: Map::new(),
+        extra,
     })
 }
 

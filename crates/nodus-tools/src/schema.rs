@@ -1,7 +1,7 @@
 //! What the server tells Claude Code: its instructions, and each tool's name,
 //! description and input schema, word for word as 0.9.4 has them, with keys
 //! in the same order (TOOL-019, Data & formats in spec 04), and the drawing
-//! tools added since (TOOL-101 to TOOL-110).
+//! tools added since (TOOL-101 to TOOL-113).
 
 use nodus_domain::{FolderColor, InkColor};
 use serde_json::{Value, json};
@@ -16,8 +16,9 @@ pub const BOARD_SERVER: &str = "nodus";
 pub const PROTOCOL_VERSION: &str = "2025-06-18";
 
 /// The server's instructions, sent with `initialize` (TOOL-017): 0.9.4's,
-/// and since then the shapes and links (TOOL-110).
-pub const INSTRUCTIONS: &str = "Nodus is the board of Claude Code sessions the user runs this session from. Besides the session cards, it holds sticky notes and views. When the user asks you to put something on the board, or to make notes of it, write it with create_note. Read the notes they have put up with list_notes. Only write notes when the user asks for them. When the user asks for a view, a dashboard, a table, a chart or other custom UI on the board, build it with create_view; list_views, get_view and update_view find and change the views there. To put a note on another project’s board, or read the notes there, pass that project to the note tools; list_projects lists the projects. When the user asks for a new project, add it with create_project. When the user asks you to archive yourself, use archive_self. The board also holds shapes (boxes, ellipses, diamonds, words and emoji stickers) and links, arrows between cards, notes, views and shapes. The user links cards to show how their work relates: list_board shows what is on the board and where, and what this session’s card is linked to. When the user asks for something drawn, laid out, rearranged or linked on the board, use draw_on_board, update_drawing and erase_from_board. The user reads this session as a chat, which can show more than text. To show a chart, stats, a table or a text layout, call show_visual (or put the same JSON in a ```visual block in your reply). To ask the user questions with choices, call ask (or use a ```questions block), then end your turn: the answers arrive as their next message. For a mockup, a side-by-side comparison or a small tool that needs HTML, call show_page, which puts a page on the board beside your card. Prefer show_visual and ask, and don't repeat in words what they show.";
+/// and since then the shapes and links (TOOL-110), and looking at the board
+/// and drawing on it unasked (TOOL-114).
+pub const INSTRUCTIONS: &str = "Nodus is the board of Claude Code sessions the user runs this session from. Besides the session cards, it holds sticky notes and views. When the user asks you to put something on the board, or to make notes of it, write it with create_note. Read the notes they have put up with list_notes. Write notes when the user asks for them, or when a short one would help them come back to something later. When the user asks for a view, a dashboard, a table, a chart or other custom UI on the board, build it with create_view; list_views, get_view and update_view find and change the views there. To put a note on another project’s board, or read the notes there, pass that project to the note tools; list_projects lists the projects. When the user asks for a new project, add it with create_project. When the user asks you to archive yourself, use archive_self. The board also holds shapes (boxes, ellipses, diamonds, words and emoji stickers) and links, arrows between cards, notes, views and shapes. The user links cards to show how their work relates: list_board shows what is on the board and where, and what this session’s card is linked to. look_at_board shows the board as a picture, with the pictures and ink sketches words can’t describe: look at it when the user points at something on the board or asks about what is there. Draw with draw_on_board when the user asks for something drawn, laid out, linked or marked, and on your own when a small sketch, a picture you made or a mark on what you mean would say it better than words: keep it small and near your card. update_drawing and erase_from_board change and take away drawings; change the user’s only when they ask. The user reads this session as a chat, which can show more than text. To show a chart, stats, a table or a text layout, call show_visual (or put the same JSON in a ```visual block in your reply). To ask the user questions with choices, call ask (or use a ```questions block), then end your turn: the answers arrive as their next message. For a mockup, a side-by-side comparison or a small tool that needs HTML, call show_page, which puts a page on the board beside your card. Prefer show_visual and ask, and don't repeat in words what they show.";
 
 /// The `--mcp-config` for every claude process (TOOL-002). Claude Code expands
 /// the `${…}` from the environment `hookEnv` gives it, so the token never
@@ -28,8 +29,9 @@ pub const BOARD_MCP_CONFIG: &str = concat!(
     r#""headers":{"Authorization":"Bearer ${NODUS_TOKEN}","X-Nodus-Session":"${NODUS_SESSION}"}}}}"#
 );
 
-/// Every session's tools: 0.9.4's six, then the drawing tools (TOOL-101).
-pub const COMMON_TOOL_NAMES: [&str; 10] = [
+/// Every session's tools: 0.9.4's six, then the drawing tools (TOOL-101,
+/// TOOL-111).
+pub const COMMON_TOOL_NAMES: [&str; 11] = [
     "create_note",
     "update_note",
     "list_notes",
@@ -37,6 +39,7 @@ pub const COMMON_TOOL_NAMES: [&str; 10] = [
     "create_project",
     "archive_self",
     "list_board",
+    "look_at_board",
     "draw_on_board",
     "update_drawing",
     "erase_from_board",
@@ -54,7 +57,7 @@ pub const SESSION_TOOL_NAMES: [&str; 2] = ["list_sessions", "archive_sessions"];
 /// Allow rules that let a session use every board tool it has without asking
 /// (TOOL-003): `--allowedTools`, one argument each, in the order the tools
 /// are listed.
-pub const BOARD_TOOL_RULES: [&str; 19] = [
+pub const BOARD_TOOL_RULES: [&str; 20] = [
     "mcp__nodus__create_note",
     "mcp__nodus__update_note",
     "mcp__nodus__list_notes",
@@ -62,6 +65,7 @@ pub const BOARD_TOOL_RULES: [&str; 19] = [
     "mcp__nodus__create_project",
     "mcp__nodus__archive_self",
     "mcp__nodus__list_board",
+    "mcp__nodus__look_at_board",
     "mcp__nodus__draw_on_board",
     "mcp__nodus__update_drawing",
     "mcp__nodus__erase_from_board",
@@ -94,7 +98,7 @@ fn common_tools() -> Vec<Value> {
     vec![
         json!({
             "name": "create_note",
-            "description": "Puts a sticky note on the user’s Nodus board, beside this session’s card. Use it when the user asks you to put something on the board: findings, a summary, a plan, a list to come back to. A note shows its text as written, so Markdown is not rendered: skip **bold** and # headings, though \"- \" bullets and blank lines read well. Keep each note to one topic someone can take in at a glance, starting with a short line that says what it is about, and write several notes for several topics. Returns the note’s id.",
+            "description": "Puts a sticky note on the user’s Nodus board, beside this session’s card. Use it when the user asks you to put something on the board: findings, a summary, a plan, a list to come back to; and on your own, sparingly, when a short note would help them come back to something later. A note shows its text as written, so Markdown is not rendered: skip **bold** and # headings, though \"- \" bullets and blank lines read well. Keep each note to one topic someone can take in at a glance, starting with a short line that says what it is about, and write several notes for several topics. Returns the note’s id.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -158,20 +162,49 @@ fn number_property(description: &str) -> Value {
     json!({ "type": "number", "description": description })
 }
 
-/// Every session's drawing tools, added after 0.9.4 (TOOL-101 to TOOL-110).
+/// Where something is: the id of a card, note, view, shape, ink or frame
+/// from list_board, or "self", for draw_on_board's ink and look_at_board.
+const TARGET: &str = "the id of a card (its session id), note, view, shape, ink stroke or frame from list_board, a key from shapes, or \"self\" for this session’s card";
+
+/// Every session's drawing tools, added after 0.9.4 (TOOL-101 to TOOL-113).
 fn drawing_tools() -> Vec<Value> {
     let kinds: Vec<&str> = DRAWN_KINDS.iter().map(|k| k.as_str()).collect();
+    let point = json!({
+        "type": "array",
+        "items": { "type": "number" },
+        "description": "[x, y] in board coordinates."
+    });
     let end =
         "the id of a card (its session id), note, view or shape from list_board, or \"self\" for this session’s card";
     vec![
         json!({
             "name": "list_board",
-            "description": "Shows what is on this session’s Nodus board and where: the session cards (one of them this session’s), sticky notes, views and shapes, each with its id and its box (x and y are its top left corner in board units, y growing downward), and the links between them. It lists the user’s frames too, named boxes whose contents move with them (what lies in a frame is what has its centre in its box), and groups, things the user glued together, each as the ids in it. linked_to_this_session says in words what this session’s card is linked to and from. The user links cards to show how their work relates, so look there to see which work bears on yours. Use it before drawing on the board, rearranging it or linking things on it.",
+            "description": "Shows what is on this session’s Nodus board and where: the session cards (one of them this session’s), sticky notes, views and shapes, each with its id and its box (x and y are its top left corner in board units, y growing downward), and the links between them. It lists the user’s frames too, named boxes whose contents move with them (what lies in a frame is what has its centre in its box), and groups, things the user glued together, each as the ids in it, and the ink drawn over the board: pen strokes, arrows, boxes and handwritten words, each with its box, what an arrow points from and to, and what a stroke goes around. linked_to_this_session says in words what this session’s card is linked to and from. The user links cards to show how their work relates, so look there to see which work bears on yours. Use it before drawing on the board, rearranging it or linking things on it; to see the pictures and sketches themselves, use look_at_board.",
             "inputSchema": { "type": "object", "properties": {} }
         }),
         json!({
+            "name": "look_at_board",
+            "description": "Shows this session’s Nodus board as a picture: the cards, notes, views, shapes and links list_board lists, and what words can’t: the pictures on it, the user’s ink (sketches, circles, arrows, handwriting) and how things sit together. Each thing carries a small tag, such as c1 for a card, n2 a note, v3 a view, s4 a shape, p5 a picture, i6 ink, l7 a link and f8 a frame, and tags maps each one to its id for the other board tools. This session’s own card is a dashed outline, so what lies under it shows. Without area or around it shows the whole board; to read small things, look closer with area or around. Use it when the user points at something on the board, asks about a picture or a sketch there, or wants something drawn beside what is there. Returns the picture, the area it shows, its scale (pixels per board unit) and the tags.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "area": {
+                        "type": "object",
+                        "description": "The part of the board to show, in board coordinates as list_board gives them.",
+                        "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "w": { "type": "number" }, "h": { "type": "number" } },
+                        "required": ["x", "y", "w", "h"]
+                    },
+                    "around": {
+                        "description": "Shows the space around something instead: the id of a card, note, view, shape, ink stroke or frame from list_board, \"self\" for this session’s card, or a list of them.",
+                        "anyOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+                    },
+                    "margin": number_property("How much room to show around what around names, in board units. Defaults to 240.")
+                }
+            }
+        }),
+        json!({
             "name": "draw_on_board",
-            "description": "Draws on the user’s Nodus board, as on a whiteboard: boxes, ellipses, diamonds, words and emoji stickers, and links, arrows between them and the cards, notes and views already there. Use it only when the user asks for something drawn, laid out or linked on the board, such as a diagram, a flow, or how pieces of work relate. Give shapes’ x and y from the drawing’s own top left: the whole drawing goes in the nearest free spot beside this session’s card, unless at puts it somewhere. Shapes without x and y go in a row, left to right. Returns the new shapes’ ids by key (or by their place in shapes, from 0), the new links’ ids, and the area the drawing took.",
+            "description": "Draws on the user’s Nodus board, as on a whiteboard: boxes, ellipses, diamonds, words, emoji stickers and pictures; links, arrows between them and the cards, notes and views already there; and ink, marks over the board: a circle around something, a line under it, an arrow, a box, words, or a free pen stroke. Use it when the user asks for something drawn, laid out, linked or marked on the board, such as a diagram, a flow, or how pieces of work relate, and on your own when a small sketch, a picture you made (a screenshot, a rendered diagram or chart) or a mark on what you mean would help more than words; keep those small, near your card, and say what you drew. Give shapes’ x and y from the drawing’s own top left: the whole drawing goes in the nearest free spot beside this session’s card, unless at puts it somewhere. Shapes without x and y go in a row, left to right. Ink is placed in board coordinates, or on what it marks. Returns the new shapes’ ids by key (or by their place in shapes, from 0), the new links’ ids, the new ink’s ids, and the area the drawing took.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -182,12 +215,13 @@ fn drawing_tools() -> Vec<Value> {
                             "type": "object",
                             "properties": {
                                 "key": { "type": "string", "description": "A name for the shape in this call, for links to point at it by. Its id comes back under it." },
-                                "kind": { "type": "string", "enum": kinds, "description": "rect, ellipse and diamond are outlines with words inside; text is words on their own; sticker is an emoji." },
+                                "kind": { "type": "string", "enum": kinds, "description": "rect, ellipse and diamond are outlines with words inside; text is words on their own; sticker is an emoji; image is a picture from a file." },
+                                "path": { "type": "string", "description": "An image’s file: the absolute path of a PNG, JPEG, GIF or WebP picture, at most 25 MB. It is copied onto the board." },
                                 "text": { "type": "string", "description": "The words in it, or a sticker’s emoji." },
                                 "color": ink_color_property("Its colour. Defaults to graphite."),
                                 "x": number_property("Its left edge, from the drawing’s left. Give x and y, or neither to put it in the row."),
                                 "y": number_property("Its top edge, from the drawing’s top."),
-                                "w": number_property("Its width. Defaults to 180 for a rect or an ellipse, 160 for a diamond, 220 for text and 64 for a sticker."),
+                                "w": number_property("Its width. Defaults to 180 for a rect or an ellipse, 160 for a diamond, 220 for text and 64 for a sticker; an image keeps its proportions, at most 480 across by default."),
                                 "h": number_property("Its height. Defaults to 90 for a rect or an ellipse, 110 for a diamond, 44 for text and 64 for a sticker.")
                             },
                             "required": ["kind"]
@@ -207,6 +241,28 @@ fn drawing_tools() -> Vec<Value> {
                             "required": ["from", "to"]
                         }
                     },
+                    "ink": {
+                        "type": "array",
+                        "description": "Ink marks to draw, in board coordinates as list_board gives them.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "kind": { "type": "string", "enum": crate::drawing::MARKS, "description": "circle goes around what around names; underline goes under what under names; rect is a box around what around names; arrow runs from from to to; text is words at x and y, or beside something; pen is a free stroke through points." },
+                                "around": { "description": format!("For circle and rect: {TARGET}, or a list of them."), "anyOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+                                "under": { "description": format!("For underline: {TARGET}, or a list of them."), "anyOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+                                "from": { "description": format!("For arrow: where it starts, {TARGET}, or a point."), "anyOf": [{ "type": "string" }, point.clone()] },
+                                "to": { "description": "For arrow: what it points at, given the same way.", "anyOf": [{ "type": "string" }, point.clone()] },
+                                "text": { "type": "string", "description": "For text: the words." },
+                                "x": number_property("For text: its left edge."),
+                                "y": number_property("For text: its top edge."),
+                                "beside": { "type": "string", "description": format!("For text instead of x and y: {TARGET}, to put the words to its right.") },
+                                "points": { "type": "array", "items": point, "description": "For pen: the points it runs through, 2 to 2000." },
+                                "color": ink_color_property("Its colour. Defaults to graphite."),
+                                "size": number_property("How thick, 0.5 to 4. Defaults to 1.")
+                            },
+                            "required": ["kind"]
+                        }
+                    },
                     "at": {
                         "type": "object",
                         "description": "Where the drawing’s top left goes, in board coordinates as list_board gives them. Leave it out to put the drawing beside this session’s card.",
@@ -218,7 +274,7 @@ fn drawing_tools() -> Vec<Value> {
         }),
         json!({
             "name": "update_drawing",
-            "description": "Changes what is on the board: a shape’s place, size, words or colour, a link’s label, colour or ends, and where cards, notes and views are, which it only moves. Positions are board coordinates, as list_board gives them. Use it only when the user asks for the board to be changed, rearranged or regrouped, or for something drawn on it to be fixed. Returns the ids it changed.",
+            "description": "Changes what is on the board: a shape’s place, size, words or colour, a link’s label, colour or ends, and where cards, notes and views are, which it only moves. Positions are board coordinates, as list_board gives them. Use it when the user asks for the board to be changed, rearranged or regrouped, or for something drawn on it to be fixed, and to fix what you drew; change the user’s own only when they ask. Ink isn’t changed: erase it and draw it again. Returns the ids it changed.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -259,11 +315,11 @@ fn drawing_tools() -> Vec<Value> {
         }),
         json!({
             "name": "erase_from_board",
-            "description": "Takes shapes and links off the board. A shape’s links go with it. Cards, notes and views can’t be erased. Use it only when the user asks for something drawn on the board to go. Returns what was erased, and what was skipped and why.",
+            "description": "Takes shapes, links and ink off the board. A shape’s links go with it. Cards, notes and views can’t be erased. Use it when the user asks for something drawn on the board to go, and to take away what you drew once it’s no longer needed; erase the user’s own only when they ask. Returns what was erased, and what was skipped and why.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "ids": { "type": "array", "items": { "type": "string" }, "description": "Ids of shapes and links, from list_board or draw_on_board." }
+                    "ids": { "type": "array", "items": { "type": "string" }, "description": "Ids of shapes, links and ink, from list_board, look_at_board or draw_on_board." }
                 },
                 "required": ["ids"]
             }

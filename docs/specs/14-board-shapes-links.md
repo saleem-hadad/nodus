@@ -1,6 +1,6 @@
 # 14 · Shapes, stickers, pictures and links
 
-Added after 1.0.8; 0.9.4 had none of this. It makes the board work like Claude Whiteboards: things on it move freely, and arrows tie them together. The board tools that let a session draw are spec 04's TOOL-101…TOOL-110.
+Added after 1.0.8; 0.9.4 had none of this. It makes the board work like Claude Whiteboards: things on it move freely, and arrows tie them together. The board tools that let a session draw are spec 04's TOOL-101…TOOL-110; after 1.0.17 a session also sees the board as a picture, puts up pictures from files and draws ink (TOOL-111…TOOL-114).
 
 Sources:
 - `crates/nodus-domain/src/board.rs` (`ShapeKind`, `BoardShape`, `LinkEnd`, `BoardLink`)

@@ -100,6 +100,28 @@ In Rust the frame becomes a `wry` webview embedded in the GPUI board (see Rust m
 - **TOOL-109** `erase_from_board {ids}`: `ids` must be a list (`ids must be a list of the ids of shapes and links, from list_board`); its strings are taken, and none → `Nothing to erase: give the ids of shapes and links, from list_board`. Shapes and links go, and with each shape the links it held; anything else is skipped with a reason: `it is a card; only shapes and links can be erased` (likewise `a note`, `a view`), or `not on the board`. Returns `{erased: [shape ids, link ids given, then links that went with the shapes], skipped: [{id, reason}]}`; `ev:board-changed(project)` only when something went. Cards, notes and views are never removed (TOOL-040).
 - **TOOL-110** `INSTRUCTIONS` ends, after 0.9.4's text, with a few sentences on shapes and links: that the user links cards to show how their work relates, that `list_board` shows the board and what this session's card is linked to, and to use the drawing tools when the user asks for something drawn, laid out, rearranged or linked (verbatim under Data & formats).
 
+### Board tools: seeing the board, pictures and ink (added after 1.0.17)
+
+Feedback #9 asked for Claude to understand the board visually and add to it. `look_at_board` shows the board as a picture, drawn from what's stored rather than taken from the window; `draw_on_board` puts up pictures from files and draws ink; and a session may draw on its own when it helps. Code: `nodus-tools` `src/look.rs` (the picture), `src/drawing.rs` (pictures and marks), `src/handlers.rs` (files); `nodus-board` `pictures.rs` (a picture's kind and size from its header).
+
+- **TOOL-111** `look_at_board {area?, around?, margin?}`, listed after `list_board`, its allow rule after `list_board`'s. It answers with two content blocks: `{type: "image", data: <base64 PNG>, mimeType: "image/png"}`, then a text block, the key, pretty JSON `{area: {x, y, w, h}, scale, tags: {<tag>: {id, kind, name?, this_session?: true}}, untagged_ink?}`.
+  - The area: `area` as given (finite `x`, `y`, `w`, `h`, `w` and `h` above 0; `area must be {"x": …, "y": …, "w": …, "h": …} in board coordinates as list_board gives them, w and h above 0`); or the box around what `around` names (an id, `"self"`, or a list of them; a card, note, view or shape drawn on the board, an ink stroke or a frame), grown by `margin` (0–4000, default 240) each way; or, with neither, everything on the board grown by 80, or `0, 0, 1200 × 800` for an empty board. Both → `give area or around, not both`; an `around` that isn't drawn → `“<id>” isn’t drawn on this board; list_board lists what’s there`; `"self"` with no card → `this session has no card on the board to look around`; a bad margin → `margin must be a number of board units, 0 or more`.
+  - The picture: the area at a scale of `min(1568 / its longer side, 2)` pixels per board unit (`scale`, to 3 places), so its longer side is at most 1568 px. The light board's colours, whatever the app's theme. In order: frames (dashed, their names), shapes but stickers, views (a header with the title, then `A view: a live page.` and its description), the other active cards (title, status dot and word, the last reply), free notes (their colour's light paper, their text), stickers, links (straight arrows between the boxes' edges, the label in a pill), ink as drawn, then the caller's own card as a dashed accent outline with `this session (you)`, so what lies under it shows. Text never comes out under 9 px; it wraps and ends in … where it doesn't fit. Pictures are their files, shown whole; one bigger than 8000 px either way, or missing, is a grey box saying `picture`.
+  - Tags: each thing in the area gets one, numbered by kind in that order: `c` cards (the caller's last), `n` notes, `v` views, `s` shapes and stickers, `p` pictures, `l` links, `i` ink (the newest 60 in the area; `untagged_ink` counts the rest), `f` frames. A tag is a 14 px pill, white on dark (accent for the caller's card): above a box's top left, below a link's label or middle, left of where a stroke starts; moved right off another tag.
+  - Text uses the system's fonts, read once. Nothing else is read but the board's pictures, by name, from the pictures folders (TOOL-112), each a plain file of at most 25 MB.
+- **TOOL-112** `draw_on_board`'s shapes may be `image`, with `path`: a PNG, JPEG, GIF or WebP file, by its absolute path (a leading `~` is the home folder). Before anything is drawn, each is checked and copied into the board's pictures (`board-images`) as `<uuid>.<png|jpg|gif|webp>`, its kind read from its first bytes. Errors: `shapes[i]: a picture needs path, its file’s absolute path`, `shapes[i]: path must be absolute`, `shapes[i]: there’s no file at “<path>”`, `shapes[i]: “<path>” isn’t a file`, `shapes[i]: “<path>” is <n> MB; a picture can be at most 25 MB`, `shapes[i]: “<path>” isn’t a PNG, JPEG, GIF or WebP picture`. It goes up at its own proportions, as SHAPE-006's do at zoom 1 (its longer side at most 480, never bigger than it is); a `w` or an `h` alone sets that side and the other follows; both set both. When the drawing fails after the copies, they're deleted. On a server board → `Pictures can’t be put up from a file on a Nodus server’s board yet`: the session's files aren't the server's to read. Shapes' `kind` error is now `kind must be rect, ellipse, diamond, text, sticker or image`.
+- **TOOL-113** Ink. `draw_on_board` takes `ink`, a list of marks, checked with the rest (`ink[i]: …`); with no shapes, links or ink → `Nothing to draw: give shapes, links or ink`. A board keeps at most 2000 strokes (`The board keeps at most 2000 ink strokes, and has <n>`). Each mark: `kind` one of `pen`, `arrow`, `rect`, `text`, `circle`, `underline` (`kind must be pen, arrow, rect, text, circle, underline`); `color` an ink colour (default graphite); `size` 0.5–4 (default 1; `size must be between 0.5 and 4`). What a mark marks is a key from this call's shapes, `"self"`, or the id of a card, note, view, shape, ink stroke or frame drawn on the board (`“<name>” isn’t a key from shapes or the id of anything drawn on this board; list_board lists what’s there`).
+  - `circle` `around` one or a list: a pen stroke, an ellipse 12% wider than their box plus `14 + 2·size`, a little uneven, its end running past its start (49 points).
+  - `underline` `under` one or a list: a pen stroke of three points under their box.
+  - `rect` `around`: an ink rectangle around their box.
+  - `arrow` `from` and `to`, each something marked or a point (`{"x", "y"}` or `[x, y]`): from the edge of one toward the other, stopping short of it (`an arrow needs from and to`; ends under 8 apart → `the arrow’s ends are too close together to draw`).
+  - `text` with `text` (trimmed, at most 500 units) at `x` and `y`, or `beside` something, to its right (`a text mark needs some text`, `a text mark needs x and y, or beside`).
+  - `pen` through `points`, 2 to 2000, each `[x, y]` or `{"x", "y"}`.
+  - Positions are board coordinates; `at` doesn't move ink. Strokes are cleaned as `cleanInk` cleans them and added on top (`board:add-ink`'s way), with new ids and the session in the stroke's `by` (kept among the fields older versions don't know, and through cleaning, up to 64 units; on a server, `createdBy` is the session's starter's). The result adds `ink: [ids]`.
+  - `list_board` adds `ink` when there is some: the newest 300 strokes, oldest first, each `{id, kind, color, x, y, w, h, text?, from?, to?, around?, yours?: true}`: a label's words; for an arrow, what's under each end (within 24, the smallest there, `{id, kind, name}`), else the point; for a stroke or a rectangle, the smaller things whose middles are inside its box (at most 8). `ink_not_listed` counts the strokes left out.
+  - `update_drawing` given an ink id → `“<id>” is ink, which update_drawing doesn’t change; erase it and draw it again`. `erase_from_board` erases ink by id too, with shapes and links; its messages say `shapes, links and ink`.
+- **TOOL-114** Drawing unasked. The tools' descriptions and `INSTRUCTIONS` say to draw when the user asks, and on one's own when a small sketch, a picture one made or a mark on what one means would say it better than words: small, near one's card, saying what was drawn. `update_drawing` and `erase_from_board` change and take away one's own drawings, and the user's only when they ask. Notes may be written unasked too, sparingly. `INSTRUCTIONS` (verbatim under Data & formats) name `look_at_board` for when the user points at something on the board.
+
 ### Notes placement (notes Claude writes)
 
 - **NOTE-001** Note text is `text.trim()` then its first `20000` UTF-16 code units (`NOTE_MAX_CHARS`); a missing or blank text throws `A note needs some text`.
@@ -379,6 +401,14 @@ Since 0.9.4 it goes on, in the same line (TOOL-110):
 ```text
  The board also holds shapes (boxes, ellipses, diamonds, words and emoji stickers) and links, arrows between cards, notes, views and shapes. The user links cards to show how their work relates: list_board shows what is on the board and where, and what this session’s card is linked to. When the user asks for something drawn, laid out, rearranged or linked on the board, use draw_on_board, update_drawing and erase_from_board.
 ```
+
+After 1.0.17 (TOOL-114), `Only write notes when the user asks for them.` reads `Write notes when the user asks for them, or when a short one would help them come back to something later.`, and the last sentence of TOOL-110's text gives way to:
+
+```text
+ look_at_board shows the board as a picture, with the pictures and ink sketches words can’t describe: look at it when the user points at something on the board or asks about what is there. Draw with draw_on_board when the user asks for something drawn, laid out, linked or marked, and on your own when a small sketch, a picture you made or a mark on what you mean would say it better than words: keep it small and near your card. update_drawing and erase_from_board change and take away drawings; change the user’s only when they ask.
+```
+
+The chat's sentences (TOOLCHAT) follow.
 
 ### MCP `tools/list` result, verbatim
 
@@ -735,7 +765,7 @@ Since 0.9.4 it goes on, in the same line (TOOL-110):
 ]
 ```
 
-Since 0.9.4, `list_board`, `draw_on_board`, `update_drawing` and `erase_from_board` sit between `archive_self` and `create_view` (TOOL-101). Their schemas are in `crates/nodus-tools/src/schema.rs`, and verbatim in `ADDED_TOOLS` in `crates/nodus-tools/tests/fixtures/generate.mjs`, which splices them into 0.9.4's answers for `fixtures/tools.json`.
+Since 0.9.4, `list_board`, `draw_on_board`, `update_drawing` and `erase_from_board` sit between `archive_self` and `create_view` (TOOL-101), and after 1.0.17 `look_at_board` after `list_board` (TOOL-111). The fixture's answers are regenerated from the Rust server when the tools change. Their schemas are in `crates/nodus-tools/src/schema.rs`, and verbatim in `ADDED_TOOLS` in `crates/nodus-tools/tests/fixtures/generate.mjs`, which splices them into 0.9.4's answers for `fixtures/tools.json`.
 
 ### `VIEW_GUIDE`, verbatim (macOS text)
 
@@ -778,7 +808,9 @@ How a view works:
 | `get_view` | `{"id", "title", "description", "html", "data"?, "state"?, "commands": [{"name", "run", "every"?, "allowed", "last"?: CommandResult}], "refresh"?: {"every", "prompt"}, "start_sessions": bool, "errors": [{"message", "at": "<ISO 8601>"}]}` |
 | `list_views` | `[{"id", "title", "description", "yours"?: true}]`, oldest first |
 | `list_board` | `{"linked_to_this_session": [lines], "cards": [{"id", "title", "status", "x", "y", "w", "h", "this_session"?: true}], "notes": [{"id", "text", "color", "x", "y", "w", "h"}], "views": [{"id", "title", "x", "y", "w", "h"}], "shapes": [{"id", "kind", "text"?, "color", "x", "y", "w", "h", "yours"?: true}], "links": [{"id", "from", "to", "label"?, "color", "yours"?: true}]}` (TOOL-102; added after 0.9.4) |
-| `draw_on_board` | `{"shapes": {"<key or index>": "<id>"}, "links": ["<id>"], "area"?: {"x", "y", "w", "h"}}` |
+| `list_board`, after 1.0.17 | adds `"ink"?: [{"id", "kind", "color", "x", "y", "w", "h", "text"?, "from"?, "to"?, "around"?, "yours"?: true}]` and `"ink_not_listed"?` (TOOL-113) |
+| `look_at_board` | an image block, then `{"area": {"x", "y", "w", "h"}, "scale", "tags": {"<tag>": {"id", "kind", "name"?, "this_session"?: true}}, "untagged_ink"?}` (TOOL-111) |
+| `draw_on_board` | `{"shapes": {"<key or index>": "<id>"}, "links": ["<id>"], "ink"?: ["<id>"], "area"?: {"x", "y", "w", "h"}}` |
 | `update_drawing` | `{"updated": ["<id>"]}` |
 | `erase_from_board` | `{"erased": ["<id>"], "skipped": [{"id", "reason"}]}` |
 
@@ -1134,7 +1166,7 @@ Every message carries `nodus: 1`.
 
 - `const BOARD_SERVER: &str = "nodus"`, `BOARD_MCP_CONFIG: &str`, `BOARD_TOOL_RULES: [&str; 16]` (12 in 0.9.4)
 - `async fn answer_mcp(session_id, message: Value) -> Option<Value>` (None only when the app can't answer)
-- `trait BoardToolHandlers { is_run, list_projects, create_project, find_project, list_sessions, archive_sessions, archive_self, list_notes, create_note, update_note, list_views, get_view, create_view, update_view, list_board, draw_on_board, update_drawing, erase_from_board }` (mirrors `BoardToolHandlers`, implemented by `StoreHandlers` with the logic in TOOL-028–TOOL-038 and TOOL-101–TOOL-110)
+- `trait BoardToolHandlers { is_run, list_projects, create_project, find_project, list_sessions, archive_sessions, archive_self, list_notes, create_note, update_note, list_views, get_view, create_view, update_view, list_board, look_at_board, draw_on_board, update_drawing, erase_from_board }` (mirrors `BoardToolHandlers`, implemented by `StoreHandlers` with the logic in TOOL-028–TOOL-038 and TOOL-101–TOOL-114; `look_at_board` answers a `Look { png, key }`, and its default refuses)
 
 `nodus-board` (notes and ink): `NOTE_MAX_CHARS`, `clamp_note_size`, `fit_note`, `create_note(board, from, patch, away)`, `update_note`, `list_notes`, `clean_ink(Value) -> Vec<InkStroke>`.
 
@@ -1510,6 +1542,10 @@ One line per behavior ID, in the order above. Tick only when the Rust build matc
 - [x] TOOL-108 update_drawing changes links' labels, colours and ends
 - [x] TOOL-109 erase_from_board takes shapes and links, a shape's links with it, never cards, notes or views
 - [x] TOOL-110 INSTRUCTIONS end with a few sentences on shapes and links
+- [x] TOOL-111 look_at_board: the board or an area as a PNG drawn from the store, with tags keyed to ids (added after 1.0.17)
+- [x] TOOL-112 draw_on_board puts up pictures from files, checked and copied, at their own proportions; not on a server
+- [x] TOOL-113 Ink marks (circle, underline, rect, arrow, text, pen) drawn, listed by list_board, erased by id
+- [x] TOOL-114 Sessions may draw and write notes unasked, small and near their card; the user's drawings change only when asked
 - [x] NOTE-001 Note text is text.trim() then its first 20000 UTF-16 code units (NOTE_MAX_CHARS)
 - [x] NOTE-002 fitNote(text): lines = text.split('\n')
 - [x] NOTE-003 A short note stays square at 216 × 216: w is stored only when ≠ 216, h only when ≠ 216 (otherwise the keys are absent)

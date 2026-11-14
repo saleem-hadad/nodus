@@ -548,23 +548,9 @@ impl AppState {
         cx.notify();
     }
 
-    /// `saveInk` (INKUI-024): the board's ink at once, then saved (spec 11).
-    pub fn save_ink(&mut self, strokes: Vec<nodus_domain::InkStroke>, cx: &mut Context<'_, Self>) {
-        let Some(board) = self.board.as_mut() else { return };
-        board.ink = strokes.clone();
-        let project_id = board.project.id.clone();
-        cx.notify();
-        let nodus = self.nodus.clone();
-        let rt = crate::board::core_rt(cx);
-        cx.spawn(async move |_, _| {
-            crate::board::on_core(&rt, async move { nodus.board().save_ink(&project_id, &strokes).await }).await;
-        })
-        .detach();
-    }
-
-    /// A server board's ink, a stroke at a time (SRV-184): strokes added or
-    /// changed, and strokes gone, on top of the board as the store has it,
-    /// so what someone else drew meanwhile stays. Then saved the same way.
+    /// The board's ink, a stroke at a time (SRV-184, INKUI-029): strokes
+    /// added or changed, and strokes gone, on top of the board as the store
+    /// has it, so what someone else or a session drew meanwhile stays.
     pub fn change_ink(&mut self, changed: Vec<nodus_domain::InkStroke>, gone: Vec<String>, cx: &mut Context<'_, Self>) {
         let Some(board) = self.board.as_mut() else { return };
         if changed.is_empty() && gone.is_empty() {

@@ -85,7 +85,7 @@ The server reuses what the app already has: `nodus-core`'s headless config (`Nod
      - `nodus` added to the `nodus-run` group;
      - `/srv/nodus/uploads`, 2750 `nodus:nodus-run`;
      - `/opt/nodus/bin` and `/opt/nodus/bin/shims`, owned by `nodus`, 0755.
-  3. Installs `ca-certificates`, `curl`, `gnupg`, `openssl`, `git`, `uidmap`, `dbus-user-session`, `nftables`, and `gh` from GitHub's apt repository.
+  3. Installs `ca-certificates`, `curl`, `gnupg`, `openssl`, `git`, `uidmap`, `dbus-user-session`, `nftables`, and `gh` from GitHub's apt repository. After 1.0.17, also `fonts-dejavu-core`, for the words in the board pictures `look_at_board` draws (TOOL-111).
   4. Installs Claude Code for `nodus-run` with Anthropic's installer, unless it's there. It updates itself.
   5. Installs rootless Docker for `nodus-run` from Docker's apt repository (`dockerd-rootless-setuptool.sh install`, `loginctl enable-linger nodus-run`).
      - The system-wide daemon is turned off, since ports it publishes skip the firewall's input chain. One that was running already is left on, with a warning.

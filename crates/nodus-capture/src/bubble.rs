@@ -17,9 +17,9 @@ use serde_json::Value;
 use crate::guess::{ClaudeEnv, MAX_REASON_CHARS, MAX_TEXT_CHARS, SETTINGS, TIMEOUT, flat};
 
 /// The system prompt, verbatim.
-pub const SYSTEM_PROMPT: &str = "You route what the user typed into a bubble on their Nodus board, a canvas of Claude Code sessions for one project. Decide what it becomes:
-- session: a new Claude Code session in the project's repository that does what the text asks. The default for work to be done, questions about the code and anything to look into.
-- note: a sticky note on the board, and nothing runs. For ideas, reminders and things to do later or to ask someone, not work to start now (\"remember to…\", \"idea:\", \"todo:\", \"ask finance about…\").
+pub const SYSTEM_PROMPT: &str = "You route what the user typed into a bubble on their Nodus board, a canvas of Claude Code sessions for one project. The bubble is put down at a spot on the board, often on something there (a picture, a sketch, a card, a note); \"this\" and \"here\" mean that, and a session can look at it. Decide what it becomes:
+- session: a new Claude Code session in the project's repository that does what the text asks. The default for work to be done, any question (about the code, or about what is on the board where the bubble is), and anything to look into.
+- note: a sticky note on the board, and nothing runs. For ideas, reminders and things to do later or to ask someone, not work to start now and not questions for Claude (\"remember to…\", \"idea:\", \"todo:\", \"ask finance about…\").
 - view: a live page on the board that Claude builds and keeps up to date. Only when the text asks for something to watch or show: a dashboard, a table, a chart, a list or the status of something.
 
 For a session, pick the model the ask needs:

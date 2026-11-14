@@ -672,13 +672,26 @@ impl ExpandedStart {
 /// wheel event first ([`WheelArbiter::saw`]), and a card terminal under one
 /// asks whether it scrolls ([`WheelArbiter::claims`]). A gesture pans the
 /// board unless its first event lands over an enabled card terminal; then
-/// every card terminal it crosses scrolls instead.
+/// every card terminal it crosses scrolls instead, until a chat runs out of
+/// room and hands the rest of it to the board ([`WheelArbiter::spills`]).
 #[derive(Debug, Clone, Default)]
 pub struct WheelArbiter {
     last: Option<Instant>,
     /// When the gesture under way began.
     start: Option<Instant>,
     board_scrolls: bool,
+    /// The fingers left the trackpad: the gesture's events are its momentum
+    /// until they touch it again.
+    coasting: bool,
+}
+
+/// What a wheel event says about the fingers on a trackpad (GPUI's
+/// `TouchPhase`); a mouse wheel's events are all `Moved`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WheelPhase {
+    Began,
+    Moved,
+    Ended,
 }
 
 pub const GESTURE_GAP: Duration = Duration::from_millis(250);
@@ -691,12 +704,18 @@ const SAME_EVENT: Duration = Duration::from_millis(4);
 impl WheelArbiter {
     /// The window saw a wheel event at `now`, before anything under the
     /// pointer did. Seeing it twice (several listeners) changes nothing.
-    pub fn saw(&mut self, now: Instant) {
+    pub fn saw(&mut self, now: Instant, phase: WheelPhase) {
         if self.last.is_none_or(|t| now.saturating_duration_since(t) > GESTURE_GAP) {
             self.start = Some(now);
             self.board_scrolls = true;
+            self.coasting = false;
         }
         self.last = Some(now);
+        match phase {
+            WheelPhase::Began => self.coasting = false,
+            WheelPhase::Ended => self.coasting = true,
+            WheelPhase::Moved => {}
+        }
     }
 
     /// The wheel event at `now` is over an enabled card terminal: whether
@@ -708,7 +727,7 @@ impl WheelArbiter {
         }
         if self.start.is_none() {
             // No window listener saw it: this event starts the gesture.
-            self.saw(now);
+            self.saw(now, WheelPhase::Moved);
         }
         if self
             .start
@@ -717,6 +736,19 @@ impl WheelArbiter {
             self.board_scrolls = false;
         }
         !self.board_scrolls
+    }
+
+    /// XCARD-034: the event [`claims`](Self::claims) gave a card's chat
+    /// can't scroll it any further (it's at the top or the bottom). Pushing
+    /// on goes on over the board: this event and the rest of the gesture
+    /// pan it. A fling's momentum stops at the edge instead. Whether this
+    /// event goes to the board.
+    pub fn spills(&mut self) -> bool {
+        if self.coasting {
+            return false;
+        }
+        self.board_scrolls = true;
+        true
     }
 }
 
@@ -1270,26 +1302,67 @@ mod tests {
         let ms = |n| t0 + Duration::from_millis(n);
         let mut w = WheelArbiter::default();
         // Starts over the terminal: it scrolls the whole gesture.
-        w.saw(ms(0));
+        w.saw(ms(0), WheelPhase::Moved);
         assert!(w.claims(ms(0), false));
-        w.saw(ms(100));
+        w.saw(ms(100), WheelPhase::Moved);
         assert!(w.claims(ms(100), false));
         // Off the card mid-gesture the board takes those events; back over
         // a terminal (any card's), it scrolls again.
-        w.saw(ms(150));
-        w.saw(ms(200));
+        w.saw(ms(150), WheelPhase::Moved);
+        w.saw(ms(200), WheelPhase::Moved);
         assert!(w.claims(ms(200), false));
         // Starts on the board: keeps panning across the terminal.
-        w.saw(ms(500));
-        w.saw(ms(600));
+        w.saw(ms(500), WheelPhase::Moved);
+        w.saw(ms(600), WheelPhase::Moved);
         assert!(!w.claims(ms(600), false));
         // A 250ms gap starts a new gesture; seen twice, it's one event.
-        w.saw(ms(900));
-        w.saw(ms(900));
+        w.saw(ms(900), WheelPhase::Moved);
+        w.saw(ms(900), WheelPhase::Moved);
         assert!(w.claims(ms(900), false));
         // A pinch always goes to the board.
-        w.saw(ms(950));
+        w.saw(ms(950), WheelPhase::Moved);
         assert!(!w.claims(ms(950), true));
+    }
+
+    #[test]
+    fn hands_a_chat_gesture_on_to_the_board_at_its_edge() {
+        // XCARD-034
+        let t0 = Instant::now();
+        let ms = |n| t0 + Duration::from_millis(n);
+        let mut w = WheelArbiter::default();
+        // The chat scrolls, then reaches its top with the fingers down: the
+        // rest of the gesture pans the board, either way it goes.
+        w.saw(ms(0), WheelPhase::Began);
+        assert!(w.claims(ms(0), false));
+        w.saw(ms(16), WheelPhase::Moved);
+        assert!(w.claims(ms(16), false));
+        assert!(w.spills());
+        w.saw(ms(32), WheelPhase::Moved);
+        assert!(!w.claims(ms(32), false));
+        // A gesture that starts at the edge spills from its first event.
+        w.saw(ms(400), WheelPhase::Began);
+        assert!(w.claims(ms(400), false));
+        assert!(w.spills());
+        w.saw(ms(416), WheelPhase::Moved);
+        assert!(!w.claims(ms(416), false));
+        // A fling's momentum stops at the edge: the chat keeps it.
+        w.saw(ms(800), WheelPhase::Moved);
+        assert!(w.claims(ms(800), false));
+        w.saw(ms(816), WheelPhase::Ended);
+        w.saw(ms(832), WheelPhase::Moved);
+        assert!(w.claims(ms(832), false));
+        assert!(!w.spills());
+        assert!(w.claims(ms(848), false));
+        // Fingers back on it mid-momentum push on over the board.
+        w.saw(ms(864), WheelPhase::Began);
+        w.saw(ms(880), WheelPhase::Moved);
+        assert!(w.claims(ms(880), false));
+        assert!(w.spills());
+        // A new gesture after a gap isn't coasting any more.
+        w.saw(ms(1000), WheelPhase::Ended);
+        w.saw(ms(1400), WheelPhase::Moved);
+        assert!(w.claims(ms(1400), false));
+        assert!(w.spills());
     }
 
     #[test]

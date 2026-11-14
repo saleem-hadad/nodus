@@ -59,6 +59,8 @@ pub type CardWheelGate = Rc<dyn Fn(&str, bool, &mut App) -> bool>;
 #[derive(Default)]
 struct CardHosts {
     hosts: HashMap<String, WeakEntity<TerminalHost>>,
+    /// The cards' chats (a session window may show the same session).
+    chats: HashMap<String, WeakEntity<ChatView>>,
     /// `useAttachedTerminal`'s `enabled`, by session.
     enabled: HashMap<String, bool>,
     shells: HashSet<String>,
@@ -159,6 +161,13 @@ impl CardTerminals {
         self.registry.type_in(session_id, text, starting);
     }
 
+    /// XCARD-034: whether a wheel event pushing `dy` scrolls the card's
+    /// chat ([`ChatView::wheel_scrolls`]); `None` for a card without one.
+    pub fn wheel_scrolls(&self, session_id: &str, dy: f32, window: &Window, cx: &App) -> Option<bool> {
+        let chat = cx.try_global::<CardHosts>()?.chats.get(session_id)?.upgrade()?;
+        chat.read(cx).wheel_scrolls(gpui::px(dy), window)
+    }
+
     /// The terminal filling the card's body (its padding is the card's).
     /// It lives while the card renders it every frame; the frame it isn't,
     /// the terminal is parked (TERM-003, TERM-092).
@@ -217,6 +226,9 @@ impl CardTerminals {
                 move |window, cx| ChatView::new(state, id, project, host, true, window, cx)
             });
             chat.update(cx, |c, _| c.set_frame(zoom, enabled));
+            cx.default_global::<CardHosts>()
+                .chats
+                .insert(id.clone(), chat.downgrade());
             if focus {
                 let handle = chat.read(cx).composer_handle(cx);
                 window.focus(&handle, cx);

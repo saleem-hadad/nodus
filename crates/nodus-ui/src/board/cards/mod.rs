@@ -446,6 +446,11 @@ pub trait TerminalHost {
     fn type_in(&self, session_id: &str, text: &str, starting: bool, cx: &mut App);
     /// The terminal element filling the card's body.
     fn element(&self, session_id: &str, window: &mut Window, cx: &mut App) -> Option<AnyElement>;
+    /// XCARD-034: whether a wheel event pushing `dy` (+ toward the top)
+    /// scrolls the card's chat: `None` when the pointer isn't over its
+    /// messages (or the card has no chat), `Some(false)` when they can't go
+    /// that way.
+    fn wheel_scrolls(&self, session_id: &str, dy: f32, window: &Window, cx: &App) -> Option<bool>;
     /// The mic for the card's title bar (spec 05, XCARD-010): what's said is
     /// typed at the prompt (`starting` while the session isn't `live`) and
     /// the card wakes.

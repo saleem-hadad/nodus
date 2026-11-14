@@ -296,6 +296,9 @@ impl TerminalHost for CardHost {
     fn element(&self, session_id: &str, window: &mut Window, cx: &mut App) -> Option<AnyElement> {
         self.terminals.element(session_id, window, cx)
     }
+    fn wheel_scrolls(&self, session_id: &str, dy: f32, window: &Window, cx: &App) -> Option<bool> {
+        self.terminals.wheel_scrolls(session_id, dy, window, cx)
+    }
     fn mic(&self, session_id: &str, live: bool, scale: f32, window: &mut Window, cx: &mut App) -> Option<AnyElement> {
         // XCARD-010 (TERM-102): `typeIn`, then the wake, as ExpandedCard.tsx.
         let terminals = self.terminals.clone();

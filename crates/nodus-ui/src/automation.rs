@@ -15,6 +15,8 @@
 //! {"cmd":"mouse","kind":"click","x":100,"y":200}    move | down | up | click | double | right
 //! {"cmd":"scroll","x":720,"y":400,"dy":-600}       a trackpad scroll at a point
 //! {"cmd":"scroll","x":720,"y":400,"dy":-1,"lines":true,"meta":true}   a mouse wheel's notch, ⌘ held
+//! {"cmd":"scroll","x":720,"y":400,"dy":-8,"phase":"ended"}   fingers lifting off the trackpad
+//!                                                  ("started" | "moved", the default | "ended")
 //! {"cmd":"pinch","x":720,"y":400,"delta":0.02}     a trackpad pinch step (+ zooms in)
 //! {"cmd":"files","kind":"entered","x":700,"y":400,"paths":["/…"]}   entered | pending | submit | exited
 //! {"cmd":"emit","event":"updateStatus","payload":{"state":"ready","version":"0.9.5","current":"0.9.4"}}
@@ -416,13 +418,18 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
                 shift: flag("shift"),
                 function: false,
             };
+            let touch_phase = match command.get("phase").and_then(Value::as_str) {
+                Some("started") => TouchPhase::Started,
+                Some("ended") => TouchPhase::Ended,
+                _ => TouchPhase::Moved,
+            };
             with_window(cx, move |window, cx| {
                 window.dispatch_event(
                     PlatformInput::Scroll(ScrollEvent {
                         position,
                         delta,
                         modifiers,
-                        touch_phase: TouchPhase::Moved,
+                        touch_phase,
                         source: Default::default(),
                     }),
                     cx,

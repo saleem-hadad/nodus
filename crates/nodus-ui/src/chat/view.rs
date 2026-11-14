@@ -1,7 +1,9 @@
 //! The chat view's state: following the transcript, the rows the list shows,
 //! what the composer sends where, and when the terminal is docked.
 
+use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -173,6 +175,9 @@ pub struct ChatView {
     pub(crate) model_open: bool,
     /// Where its chip was drawn, whose own press toggles it.
     pub(crate) model_chip: Option<gpui::Bounds<gpui::Pixels>>,
+    /// The messages' area as last painted, whose hover says a wheel event
+    /// is over them (XCARD-034).
+    messages_hitbox: Rc<Cell<Option<gpui::HitboxId>>>,
     /// The terminal drew something since the screen was last looked at.
     screen_dirty: bool,
     ticks: u32,
@@ -268,6 +273,7 @@ impl ChatView {
             dialog: false,
             model_open: false,
             model_chip: None,
+            messages_hitbox: Rc::default(),
             screen_dirty: true,
             ticks: 0,
             last_queue: Vec::new(),
@@ -696,6 +702,28 @@ impl ChatView {
     pub(crate) fn px(&self, v: f32) -> gpui::Pixels {
         px(v * self.scale)
     }
+
+    /// XCARD-034: whether a wheel event pushing `dy` (+ toward the top)
+    /// scrolls the messages: `None` when the pointer isn't over them (the
+    /// composer, the terminal, the `/` menu), `Some(false)` when they can't
+    /// go that way, being at the top or the bottom or too short to scroll.
+    pub fn wheel_scrolls(&self, dy: gpui::Pixels, window: &Window) -> Option<bool> {
+        if !self.messages_hitbox.get()?.should_handle_scroll(window) {
+            return None;
+        }
+        if self.rows.is_empty() || self.list.max_offset_for_scrollbar().y <= px(0.) {
+            return Some(false);
+        }
+        Some(if dy > px(0.) {
+            let top = self.list.logical_scroll_top();
+            top.item_ix > 0 || top.offset_in_item > px(0.5)
+        } else if dy < px(0.) {
+            // Scrolled back to the bottom, the list follows its tail again.
+            !self.list.is_following_tail()
+        } else {
+            true
+        })
+    }
 }
 
 impl Render for ChatView {
@@ -745,6 +773,7 @@ impl Render for ChatView {
                     .min_h_0()
                     .relative()
                     .child(messages)
+                    .child(messages_hitbox(self.messages_hitbox.clone()))
                     .children(self.render_edges(window, cx)),
             )
             .children(dock)
@@ -976,6 +1005,19 @@ pub(crate) fn shows_dialog(screen: &str) -> bool {
 
 fn rgba_white(a: f32) -> gpui::Rgba {
     theme::tokens::rgba(255, 255, 255, a)
+}
+
+/// The messages' area, noted each frame for [`ChatView::wheel_scrolls`]; it
+/// doesn't stop the pointer, and what's drawn over it (the `/` menu) does.
+fn messages_hitbox(cell: Rc<Cell<Option<gpui::HitboxId>>>) -> impl IntoElement {
+    gpui::canvas(
+        |bounds, window, _| window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal),
+        move |_, hitbox, _, _| cell.set(Some(hitbox.id)),
+    )
+    .absolute()
+    .top_0()
+    .left_0()
+    .size_full()
 }
 
 #[cfg(test)]

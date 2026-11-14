@@ -122,6 +122,7 @@ All values below are resolved for **light** and **dark**. The theme follows `nat
 - **XCARD-031** While the pointer is over the expanded card's node, an 11×11 diagonal grip appears 4px from the bottom-right corner (two white 32% diagonal stripes), fading over 120ms `ease`; it never takes the pointer.
 - **XCARD-032** Expanded cards stack above compact cards (node z-index 1 vs 0; 09); the deck (DECK) and stickers (NOTEUI) render on expanded cards exactly as on compact ones, sized to the expanded node.
 - **XCARD-033** An expanded server card's terminal (hosted Nodus, added after 1.0.12) is the size the session's terminal has, which follows whoever typed into it last (SRV-144, TERM-114), not the card's: a wider one is cut at the card's edge, a narrower or shorter one leaves the terminal's background beside it. Typing into it resizes the session to the card's own size first.
+- **XCARD-034** Scroll chaining from a chat (added after 1.0.20): when a gesture's event over a Claude card's messages can't scroll them any further its way (they're at the top, or at the bottom where they follow the newest, or too short to scroll), it pans the board instead, and so does the rest of that gesture, whichever way it then goes (XCARD-027's board gesture). A gesture that starts there spills from its first event; one that scrolled the chat to its edge spills while the fingers stay on the trackpad. A fling's momentum (after the fingers lift, until they touch again) stops at the edge. Only pixel scrolls (a trackpad, a Magic Mouse) spill: a mouse wheel's notches, which zoom the board (BOARD-179), stay with the chat. The composer, the docked terminal and the `/` menu never spill.
 
 ### Agent deck & fan — DECK
 
@@ -565,7 +566,7 @@ Lineage: stroke `--border-strong`, width 1.5, no dash; animated (child working):
 | Expanded title bar | click / double-click title / drag | focus terminal / rename / move | XCARD-017 |
 | Expanded tools | click | per tool | XCARD-009…015 |
 | Expanded body | pointer-down | focus terminal (if attached) | XCARD-018 |
-| Expanded body | wheel (gesture started here) / pinch | scroll terminal / zoom board | XCARD-027/028 |
+| Expanded body | wheel (gesture started here) / pinch | scroll terminal / zoom board; a chat at its edge pans the board | XCARD-027/028/034 |
 | Expanded edges/corners | drag | resize, min 360×240 | XCARD-029/030 |
 | Archive frame | hover (no buttons) | stack lift + search field shows and focuses | ARCH-016, ARCH-019/020 |
 | Archive frame | click (folded) | open panel | ARCH-011 |
@@ -777,6 +778,7 @@ Cross-domain dependencies: 09 (node z-order incl. select elevation +1000, drag/d
 - [x] XCARD-031 grip on hover
 - [x] XCARD-032 z above compact; deck & stickers on expanded
 - [x] XCARD-033 a server card's terminal at the size the session follows (hosted)
+- [x] XCARD-034 a chat at its edge hands the gesture to the board
 - [x] DECK-001 deck existence
 - [x] DECK-002 3 layers by urgency, nearest = most urgent
 - [x] DECK-003 layer surface + 3px status strip

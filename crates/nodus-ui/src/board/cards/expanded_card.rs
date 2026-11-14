@@ -11,15 +11,16 @@ use gpui::base::TextSelection;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, CursorStyle, DispatchPhase, FontWeight, Global, HitboxBehavior, InteractiveElement, IntoElement,
-    MouseButton, ParentElement, Rgba, ScrollEvent, StatefulInteractiveElement, Styled, Window, canvas, div, radians,
-    svg,
+    MouseButton, ParentElement, Rgba, ScrollDelta, ScrollEvent, StatefulInteractiveElement, Styled, TouchPhase, Window,
+    canvas, div, px, radians, svg,
 };
 use nodus_domain::{AgentInfo, SessionUsage};
 
 use super::agent_deck::{self, DeckHandles};
 use super::icons::{CardIcon, GRIP_PATH, card_icon};
 use super::present::{
-    self, EXPANDED_MIN_H, EXPANDED_MIN_W, ExpandedStart, Phase, WakeEffect, WheelArbiter, is_terminal, running,
+    self, EXPANDED_MIN_H, EXPANDED_MIN_W, ExpandedStart, Phase, WakeEffect, WheelArbiter, WheelPhase, is_terminal,
+    running,
 };
 use super::resize::resize_zones;
 use super::session_card::{SessionNode, apply, heading, surface};
@@ -251,8 +252,11 @@ pub fn body(
             // pointer does, and marks where gestures begin. Painted over the
             // body, this hears its wheel before anything in it does: the
             // board's gesture crossing the card pans on, and the chat under
-            // it never scrolls (it doesn't ask the arbiter).
+            // it never scrolls (it doesn't ask the arbiter). XCARD-034: nor
+            // does a chat that's run out of room, the board taking over; a
+            // mouse's notches, which zoom the board (BOARD-179), don't spill.
             let actions = env.actions.clone();
+            let (chats, chat_id) = (host.clone().filter(|_| chat), id.clone());
             d.child(
                 canvas(
                     |bounds, window, _| window.insert_hitbox(bounds, HitboxBehavior::Normal),
@@ -260,10 +264,26 @@ pub fn body(
                         window.on_mouse_event(move |e: &ScrollEvent, phase, window, cx| {
                             let now = Instant::now();
                             if phase == DispatchPhase::Capture {
-                                cx.default_global::<Wheel>().0.saw(now);
-                            } else if hitbox.should_handle_scroll(window)
-                                && !cx.default_global::<Wheel>().0.claims(now, e.modifiers.control)
-                            {
+                                let phase = match e.touch_phase {
+                                    TouchPhase::Started => WheelPhase::Began,
+                                    TouchPhase::Ended => WheelPhase::Ended,
+                                    _ => WheelPhase::Moved,
+                                };
+                                cx.default_global::<Wheel>().0.saw(now, phase);
+                                return;
+                            }
+                            if !hitbox.should_handle_scroll(window) {
+                                return;
+                            }
+                            let claimed = cx.default_global::<Wheel>().0.claims(now, e.modifiers.control);
+                            let spills = claimed
+                                && matches!(e.delta, ScrollDelta::Pixels(_))
+                                && chats.as_ref().is_some_and(|h| {
+                                    let dy = e.delta.pixel_delta(px(1.)).y;
+                                    h.wheel_scrolls(&chat_id, dy.into(), window, cx) == Some(false)
+                                })
+                                && cx.default_global::<Wheel>().0.spills();
+                            if !claimed || spills {
                                 cx.stop_propagation();
                                 actions.wheel(e, cx);
                             }

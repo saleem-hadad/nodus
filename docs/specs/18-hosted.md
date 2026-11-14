@@ -54,16 +54,17 @@ The server reuses what the app already has: `nodus-core`'s headless config (`Nod
     - `audit.jsonl`, appended to and never rewritten (SRV-210);
     - `env`, the sessions' environment, which a person writes (SRV-141);
     - `board-images/` and `views/` as on a Mac, and `uploads/` when `serve` isn't given `--uploads` (one user, development and tests).
-  - **Uploads** go in `serve --uploads <folder>`, which the installer sets to `/srv/nodus/uploads` (2770, `nodus:nodus-run`), so sessions can read them. Each is written 0640 (SRV-163).
+  - **Uploads** go in `serve --uploads <folder>`, which the installer sets to `/srv/nodus/uploads` (2750, `nodus:nodus-run`), so sessions can read them and write nothing there. Each is written 0640 (SRV-163).
   - **The sessions' data** is in `/home/nodus-run` (0750, group `nodus-run`): `projects/<slug>/main` (the clone), `projects/<slug>/worktrees/`, `projects/<slug>/saved/` and `projects/<slug>/setup-logs/` (SESS-206…SESS-212), and Claude Code's own `.claude/` and `.claude.json`, transcripts included.
 - **SRV-004** **The session host** runs as `nodus-run`, under its own unit, `nodus-host.service` (SRV-013); `serve` never starts it. `serve --host-socket /run/nodus/host.sock` connects to it (the folder 0750 and the socket 0660, both group `nodus-run`, which `nodus` belongs to) and retries every second until it's up.
   - Restarting or updating `serve` leaves sessions running, and the next `serve` adopts them.
   - When a `serve` connects with another host protocol, the host stops its sessions and exits (HOST-022, HOST-064), and systemd starts it again from the new binary. Each card resumes on open or on send, as it does locally after the host goes (SESS-136, SESS-145).
   - A reboot stops sessions too, and they resume the same way.
 - **SRV-005** **Two users.** `nodus` holds everything that has to be trusted. `nodus-run` runs everything that touches repo content.
-  - **No child process of the core runs as `nodus`.** Every process the core starts goes through the host as `nodus-run`: sessions and terminals, and also `git`, the background `claude -p` jobs (names, summaries, action drafts, forks, the Claude token check), view commands, `.nodus/setup` and clones. The host's `exec` message runs a process outside any terminal and answers its exit code and output (02, `exec`, `exec-cancel`). The core reaches it through one `Runner`, which on a Mac spawns locally as before. `serve` itself runs only `tailscale`, to find its address and who a device is.
+  - **No child process of the core runs as `nodus`.** Every process the core starts goes through the host as `nodus-run`: sessions and terminals, and also `git`, the background `claude -p` jobs (names, summaries, action drafts, forks, the Claude token check), view commands, `.nodus/setup` and clones. The host's `exec` message runs a process outside any terminal and answers its exit code and output (02, `exec`, `exec-cancel`). The core reaches it through one `Runner`, which on a Mac spawns locally as before. `serve` itself runs only `tailscale`, to find its address and who a device is: not even `claude --version`, since the `claude` it would find is `nodus-run`'s, which a session can replace. `nodus.service` couldn't run it anyway (SRV-013).
     - This matters because repo config runs code: `core.fsmonitor`, `.git/hooks`, the hooks in `.claude/settings.json`.
   - **`nodus` only reads `nodus-run`'s files.** `nodus` is in the `nodus-run` group, and `nodus-host.service` sets `UMask=0027`, so transcripts and worktrees are group-readable. Reading a transcript is parsing data, not running it.
+  - **`nodus` makes nothing where a session says.** A session's board tools are answered by `serve`, as `nodus`, so `create_project` makes no folder and no project on a server (SRV-146).
   - **`nodus-run` reads nothing of `nodus`'s.** `/home/nodus` is 0700, and `/opt/nodus/bin` belongs to `nodus` (0755), so `nodus-run` can run the binary but not change it.
   - **Everything from the host is untrusted.** `serve` checks each hook, status line, board tools request and credential request against that session's own token (SRV-143). It gives the host only what a session needs: its Claude token, its git identity, its environment.
   - **Pre-trusting a folder** for Claude Code is the host's `trust` message (SRV-126), since `.claude.json` is `nodus-run`'s.
@@ -82,7 +83,7 @@ The server reuses what the app already has: `nodus-core`'s headless config (`Nod
   2. Creates the users and folders:
      - `nodus-run` (home `/home/nodus-run`, 0750) and `nodus` (home `/home/nodus`, 0700), each with its own group, `/bin/bash` as its shell (terminal cards start the user's shell) and subordinate id ranges for rootless Docker;
      - `nodus` added to the `nodus-run` group;
-     - `/srv/nodus/uploads`, 2770 `nodus:nodus-run`;
+     - `/srv/nodus/uploads`, 2750 `nodus:nodus-run`;
      - `/opt/nodus/bin` and `/opt/nodus/bin/shims`, owned by `nodus`, 0755.
   3. Installs `ca-certificates`, `curl`, `gnupg`, `openssl`, `git`, `uidmap`, `dbus-user-session`, `nftables`, and `gh` from GitHub's apt repository.
   4. Installs Claude Code for `nodus-run` with Anthropic's installer, unless it's there. It updates itself.
@@ -100,6 +101,8 @@ The server reuses what the app already has: `nodus-core`'s headless config (`Nod
 - **SRV-012** Running it again upgrades in place and keeps the data. A new binary restarts `nodus.service` only, so sessions keep running in the host (SRV-004); a changed host unit restarts the host, and its sessions stop. `--uninstall` stops and removes both services and the binary, and kills the host's leftover sessions. It keeps the data, the users, `nodus-run`'s Docker and the firewall, so nothing left running is exposed. `--uninstall --purge` removes those too. The packages stay.
 - **SRV-013** **The units.** Paths are absolute, because in a system unit `%h` is root's home whatever `User=` says.
   - `nodus.service`: `User=nodus`, `SupplementaryGroups=nodus-run`, `ExecStart=/opt/nodus/bin/nodus serve --host-socket /run/nodus/host.sock --run-home /home/nodus-run --uploads /srv/nodus/uploads`, `UMask=0027`, `Restart=always`, `RestartSec=1`, after `nodus-host.service` and `tailscaled.service`.
+    - `NoExecPaths=/home/nodus-run /srv/nodus /tmp /var/tmp /dev/shm`, `PrivateTmp=yes` and `NoNewPrivileges=yes`: `nodus` runs nothing `nodus-run` could have written (SRV-005).
+    - `StartLimitIntervalSec=0`, so it never stops restarting: a session holding port 7420 for a while delays the server, and can't learn a token from the apps meanwhile (SRV-030).
   - `nodus-host.service`:
     - `User=nodus-run`, `ExecStart=/opt/nodus/bin/nodus host --socket /run/nodus/host.sock`;
     - `RuntimeDirectory=nodus`, `RuntimeDirectoryMode=0750`, `RuntimeDirectoryPreserve=yes`;
@@ -116,6 +119,7 @@ The server reuses what the app already has: `nodus-core`'s headless config (`Nod
 | Route | Auth | What |
 |---|---|---|
 | `GET /api/hello` | none | `{ name, version, protocol, needsSetup }` |
+| `GET /api/prove?nonce=…&hint=…` | none | `{ proof }`: that the server keeps a token's hash (SRV-030) |
 | `POST /api/setup/claim` | the setup code | `{ token }`: a setup token (SRV-060) |
 | `POST /api/auth/device`, `POST /api/auth/device/poll` | none, or a setup token in the wizard | GitHub device sign-in (SRV-041). The poll names a random handle the server gave, never the user code. |
 | `GET /api/ws` | device or setup token | the WebSocket (SRV-023) |
@@ -157,6 +161,11 @@ The server reuses what the app already has: `nodus-core`'s headless config (`Nod
   ```
   - Tailscale refuses a tag nobody owns yet. When it refuses `tag:nodus`, the installer joins untagged and says to add the policy and run `sudo tailscale up --advertise-tags=tag:nodus`.
   - Settings → Servers warns while the server isn't tagged, or Tailscale isn't running on it (UI-327).
+- **SRV-030** **A server proves it keeps a token before it gets one.** The wire is plain HTTP, and anything can answer at a server's address: another machine where its name resolves while Tailscale is off, or, while `serve` restarts, a session on the server that took port 7420. Neither may be handed a token.
+  - The server keeps each device token's and setup token's SHA-256 (SRV-042, SRV-060). Before a request that carries one, the app asks on the same connection `GET /api/prove?nonce=<32 random bytes, hex>&hint=<the first 16 hex of the SHA-256 of the token's hash>`, and the server answers `{ proof }`, an HMAC-SHA256 of `nodus-server-proof\n<nonce>` under that hash. Only then does the request with the token go, on that connection. Only a server that keeps the hash can answer, the hint gives nothing away, and each nonce is fresh.
+  - What can't prove it gets nothing, and the app says `What answered at this address couldn’t prove it’s this server, so nothing secret was sent to it. Check that Tailscale is on, and the address.` A server that keeps no such token (a revoked device's, a setup token past its hour) answers 404, which the app takes as the request being refused: 401.
+  - It covers the WebSocket, uploads and files, the nonce and a sign-in with a setup token, and so whatever goes over the WebSocket afterwards: a Claude token being added, a new App key.
+  - The setup code goes without it: a server that proved it keeps the code's hash would answer guesses past its 10 tries an hour (SRV-060). So the first claim is the one secret sent on trust: claim it with Tailscale on, or through the tunnel.
 
 ## 4 · People
 
@@ -247,6 +256,9 @@ Sessions on a server run on Claude accounts its members add, from `claude setup-
 - **SRV-105** Settings → Servers → Claude accounts lists the accounts with their usage and reset times, plus **Add**, **Rename** and **Remove** (UI-330). Any member can remove any account.
   - Removing an account moves the sessions using it, as SRV-104 does.
   - Removing it from Nodus doesn't revoke the token: the dialog says it works until it expires or its owner revokes it in their Claude account.
+- **SRV-106** **What a session reports is doubted.** A session's status line and `StopFailure` come from a process that repo content or a web page may steer, and every account it moves to puts that account's token in its environment.
+  - A session takes an account it hasn't run on at most once in 30 minutes; its first doesn't count. Until then a move, or a start, takes only an account it has run on, and with none free it waits (SRV-104) and goes on once one is free or the half hour is up: `This session moved to another Claude account less than 30 minutes ago, and the ones it has run on are at their limit. It can go on once one is free, or in half an hour.` Background `claude -p` runs and other sessions pick as SRV-101 says.
+  - No window is taken to reset more than a week ahead, Claude's longest, so a report can't keep an account `limited` past that.
 
 ## 8 · Projects, worktrees, environments
 
@@ -254,6 +266,7 @@ Sessions on a server run on Claude accounts its members add, from `claude setup-
 - **SRV-121** **The main checkout is never edited.** The server fetches into it and nothing more.
 - **SRV-122** **A worktree per card** (SESS-206). Each new card, Claude or terminal, on a project from GitHub gets its own worktree, `projects/<slug>/worktrees/<cardId-8>`, on a branch `nodus/<title-slug>-<cardId-4>` cut from `origin/<default>` after a fetch. Its process starts there, not in the project's folder.
 - **SRV-123** **Setting up a worktree** (SESS-208). If the repo has an executable `.nodus/setup`, it runs in the new worktree before the session starts, and the card shows `Setting up…` with the script's last line. The session starts even when the script fails or takes over 30 minutes, and the card shows why. A session can write the script when it's asked to set the project's environment up, so every later card starts ready.
+  - `serve` reads the log for that line as `nodus`, from a folder a session can change, so it takes only a regular file `nodus-run` owns, opened without following a link or waiting on a pipe, and only its last 4 KB. A link to one of the server's own files, a device or a pipe in the log's place shows nothing.
 - **SRV-124** **Removing a card** removes its worktree (SESS-212). Uncommitted changes or unpushed commits are saved first to `saved/<cardId>-<time>/`, as a patch and a `git bundle`, and kept for 30 days. Archived cards keep their worktrees.
 - **SRV-125** **Transcripts** are found under the card's own folder, its worktree (SESS-211), and so is what ⌘K searches (SESS-215). Importing sessions from disk (SESS-073) looks only at the main checkout.
 - **SRV-126** **Trust** (SESS-207). Before a session first starts in a new worktree, the host marks the folder trusted in `/home/nodus-run/.claude.json` (`trust`, 02), as accepting Claude Code's trust dialog would. Otherwise every new card would stop at that dialog.
@@ -278,6 +291,7 @@ Sessions on a server run on Claude accounts its members add, from `claude setup-
   - Every app with the session open gets `ev:pty-size { sessionId, cols, rows }`, first when it opens, before the replay, and its terminal takes that size rather than its container's. Other viewers' terminals reflow.
   - The wire's `PROTOCOL` went from 1 to 2 with this, so servers and apps update together (SRV-027).
 - **SRV-145** **View commands** run through the host as `nodus-run` in the main checkout, with SRV-141's environment and no Claude token. Any member can allow or turn down one, the view records who allowed it (`approvedBy`), and the audit log gets a line either way (SRV-210).
+- **SRV-146** **The board tools on a server** are answered by `serve` as `nodus`. `create_project` makes no folder and no project there: it answers `Projects on a Nodus server come from GitHub: ask a member to add the repository with Add from GitHub`.
 
 ## 10 · The app's side
 
@@ -290,7 +304,8 @@ Sessions on a server run on Claude accounts its members add, from `claude setup-
   - Reveal in Finder (Show in File Explorer) and the folder picker are hidden for server projects (UI-312).
   - Files dropped on a server session's terminal and pictures added to a server board are uploaded first (`PUT /api/uploads`), and the server's path or name is typed or kept (TERM-112, SHAPE-041).
     - The server picks the stored name, a UUID with the original's extension; the original name is kept only as a label.
-    - It keeps them in the `--uploads` folder (SRV-003), written 0640 so the session's user can read them through the group.
+    - It keeps them in the `--uploads` folder (SRV-003), written 0640 so the session's user can read them through the group. Each is a new file, never one already there or a link in its place.
+    - It gives back only regular files it wrote itself, opened without following a link: sessions can't write in that folder, and anything else found there is never served.
     - An upload over 50 MB is refused before anything is sent: `Files over 50 MB can’t go to a server`.
   - Board pictures and views' pages load through `GET /api/files/<id>`, and pictures are kept in `server-files/<server>/` (01).
   - A server view's page and its bridge calls go only to that server, never to the local core (VIEW-020).
@@ -348,7 +363,8 @@ Sessions on a server run on Claude accounts its members add, from `claude setup-
   - sign-in by GitHub id (SRV-040, SRV-041);
   - hashed, revocable device tokens (SRV-042);
   - the setup code and nonce rules (SRV-060, SRV-062);
-  - Bearer tokens in headers only, and the `Host` allowlist (SRV-021, SRV-022).
+  - Bearer tokens in headers only, and the `Host` allowlist (SRV-021, SRV-022);
+  - a token going only to a server that proves it keeps it (SRV-030).
 - **Untrusted content steering a session:** repo code, dependencies, issues and web pages. The defences:
   - one token per session (SRV-143);
   - the credential helper limited to the session's own repository (SRV-084);
@@ -360,15 +376,18 @@ Sessions on a server run on Claude accounts its members add, from `claude setup-
 
 **Two users (SRV-005).** A compromised session runs as `nodus-run`. That can:
 - read the repos, and the other sessions' environments through `/proc`, with the Claude tokens and session tokens of the sessions running at that moment;
+- from then on, see the token of each Claude account a session or a background `claude -p` runs on, so in time every account's. A session gets an account it hasn't run on at most once in half an hour (SRV-106), so it can't walk the pool at once;
 - read the Docker volumes;
 - stay on through `nodus-run`'s cron or user units.
 
 It can't:
-- read the GitHub App key, the other Claude accounts, the members, devices, session key or audit log;
+- read the GitHub App key, `claude-accounts.json`, the members, devices, session key or audit log;
+- run anything as `nodus` (SRV-005, SRV-013), or make `serve` read its files through a link (SRV-123, SRV-163);
+- learn a member's device token by answering at the server's address (SRV-030);
 - add a member or a device;
 - change the server binary or `serve`'s state.
 
-So rebuilding `nodus-run`'s side and replacing the Claude tokens that were live recovers the server. The App key and the device tokens stay safe.
+So rebuilding `nodus-run`'s side and replacing every Claude token recovers the server. The App key and the device tokens stay safe.
 
 **Recovery playbook**, also in `docs/server.md`:
 1. Rebuild the VM from scratch.

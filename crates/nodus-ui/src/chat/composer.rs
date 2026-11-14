@@ -4,7 +4,7 @@
 use std::time::Duration;
 
 use gpui::component::Sizable as _;
-use gpui::component::input::Textarea;
+use gpui::component::input::{IndentInline, MoveDown, MoveUp, Textarea};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Context, FontWeight, InteractiveElement, IntoElement, KeyDownEvent, ParentElement, SharedString,
@@ -30,8 +30,9 @@ const COMPOSER_W: f32 = 780.;
 
 impl ChatView {
     /// CHAT-020: Return sends (or queues while Claude works), ⌘Return sends
-    /// at once, Esc stops Claude; ⇧Return is a new line.
-    fn composer_key(&mut self, e: &KeyDownEvent, _window: &mut Window, cx: &mut Context<'_, Self>) {
+    /// at once, Esc stops Claude; ⇧Return is a new line. CHAT-045: Esc
+    /// closes the `/` menu first.
+    fn composer_key(&mut self, e: &KeyDownEvent, window: &mut Window, cx: &mut Context<'_, Self>) {
         let k = &e.keystroke;
         let m = k.modifiers;
         let busy = self.card(cx).is_some_and(|c| c.live && c.status != SessionStatus::Done);
@@ -39,6 +40,7 @@ impl ChatView {
             // The field sends on Return itself (InputEvent::PressEnter); it
             // goes no further.
             "enter" if !m.shift && !m.alt => cx.stop_propagation(),
+            "escape" if self.slash_dismiss(window, cx) => cx.stop_propagation(),
             "escape" if busy => {
                 cx.stop_propagation();
                 self.interrupt(cx);
@@ -69,6 +71,8 @@ impl ChatView {
                 .text_color(t.status_waiting)
                 .child(SharedString::from(e))
         });
+        let menu = self.render_slash_menu(&t, window, cx);
+        let menu_open = menu.is_some();
         let mic = self.mic(window, cx);
         let send = self.send_button(&t, busy, window, cx);
         let stop = busy.then(|| self.stop_button(&t, cx));
@@ -102,6 +106,7 @@ impl ChatView {
             ));
         }
         let pill = div()
+            .relative()
             .flex()
             .items_end()
             .gap(self.px(6.))
@@ -116,7 +121,8 @@ impl ChatView {
             .child(div().flex_1().min_w_0().child(field))
             .child(mic)
             .children(stop)
-            .child(send);
+            .child(send)
+            .children(menu);
         let side = if self.in_card { 10. } else { 24. };
         div()
             .flex_none()
@@ -127,6 +133,23 @@ impl ChatView {
             .pt(self.px(4.))
             .pb(self.px(if self.in_card { 10. } else { 18. }))
             .on_key_down(cx.listener(Self::composer_key))
+            // CHAT-045: ↑, ↓ and Tab are the field's own bindings, which run
+            // before any key handler, so the `/` menu takes them as actions.
+            .capture_action(cx.listener(|this, _: &MoveDown, window, cx| {
+                if this.slash_move(true, window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
+            .capture_action(cx.listener(|this, _: &MoveUp, window, cx| {
+                if this.slash_move(false, window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
+            .capture_action(cx.listener(|this, _: &IndentInline, window, cx| {
+                if this.slash_complete(None, window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
             .child(
                 div()
                     .w_full()
@@ -137,7 +160,7 @@ impl ChatView {
                     .children(queue)
                     .children(error)
                     .child(pill)
-                    .child(self.hint(&t, live, status, cx)),
+                    .child(self.hint(&t, live, status, menu_open, cx)),
             )
             .into_any_element()
     }
@@ -361,14 +384,16 @@ impl ChatView {
         t: &Tokens,
         live: bool,
         status: Option<SessionStatus>,
+        menu_open: bool,
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
         let text = match (live, status) {
+            _ if menu_open => "↑↓ choose · ↩ runs · ⇥ completes · Esc closes",
             _ if self.dialog => "Claude is asking something in the terminal below",
             (false, _) => "Not running · sending resumes it",
             (true, Some(SessionStatus::Working)) => "Working · ↩ queues · ⌘↩ sends now · Esc stops",
             (true, Some(SessionStatus::Waiting)) => "Claude is asking something below · ↩ queues",
-            _ => "↩ sends · ⇧↩ new line",
+            _ => "↩ sends · ⇧↩ new line · / for commands",
         };
         let open = self.dock.open;
         let me = cx.entity().downgrade();

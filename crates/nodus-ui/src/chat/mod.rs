@@ -10,6 +10,7 @@ mod entries;
 pub mod form;
 mod look;
 mod shows;
+mod slash;
 mod view;
 pub mod visual;
 

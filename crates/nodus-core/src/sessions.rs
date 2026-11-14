@@ -392,6 +392,20 @@ impl SessionsApi<'_> {
         self.nodus.inner.board.transcript_file(project_id, session_id).ok()
     }
 
+    /// The home folder and the session's folder its slash commands are read
+    /// from (CHAT-043). None for a session on a server board, whose folder
+    /// isn't on this computer.
+    pub fn command_places(
+        &self,
+        project_id: &str,
+        session_id: &str,
+    ) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
+        if self.nodus.route_project(project_id).is_some() {
+            return None;
+        }
+        self.nodus.inner.board.command_places(project_id, session_id).ok()
+    }
+
     /// `session:summarize` (SESS-165…174): handoff summaries, one per id
     /// asked for in that order, once the login shell's environment is in.
     /// Progress arrives as `Event::SummarizeProgress`.

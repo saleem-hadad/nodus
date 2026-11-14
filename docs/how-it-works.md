@@ -27,6 +27,8 @@ flowchart LR
 
 Sessions are ordinary Claude Code sessions. New cards run `claude --session-id <uuid>`, and resuming runs `claude --resume <id>`, so you can continue the same session from any terminal later. Your own settings, hooks and MCP servers still apply.
 
+Type **/** in a session's chat for the commands and skills Claude Code offers there: its own, the project's and yours in `.claude`, your enabled plugins', and the skills Claude Code lists for the session. Keep typing to narrow the list, use ↑ and ↓ to choose, Return to run one, and Tab to put it in the field so you can add what it takes.
+
 ## Sessions keep running after you quit
 
 The app doesn't run sessions itself. A background process, the session host, owns their terminals, so quitting Nodus (or a crash) leaves them running. Open the app again and the cards are still live, with their recent output and an up-to-date status.

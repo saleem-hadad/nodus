@@ -573,6 +573,20 @@ impl Board {
         Ok(self.transcripts.transcript_path(&folder, session_id))
     }
 
+    /// Where a session's slash commands are read from (CHAT-043): the home
+    /// folder whose `.claude` holds the user's commands, skills and plugins,
+    /// and the folder the session runs in, whose `.claude` holds the
+    /// project's.
+    pub fn command_places(
+        &self,
+        project_id: &str,
+        session_id: &str,
+    ) -> Result<(std::path::PathBuf, std::path::PathBuf), BoardError> {
+        let project = self.project(project_id)?;
+        let folder = self.session_folder(&project, session_id);
+        Ok((self.transcripts.home().to_owned(), folder.into()))
+    }
+
     /// `session:agent-transcript`: a subagent's steps, for the agent viewer.
     /// Both ids end up in a path, so only safe ones are read (SESS-163).
     pub fn agent_transcript(

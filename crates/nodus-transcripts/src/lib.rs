@@ -21,6 +21,7 @@ pub mod parse;
 pub mod paths;
 pub mod preview;
 pub mod search;
+pub mod slash;
 pub mod summarize;
 mod value;
 pub mod watch;

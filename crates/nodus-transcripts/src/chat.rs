@@ -20,6 +20,7 @@ use serde_json::Value;
 
 use crate::lines::{Json, read_lines};
 use crate::parse::{describe_tool_use, message_text, prompt_full, task_notification, time_of, tool_name, user_text};
+use crate::slash::{SlashCommand, listed_skills};
 use crate::value::{as_str, field, truthy};
 
 /// Only this much of the end of a long transcript is read when the chat
@@ -49,6 +50,8 @@ pub struct ChatLog {
     pages: HashMap<String, usize>,
     version: u64,
     snapshot: Option<(u64, Arc<[ChatEntry]>)>,
+    /// The skills Claude Code last listed for the session (CHAT-043).
+    skills: Arc<[SlashCommand]>,
 }
 
 impl ChatLog {
@@ -62,6 +65,7 @@ impl ChatLog {
             pages: HashMap::new(),
             version: 0,
             snapshot: None,
+            skills: Arc::from(Vec::new()),
         }
     }
 
@@ -119,6 +123,12 @@ impl ChatLog {
         self.version
     }
 
+    /// CHAT-043: the skills Claude Code listed in the transcript, made again
+    /// only when a new listing comes.
+    pub fn skills(&self) -> Arc<[SlashCommand]> {
+        Arc::clone(&self.skills)
+    }
+
     fn push(&mut self, entry: ChatEntry) {
         match &entry {
             ChatEntry::Tool { id, .. }
@@ -159,8 +169,36 @@ impl ChatLog {
             Some("user") => self.user(line, uuid, at),
             Some("assistant") => self.assistant(line, &uuid, at),
             Some("system") => self.system(line, uuid, at),
+            Some("attachment") => self.attachment(line),
             _ => {}
         }
+    }
+
+    /// CHAT-043: Claude Code lists the skills it offers when the session
+    /// starts, and lists those added later as they come.
+    fn attachment(&mut self, line: &Json) {
+        let attachment = line.get("attachment");
+        if as_str(field(attachment, "type")) != Some("skill_listing") {
+            return;
+        }
+        let Some(Value::Array(names)) = field(attachment, "names") else {
+            return;
+        };
+        let names: Vec<&str> = names.iter().filter_map(Value::as_str).collect();
+        let content = as_str(field(attachment, "content")).unwrap_or_default();
+        let listed = listed_skills(&names, content);
+        let skills: Vec<SlashCommand> = if truthy(field(attachment, "isInitial")) {
+            listed
+        } else {
+            let mut skills = self.skills.to_vec();
+            for skill in listed {
+                if !skills.iter().any(|s| s.name == skill.name) {
+                    skills.push(skill);
+                }
+            }
+            skills
+        };
+        self.skills = skills.into();
     }
 
     fn user(&mut self, line: &Json, uuid: String, at: f64) {
@@ -663,5 +701,32 @@ mod tests {
         fs::write(&t.path, format!("{}\n", user("u3", &json!("three")))).unwrap();
         assert!(log.refresh());
         assert_eq!(log.entries().len(), 1);
+    }
+
+    #[test]
+    fn chat_043_the_skills_claude_code_lists_are_kept_and_added_to() {
+        let t = Transcript::new();
+        let mut log = ChatLog::new(t.path.clone());
+        let listing = |names: &[&str], content: &str, initial: bool| {
+            json!({ "type": "attachment", "uuid": "x", "attachment": {
+                "type": "skill_listing", "names": names, "content": content, "isInitial": initial,
+            }})
+        };
+        t.add(&[listing(
+            &["simplify", "loop"],
+            "- simplify: Review the code\n- loop: Run on an interval\n",
+            true,
+        )]);
+        log.refresh();
+        assert!(log.entries().is_empty());
+        let names = |log: &ChatLog| log.skills().iter().map(|s| s.name.clone()).collect::<Vec<_>>();
+        assert_eq!(names(&log), ["simplify", "loop"]);
+        assert_eq!(log.skills()[0].description, "Review the code");
+        t.add(&[listing(&["taco", "loop"], "- taco: Tasks\n", false)]);
+        log.refresh();
+        assert_eq!(names(&log), ["simplify", "loop", "taco"]);
+        t.add(&[listing(&["init"], "- init: Start\n", true)]);
+        log.refresh();
+        assert_eq!(names(&log), ["init"]);
     }
 }

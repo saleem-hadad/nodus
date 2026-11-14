@@ -136,6 +136,8 @@ pub struct ChatView {
     pub(crate) rows: Vec<Row>,
     pub(crate) list: ListState,
     pub(crate) composer: Entity<TextareaState>,
+    /// The composer's `/` menu (CHAT-042).
+    pub(crate) slash: super::slash::SlashMenu,
     /// Claude's charts and forms, read once each.
     pub(crate) shows: super::shows::Shows,
     /// Tool runs shown in full, by their first call's id.
@@ -210,15 +212,16 @@ impl ChatView {
                 _ => {}
             }),
             cx.subscribe_in(&composer, window, |this, _, e: &InputEvent, window, cx| match e {
-                InputEvent::Change if this.error.is_some() => {
+                InputEvent::Change => {
                     this.error = None;
+                    this.slash_changed(cx);
                     cx.notify();
                 }
                 // CHAT-020: Return sends (or queues), ⌘Return sends at once.
                 InputEvent::PressEnter {
                     secondary,
                     shift: false,
-                } => this.submit(*secondary, window, cx),
+                } => this.press_enter(*secondary, window, cx),
                 _ => {}
             }),
         ];
@@ -238,6 +241,7 @@ impl ChatView {
             rows: Vec::new(),
             list,
             composer,
+            slash: super::slash::SlashMenu::default(),
             shows: super::shows::Shows::default(),
             opened: HashSet::new(),
             born: HashMap::new(),
@@ -274,11 +278,11 @@ impl ChatView {
             let mut first = true;
             loop {
                 let reading = Arc::clone(&log);
-                let (changed, entries) = cx
+                let (changed, entries, skills) = cx
                     .background_spawn(async move {
                         let mut log = reading.lock().unwrap_or_else(PoisonError::into_inner);
                         let changed = log.refresh();
-                        (changed, log.snapshot())
+                        (changed, log.snapshot(), log.skills())
                     })
                     .await;
                 let gone = this
@@ -286,6 +290,8 @@ impl ChatView {
                         if changed || first {
                             this.set_entries(entries, cx);
                         }
+                        // CHAT-043: the skills Claude Code listed, for the `/` menu.
+                        this.slash.set_listed(skills);
                         this.look_at_screen(cx);
                     })
                     .is_err();
@@ -503,6 +509,14 @@ impl ChatView {
         }
         self.composer.update(cx, |s, cx| s.set_value("", window, cx));
         self.deliver(text, now, cx);
+    }
+
+    /// Return (⌘Return when `now`): CHAT-045's `/` menu runs its command
+    /// while it's open, else CHAT-020 sends the composer's words.
+    fn press_enter(&mut self, now: bool, window: &mut Window, cx: &mut Context<'_, Self>) {
+        if !self.slash_run(now, window, cx) {
+            self.submit(now, window, cx);
+        }
     }
 
     pub(crate) fn deliver(&mut self, text: String, now: bool, cx: &mut Context<'_, Self>) {

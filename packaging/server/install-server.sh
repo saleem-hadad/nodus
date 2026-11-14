@@ -30,7 +30,7 @@
 #               Owns /home/nodus-run (0750).
 #   /opt/nodus/bin/nodus           the server binary, owned by nodus, 0755
 #   /opt/nodus/bin/shims/gh        a link to it: sessions' gh (SRV-083)
-#   /srv/nodus/uploads             2770 nodus:nodus-run
+#   /srv/nodus/uploads             2750 nodus:nodus-run
 #   /etc/nodus/nftables.nft        the firewall, loaded by nodus-firewall.service
 
 main() {
@@ -282,7 +282,11 @@ create_users() {
 	run usermod --append --groups "$RUN_USER" "$SERVE_USER"
 
 	install -d -o root -g root -m 0755 /srv/nodus
-	install -d -o "$SERVE_USER" -g "$RUN_USER" -m 2770 "$UPLOADS"
+	# Sessions read uploads and write nothing there: a link they left in the
+	# server's folder would be read as nodus (SRV-163). chmod for upgrades
+	# from 2770.
+	install -d -o "$SERVE_USER" -g "$RUN_USER" -m 2750 "$UPLOADS"
+	chmod 2750 "$UPLOADS"
 	install -d -o root -g root -m 0755 /opt/nodus
 	# nodus can replace the binary (updates, SRV-200); nodus-run can only run it.
 	install -d -o "$SERVE_USER" -g "$SERVE_USER" -m 0755 "$BIN_DIR"

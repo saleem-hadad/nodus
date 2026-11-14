@@ -1,0 +1,46 @@
+#!/bin/bash
+# Runs once, as root, on the server's first boot (cloud-init). It installs
+# Nodus with install-server.sh after checking the script's signature
+# against the release key in this repo, so a tampered download never runs.
+set -euo pipefail
+
+# The log can hold the setup code: root only.
+install -m 0600 /dev/null /var/log/nodus-bootstrap.log
+exec >>/var/log/nodus-bootstrap.log 2>&1
+echo "nodus bootstrap: $(date -u)"
+
+hostnamectl set-hostname "${name}"
+
+version="${nodus_version}"
+if [ -n "$version" ]; then
+	base="https://github.com/saleem-hadad/nodus/releases/download/v$version"
+else
+	base="https://github.com/saleem-hadad/nodus/releases/latest/download"
+fi
+
+work=$(mktemp -d)
+cat >"$work/key.pem" <<'KEY'
+${signing_key}
+KEY
+for attempt in 1 2 3 4 5; do
+	if curl -fsSL "$base/install-server.sh" -o "$work/install-server.sh" &&
+		curl -fsSL "$base/install-server.sh.sig" -o "$work/install-server.sh.sig"; then
+		break
+	fi
+	echo "Download failed (attempt $attempt), retrying in 10 seconds."
+	sleep 10
+done
+openssl pkeyutl -verify -pubin -inkey "$work/key.pem" -rawin \
+	-in "$work/install-server.sh" -sigfile "$work/install-server.sh.sig"
+
+args=()
+if [ -n "$version" ]; then args+=(--version "$version"); fi
+%{ if tailscale_auth_key != "" ~}
+args+=(--tailscale)
+export TS_AUTHKEY='${tailscale_auth_key}'
+%{ endif ~}
+
+bash "$work/install-server.sh" "$${args[@]}"
+unset TS_AUTHKEY
+rm -rf "$work"
+echo "nodus bootstrap: done $(date -u)"

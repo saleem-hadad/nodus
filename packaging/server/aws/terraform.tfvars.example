@@ -1,0 +1,16 @@
+# Copy to terraform.tfvars (which git ignores) and fill in.
+
+ssh_public_key = "ssh-ed25519 AAAA... you@laptop"
+
+# Single-use, pre-approved, tagged tag:nodus (see README.md). It's spent
+# once the server joins, so it's worthless if anything later shows it.
+tailscale_auth_key = "tskey-auth-..."
+
+# Optional. Without it, SSH only works over the tailnet.
+# ssh_cidr = "203.0.113.7/32"
+
+# region        = "me-central-1"
+# name          = "nodus"
+# instance_type = "m7g.xlarge"
+# disk_gb       = 100
+# nodus_version = ""

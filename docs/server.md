@@ -37,6 +37,8 @@ In Nodus: Connect to server… → http://nodus-box:7420 → code K7QM-4RXD
 - Its log is `/var/log/nodus-install.log`. The services log to the journal: `journalctl -u nodus -u nodus-host`.
 - Without `--tailscale`, the server listens on `127.0.0.1:7420` only. Tunnel to it from your computer with `ssh -N -L 7420:127.0.0.1:7420 you@server`, and connect to `127.0.0.1:7420`.
 
+On AWS, [`packaging/server/aws`](../packaging/server/aws/README.md) makes the machine with Terraform and runs the install on its first boot; `terraform destroy` removes it again.
+
 ### The Tailscale policy
 
 The server runs Claude in auto mode, so it should reach none of your team's devices. Add this to your tailnet's policy file (**Access controls** in Tailscale's admin console), inside its top-level object:

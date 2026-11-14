@@ -45,19 +45,22 @@ pub(crate) fn clock(window: &mut Window, cx: &App) -> f64 {
 }
 
 /// The cells of the 3×3 grid, row by row, in the order the snake's head
-/// visits them: round the ring clockwise from the top left, through the
-/// middle, and back to the start.
-const SNAKE: [usize; 9] = [0, 1, 2, 5, 8, 7, 6, 3, 4];
+/// visits them: round the ring of eight clockwise from the top left, each a
+/// neighbour of the last, so the lap has no start or end. The middle rests.
+const SNAKE: [usize; 8] = [0, 1, 2, 5, 8, 7, 6, 3];
 /// One lap of the snake.
 const SNAKE_MS: f64 = 1600.;
 /// How many cells the snake's tail trails behind its head.
-const TAIL: f64 = 3.4;
+const TAIL: f64 = 3.2;
 
 /// How lit grid cell `cell` is (0…1) with the snake's head `head` cells
 /// along its path: full at the head, fading over the tail behind it and
 /// over the one cell ahead, so the light glides from dot to dot.
 fn snake_light(cell: usize, head: f64) -> f32 {
-    let at = SNAKE.iter().position(|&c| c == cell).unwrap_or(0) as f64;
+    let Some(at) = SNAKE.iter().position(|&c| c == cell) else {
+        return 0.;
+    };
+    let at = at as f64;
     let n = SNAKE.len() as f64;
     let behind = (head - at).rem_euclid(n);
     let ahead = (at - head).rem_euclid(n);
@@ -420,16 +423,25 @@ mod tests {
     #[test]
     fn lights_the_snake_from_its_head_back() {
         // The head on the top-left cell: it's full, the cells behind it on
-        // the path (the middle, then the left) fade, and the far ones rest.
+        // the ring (the left, then the bottom left) fade, and the far ones
+        // and the middle rest.
         assert!((snake_light(0, 0.) - 1.).abs() < 1e-6);
-        assert!(snake_light(4, 0.) > snake_light(3, 0.));
-        assert!(snake_light(3, 0.) > 0.);
+        assert!(snake_light(3, 0.) > snake_light(6, 0.));
+        assert!(snake_light(6, 0.) > 0.);
         assert_eq!(snake_light(8, 0.), 0.);
+        assert_eq!(snake_light(4, 0.), 0.);
         // Halfway to the next cell, the light is on both, more on the one it left.
         let (left, next) = (snake_light(0, 0.5), snake_light(1, 0.5));
         assert!(left > next && next > 0.);
-        // A lap later it's where it started.
-        assert_eq!(snake_light(5, 3.), snake_light(5, 12.));
+        // A lap later it's where it started, and the lap's end flows into
+        // its start: no dot jumps.
+        assert_eq!(snake_light(5, 3.), snake_light(5, 11.));
+        for cell in 0..9 {
+            assert!(
+                (snake_light(cell, 7.999) - snake_light(cell, 0.)).abs() < 0.01,
+                "{cell}"
+            );
+        }
     }
 
     #[test]

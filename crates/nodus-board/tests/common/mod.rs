@@ -55,6 +55,7 @@ impl BoardSessions for FakeSessions {
     fn usage(&self, session_id: &str) -> Option<SessionUsage> {
         (session_id == "with-usage").then(|| SessionUsage {
             model: Some("Opus".into()),
+            effort: None,
             context_percent: None,
             context_tokens: None,
             context_size: None,

@@ -27,6 +27,8 @@ use crate::board::layout::card_title;
 pub(crate) enum Popover {
     Menu(Vec<SlashCommand>, usize),
     Picker,
+    /// MODEL-020: the model menu.
+    Model,
 }
 
 /// The bar's state, per board mount (BAR-041).
@@ -51,6 +53,10 @@ pub(crate) struct Bar {
     pub picking: bool,
     /// The colour picker's and the note swatch's boxes, as last drawn.
     pub picker_area: [Option<gpui::Bounds<gpui::Pixels>>; 2],
+    /// The model menu is open (MODEL-020).
+    pub model_open: bool,
+    /// The model menu's and its chip's boxes, as last drawn.
+    pub model_area: [Option<gpui::Bounds<gpui::Pixels>>; 2],
     /// The popover, sinking away once closed (MOTION-011).
     pub popover: crate::components::presence::Presence<Popover>,
     pub sending: bool,
@@ -85,6 +91,8 @@ impl Default for Bar {
             last_into: None,
             picking: false,
             picker_area: [None, None],
+            model_open: false,
+            model_area: [None, None],
             popover: Default::default(),
             sending: false,
             focus_request: None,
@@ -251,13 +259,77 @@ impl BoardCanvas {
     }
 
     /// BAR-022: a press anywhere but the picker and its swatch closes it
-    /// (seen before anything else handles it).
+    /// (seen before anything else handles it); MODEL-020: the model menu
+    /// and its chip likewise.
     pub(crate) fn bar_outside_press(&mut self, at: gpui::Point<gpui::Pixels>, cx: &mut Context<'_, Self>) {
         let bar = &mut self.overlays.bar;
         if bar.picking && !bar.picker_area.iter().flatten().any(|b| b.contains(&at)) {
             bar.picking = false;
             cx.notify();
         }
+        if bar.model_open && !bar.model_area.iter().flatten().any(|b| b.contains(&at)) {
+            bar.model_open = false;
+            cx.notify();
+        }
+    }
+
+    /// MODEL-020: what the bar's chip names: the model and effort of the
+    /// session it sends into, else those it starts sessions on.
+    pub(crate) fn bar_model_choice(&self, cx: &gpui::App) -> crate::model_menu::ModelChoice {
+        if let Some(into) = self.bar_sends_into()
+            && let Some(card) = self.cards().iter().find(|c| c.node.session_id == into.session_id)
+        {
+            return crate::model_menu::choice_of(card);
+        }
+        let settings = self.state.read(cx).settings.as_ref();
+        crate::model_menu::ModelChoice {
+            model: settings.and_then(nodus_domain::AppSettings::session_model),
+            effort: settings.and_then(nodus_domain::AppSettings::session_effort),
+            running: None,
+        }
+    }
+
+    /// MODEL-021, MODEL-022: a pick from the bar's model menu switches the
+    /// session it sends into, else is kept for the sessions it starts.
+    pub(crate) fn bar_pick_model(
+        &mut self,
+        switch: nodus_domain::ModelSwitch,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        use nodus_domain::ModelSwitch;
+        self.overlays.bar.model_open = false;
+        self.bar_focus_field(window, cx);
+        cx.notify();
+        let Some(into) = self.bar_sends_into() else {
+            let name = |s: Option<&'static str>| Some(s.unwrap_or_default().to_owned());
+            let patch = match switch {
+                ModelSwitch::Model(model) => nodus_domain::SettingsPatch {
+                    session_model: name(model.map(nodus_domain::SessionModel::as_str)),
+                    ..Default::default()
+                },
+                ModelSwitch::Effort(effort) => nodus_domain::SettingsPatch {
+                    session_effort: name(effort.map(nodus_domain::SessionEffort::as_str)),
+                    ..Default::default()
+                },
+            };
+            self.state.update(cx, |s, cx| s.update_settings(patch, cx));
+            return;
+        };
+        let waiting = self.cards().iter().any(|c| {
+            c.node.session_id == into.session_id && c.live && c.status == nodus_domain::SessionStatus::Waiting
+        });
+        if waiting {
+            self.show_toast("Claude is asking you something. Answer it, then switch.".to_owned(), cx);
+            return;
+        }
+        let done = crate::model_menu::switch(&self.state, &self.project_id, &into.session_id, switch, cx);
+        cx.spawn(async move |this, cx| {
+            if let Err(err) = done.await {
+                let _ = this.update(cx, |c, cx| c.show_toast(format!("Couldn’t switch: {err}"), cx));
+            }
+        })
+        .detach();
     }
 
     /// BAR-033: the board's `/`: the keyboard to the bar, with `/` typed

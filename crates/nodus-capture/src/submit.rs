@@ -272,6 +272,7 @@ impl Maker<'_> {
                     auto_mode: Some(true),
                     from_view: None,
                     model: None,
+                    effort: None,
                 };
                 let session_id = self
                     .handlers

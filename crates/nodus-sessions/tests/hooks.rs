@@ -301,6 +301,7 @@ async fn status_line_turns_a_report_into_usage() {
             id.clone(),
             SessionUsage {
                 model: Some("Opus 5.5".into()),
+                effort: None,
                 context_tokens: Some(3000.0),
                 context_size: Some(200_000.0),
                 context_percent: Some(1.5),

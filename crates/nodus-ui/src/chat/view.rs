@@ -169,6 +169,10 @@ pub struct ChatView {
     /// Claude shows a dialog in its terminal (a trust check, a permission
     /// prompt, a picker), so the terminal docks and nothing is typed in.
     pub(crate) dialog: bool,
+    /// The model menu is open (MODEL-033).
+    pub(crate) model_open: bool,
+    /// Where its chip was drawn, whose own press toggles it.
+    pub(crate) model_chip: Option<gpui::Bounds<gpui::Pixels>>,
     /// The terminal drew something since the screen was last looked at.
     screen_dirty: bool,
     ticks: u32,
@@ -262,6 +266,8 @@ impl ChatView {
             sending: false,
             pending_text: None,
             dialog: false,
+            model_open: false,
+            model_chip: None,
             screen_dirty: true,
             ticks: 0,
             last_queue: Vec::new(),
@@ -588,6 +594,32 @@ impl ChatView {
             });
         })
         .detach();
+    }
+
+    /// MODEL-032: the session's model or effort, picked from the menu. Not
+    /// while Claude asks something, which the restart would lose.
+    pub(crate) fn switch_model(&mut self, switch: nodus_domain::ModelSwitch, cx: &mut Context<'_, Self>) {
+        self.model_open = false;
+        self.error = None;
+        let waiting = self
+            .card(cx)
+            .is_some_and(|c| c.live && c.status == SessionStatus::Waiting);
+        if self.dialog || waiting {
+            self.error = Some("Claude is asking you something. Answer it, then switch.".into());
+            cx.notify();
+            return;
+        }
+        let done = crate::model_menu::switch(&self.state, &self.project_id, &self.session_id, switch, cx);
+        cx.spawn(async move |this, cx| {
+            if let Err(err) = done.await {
+                let _ = this.update(cx, |this, cx| {
+                    this.error = Some(err);
+                    cx.notify();
+                });
+            }
+        })
+        .detach();
+        cx.notify();
     }
 
     /// Claude is running and in a turn (or waiting on the user in one).

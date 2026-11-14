@@ -39,6 +39,8 @@ impl BoardCanvas {
             Some(Popover::Menu(commands, active))
         } else if self.overlays.bar.picking && self.overlays.bar.target == Some(Target::Note) {
             Some(Popover::Picker)
+        } else if self.overlays.bar.model_open && self.overlays.bar.target.is_none() {
+            Some(Popover::Model)
         } else {
             None
         };
@@ -47,6 +49,7 @@ impl BoardCanvas {
             (Some(shown), _) => shown,
             (None, Popover::Menu(..)) => enter(window, cx, "bar-menu", DUR_FAST, motion::ease_out),
             (None, Popover::Picker) => enter(window, cx, "bar-picker", DUR_FAST, motion::ease_out),
+            (None, Popover::Model) => enter(window, cx, "bar-model", DUR_FAST, motion::ease_out),
         };
         Some(self.render_popover(t, &popover, rise, leaving.is_none(), window, cx))
     }
@@ -64,6 +67,7 @@ impl BoardCanvas {
         let (key, body) = match popover {
             Popover::Menu(commands, active) => ("bar-menu", self.render_slash_menu(t, commands, *active, cx)),
             Popover::Picker => ("bar-picker", self.render_picker(window, cx)),
+            Popover::Model => ("bar-model", self.render_model_menu(t, cx)),
         };
         let card = div()
             .id(if live { key } else { "bar-popover-leaving" })
@@ -84,8 +88,19 @@ impl BoardCanvas {
                 d.child(crate::board::overlays::bounds_probe(cx.entity().downgrade(), |c, b| {
                     c.overlays.bar.picker_area[0] = Some(b);
                 }))
+            })
+            .when(live && key == "bar-model", |d| {
+                d.child(crate::board::overlays::bounds_probe(cx.entity().downgrade(), |c, b| {
+                    c.overlays.bar.model_area[0] = Some(b);
+                }))
             });
-        let popover = div().absolute().left_0().bottom_full().pb(px(8.)).child(card);
+        // MODEL-020: the model menu stands over its chip, at the pill's right.
+        let popover = div()
+            .absolute()
+            .map(|d| if key == "bar-model" { d.right_0() } else { d.left_0() })
+            .bottom_full()
+            .pb(px(8.))
+            .child(card);
         if live {
             popover.into_any_element()
         } else {
@@ -179,6 +194,28 @@ impl BoardCanvas {
             .p(px(5.))
             .children(options)
             .into_any_element()
+    }
+
+    /// MODEL-020: the model menu, for the session the bar sends into or
+    /// the ones it starts.
+    fn render_model_menu(&mut self, t: &Tokens, cx: &mut Context<'_, Self>) -> AnyElement {
+        let choice = self.bar_model_choice(cx);
+        let (model_me, effort_me) = (cx.entity().downgrade(), cx.entity().downgrade());
+        let on_model: crate::model_menu::OnModel = Rc::new(move |model, window, cx| {
+            if let Some(c) = model_me.upgrade() {
+                c.update(cx, |c, cx| {
+                    c.bar_pick_model(nodus_domain::ModelSwitch::Model(model), window, cx);
+                });
+            }
+        });
+        let on_effort: crate::model_menu::OnEffort = Rc::new(move |effort, window, cx| {
+            if let Some(c) = effort_me.upgrade() {
+                c.update(cx, |c, cx| {
+                    c.bar_pick_model(nodus_domain::ModelSwitch::Effort(effort), window, cx);
+                });
+            }
+        });
+        crate::model_menu::menu(t, "bar-model-row", &choice, 1., &on_model, &on_effort)
     }
 
     /// The eight swatches; a pick sets the colour, closes, refocuses the field.

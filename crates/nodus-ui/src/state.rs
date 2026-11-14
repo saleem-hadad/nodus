@@ -815,6 +815,7 @@ pub fn merge_settings(settings: &mut AppSettings, patch: &SettingsPatch) {
     if let Some(v) = patch.wheel_zoom {
         settings.wheel_zoom = v;
     }
+    settings.merge_session_choice(patch);
 }
 
 /// UI-290: the toast for a folder the core turned down. The last segment is

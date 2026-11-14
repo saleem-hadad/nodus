@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::time::Duration;
 
-use nodus_domain::{BoardNode, SessionKind, SessionModel, SessionStatus};
+use nodus_domain::{BoardNode, SessionEffort, SessionKind, SessionModel, SessionStatus};
 use nodus_platform::env::EnvMap;
 use nodus_platform::{ClaudeNotFound, Env, ShellCommand};
 use regex::Regex;
@@ -61,6 +61,8 @@ pub struct SpawnOptions {
     pub permission_mode: Option<PermissionMode>,
     /// The card's model, a `SessionModel` alias; Claude Code's default when none.
     pub model: Option<String>,
+    /// The card's effort, a `SessionEffort` level; Claude Code's default when none.
+    pub effort: Option<String>,
     /// More `claude` options, such as an action run's system prompt.
     pub extra_args: Option<Vec<String>>,
     pub cols: Option<f64>,
@@ -164,6 +166,10 @@ pub fn command_for(
     if let Some(model) = opts.model.as_deref().and_then(SessionModel::parse) {
         args.extend(["--model".to_owned(), model.as_str().to_owned()]);
     }
+    // MODEL-001: and its effort, the same way.
+    if let Some(effort) = opts.effort.as_deref().and_then(SessionEffort::parse) {
+        args.extend(["--effort".to_owned(), effort.as_str().to_owned()]);
+    }
     // SESS-123: the board tools, allowed outright so they never stop to ask.
     // Both lists are followed by another option, so neither swallows the prompt.
     if let Some(tools) = board_tools {
@@ -255,6 +261,7 @@ pub fn for_create(
         initial_prompt: if terminal { None } else { first_prompt },
         permission_mode: (action.is_some() || node.auto_mode == Some(true)).then_some(PermissionMode::Auto),
         model: node.model().map(str::to_owned),
+        effort: node.effort().map(str::to_owned),
         extra_args: action.map(|a| a.args),
         cols: None,
         rows: None,
@@ -285,6 +292,7 @@ pub fn for_open(
             .is_some_and(|n| n.auto_mode == Some(true))
             .then_some(PermissionMode::Auto),
         model: node.and_then(BoardNode::model).map(str::to_owned),
+        effort: node.and_then(BoardNode::effort).map(str::to_owned),
         extra_args: brain_args.filter(|_| node.is_some_and(is_brain)),
         cols: Some(cols),
         rows: Some(rows),
@@ -310,6 +318,7 @@ pub fn for_send(
         initial_prompt: Some(nodus_domain::js::trim(prompt).to_owned()),
         permission_mode: (node.auto_mode == Some(true)).then_some(PermissionMode::Auto),
         model: node.model().map(str::to_owned),
+        effort: node.effort().map(str::to_owned),
         extra_args: brain_args.filter(|_| is_brain(node)),
         ..SpawnOptions::default()
     }
@@ -493,7 +502,7 @@ mod tests {
 
     #[test]
     fn starts_and_resumes_on_the_cards_model() {
-        let card = node(json!({ "model": "opus" }));
+        let card = node(json!({ "model": "opus", "effort": "xhigh" }));
         let created = for_create("p", "/work/repo", &card, None, Some("design it"));
         let opened = for_open("p", "/work/repo", ID, Some(&card), true, None, (80.0, 24.0));
         let sent = for_send("p", "/work/repo", &card, true, "and test it", None);
@@ -501,13 +510,22 @@ mod tests {
             let args = argv(opts, false);
             let at = args.iter().position(|a| a == "--model").expect("a --model");
             assert_eq!(args[at + 1], "opus");
+            let at = args.iter().position(|a| a == "--effort").expect("an --effort");
+            assert_eq!(args[at + 1], "xhigh");
         }
     }
 
     #[test]
     fn leaves_out_a_model_it_doesnt_know() {
-        let opts = for_create("p", "/work/repo", &node(json!({ "model": "-rf" })), None, None);
-        assert!(!argv(&opts, false).iter().any(|a| a == "--model"));
+        let opts = for_create(
+            "p",
+            "/work/repo",
+            &node(json!({ "model": "-rf", "effort": "ultra" })),
+            None,
+            None,
+        );
+        let args = argv(&opts, false);
+        assert!(!args.iter().any(|a| a == "--model" || a == "--effort"));
     }
 
     #[test]

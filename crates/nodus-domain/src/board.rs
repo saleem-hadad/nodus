@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::project::{FolderColor, Project};
-use crate::session::{SessionCard, SessionKind, SessionModel};
+use crate::session::{SessionCard, SessionEffort, SessionKind, SessionModel};
 use crate::view::BoardView;
 
 /// A rectangle in board coordinates. Like [`Viewport`], a closed shape with
@@ -100,6 +100,24 @@ impl BoardNode {
             }
             None => {
                 self.extra.remove("model");
+            }
+        }
+    }
+
+    /// The effort level it was started on, or switched to, and resumes on:
+    /// a [`SessionEffort`] in `effort`, kept as [`Self::model`] is. None is
+    /// Claude Code's default for the model.
+    pub fn effort(&self) -> Option<&str> {
+        self.extra.get("effort").and_then(Value::as_str)
+    }
+
+    pub fn set_effort(&mut self, effort: Option<SessionEffort>) {
+        match effort {
+            Some(effort) => {
+                self.extra.insert("effort".into(), Value::from(effort.as_str()));
+            }
+            None => {
+                self.extra.remove("effort");
             }
         }
     }
@@ -422,4 +440,11 @@ pub struct NodePatch {
     pub w: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub h: Option<f64>,
+    /// The model it resumes on, a [`SessionModel`] alias (MODEL-010);
+    /// `Some(None)`, sent as `model: null`, is Claude Code's default.
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "crate::nullable")]
+    pub model: Option<Option<String>>,
+    /// Its effort, a [`SessionEffort`] level, as `model` is.
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "crate::nullable")]
+    pub effort: Option<Option<String>>,
 }

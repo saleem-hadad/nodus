@@ -32,12 +32,20 @@ pub(crate) fn ask(args: &Value) -> Result<Value, ToolError> {
 }
 
 /// TOOLCHAT-003: what of `show_page`'s arguments go on to `create_view`. A
-/// page has no commands, schedule or brain of its own to set up.
+/// page has no commands, schedule or brain of its own to set up, and it's
+/// always the session's to write: without html it fails as a blank page
+/// does, rather than going to a brain (VIEW-161).
 pub(crate) fn page_args(args: &Value) -> Value {
     let mut out = Map::new();
     for key in ["title", "html", "description", "data", "width", "height"] {
-        if let Some(value) = args.get(key) {
-            out.insert(key.to_owned(), value.clone());
+        match args.get(key) {
+            None | Some(Value::Null) if key == "html" => {
+                out.insert(key.to_owned(), Value::String(String::new()));
+            }
+            Some(value) => {
+                out.insert(key.to_owned(), value.clone());
+            }
+            None => {}
         }
     }
     Value::Object(out)
@@ -79,5 +87,17 @@ mod tests {
     fn a_page_takes_only_a_pages_arguments() {
         let args = json!({ "title": "T", "html": "<p>", "commands": [], "refresh": 10, "width": 600 });
         assert_eq!(page_args(&args), json!({ "title": "T", "html": "<p>", "width": 600 }));
+    }
+
+    #[test]
+    fn a_page_without_html_stays_the_sessions_and_never_goes_to_a_brain() {
+        // VIEW-161: create_view without html hands a view to its brain; a
+        // page is blank instead, which create_view turns down.
+        for args in [
+            json!({ "title": "Mockups" }),
+            json!({ "title": "Mockups", "html": null }),
+        ] {
+            assert_eq!(page_args(&args), json!({ "title": "Mockups", "html": "" }));
+        }
     }
 }

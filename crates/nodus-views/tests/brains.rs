@@ -517,3 +517,91 @@ async fn a_brain_that_wont_stop_is_not_asked_and_is_stopped_next_time() {
     assert_eq!(f.node("brain").unwrap().auto_mode, None);
     assert_eq!(f.brains.spawns().last().unwrap().permission_mode, None);
 }
+
+const BRIEF: &str = "Open pull requests: `gh pr list --json number,title` works here. Refresh every 15 minutes.";
+
+#[tokio::test(start_paused = true)]
+async fn a_view_without_html_goes_to_its_brain_at_once() {
+    // VIEW-161
+    let f = Fixture::paused(NOW);
+    let made = f
+        .views
+        .create_view_from_tool(
+            P,
+            "s1",
+            &json!({ "title": "PRs", "description": BRIEF, "data": { "rows": [1] } }),
+        )
+        .await
+        .unwrap();
+    let id = made["view_id"].as_str().unwrap().to_owned();
+    assert_eq!(made["waiting_for_approval"], json!([]));
+    assert!(
+        made["building"]
+            .as_str()
+            .unwrap()
+            .starts_with("Its brain, a Claude session of its own,")
+    );
+    assert!(made.get("errors").is_none() && made.get("checked").is_none());
+
+    let view = f.view(&id).unwrap();
+    assert_eq!((view.version, view.from.as_deref()), (0, Some("s1")));
+    assert_eq!(view.description, BRIEF);
+    assert!(!f.views_dir(&id).join("index.html").exists());
+    let spawn = &f.brains.spawns()[0];
+    assert_eq!(
+        spawn.initial_prompt.as_deref(),
+        Some(format!("Build this view:\n\n{BRIEF}").as_str())
+    );
+    // s1 is in auto mode, so its view's brain is too (VIEW-155).
+    assert_eq!(spawn.permission_mode, Some(PermissionMode::Auto));
+    assert_eq!(view.session_id.as_deref(), Some(spawn.session_id.as_str()));
+    assert_eq!(
+        f.views.get_view_for_tool(P, "s1", Some(&json!(id))).unwrap()["data"],
+        json!({ "rows": [1] })
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_view_handed_off_by_a_session_not_in_auto_mode_asks_before_it_runs_things() {
+    // VIEW-155, VIEW-161
+    let f = Fixture::paused(NOW);
+    not_in_auto_mode(&f);
+    let made = f
+        .views
+        .create_view_from_tool(P, "s2", &json!({ "title": "PRs", "description": BRIEF, "html": null }))
+        .await
+        .unwrap();
+    assert_eq!(
+        f.view(made["view_id"].as_str().unwrap()).unwrap().auto_mode,
+        Some(false)
+    );
+    assert_eq!(f.brains.spawns()[0].permission_mode, None);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_view_without_html_needs_a_brief_and_goes_if_its_brain_cant_start() {
+    // VIEW-161
+    let f = Fixture::paused(NOW);
+    let err = |r: Result<serde_json::Value, nodus_views::ViewError>| r.unwrap_err().to_string();
+    assert!(
+        err(f.views.create_view_from_tool(P, "s1", &json!({ "title": "PRs" })).await)
+            .starts_with("Describe the view for its brain")
+    );
+    assert!(
+        err(f
+            .views
+            .create_view_from_tool(P, "s1", &json!({ "title": "PRs", "html": null, "description": "  " }))
+            .await)
+        .starts_with("Describe the view for its brain")
+    );
+    *f.brains.fail.lock().unwrap() = Some("no claude".into());
+    assert_eq!(
+        err(f
+            .views
+            .create_view_from_tool(P, "s1", &json!({ "title": "PRs", "description": BRIEF, "data": [1] }))
+            .await),
+        "no claude"
+    );
+    assert_eq!(f.store.read(|s| s.board(P).unwrap().views.len()), 0);
+    assert_eq!(f.store.read(|s| s.board(P).unwrap().nodes.len()), 1);
+}

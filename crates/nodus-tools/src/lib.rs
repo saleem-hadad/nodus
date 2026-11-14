@@ -19,9 +19,11 @@
 //!
 //! nodus-core builds a [`StoreHandlers`] on the store and the board, with a
 //! [`ProjectAdder`] (its `projects.add`) and [`ViewTools`] (nodus-views'
-//! `Views`), and an [`McpServer`] with the app's version and nodus-views'
-//! `VIEW_GUIDE`. The session host client hands it each relayed request and
-//! sends back what it answers (TOOL-014).
+//! `Views`), and an [`McpServer`] with the app's version. How to write a
+//! view's page isn't in the tools: it's nodus-views' `nodus:views` skill,
+//! which every Claude process with the tools loads (VIEW-159). The session
+//! host client hands the server each relayed request and sends back what it
+//! answers (TOOL-014).
 
 mod chat;
 mod drawing;

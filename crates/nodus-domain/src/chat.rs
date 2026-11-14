@@ -43,6 +43,14 @@ pub fn queued_text(line: &str) -> Option<&str> {
     Some(rest.trim_start_matches(['\n', '\r']))
 }
 
+/// How many lines a call that changes a file adds and takes away, for the
+/// chat's `+12 −3` (CHAT-047).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LineChanges {
+    pub added: u32,
+    pub removed: u32,
+}
+
 /// The answers to a form in the chat, or to a page on the board, as they go
 /// to Claude: a tag naming what they answer, then the answers as JSON.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -136,6 +144,9 @@ pub enum ChatEntry {
         /// Its result has come in.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         done: bool,
+        /// The lines an edit or a write adds and takes away (CHAT-047).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        changes: Option<LineChanges>,
     },
     /// A chart, stats, a table or text laid out (`show_visual`, or a
     /// fenced `visual` block): the spec as Claude wrote it.

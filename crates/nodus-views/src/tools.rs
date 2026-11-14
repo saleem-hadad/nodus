@@ -29,6 +29,12 @@ fn waiting_names(view: &BoardView) -> Value {
 const STARTS_SESSIONS_REFUSED: &str =
     "Only a session in auto mode, or the view’s own brain, can let a view start sessions";
 
+/// What `create_view` without html says when it has no brief (VIEW-161).
+const BRIEF_NEEDED: &str = "Describe the view for its brain, which builds it without this conversation: what it shows, where the data comes from and how fresh it should be. Or send the html to build it yourself";
+
+/// What `create_view` without html answers: the brain is on it (VIEW-161).
+const BUILDING: &str = "Its brain, a Claude session of its own, is building it now beside your card, and keeps it up to date. Tell the user it’s on its way, and carry on: don’t wait for it or build it yourself.";
+
 /// `clampViewSize({w: Number(width), h: Number(height)})` (VIEW-104).
 fn tool_size(args: &Value) -> PartialSize {
     clamp_view_size(PartialSize {
@@ -90,8 +96,10 @@ impl Views {
         }
     }
 
-    /// `create_view`: a session puts up a view of its own making, beside its
-    /// card. Its brain starts when first needed (VIEW-102 to VIEW-107).
+    /// `create_view`: a session puts up a view beside its card. Without html
+    /// its brain builds it, starting at once (VIEW-161); with html the page is
+    /// the session's own, and its brain starts when first needed (VIEW-102 to
+    /// VIEW-107).
     pub async fn create_view_from_tool(
         &self,
         project_id: &str,
@@ -102,7 +110,16 @@ impl Views {
         if title.is_empty() {
             return Err(ViewError::new("A view needs a title"));
         }
-        let html = check_html(args.get("html"))?;
+        // VIEW-161: no html hands the building to the view's brain, which
+        // goes on the description alone.
+        let html = match args.get("html") {
+            None | Some(Value::Null) => None,
+            html => Some(check_html(html)?),
+        };
+        let description = clip(args.get("description"), MAX_DESCRIPTION_CHARS);
+        if html.is_none() && description.is_empty() {
+            return Err(ViewError::new(BRIEF_NEEDED));
+        }
         let data = args.get("data").cloned();
         check_json(data.as_ref(), MAX_DATA_CHARS, "The data")?;
         let commands = args.get("commands").map(|c| normalize_commands(c, None)).transpose()?;
@@ -123,7 +140,6 @@ impl Views {
             },
         );
         let now = self.now();
-        let description = clip(args.get("description"), MAX_DESCRIPTION_CHARS);
         let view = BoardView {
             id: uuid::Uuid::new_v4().to_string(),
             description: if description.is_empty() {
@@ -142,7 +158,8 @@ impl Views {
             // VIEW-115: only `true` itself.
             starts_sessions: start_sessions.then_some(true),
             auto_mode: Some(auto),
-            version: 1,
+            // VIEW-161: no page until its brain sends one.
+            version: if html.is_some() { 1 } else { 0 },
             created_at: now,
             updated_at: now,
             session_id: None,
@@ -150,7 +167,9 @@ impl Views {
             denied_runs: None,
             extra: Map::new(),
         };
-        write_html(&self.inner.user_data, &view.id, &html)?;
+        if let Some(html) = &html {
+            write_html(&self.inner.user_data, &view.id, html)?;
+        }
         self.with_runtime(&view.id, |rt| {
             rt.data = data;
             if refresh.is_some() {
@@ -165,6 +184,24 @@ impl Views {
             view.set_created_by(starter.as_deref());
             state.board_mut(project_id).views.insert(view.id.clone(), view);
         });
+        if html.is_none() {
+            // VIEW-161: as for a view the user describes (VIEW-100), the
+            // brain starts on building it, and the view goes if it can't.
+            let prompt = format!("Build this view:\n\n{}", view.description);
+            if let Err(err) = self.start_brain(project_id, &view.id, Some(prompt)).await {
+                self.inner.store.update(|state| {
+                    state.board_mut(project_id).views.shift_remove(&view.id);
+                });
+                self.delete_files(&view.id);
+                return Err(err);
+            }
+            let waiting = waiting_names(&self.view(project_id, &view.id).unwrap_or(view.clone()));
+            let mut out = Map::new();
+            out.insert("view_id".into(), Value::String(view.id));
+            out.insert("waiting_for_approval".into(), waiting);
+            out.insert("building".into(), Value::String(BUILDING.into()));
+            return Ok(Value::Object(out));
+        }
         self.board_changed(project_id);
         let page = self.check_page(&view.id, now).await;
         let waiting = waiting_names(&self.view(project_id, &view.id).unwrap_or(view.clone()));

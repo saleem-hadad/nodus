@@ -35,9 +35,16 @@ pub(crate) fn markdown_style(t: &Tokens, s: f32) -> TextViewStyle {
         .with_selection(t.bg_selected.into())
         .with_code_background(t.bg_sunken.into())
         .with_border(t.border.into())
-        // Inline code keeps a light wash on the light theme's: name it for both.
+        // CHAT-047: inline code (paths, names) in the accent, on a wash of it.
         .with_inline_code(HighlightStyle {
-            background_color: Some(if t.dark { t.bg_pressed } else { t.bg_hover }.into()),
+            color: Some(t.accent.into()),
+            background_color: Some(
+                Rgba {
+                    a: if t.dark { 0.16 } else { 0.09 },
+                    ..t.accent
+                }
+                .into(),
+            ),
             ..HighlightStyle::default()
         })
         .with_paragraph_gap(rems(0.6 * s))
@@ -203,7 +210,7 @@ impl ChatView {
                     .py(self.px(9.))
                     .rounded(self.px(18.))
                     .rounded_br(self.px(6.))
-                    .bg(t.bg_hover)
+                    .bg(look::your_bubble(t))
                     .child(inner),
             )
             .into_any_element()
@@ -297,6 +304,7 @@ impl ChatView {
                 detail,
                 failed,
                 done,
+                changes,
                 ..
             }) = self.entries.get(i)
             else {
@@ -313,7 +321,11 @@ impl ChatView {
                     look::tool_icon(name),
                     12.5 * self.scale,
                     1.9,
-                    if *failed { t.status_waiting } else { t.text_tertiary },
+                    if *failed {
+                        t.status_waiting
+                    } else {
+                        look::tool_tone(name, t)
+                    },
                 )
                 .into_any_element()
             };
@@ -361,6 +373,31 @@ impl ChatView {
                         .text_color(t.text_tertiary)
                         .child(SharedString::from(detail.clone())),
                 )
+                // CHAT-047: what an edit or a write changed, `+12 −3`.
+                .when_some(changes.filter(|c| c.added + c.removed > 0), |d, c| {
+                    d.child(
+                        div()
+                            .flex_none()
+                            .flex()
+                            .gap(self.px(5.))
+                            .font_family(fonts::mono())
+                            .text_size(self.px(11.5))
+                            .when(c.added > 0, |d| {
+                                d.child(
+                                    div()
+                                        .text_color(t.diff_add)
+                                        .child(SharedString::from(format!("+{}", c.added))),
+                                )
+                            })
+                            .when(c.removed > 0, |d| {
+                                d.child(
+                                    div()
+                                        .text_color(t.diff_del)
+                                        .child(SharedString::from(format!("−{}", c.removed))),
+                                )
+                            }),
+                    )
+                })
                 .when(!running, |d| {
                     d.child(look::outcome(*failed, 11. * self.scale, ended, t))
                 });
@@ -442,6 +479,7 @@ impl ChatView {
                         look::words(&markdown, share).to_owned(),
                     )
                     .motion(look::settle())
+                    .shared_code_block_highlighter(super::syntax::highlighter(t))
                     .style(markdown_style(t, self.scale))
                     .selectable(true),
                 )
@@ -484,6 +522,21 @@ impl ChatView {
         }
     }
 
+    /// CHAT-048: how a view handed to its brain is getting on, until it has
+    /// a page; as its empty state on the board says it (VIEW-137).
+    fn building(&self, view_id: &str, cx: &Context<'_, Self>) -> Option<&'static str> {
+        let state = self.state.read(cx);
+        let view = state.board.as_ref()?.views.iter().find(|v| v.id == view_id)?;
+        if view.version > 0 {
+            return None;
+        }
+        Some(match crate::views::card::brain_status(view, cx).0 {
+            SessionStatus::Working => "Claude is building it beside this session…",
+            SessionStatus::Waiting => "Claude needs you to carry on with it",
+            _ => "No page yet",
+        })
+    }
+
     /// CHAT-028: a page Claude put on the board.
     fn render_page(
         &mut self,
@@ -493,10 +546,12 @@ impl ChatView {
         t: &Tokens,
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
-        let line = match (view_id, answered) {
-            (None, _) => "Putting it on the board…",
-            (Some(_), true) => "On the board · Answered",
-            (Some(_), false) => "On the board, beside this session",
+        let building = view_id.and_then(|view| self.building(view, cx));
+        let line = match (view_id, answered, building) {
+            (None, _, _) => "Putting it on the board…",
+            (Some(_), _, Some(building)) => building,
+            (Some(_), true, None) => "On the board · Answered",
+            (Some(_), false, None) => "On the board, beside this session",
         };
         let me = cx.entity().downgrade();
         let button = view_id.map(|view| {

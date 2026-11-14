@@ -36,6 +36,8 @@ In Rust the frame becomes a `wry` webview embedded in the GPUI board (see Rust m
 
 > **Since 1.0.14 (spec 16):** every session also has `show_visual`, `ask` and `show_page` (TOOLCHAT-001…TOOLCHAT-004), after the view tools in `tools/list` and `--allowedTools`; the instructions end with a paragraph on them; and a view's page has `nodus.submit(answers)` (CHAT-031).
 
+> **Since 1.0.19:** `create_view` without `html` hands the view to its brain, which starts building it at once (VIEW-161), and every Claude process with the board tools loads Nodus's own plugin, whose `nodus:views` skill says how to make views and pages (VIEW-159, VIEW-160). The guide left `create_view`'s description for the skill; brains keep it in their system prompt.
+
 ## Behaviors
 
 ### Board tools: endpoint and relay
@@ -307,12 +309,12 @@ Feedback #9 asked for Claude to understand the board visually and add to it. `lo
 
 ### Views: created and changed by board tools
 
-- **VIEW-102** `create_view` checks, in order: `title = clip(title, 80)` empty → `A view needs a title`; `checkHtml(html)`; `data` (when not `undefined`) → `checkJson(data, 1048576, 'The data')`; `commands` (when not `undefined`) → `normalizeCommands(commands)` with no remembered answers (all new commands wait); `refresh` → `normalizeRefresh`.
+- **VIEW-102** `create_view` checks, in order: `title = clip(title, 80)` empty → `A view needs a title`; `checkHtml(html)` (since 1.0.19 only when `html` is given and not `null`; without it, VIEW-161); `data` (when not `undefined`) → `checkJson(data, 1048576, 'The data')`; `commands` (when not `undefined`) → `normalizeCommands(commands)` with no remembered answers (all new commands wait); `refresh` → `normalizeRefresh`.
 - **VIEW-103** `create_view` placement (`placeView`): preferred = right of the caller's active card (`x + cardSize.w + 32`, same `y`), else right of the rightmost active card, else `{dock.x + dock.w + 80, dock.y}`; final = `findFreeSpot(preferred, obstacles(board), dock, viewSize(size))` where obstacles = active cards, free notes, all views. A brain calling it has no active card, so it goes beside the rightmost card.
 - **VIEW-104** Size from tools: `clampViewSize({w: Number(width), h: Number(height)})`: non-finite → undefined (default 480/360); finite → `Math.round(min(2400, max(240, w)))`, `Math.round(min(1800, max(160, h)))`. `Number()` coercion applies: `"500"` → 500, `null`/`false` → 0 → minimum, `true` → 1 → minimum.
 - **VIEW-105** The new view: `{id: uuid, title, description: clip(description, 4000) || title, x, y, w?, h?, from: <caller>, commands?: (only if non-empty), refresh?, startsSessions?: true (only when start_sessions === true exactly, VIEW-157), autoMode (VIEW-155), version: 1, createdAt: now, updatedAt: now}`.
 - **VIEW-106** Then: write `index.html`; runtime `data = args.data`; if refresh, `refreshedAt = now`; schedule runtime save; add to the board; save; `ev:board-changed`; wait for the page check (VIEW-108); return `{view_id, waiting_for_approval: [names of waiting commands], ...check}`.
-- **VIEW-107** A view put up by a tool has no brain until it first needs one (an ask, refresh, ⌨, Build).
+- **VIEW-107** A view put up by a tool with its `html` has no brain until it first needs one (an ask, refresh, ⌨, Build). Without `html` its brain starts at once (VIEW-161).
 - **VIEW-108** Page check (`checkPage(view, since)`): wait up to `3000` ms (`LOAD_WAIT_MS`) for a `loaded` report with version ≥ the view's version; on timeout → `{checked: "The board isn’t showing this view right now, so the page couldn’t be checked for errors."}`; on load → wait `500` ms more (`SETTLE_MS`) → `{errors: [messages of runtime errors with at ≥ since]}` (`[]` when none).
 - **VIEW-109** `update_view` resolves the view: `view_id` `undefined` → the caller's own view when the caller is a brain, else `view_id is required: this session isn’t a view’s brain`; otherwise `findView`.
 - **VIEW-110** `update_view` validates everything before changing anything: `html` (when given) via `checkHtml`; `data` via `checkJson`; `commands` via `normalizeCommands(commands, view)` (remembered answers); `refresh` via `normalizeRefresh` only when given (`undefined` keeps the current one); `title = clip(title, 80)`.
@@ -322,6 +324,12 @@ Feedback #9 asked for Claude to understand the board visually and add to it. `lo
 - **VIEW-114** `list_views` returns every view oldest first as `{id, title, description, yours?: true}`, `yours` when the caller is the view's brain or put it up (`from`).
 - **VIEW-115** A view starts sessions only after a tool sets `start_sessions: true` (VIEW-157); the user can only turn it off (VIEW-116, menu), never on; it survives other updates.
 
+### Views: handed to their brain, and the `nodus:views` skill (since 1.0.19)
+
+- **VIEW-159** Nodus has a Claude Code plugin of its own, `nodus`, with one skill, `nodus:views` (`crates/nodus-views/src/skill.rs`). At start the app writes it to `<userData>/claude-plugin/`: `.claude-plugin/plugin.json` (`{"name": "nodus", "version": <app version>, "description": "Nodus's own skills, for the Claude sessions it runs."}`, pretty-printed) and `skills/views/SKILL.md`, each only when it says something new, through `<name>.<pid>.tmp` and a rename. Every Claude process that gets the board tools (cards, brains, action runs; SESS-123) also gets `--plugin-dir <that folder>` right after the tool rules, so the skill is that process's alone: nothing goes into the user's `~/.claude` or the repository. If it can't be written the app logs `[views] couldn’t write the nodus plugin: <error>` and launches without it.
+- **VIEW-160** `SKILL.md` is one file, so the Skill tool loads it whole and Claude never reads outside the project for it (a read there stops to ask the user): its frontmatter (`name: views`, a description naming create_view, show_page and update_view), which tool fits what (show_visual, ask, show_page, create_view), how to hand a view to its brain and what its brief must say, how to write a page (data first, start from an example, read the errors, then send data), `## How a page works` with `VIEW_GUIDE` (platform variant included), and `## Examples`: four pages that follow the guide, each with what it shows, in an `html` fence (a table fed by a command, numbers and an SVG chart from `nodus.data` with Claude's look while asked, the board's sessions with `nodus-dot`, and a `show_page` choice sent with `nodus.submit`).
+- **VIEW-161** `create_view` without `html` (missing or `null`) hands the view to its brain. `description` is then required: `clip(description, 4000)` empty → `Describe the view for its brain, which builds it without this conversation: what it shows, where the data comes from and how fresh it should be. Or send the html to build it yourself`. Everything else is checked and the view made as VIEW-102…VIEW-105 (placement, size, commands, refresh, `start_sessions`, `autoMode` from the caller, VIEW-155), but with `version: 0` and no `index.html`. Data and refresh go into its runtime as VIEW-106. Its brain then starts on `Build this view:\n\n<description>` (VIEW-089, in the view's mode, so a session not in auto mode gets a brain that asks before it runs things); if that fails the view and its files go and the error is returned. There is no page check. The answer is `{view_id, waiting_for_approval, building: "Its brain, a Claude session of its own, is building it now beside your card, and keeps it up to date. Tell the user it’s on its way, and carry on: don’t wait for it or build it yourself."}`. `show_page` always passes `html` (`""` when missing or `null`), so a page is never handed off (TOOLCHAT-003). `create_view`'s description and `html`/`description` parameters say this, and point a session writing html itself to the skill; `update_view`'s and `show_page`'s descriptions and the server's instructions point to it too.
+
 ### Views: board edits, removal, reports
 
 - **VIEW-116** `views:save(projectId, patch)` (`saveView`): `findView(patch.id)`; finite `x`/`y` → rounded and set; `clampViewSize({w, h})` values set when defined; `title = clip(title, 80)` non-empty → rename (VIEW-091); `startsSessions === false` → removed (any other value ignored); save. No `ev:board-changed`.
@@ -329,7 +337,7 @@ Feedback #9 asked for Claude to understand the board visually and add to it. `lo
 - **VIEW-118** Removing a project deletes the files of all its views (brains stop with the project's sessions).
 - **VIEW-119** `views:report` (fire-and-forget; any error, e.g. a view that has gone, is swallowed): a non-empty string `error` → appended as `{message: error.slice(0, 2000), at: now}`, keeping the last 20, save scheduled; a numeric `loaded ≥ view.version` → all page-check waiters of that view resolve.
 - **VIEW-120** `views:refresh`, `views:ask` (origin `user`, prompt `String(prompt ?? '')`), `views:brain` wait for the login-shell env first; `views:approve` passes `allow === true`.
-- **VIEW-121** The "how a view works" guide (`VIEW_GUIDE`) is given to brains (in their system prompt) and to every session (in `create_view`'s description); on Windows it contains one extra sentence (Platform differences).
+- **VIEW-121** The "how a view works" guide (`VIEW_GUIDE`) is given to brains (in their system prompt) and to every session (in `create_view`'s description; since 1.0.19 in the `nodus:views` skill instead, VIEW-160); on Windows it contains one extra sentence (Platform differences).
 
 ### Views: the card (renderer)
 
@@ -412,7 +420,7 @@ The chat's sentences (TOOLCHAT) follow.
 
 ### MCP `tools/list` result, verbatim
 
-`result.tools` for an action run, in this order. Ordinary sessions get the same array without the last two entries. Generated from the 0.9.4 source on macOS; `create_view`'s description is the text shown followed by `\n\n` and `VIEW_GUIDE` (next section), written here as `<VIEW_GUIDE>`. Recommended: commit the Electron app's actual `tools/list` output (macOS and Windows) as golden fixtures and compare byte for byte.
+`result.tools` for an action run, in this order. Ordinary sessions get the same array without the last two entries. Generated from the 0.9.4 source on macOS; `create_view`'s description is the text shown followed by `\n\n` and `VIEW_GUIDE` (next section), written here as `<VIEW_GUIDE>`. Recommended: commit the Electron app's actual `tools/list` output (macOS and Windows) as golden fixtures and compare byte for byte. Since 1.0.19 `create_view`'s description is `CREATE_VIEW` (`crates/nodus-tools/src/schema.rs`) without the guide, only `title` is required, and `tests/fixtures/tools.json` holds the current output, the same on both platforms (VIEW-161).
 
 ```json
 [
@@ -841,6 +849,8 @@ ${view.description}
 You build the page and keep it up to date with the mcp__nodus__* board tools. update_view sets its html, data, title, commands and refresh schedule. get_view shows it as it is now, with its commands' last output and any JavaScript errors it hit. Leave out view_id: both act on this view. If you're picking up a view that already has a page, read it with get_view before changing it.
 
 ${VIEW_GUIDE}
+
+The nodus:views skill has example pages that follow this guide: start a new page from the nearest one.
 
 Nobody watches you while you work, so don't stop to chat. Work out where the data comes from by looking around the repository, the CLIs on the PATH and your MCP tools. If you need the user, for a missing API token or a choice only they can make, ask with AskUserQuestion, which shows on the view that you need them. End each turn with one short line on what you did.
 ```
@@ -1733,3 +1743,6 @@ One line per behavior ID, in the order above. Tick only when the Rust build matc
 - [x] VIEW-156 update_view from a session not in auto mode takes the view out of auto mode, and stops a brain still running in it…
 - [x] VIEW-157 start_sessions: true only from a session in auto mode or the view's own brain…
 - [x] VIEW-158 A brain stopped at a permission prompt is waiting, so the view shows Claude needs the user…
+- [x] VIEW-159 The app writes its nodus plugin into userData and every Claude process with the board tools gets --plugin-dir for it…
+- [x] VIEW-160 SKILL.md is one file: which tool, the brief, writing a page, VIEW_GUIDE and four example pages…
+- [x] VIEW-161 create_view without html needs a description, makes a version 0 view and starts its brain on building it…

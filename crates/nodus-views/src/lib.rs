@@ -37,6 +37,7 @@ mod command;
 mod page;
 mod runtime;
 mod serve;
+mod skill;
 mod tools;
 mod views;
 
@@ -54,6 +55,7 @@ pub use command::COMMAND_TIMEOUT;
 pub use page::{BRIDGE, EMPTY_PAGE, THEME, VIEW_CSP, VIEW_GUIDE, VIEW_SCHEME, ViewBoot, build_view_page, script_json};
 pub use runtime::{PageError, Runtime};
 pub use serve::{PageResponse, view_id_from_url};
+pub use skill::{PLUGIN_DIR, skill_markdown, write_plugin};
 pub use views::{CommandRun, Views, ViewsConfig};
 
 /// Why something asked of a view failed, in the words the page, the card or

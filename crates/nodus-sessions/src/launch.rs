@@ -125,6 +125,9 @@ pub struct BoardTools<'a> {
     pub mcp_config: &'a str,
     /// `BOARD_TOOL_RULES`, one argument each.
     pub allowed_tools: &'a [String],
+    /// Nodus's own Claude Code plugin, with the `nodus:views` skill, when the
+    /// app could write it (VIEW-159).
+    pub plugin_dir: Option<&'a str>,
 }
 
 /// The command line for a card's process: a login shell for a terminal, like
@@ -170,6 +173,10 @@ pub fn command_for(
             "--allowedTools".to_owned(),
         ]);
         args.extend(tools.allowed_tools.iter().cloned());
+        // VIEW-159: for this process alone, never the user's own plugins.
+        if let Some(dir) = tools.plugin_dir {
+            args.extend(["--plugin-dir".to_owned(), dir.to_owned()]);
+        }
     }
     // SESS-132, SESS-133
     if let Some(extra) = &opts.extra_args {
@@ -408,6 +415,7 @@ mod tests {
         let tools = tools.then_some(BoardTools {
             mcp_config: MCP,
             allowed_tools: &rules,
+            plugin_dir: None,
         });
         let hook_env = hook_env();
         let hooks = Hooks {
@@ -452,6 +460,35 @@ mod tests {
         assert_eq!(argv(&opts, true), expected);
         assert_eq!(initial_status(&opts), SessionStatus::Working);
         assert_eq!(pty_size(&opts), (120.0, 36.0));
+    }
+
+    #[test]
+    fn loads_nodus_plugin_after_the_board_tools() {
+        let opts = for_create("p", "/work/repo", &node(json!({})), None, Some("go"));
+        let rules = rules();
+        let tools = BoardTools {
+            mcp_config: MCP,
+            allowed_tools: &rules,
+            plugin_dir: Some("/data/Nodus Dev/claude-plugin"),
+        };
+        let hook_env = hook_env();
+        let hooks = Hooks {
+            settings: SETTINGS,
+            env: &hook_env,
+        };
+        let args = command_for(&opts, &env(), hooks, Some(tools)).unwrap().args;
+        let mut expected = s(&["--mcp-config", MCP, "--allowedTools"]);
+        expected.extend(rules.iter().cloned());
+        expected.extend(s(&[
+            "--plugin-dir",
+            "/data/Nodus Dev/claude-plugin",
+            "--settings",
+            SETTINGS,
+            "--",
+            "go",
+        ]));
+        let at = args.iter().position(|a| a == "--mcp-config").unwrap();
+        assert_eq!(args[at..], expected);
     }
 
     #[test]

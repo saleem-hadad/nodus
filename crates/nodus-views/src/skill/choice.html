@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+<head>
+<style>
+  body { display: flex; flex-direction: column; gap: 10px; height: 100vh; padding: 12px 14px; box-sizing: border-box; }
+  .options { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  label.option { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 8px; background: var(--nodus-surface); transition: box-shadow var(--nodus-fast) var(--nodus-ease); }
+  label.option:hover { background: var(--nodus-hover); }
+  label.option:has(input:checked) { box-shadow: 0 0 0 2px var(--nodus-accent); }
+  .head { display: flex; align-items: center; gap: 6px; font-weight: 500; }
+  .head small { margin-left: auto; }
+  /* The mockups: plain boxes in the board's colours, enough to compare layouts. */
+  .mock { flex: 1; min-height: 70px; display: flex; gap: 4px; padding: 6px; border-radius: 6px; background: var(--nodus-bg); }
+  .mock i { display: block; border-radius: 3px; background: var(--nodus-border-strong); }
+  .mock .col, .mock.col { display: flex; flex-direction: column; gap: 4px; }
+  .send { display: flex; gap: 8px; }
+  .send input { flex: 1; min-width: 0; }
+</style>
+</head>
+<body>
+  <div class="options">
+    <label class="option">
+      <span class="head"><input type="radio" name="layout" value="sidebar" checked> Sidebar <small>Recommended</small></span>
+      <span class="mock"><span class="col" style="width:28%"><i style="height:8px"></i><i style="height:8px"></i><i style="height:8px"></i></span><i style="flex:1"></i></span>
+    </label>
+    <label class="option">
+      <span class="head"><input type="radio" name="layout" value="tabs"> Tabs</span>
+      <span class="mock col"><span style="display:flex;gap:4px"><i style="width:22%;height:8px"></i><i style="width:22%;height:8px"></i><i style="width:22%;height:8px"></i></span><i style="flex:1"></i></span>
+    </label>
+  </div>
+  <div class="send">
+    <input id="note" placeholder="Anything to add? (optional)">
+    <button class="nodus-primary" id="send">Send</button>
+  </div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  // nodus.submit sends the answers to the session that put the page up, as
+  // the user's next message. Forms don't submit in the sandbox: use a button.
+  async function send() {
+    if ($('send').disabled) return;
+    $('send').disabled = true;
+    const layout = document.querySelector('input[name=layout]:checked').value;
+    try {
+      await nodus.submit({ layout, note: $('note').value.trim() || undefined });
+      $('send').textContent = 'Sent';
+      document.querySelectorAll('input').forEach((input) => { input.disabled = true; });
+    } catch (err) {
+      $('send').disabled = false;
+      $('note').placeholder = err.message;
+    }
+  }
+  $('send').addEventListener('click', send);
+  $('note').addEventListener('keydown', (event) => { if (event.key === 'Enter') send(); });
+</script>
+</body>
+</html>

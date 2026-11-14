@@ -11,6 +11,7 @@ pub mod form;
 mod look;
 mod shows;
 mod slash;
+mod syntax;
 mod view;
 pub mod visual;
 

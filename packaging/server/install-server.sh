@@ -438,8 +438,9 @@ include <tunables/global>
 # into packaging/server/signing-key.pub.pem, which the server builds in to
 # check its own updates (SRV-200). The two must match.
 # BEGIN SIGNING KEY
-# TODO: placeholder. Run scripts/server-signing-key.sh to make the key and write it here.
-readonly SIGNING_KEY=''
+readonly SIGNING_KEY='-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAKV2uvwIKuOBkg9vY8dxJtDGkPxzTQEed6wuho1ZUs6Q=
+-----END PUBLIC KEY-----'
 # END SIGNING KEY
 
 install_binary() {

@@ -60,6 +60,9 @@ pub(crate) struct Row {
     pub kind: RowKind,
     /// The first of Claude's rows after the user spoke: it carries the name.
     pub header: bool,
+    /// Claude's last words in a turn it used tools in, which sum it up
+    /// (CHAT-051).
+    pub summary: bool,
 }
 
 impl Row {
@@ -83,6 +86,7 @@ pub(crate) fn rows_of(entries: &[ChatEntry]) -> Vec<Row> {
             rows.push(Row {
                 kind: RowKind::User(i),
                 header: false,
+                summary: false,
             });
             claude_spoke = false;
             i += 1;
@@ -92,6 +96,7 @@ pub(crate) fn rows_of(entries: &[ChatEntry]) -> Vec<Row> {
             rows.push(Row {
                 kind: RowKind::Entry(i),
                 header: false,
+                summary: false,
             });
             i += 1;
             continue;
@@ -106,16 +111,49 @@ pub(crate) fn rows_of(entries: &[ChatEntry]) -> Vec<Row> {
             rows.push(Row {
                 kind: RowKind::Tools(start, i),
                 header,
+                summary: false,
             });
             continue;
         }
         rows.push(Row {
             kind: RowKind::Entry(i),
             header,
+            summary: false,
         });
         i += 1;
     }
+    mark_summaries(&mut rows, entries);
     rows
+}
+
+/// CHAT-051: a turn's summary is Claude's words after it used a tool, with
+/// nothing after them before the user's next message (or the chat's end)
+/// but notices, and none of those `Interrupted`.
+fn mark_summaries(rows: &mut [Row], entries: &[ChatEntry]) {
+    let mut used_tools = false;
+    for r in 0..rows.len() {
+        let i = match rows[r].kind {
+            RowKind::User(_) => {
+                used_tools = false;
+                continue;
+            }
+            RowKind::Tools(..) => {
+                used_tools = true;
+                continue;
+            }
+            RowKind::Entry(i) => i,
+        };
+        if !used_tools || !matches!(entries[i], ChatEntry::Text { .. }) {
+            continue;
+        }
+        rows[r].summary = rows[r + 1..]
+            .iter()
+            .take_while(|next| !matches!(next.kind, RowKind::User(_)))
+            .all(|next| match next.kind {
+                RowKind::Entry(j) => matches!(&entries[j], ChatEntry::Notice { text, .. } if text != "Interrupted"),
+                _ => false,
+            });
+    }
 }
 
 /// Where the session's terminal is: docked under the chat or out of sight.
@@ -1093,5 +1131,54 @@ mod tests {
                 (RowKind::Tools(6, 7), true),
             ]
         );
+    }
+
+    #[test]
+    fn chat_051_the_last_words_of_a_turn_that_used_tools_sum_it_up() {
+        let notice = |id: &str, text: &str| ChatEntry::Notice {
+            id: id.into(),
+            at: 0.,
+            text: text.into(),
+        };
+        let entries = vec![
+            // A reply with no tools isn't summed up.
+            user("u1"),
+            text("a"),
+            // Words before more tools aren't the summary; the last are, a
+            // notice after them or not.
+            user("u2"),
+            text("b"),
+            tool("t1"),
+            text("c"),
+            notice("n1", "Earlier messages were summarized to free up context"),
+            // Interrupted words don't sum anything up.
+            user("u3"),
+            tool("t2"),
+            text("d"),
+            notice("n2", "Interrupted"),
+            // Nor do words before a form.
+            user("u4"),
+            tool("t3"),
+            text("e"),
+            ChatEntry::Questions {
+                id: "q".into(),
+                at: 0.,
+                spec: json!({}),
+                answered: None,
+            },
+            // The chat's last turn.
+            user("u5"),
+            tool("t4"),
+            text("f"),
+        ];
+        let summed: Vec<_> = rows_of(&entries)
+            .iter()
+            .filter(|r| r.summary)
+            .map(|r| match r.kind {
+                RowKind::Entry(i) => entries[i].id().to_owned(),
+                other => panic!("{other:?} marked"),
+            })
+            .collect();
+        assert_eq!(summed, ["c", "f"]);
     }
 }

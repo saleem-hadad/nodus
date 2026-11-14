@@ -1,7 +1,7 @@
 //! Drawing the chat's rows: the user's messages, Claude's words as Markdown,
 //! runs of tool calls, and the charts, forms and pages Claude shows.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use gpui::base::text::{TextView, TextViewStyle};
 use gpui::prelude::FluentBuilder as _;
@@ -98,6 +98,10 @@ impl ChatView {
             RowKind::Tools(start, end) => self.render_tools(start, end, &t, window, cx),
             RowKind::Entry(i) => self.render_entry(i, p, &t, window, cx),
         };
+        let body = match row.summary.then(|| self.turn_over(ix)).flatten() {
+            Some(ended) => self.summary_card(entry_index(row.kind), body, ended.max(born), &t, window, cx),
+            None => body,
+        };
         let mut said = div().w_full().flex().flex_col().gap(self.px(8.));
         if row.header {
             let now = crate::parity::now_ms(cx);
@@ -157,6 +161,96 @@ impl ChatView {
                         .child(crate::terminal::text::format_time(at, now)),
                 )
             })
+            .into_any_element()
+    }
+
+    /// CHAT-051: whether the turn that row `ix` ends is over (the user spoke
+    /// after it, or Claude stopped working), and when the chat saw it end:
+    /// none when it opened that way.
+    fn turn_over(&self, ix: usize) -> Option<Option<Instant>> {
+        let next = self.rows.get(ix + 1..)?.iter().find_map(|r| match r.kind {
+            RowKind::User(i) => self.entries.get(i),
+            _ => None,
+        });
+        match next {
+            Some(user) => Some(self.born.get(user.id()).copied()),
+            None if self.working_since.is_none() => Some(self.turn_ended),
+            None => None,
+        }
+    }
+
+    /// CHAT-051, MOTION-045: the turn's summary on a card, under `Summary`
+    /// and how long Claude worked. From `from`, the card gathers round the
+    /// words: its edge, surface and shadow fade in as its padding grows.
+    fn summary_card(
+        &self,
+        i: usize,
+        words: AnyElement,
+        from: Option<Instant>,
+        t: &Tokens,
+        window: &mut Window,
+        cx: &gpui::App,
+    ) -> AnyElement {
+        let at = self.entries.get(i).map_or(0., ChatEntry::at);
+        let asked = self
+            .entries
+            .get(..i)
+            .and_then(|before| before.iter().rev().find(|e| e.is_user()))
+            .map_or(0., ChatEntry::at);
+        let worked = (asked > 0. && at > asked).then(|| look::elapsed(((at - asked) / 1000.) as u64));
+        let e = motion::ease_out(look::arrival(from, Duration::from_millis(420), window, cx));
+        let fade = |c: Rgba| Rgba { a: c.a * e, ..c };
+        let head = div()
+            .flex()
+            .items_center()
+            .gap(self.px(6.))
+            .h(self.px(16.))
+            .text_size(self.px(11.5))
+            .whitespace_nowrap()
+            .child(
+                div()
+                    .flex_none()
+                    .child(icon(Icon::Check, 11. * self.scale, 2.6, t.diff_add)),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(t.text_secondary)
+                    .child("Summary"),
+            )
+            .when_some(worked, |d, worked| {
+                d.child(
+                    div()
+                        .flex_none()
+                        .text_color(t.text_tertiary)
+                        .child(SharedString::from(format!("Worked {worked}"))),
+                )
+            });
+        let head = if e < 1. {
+            div().h(self.px(16. * e)).overflow_hidden().opacity(e).child(head)
+        } else {
+            head
+        };
+        let mut shadow = t.sm();
+        for layer in &mut shadow {
+            layer.color.a *= e;
+        }
+        div()
+            .w_full()
+            .flex()
+            .flex_col()
+            .gap(self.px(8. * e))
+            .px(self.px(16. * e))
+            .py(self.px(12. * e))
+            .rounded(self.px(14.))
+            .border_1()
+            .border_color(fade(t.border))
+            .bg(fade(t.bg_elevated))
+            .shadow(shadow)
+            .child(head)
+            .child(words)
             .into_any_element()
     }
 
@@ -743,7 +837,7 @@ impl ChatView {
         &self,
         now: SharedString,
         was: Option<SharedString>,
-        at: Option<std::time::Instant>,
+        at: Option<Instant>,
         ms: f64,
         t: &Tokens,
         window: &mut Window,

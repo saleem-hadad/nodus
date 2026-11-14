@@ -53,6 +53,7 @@ Sources:
 - **MOTION-041** Claude's words arrive a few at a time: a reply shows a growing share of its words, cut at a word's end, over 24ms a word (300ms at least, 1.4s at most). Each word fades up over 420ms as it comes, 28ms behind the one before it. What the chat opened with, parity shots and reduced motion show every word at once.
 - **MOTION-042** When a tool call that ran while the chat was up finishes, its tick (or cross) springs in from a fifth of its size, turned back 25°, over 500ms on `--ease-spring`, and its line's hover surface eases away.
 - **MOTION-043** While Claude works, a very faint light circles the composer's edge clockwise, a lap every 4.5s: a head at 30% of the tertiary text colour (barely more than the border) with a soft front, and a tail that fades behind it over 15% of the way round (180px at most). It fades in and out over 600ms as Claude starts and stops. Parity shots and reduced motion show none.
+- **MOTION-045** When a turn ends while the chat is up, its summary's card (CHAT-051) gathers round the words over 420ms (`--ease-out`): its padding grows from nothing, so the words move in, and its edge, surface and shadow fade in as the `Summary` line opens above them. Its start is the later of the turn ending and the words arriving. Summaries already there when the chat opened, parity shots and reduced motion show the card in place.
 
 ## Known limits
 

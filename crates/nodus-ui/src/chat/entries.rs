@@ -522,6 +522,21 @@ impl ChatView {
         }
     }
 
+    /// CHAT-048: how a view handed to its brain is getting on, until it has
+    /// a page; as its empty state on the board says it (VIEW-137).
+    fn building(&self, view_id: &str, cx: &Context<'_, Self>) -> Option<&'static str> {
+        let state = self.state.read(cx);
+        let view = state.board.as_ref()?.views.iter().find(|v| v.id == view_id)?;
+        if view.version > 0 {
+            return None;
+        }
+        Some(match crate::views::card::brain_status(view, cx).0 {
+            SessionStatus::Working => "Claude is building it beside this session…",
+            SessionStatus::Waiting => "Claude needs you to carry on with it",
+            _ => "No page yet",
+        })
+    }
+
     /// CHAT-028: a page Claude put on the board.
     fn render_page(
         &mut self,
@@ -531,10 +546,12 @@ impl ChatView {
         t: &Tokens,
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
-        let line = match (view_id, answered) {
-            (None, _) => "Putting it on the board…",
-            (Some(_), true) => "On the board · Answered",
-            (Some(_), false) => "On the board, beside this session",
+        let building = view_id.and_then(|view| self.building(view, cx));
+        let line = match (view_id, answered, building) {
+            (None, _, _) => "Putting it on the board…",
+            (Some(_), _, Some(building)) => building,
+            (Some(_), true, None) => "On the board · Answered",
+            (Some(_), false, None) => "On the board, beside this session",
         };
         let me = cx.entity().downgrade();
         let button = view_id.map(|view| {

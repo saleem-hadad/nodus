@@ -1,0 +1,65 @@
+<!doctype html>
+<html>
+<head>
+<style>
+  body { display: flex; flex-direction: column; height: 100vh; padding: 12px 14px; box-sizing: border-box; }
+  .counts { display: flex; gap: 14px; margin-bottom: 8px; color: var(--nodus-text-2); font-variant-numeric: tabular-nums; }
+  .counts span { display: inline-flex; align-items: center; gap: 6px; }
+  .counts b { color: var(--nodus-text); font-weight: 600; }
+  ul { flex: 1; min-height: 0; overflow: auto; margin: 0; padding: 0; list-style: none; }
+  li { display: flex; align-items: center; gap: 8px; padding: 6px 6px; border-radius: 6px; cursor: default; }
+  li:hover { background: var(--nodus-hover); }
+  li + li { border-top: 1px solid var(--nodus-border); }
+  li:hover, li:hover + li { border-top-color: transparent; }
+  .what { flex: 1; min-width: 0; }
+  .what div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .what small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .branch { color: var(--nodus-text-3); font: 11px var(--nodus-mono); white-space: nowrap; }
+  .state { margin: 14px 0; color: var(--nodus-text-2); }
+</style>
+</head>
+<body>
+  <div class="counts" id="counts"></div>
+  <ul id="list"></ul>
+  <p class="state" id="state" hidden></p>
+<script>
+  // No data or commands: it reads the board through window.nodus.
+  const $ = (id) => document.getElementById(id);
+  const DOT = { working: 'is-working', 'waiting for the user': 'is-waiting', done: 'is-done' };
+  const ORDER = { 'waiting for the user': 0, working: 1, done: 2 };
+
+  function dot(status) {
+    return Object.assign(document.createElement('span'), { className: 'nodus-dot ' + (DOT[status] || '') });
+  }
+
+  async function draw() {
+    let sessions;
+    try { sessions = await nodus.sessions(); } catch (err) { $('state').hidden = false; $('state').textContent = err.message; return; }
+    const count = (status) => sessions.filter((s) => s.status === status).length;
+    $('counts').replaceChildren(...[['waiting for the user', 'waiting for you'], ['working', 'working'], ['done', 'done']].map(([status, label]) => {
+      const span = document.createElement('span');
+      span.append(dot(status), Object.assign(document.createElement('b'), { textContent: count(status) }), ' ' + label);
+      return span;
+    }));
+    $('state').hidden = sessions.length > 0;
+    $('state').textContent = 'No sessions on the board.';
+    sessions.sort((a, b) => ORDER[a.status] - ORDER[b.status]);
+    $('list').replaceChildren(...sessions.map((s) => {
+      const li = document.createElement('li');
+      const what = Object.assign(document.createElement('div'), { className: 'what' });
+      what.append(Object.assign(document.createElement('div'), { textContent: s.title }));
+      if (s.lastReply) what.append(Object.assign(document.createElement('small'), { textContent: s.lastReply }));
+      li.append(dot(s.status), what);
+      if (s.branch) li.append(Object.assign(document.createElement('span'), { className: 'branch', textContent: s.branch }));
+      li.title = 'Open ' + s.title;
+      li.addEventListener('click', () => nodus.openSession(s.id));
+      return li;
+    }));
+  }
+
+  // Fires when sessions, notes or other views change.
+  nodus.on('board', draw);
+  draw();
+</script>
+</body>
+</html>

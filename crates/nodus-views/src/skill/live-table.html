@@ -1,0 +1,114 @@
+<!doctype html>
+<html>
+<head>
+<style>
+  body { display: flex; flex-direction: column; height: 100vh; padding: 10px 14px 12px; box-sizing: border-box; }
+  .bar { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .bar small { flex: 1; }
+  .rows { flex: 1; min-height: 0; overflow: auto; }
+  td { vertical-align: top; }
+  .num { width: 1%; color: var(--nodus-text-3); font: 12px var(--nodus-mono); white-space: nowrap; }
+  .title a { color: inherit; text-decoration: none; }
+  .title a:hover { color: var(--nodus-accent); }
+  .draft { color: var(--nodus-text-3); }
+  .who, .age { width: 1%; color: var(--nodus-text-2); white-space: nowrap; }
+  .age { color: var(--nodus-text-3); font-size: 11px; text-align: right; font-variant-numeric: tabular-nums; }
+  .ok { color: var(--nodus-green); }
+  .state { margin: 14px 0; color: var(--nodus-text-2); }
+  .state.failed { color: var(--nodus-red); }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <small id="when">Not fetched yet</small>
+    <button class="nodus-ghost" id="refresh">Refresh</button>
+  </div>
+  <div class="rows">
+    <table hidden id="table">
+      <thead><tr><th>#</th><th>Title</th><th>Author</th><th></th></tr></thead>
+      <tbody id="body"></tbody>
+    </table>
+    <p class="state" id="state">Fetching the open pull requests…</p>
+  </div>
+<script>
+  // The view's command, declared with update_view's commands:
+  // { name: 'prs', run: 'gh pr list --json number,title,author,isDraft,reviewDecision,updatedAt,url --limit 50', every: 15 }
+  const COMMAND = 'prs';
+  const $ = (id) => document.getElementById(id);
+
+  function ago(when) {
+    const minutes = Math.round((Date.now() - when) / 60000);
+    if (minutes < 1) return 'just now';
+    if (minutes < 60) return minutes + 'm ago';
+    if (minutes < 60 * 24) return Math.round(minutes / 60) + 'h ago';
+    return Math.round(minutes / 60 / 24) + 'd ago';
+  }
+
+  function say(text, failed) {
+    $('table').hidden = true;
+    $('state').hidden = false;
+    $('state').textContent = text;
+    $('state').classList.toggle('failed', Boolean(failed));
+  }
+
+  function cell(row, className, text) {
+    const td = row.insertCell();
+    td.className = className;
+    td.textContent = text;
+    return td;
+  }
+
+  function stamp() {
+    const last = nodus.results[COMMAND];
+    if (!last) return;
+    $('when').textContent = 'Updated ' + ago(last.at);
+    $('when').title = new Date(last.at).toLocaleString();
+  }
+
+  // Every result, the page's own runs and the schedule's alike.
+  function show(result) {
+    stamp();
+    if (result.error || result.code !== 0) {
+      say('gh failed: ' + (result.error || result.stderr.trim() || 'exit code ' + result.code), true);
+      return;
+    }
+    let prs;
+    try { prs = JSON.parse(result.stdout); } catch { say('gh’s output wasn’t JSON.', true); return; }
+    if (!prs.length) { say('No open pull requests.'); return; }
+    const body = $('body');
+    body.textContent = '';
+    for (const pr of prs) {
+      const row = body.insertRow();
+      row.className = 'nodus-enter';
+      cell(row, 'num', '#' + pr.number);
+      const title = cell(row, 'title', '');
+      const link = document.createElement('a');
+      link.href = pr.url;
+      link.textContent = pr.title;
+      title.append(link);
+      if (pr.isDraft) title.append(Object.assign(document.createElement('span'), { className: 'draft', textContent: ' · Draft' }));
+      if (pr.reviewDecision === 'APPROVED') title.append(Object.assign(document.createElement('span'), { className: 'ok', textContent: ' · Approved' }));
+      cell(row, 'who', pr.author.login);
+      cell(row, 'age', ago(Date.parse(pr.updatedAt)));
+    }
+    $('state').hidden = true;
+    $('table').hidden = false;
+  }
+
+  function run() {
+    $('refresh').disabled = true;
+    // It resolves to the result, which also arrives through on('result').
+    // Until the user allows the command on the view, it rejects saying so.
+    nodus.run(COMMAND)
+      .catch((err) => { if (!nodus.results[COMMAND]) say(err.message); })
+      .finally(() => { $('refresh').disabled = false; });
+  }
+
+  nodus.on('result', (result) => { if (result.name === COMMAND) show(result); });
+  $('refresh').addEventListener('click', run);
+  if (nodus.results[COMMAND]) show(nodus.results[COMMAND]);
+  else run();
+  setInterval(stamp, 60000);
+</script>
+</body>
+</html>

@@ -17,7 +17,7 @@ pub const PROTOCOL_VERSION: &str = "2025-06-18";
 
 /// The server's instructions, sent with `initialize` (TOOL-017): 0.9.4's,
 /// and since then the shapes and links (TOOL-110).
-pub const INSTRUCTIONS: &str = "Nodus is the board of Claude Code sessions the user runs this session from. Besides the session cards, it holds sticky notes and views. When the user asks you to put something on the board, or to make notes of it, write it with create_note. Read the notes they have put up with list_notes. Only write notes when the user asks for them. When the user asks for a view, a dashboard, a table, a chart or other custom UI on the board, build it with create_view; list_views, get_view and update_view find and change the views there. To put a note on another project’s board, or read the notes there, pass that project to the note tools; list_projects lists the projects. When the user asks for a new project, add it with create_project. When the user asks you to archive yourself, use archive_self. The board also holds shapes (boxes, ellipses, diamonds, words and emoji stickers) and links, arrows between cards, notes, views and shapes. The user links cards to show how their work relates: list_board shows what is on the board and where, and what this session’s card is linked to. When the user asks for something drawn, laid out, rearranged or linked on the board, use draw_on_board, update_drawing and erase_from_board. The user reads this session as a chat, which can show more than text. To show a chart, stats, a table or a text layout, call show_visual (or put the same JSON in a ```visual block in your reply). To ask the user questions with choices, call ask (or use a ```questions block), then end your turn: the answers arrive as their next message. For a mockup, a side-by-side comparison or a small tool that needs HTML, call show_page, which puts a page on the board beside your card. Prefer show_visual and ask, and don't repeat in words what they show.";
+pub const INSTRUCTIONS: &str = "Nodus is the board of Claude Code sessions the user runs this session from. Besides the session cards, it holds sticky notes and views. When the user asks you to put something on the board, or to make notes of it, write it with create_note. Read the notes they have put up with list_notes. Only write notes when the user asks for them. When the user asks for a view, a dashboard, a table, a chart or other custom UI on the board, put it up with create_view, which hands the building to the view’s own Claude session; list_views, get_view and update_view find and change the views there. To put a note on another project’s board, or read the notes there, pass that project to the note tools; list_projects lists the projects. When the user asks for a new project, add it with create_project. When the user asks you to archive yourself, use archive_self. The board also holds shapes (boxes, ellipses, diamonds, words and emoji stickers) and links, arrows between cards, notes, views and shapes. The user links cards to show how their work relates: list_board shows what is on the board and where, and what this session’s card is linked to. When the user asks for something drawn, laid out, rearranged or linked on the board, use draw_on_board, update_drawing and erase_from_board. The user reads this session as a chat, which can show more than text. To show a chart, stats, a table or a text layout, call show_visual (or put the same JSON in a ```visual block in your reply). To ask the user questions with choices, call ask (or use a ```questions block), then end your turn: the answers arrive as their next message. For a mockup, a side-by-side comparison or a small tool that needs HTML, call show_page, which puts a page on the board beside your card; the nodus:views skill says how to write one. Prefer show_visual and ask, and don't repeat in words what they show.";
 
 /// The `--mcp-config` for every claude process (TOOL-002). Claude Code expands
 /// the `${…}` from the environment `hookEnv` gives it, so the token never
@@ -355,15 +355,24 @@ fn properties(entries: Vec<(&'static str, Value)>) -> Value {
     Value::Object(entries.into_iter().map(|(k, v)| (k.to_owned(), v)).collect())
 }
 
-/// Every session's view tools (`VIEW_TOOLS`). `view_guide` is the "how a view
-/// works" text (`VIEW_GUIDE`, nodus-views), which ends `create_view`'s description.
-fn view_tools(view_guide: &str) -> Vec<Value> {
+/// Every session's view tools (`VIEW_TOOLS`). How to write a page is the
+/// `nodus:views` skill's (VIEW-160), so `create_view` says how to hand a
+/// view to its brain instead (VIEW-161).
+fn view_tools() -> Vec<Value> {
     let mut create = view_properties();
+    for (name, property) in &mut create {
+        if *name == "html" {
+            *property = json!({
+                "type": "string",
+                "description": "The page, when you write it yourself: one self-contained HTML document, with its CSS and JavaScript inline. It draws from nodus.data. Leave it out to have the view’s brain build it."
+            });
+        }
+    }
     create.push((
         "description",
         json!({
             "type": "string",
-            "description": "What the view is for and where its data comes from, for its brain to go on later."
+            "description": "The brain’s brief, which it goes on without this conversation: what the view shows and what for, where its data comes from, how fresh it should be, and what the user asked for. Needed without html."
         }),
     ));
     let mut update = vec![view_id_property()];
@@ -371,12 +380,12 @@ fn view_tools(view_guide: &str) -> Vec<Value> {
     vec![
         json!({
             "name": "create_view",
-            "description": format!("Puts a view on the user’s Nodus board, beside this session’s card: a small live web page, such as a table, a dashboard or a chart, that stays up to date. Use it when the user asks for a view or for custom UI on the board. It returns the view’s id, the commands waiting for the user to allow them, and any JavaScript errors the page hit as it loaded. The view gets a brain of its own, a Claude session that keeps it up to date, when it first needs one.\n\n{view_guide}"),
-            "inputSchema": { "type": "object", "properties": properties(create), "required": ["title", "html"] }
+            "description": CREATE_VIEW,
+            "inputSchema": { "type": "object", "properties": properties(create), "required": ["title"] }
         }),
         json!({
             "name": "update_view",
-            "description": "Changes a view on the board: its page, its data, its title, its commands or its refresh schedule. Leave out what stays the same. To show fresh data, send only data. Returns the commands waiting for the user to allow them and, when the page changed, any JavaScript errors it hit as it loaded.",
+            "description": "Changes a view on the board: its page, its data, its title, its commands or its refresh schedule. Leave out what stays the same. To show fresh data, send only data. Before changing a page’s html, use the nodus:views skill, which has how a page works and the board’s look. Returns the commands waiting for the user to allow them and, when the page changed, any JavaScript errors it hit as it loaded.",
             "inputSchema": { "type": "object", "properties": properties(update) }
         }),
         json!({
@@ -465,8 +474,11 @@ const VISUAL_GUIDE: &str = "Shows a chart, stat tiles, a table or a text layout 
 /// `ask`'s description.
 const ASK_GUIDE: &str = "Asks the user questions as a form in their chat: every question at once, choices picked with a click (lettered for them, with an \"Other\" choice and a note box added), and one Send button. Use it instead of asking in prose or with AskUserQuestion when you need the user's decisions. Give the form a short, specific title, and each choice question 2 or more choices; mark the one you recommend with \"recommended\": true, and link what a question is about (a PR, a file) in its title or detail. After calling it, end your turn: the answers arrive as the user's next message, in a <nodus-answers> block keyed by question (its name, else its title). A question left blank arrives as \"skipped\", a note as \"<key> (note)\".";
 
+/// `create_view`'s description (VIEW-161).
+const CREATE_VIEW: &str = "Puts a view on the user’s Nodus board, beside this session’s card: a small live web page, such as a table, a dashboard or a chart, that stays up to date. Use it when the user asks for a view or for custom UI on the board.\n\nA view has a brain, a Claude session of its own that builds its page and keeps it up to date. Hand the building to it: give a title and a description, and leave out html. The brain starts at once without this conversation, so the description is its whole brief: what the view shows and what for, where the data comes from (commands you know work and what their output looks like, MCP tools, files, the env vars that hold tokens), how fresh it should be, and what the user asked about its look or what it does. Pass data you already have as data. It returns straight away with the view’s id and the commands waiting for the user to allow them: tell the user the view is on its way, and don’t wait for it.\n\nWrite the html yourself only for a small page whose content you already have, and use the nodus:views skill first: it has how a page works, the board’s look and examples. Then it also returns any JavaScript errors the page hit as it loaded; fix them.";
+
 /// `show_page`'s description.
-const PAGE_GUIDE: &str = "Puts a page on the user's Nodus board beside this session's card, and a card for it in their chat: for what show_visual and ask can't express, such as a UI mockup, layouts compared side by side, or a small interactive tool. Write one self-contained HTML page as for create_view, styled with the board's CSS variables. A page that asks the user something calls nodus.submit(answers) (any JSON) from its own Send button; the answers arrive as the user's next message, in a <nodus-answers> block. Returns the view's id; change the page with update_view.";
+const PAGE_GUIDE: &str = "Puts a page on the user's Nodus board beside this session's card, and a card for it in their chat: for what show_visual and ask can't express, such as a UI mockup, layouts compared side by side, or a small interactive tool. You write the page: use the nodus:views skill first, for how a page works, the board's look and examples. It's one self-contained HTML page with no network, styled with the board's --nodus-* CSS variables. A page that asks the user something calls nodus.submit(answers) (any JSON) from its own Send button; the answers arrive as the user's next message, in a <nodus-answers> block. Returns the view's id; change the page with update_view.";
 
 /// An action run's tools, on top of the common ones (`SESSION_TOOLS`).
 fn session_tools() -> Vec<Value> {
@@ -504,10 +516,10 @@ pub(crate) struct ToolLists {
 }
 
 impl ToolLists {
-    pub(crate) fn new(view_guide: &str) -> Self {
+    pub(crate) fn new() -> Self {
         let mut session = common_tools();
         session.extend(drawing_tools());
-        session.extend(view_tools(view_guide));
+        session.extend(view_tools());
         session.extend(chat_tools());
         let mut run = session.clone();
         run.extend(session_tools());

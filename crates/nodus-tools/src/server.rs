@@ -188,15 +188,14 @@ pub struct McpServer<H> {
 }
 
 impl<H: BoardToolHandlers> McpServer<H> {
-    /// A server that says it's `version` (the app's, TOOL-017), lists
-    /// `create_view` with `view_guide` (nodus-views' `VIEW_GUIDE`, VIEW-121),
-    /// and calls `handlers`; with none, every tool call fails with `The board
-    /// is not available` (TOOL-025).
-    pub fn new(version: impl Into<String>, view_guide: &str, handlers: Option<H>) -> Self {
+    /// A server that says it's `version` (the app's, TOOL-017) and calls
+    /// `handlers`; with none, every tool call fails with `The board is not
+    /// available` (TOOL-025).
+    pub fn new(version: impl Into<String>, handlers: Option<H>) -> Self {
         Self {
             version: version.into(),
             handlers,
-            tools: ToolLists::new(view_guide),
+            tools: ToolLists::new(),
         }
     }
 

@@ -1,0 +1,103 @@
+<!doctype html>
+<html>
+<head>
+<style>
+  body { padding: 12px 14px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+  .stat { padding: 8px 10px; border-radius: 8px; background: var(--nodus-surface); }
+  .stat small { display: block; }
+  .stat b { display: block; margin-top: 2px; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stat .up { color: var(--nodus-green); }
+  .stat .down { color: var(--nodus-red); }
+  .chart { margin-top: 12px; }
+  .chart svg { display: block; width: 100%; height: 120px; overflow: visible; }
+  .bar { fill: var(--nodus-text-3); }
+  .bar.last { fill: var(--nodus-accent); }
+  .axis { fill: var(--nodus-text-3); font: 10px var(--nodus-font); }
+  .foot { display: flex; align-items: center; gap: 6px; margin-top: 10px; min-height: 26px; }
+  .foot small { flex: 1; }
+  .state { margin: 14px 0; color: var(--nodus-text-2); }
+</style>
+</head>
+<body>
+  <div id="view" hidden>
+    <div class="stats" id="stats"></div>
+    <div class="chart"><svg id="chart" role="img" aria-label="Sign-ups per day"></svg></div>
+  </div>
+  <p class="state" id="empty">No numbers yet.</p>
+  <div class="foot">
+    <small id="when"></small>
+    <span id="working" hidden><span class="nodus-sparkle"></span> <span class="nodus-thinking">Counting the latest sign-ups…</span></span>
+    <button class="nodus-ghost" id="update">Update</button>
+  </div>
+<script>
+  // nodus.data, sent with update_view's data by the view's brain:
+  // { asOf: '2026-11-14T09:00:00Z', total: 1284, today: 31, change: 0.12, days: [{ day: 'Mon', count: 24 }, …] }
+  const $ = (id) => document.getElementById(id);
+  const SVG = 'http://www.w3.org/2000/svg';
+  const number = new Intl.NumberFormat();
+
+  function stat(label, value, note, tone) {
+    const box = document.createElement('div');
+    box.className = 'stat';
+    box.append(Object.assign(document.createElement('small'), { textContent: label }));
+    const b = Object.assign(document.createElement('b'), { textContent: value });
+    if (note) b.append(' ', Object.assign(document.createElement('span'), { className: tone, textContent: note }));
+    box.append(b);
+    return box;
+  }
+
+  function chart(days) {
+    const svg = $('chart');
+    svg.textContent = '';
+    const width = svg.clientWidth || 400, height = 120, axis = 16;
+    const max = Math.max(1, ...days.map((d) => d.count));
+    const step = width / days.length, bar = Math.min(28, step * 0.6);
+    days.forEach((d, i) => {
+      const h = Math.max(2, (d.count / max) * (height - axis - 4));
+      const x = i * step + (step - bar) / 2;
+      const rect = document.createElementNS(SVG, 'rect');
+      Object.entries({ x, y: height - axis - h, width: bar, height: h, rx: 3 }).forEach(([k, v]) => rect.setAttribute(k, v));
+      rect.setAttribute('class', i === days.length - 1 ? 'bar last' : 'bar');
+      rect.append(Object.assign(document.createElementNS(SVG, 'title'), { textContent: d.day + ': ' + number.format(d.count) }));
+      const label = document.createElementNS(SVG, 'text');
+      Object.entries({ x: i * step + step / 2, y: height - 3, 'text-anchor': 'middle', class: 'axis' }).forEach(([k, v]) => label.setAttribute(k, v));
+      label.textContent = d.day;
+      svg.append(rect, label);
+    });
+  }
+
+  function working(on) {
+    $('working').hidden = !on;
+    $('update').hidden = on;
+  }
+
+  let data;
+  nodus.on('data', (next) => {
+    data = next;
+    working(false);
+    if (!data || !data.days) return;
+    $('empty').hidden = true;
+    $('view').hidden = false;
+    const change = data.change == null ? '' : (data.change >= 0 ? '+' : '−') + Math.round(Math.abs(data.change) * 100) + '%';
+    $('stats').replaceChildren(
+      stat('Total', number.format(data.total)),
+      stat('Today', number.format(data.today), change, data.change >= 0 ? 'up' : 'down'),
+    );
+    chart(data.days);
+    $('when').textContent = 'As of ' + new Date(data.asOf).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+  });
+
+  // The brain fetches and sends new data with update_view; until then, show
+  // that Claude is at it. At most one ask every 15 seconds.
+  $('update').addEventListener('click', () => {
+    working(true);
+    nodus.ask('Count the latest sign-ups and send them with update_view’s data.').catch((err) => {
+      working(false);
+      $('when').textContent = err.message;
+    });
+  });
+  addEventListener('resize', () => data && data.days && chart(data.days));
+</script>
+</body>
+</html>

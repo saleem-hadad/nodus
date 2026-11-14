@@ -264,6 +264,9 @@ pub(crate) struct Inner {
     pub(crate) remotes: Remotes,
     /// `BOARD_TOOL_RULES`, as arguments.
     board_tool_rules: Vec<String>,
+    /// Nodus's own Claude Code plugin, written at start, for `--plugin-dir`
+    /// (VIEW-159); none when it couldn't be written.
+    claude_plugin: Option<String>,
     /// A server's part ([`crate::hosting`]); none in the app.
     pub(crate) hosted: Option<crate::hosting::Hosted>,
 }
@@ -339,7 +342,7 @@ impl Nodus {
                 home: Some(config.home.clone()),
                 on_server: config.hosting.is_some(),
             });
-            let server = Arc::new(McpServer::new(crate::VERSION, nodus_views::VIEW_GUIDE, Some(tools)));
+            let server = Arc::new(McpServer::new(crate::VERSION, Some(tools)));
             let agents = Agents::new(&config.home, Arc::new(SystemClock));
             let pending_work = agents.clone();
             let status = StatusMachine::new(
@@ -444,6 +447,13 @@ impl Nodus {
                 secrets,
                 remotes: Remotes::new(&config.user_data),
                 board_tool_rules: nodus_tools::BOARD_TOOL_RULES.iter().map(|&r| r.to_owned()).collect(),
+                claude_plugin: match nodus_views::write_plugin(&config.user_data, crate::VERSION) {
+                    Ok(dir) => Some(dir.to_string_lossy().into_owned()),
+                    Err(err) => {
+                        tracing::warn!("[views] couldn’t write the nodus plugin: {err}");
+                        None
+                    }
+                },
                 hosted: config
                     .hosting
                     .clone()
@@ -778,6 +788,7 @@ impl Inner {
         let powershell = hooks::uses_powershell(&env);
         let endpoint = Arc::clone(&self.endpoint);
         let rules = self.board_tool_rules.clone();
+        let plugin = self.claude_plugin.clone();
         let spawned = self
             .host
             .spawn_session(&opts, move |opts, host| {
@@ -791,6 +802,7 @@ impl Inner {
                 let tools = host.relays_mcp.then_some(launch::BoardTools {
                     mcp_config: nodus_tools::BOARD_MCP_CONFIG,
                     allowed_tools: &rules,
+                    plugin_dir: plugin.as_deref(),
                 });
                 let mut command = launch::command_for(
                     opts,

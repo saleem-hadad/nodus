@@ -565,7 +565,7 @@ async fn changes_a_note_by_id() {
 #[tokio::test]
 async fn answers_through_the_server_end_to_end() {
     let f = Fixture::new();
-    let server = McpServer::new("0.9.4", "guide", Some(f.handlers));
+    let server = McpServer::new("0.9.4", Some(f.handlers));
     let reply = server
         .answer(
             "s1",
@@ -1180,7 +1180,7 @@ async fn erases_shapes_with_their_links_but_never_cards_notes_or_views() {
 #[tokio::test]
 async fn draws_and_lists_through_the_server_end_to_end() {
     let f = Fixture::new();
-    let server = McpServer::new("1.0.8", "guide", Some(f.handlers));
+    let server = McpServer::new("1.0.8", Some(f.handlers));
     let call = |id: i64, name: &str, args: Value| json!({ "id": id, "method": "tools/call", "params": { "name": name, "arguments": args } });
     let drawn = server
         .answer(

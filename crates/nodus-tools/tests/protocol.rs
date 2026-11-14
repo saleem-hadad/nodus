@@ -162,7 +162,7 @@ impl BoardToolHandlers for Mock {
 }
 
 fn server(mock: Mock) -> McpServer<Mock> {
-    McpServer::new("9.9.9", "<VIEW_GUIDE>", Some(mock))
+    McpServer::new("9.9.9", Some(mock))
 }
 
 fn mock(server: &McpServer<Mock>) -> &Mock {
@@ -535,7 +535,7 @@ async fn tools_report_a_view_tool_that_fails_as_they_do_any_other() {
 #[tokio::test]
 async fn tools_say_the_board_isnt_there_before_handlers_are_given() {
     // TOOL-025, and tools/list without handlers lists an ordinary session's tools.
-    let server: McpServer<Mock> = McpServer::new("9.9.9", "", None);
+    let server: McpServer<Mock> = McpServer::new("9.9.9", None);
     let reply = call_none(&server).await;
     assert_eq!(reply["result"]["content"][0]["text"], "The board is not available");
     let tools = server.answer(RUN, &json!({ "id": 1, "method": "tools/list" })).await;
@@ -656,7 +656,6 @@ async fn answers_as_0_9_4_does_on_macos_and_windows() {
     let fixtures = fixtures();
     for platform in ["darwin", "win32"] {
         let expected = &fixtures[platform];
-        let guide = expected["viewGuide"].as_str().unwrap();
         let awkward = json!({
             "at": 1_700_000_000_000_i64,
             "half": 0.5,
@@ -671,7 +670,6 @@ async fn answers_as_0_9_4_does_on_macos_and_windows() {
         });
         let server = McpServer::new(
             "9.9.9",
-            guide,
             Some(Mock {
                 list_projects: Some(awkward),
                 ..Mock::default()

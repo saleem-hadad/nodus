@@ -222,6 +222,20 @@ pub struct InkStroke {
     pub extra: Map<String, Value>,
 }
 
+/// The key an ink stroke keeps the session that drew it under, among the
+/// fields older versions don't know (TOOL-113).
+pub const INK_BY: &str = "by";
+
+impl InkStroke {
+    /// The session that drew it with its board tools, if one did.
+    pub fn by(&self) -> Option<&str> {
+        self.extra
+            .get(INK_BY)
+            .and_then(Value::as_str)
+            .filter(|by| !by.is_empty())
+    }
+}
+
 string_enum! {
     /// What a shape on the board is: a box, an ellipse or a diamond with
     /// words in it, words on their own, an emoji sticker, or a picture.

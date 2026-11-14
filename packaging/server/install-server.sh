@@ -301,6 +301,8 @@ create_users() {
 install_packages() {
 	apt_update
 	apt_install ca-certificates curl gnupg openssl git uidmap dbus-user-session nftables
+	# A font, for the words in the board pictures sessions look at (TOOL-111).
+	apt_install fonts-dejavu-core
 	# gh, from GitHub's own apt repository.
 	install -d -m 0755 /etc/apt/keyrings
 	run curl -fsSL -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \

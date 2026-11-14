@@ -1,6 +1,7 @@
 //! What the tools do, on the store and the board: ipc.ts's
 //! `configureBoardTools({…})` handlers (TOOL-026 to TOOL-040).
 
+use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -13,8 +14,12 @@ use nodus_domain::{CreatedBy, Event, EventSink, Project, SessionCard, SessionKin
 use nodus_store::{BoardState, Store};
 use serde_json::{Value, json};
 
-use crate::drawing;
+use crate::drawing::{self, Picture};
+use crate::look::{self, Look};
 use crate::server::{BoardToolHandlers, BoxFuture, ToolError};
+
+/// The biggest picture a session can put up, and that look_at_board reads.
+const MAX_PICTURE_BYTES: u64 = 25 << 20;
 
 /// What `create_project` answers on a server (SRV-146).
 pub const SERVER_PROJECTS: &str =
@@ -60,6 +65,7 @@ pub struct StoreHandlers {
     clock: Clock,
     home: Option<PathBuf>,
     on_server: bool,
+    pictures: Vec<PathBuf>,
 }
 
 /// What the handlers work with. `board` must be on the same `store`.
@@ -78,6 +84,10 @@ pub struct StoreHandlersConfig {
     /// and every request comes from a session that may be steered by what it
     /// read (SRV-146).
     pub on_server: bool,
+    /// The folders a board's pictures are in, by name: the first is where
+    /// new ones go (`board-images`), the rest are only read from (a
+    /// server's uploads, SRV-163).
+    pub pictures: Vec<PathBuf>,
 }
 
 impl StoreHandlers {
@@ -92,6 +102,99 @@ impl StoreHandlers {
             clock: config.clock,
             home: config.home,
             on_server: config.on_server,
+            pictures: config.pictures,
+        }
+    }
+
+    /// A picture's bytes, by the name a picture shape holds: a plain file
+    /// in one of the pictures folders, never a link to one elsewhere.
+    fn picture(&self, name: &str) -> Option<Vec<u8>> {
+        if !nodus_board::shapes::image_name_ok(name) {
+            return None;
+        }
+        self.pictures.iter().find_map(|dir| {
+            let path = dir.join(name);
+            let meta = std::fs::symlink_metadata(&path).ok()?;
+            (meta.is_file() && meta.len() <= MAX_PICTURE_BYTES).then(|| std::fs::read(&path).ok())?
+        })
+    }
+
+    /// TOOL-112: the picture files draw_on_board's shapes name, each checked
+    /// and copied into the board's pictures under a new name, by the
+    /// shape's place in the list.
+    fn copy_pictures(&self, args: &Value) -> Result<HashMap<usize, Picture>, ToolError> {
+        let mut copied = HashMap::new();
+        let Some(Value::Array(shapes)) = args.get("shapes") else {
+            return Ok(copied);
+        };
+        let wanted: Vec<(usize, &Value)> = shapes
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.get("kind").and_then(Value::as_str) == Some("image"))
+            .collect();
+        if wanted.is_empty() {
+            return Ok(copied);
+        }
+        // A session on a server runs as another user, in a folder of its
+        // own, so a path it names isn't one this side should read.
+        if self.on_server {
+            return Err("Pictures can’t be put up from a file on a Nodus server’s board yet".into());
+        }
+        let Some(dir) = self.pictures.first() else {
+            return Err("This board has nowhere to keep pictures".into());
+        };
+        let mut written: Vec<PathBuf> = Vec::new();
+        let result = (|| {
+            for (i, shape) in wanted {
+                let at = format!("shapes[{i}]");
+                let Some(path) = trimmed(shape.get("path")) else {
+                    return Err(format!("{at}: a picture needs path, its file’s absolute path"));
+                };
+                let file = expand_home(path, self.home.as_deref());
+                if !is_absolute(&file) {
+                    return Err(format!("{at}: path must be absolute"));
+                }
+                let meta = std::fs::metadata(&file).map_err(|_| format!("{at}: there’s no file at “{file}”"))?;
+                if !meta.is_file() {
+                    return Err(format!("{at}: “{file}” isn’t a file"));
+                }
+                if meta.len() > MAX_PICTURE_BYTES {
+                    return Err(format!(
+                        "{at}: “{file}” is {} MB; a picture can be at most {} MB",
+                        meta.len().div_ceil(1 << 20),
+                        MAX_PICTURE_BYTES >> 20
+                    ));
+                }
+                let bytes = std::fs::read(&file).map_err(|err| format!("{at}: {}", fs_message(&err, "open", &file)))?;
+                let Some(ext) = nodus_board::pictures::picture_kind(&bytes) else {
+                    return Err(format!("{at}: “{file}” isn’t a PNG, JPEG, GIF or WebP picture"));
+                };
+                let size = nodus_board::pictures::picture_size(&bytes);
+                let name = format!("{}.{ext}", nodus_board::shapes::new_id());
+                std::fs::create_dir_all(dir)
+                    .and_then(|()| std::fs::write(dir.join(&name), &bytes))
+                    .map_err(|err| {
+                        format!(
+                            "{at}: {}",
+                            fs_message(&err, "open", &dir.join(&name).display().to_string())
+                        )
+                    })?;
+                written.push(dir.join(&name));
+                copied.insert(i, Picture { name, size });
+            }
+            Ok(())
+        })();
+        if let Err(err) = result {
+            self.drop_pictures(&written);
+            return Err(err.into());
+        }
+        Ok(copied)
+    }
+
+    /// Pictures copied in for a drawing that didn't go up.
+    fn drop_pictures(&self, files: &[PathBuf]) {
+        for file in files {
+            let _ = std::fs::remove_file(file);
         }
     }
 
@@ -448,15 +551,50 @@ impl BoardToolHandlers for StoreHandlers {
         }))
     }
 
-    /// TOOL-103 to TOOL-106
+    /// TOOL-111
+    fn look_at_board(&self, project_id: &str, self_id: &str, args: &Value) -> Result<Look, ToolError> {
+        let project = self.project(project_id)?;
+        let disk = self.board.scan_board(&project);
+        // A copy of the board, so it's drawn without holding the store.
+        let (board, items) = self.store.read(|state| {
+            let board = state.board(project_id).cloned().unwrap_or_default();
+            let cards: Vec<SessionCard> = notes::active_cards(&board)
+                .map(|n| to_card(n, disk.get(&n.session_id), self.sessions.as_ref()))
+                .collect();
+            let items = session_list_items(&cards, &[], None, false);
+            (board, items)
+        });
+        look::look(&board, self_id, &items, args, &|name| self.picture(name)).map_err(ToolError)
+    }
+
+    /// TOOL-103 to TOOL-106, TOOL-112, TOOL-113
     fn draw_on_board(&self, project_id: &str, self_id: &str, args: &Value) -> Result<Value, ToolError> {
         self.project(project_id)?;
+        let pictures = self.copy_pictures(args)?;
         let now = (self.clock)();
         let drawn = self.store.update(|state| {
             // SRV-183: on a server, what it draws is the session's starter's.
             let starter = state.session_starter(self_id).map(str::to_owned);
-            drawing::draw(state.board_mut(project_id), self_id, starter.as_deref(), args, now)
-        })?;
+            drawing::draw(
+                state.board_mut(project_id),
+                self_id,
+                starter.as_deref(),
+                args,
+                now,
+                &pictures,
+            )
+        });
+        let drawn = match drawn {
+            Ok(drawn) => drawn,
+            Err(err) => {
+                let files: Vec<PathBuf> = match self.pictures.first() {
+                    Some(dir) => pictures.values().map(|p| dir.join(&p.name)).collect(),
+                    None => Vec::new(),
+                };
+                self.drop_pictures(&files);
+                return Err(err.into());
+            }
+        };
         self.board_changed(project_id);
         Ok(drawn)
     }

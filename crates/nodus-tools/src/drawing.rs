@@ -3,7 +3,9 @@
 //! `draw_on_board` puts up shapes and the links between things;
 //! `update_drawing` changes shapes and links and moves cards, notes and
 //! views; `erase_from_board` takes shapes and links away (TOOL-101 to
-//! TOOL-110).
+//! TOOL-110). Since 1.0.17 a session also puts up pictures and draws ink:
+//! circles, underlines, arrows, boxes, words and free strokes (TOOL-112,
+//! TOOL-113), and list_board lists the ink.
 //!
 //! The functions work on a board in hand, and check everything they're given
 //! before they change anything, so a call that fails leaves the board as it
@@ -13,22 +15,33 @@ use std::collections::HashMap;
 
 use nodus_board::cards::SessionListItem;
 use nodus_board::geometry::{Point, Size, note_size, view_size};
+use nodus_board::ink::{INK_MAX_POINTS, INK_MAX_STROKES, INK_MAX_TEXT, add_ink, clean_ink, remove_ink};
+use nodus_board::ink_draw::{fallback_width, r1, stroke_box};
+use nodus_board::pictures::fitted;
 use nodus_board::shapes::{
     LINK_MAX_LABEL, MAX_LINKS, MAX_SHAPES, SHAPE_MAX, SHAPE_MIN, clean_link, clean_shape, drawn_size, holds, item_rect,
     new_id, place_drawing, remove_links, remove_shapes, save_links, save_shapes,
 };
-use nodus_domain::{BoardLink, BoardShape, CreatedBy, InkColor, LinkEnd, Rect, ShapeKind, js};
+use nodus_domain::{
+    BoardLink, BoardShape, CreatedBy, INK_BY, InkColor, InkKind, InkStroke, LinkEnd, Rect, ShapeKind, js,
+};
 use nodus_store::BoardState;
 use serde_json::{Map, Value, json};
 
-/// The kinds a session can draw: every one but a picture.
-pub(crate) const DRAWN_KINDS: [ShapeKind; 5] = [
+/// The kinds a session can draw: all of them, a picture from a file
+/// (TOOL-112).
+pub(crate) const DRAWN_KINDS: [ShapeKind; 6] = [
     ShapeKind::Rect,
     ShapeKind::Ellipse,
     ShapeKind::Diamond,
     ShapeKind::Text,
     ShapeKind::Sticker,
+    ShapeKind::Image,
 ];
+
+/// The ink marks a session draws (TOOL-113): a free stroke, an arrow, a
+/// box, words, and a circle around or a line under things.
+pub(crate) const MARKS: [&str; 6] = ["pen", "arrow", "rect", "text", "circle", "underline"];
 
 /// What a link's end names to mean the calling session's own card.
 const SELF: &str = "self";
@@ -39,7 +52,11 @@ const NOTE_PREVIEW: usize = 200;
 /// How much of a note's first line names it in a link.
 const NAME_CHARS: usize = 60;
 
-const KINDS: &str = "rect, ellipse, diamond, text or sticker";
+const KINDS: &str = "rect, ellipse, diamond, text, sticker or image";
+/// How many ink strokes list_board lists, the newest.
+const INK_LISTED: usize = 300;
+/// How far a mark keeps from what it goes around or under.
+const MARK_GAP: f64 = 14.0;
 const COLORS: &str = "graphite, red, orange, green, blue or purple";
 
 // ---------------------------------------------------------------------------
@@ -360,7 +377,106 @@ pub(crate) fn list_board(board: &BoardState, self_id: &str, cards: &[SessionList
     if !groups.is_empty() {
         listed["groups"] = Value::Array(groups);
     }
+    // TOOL-113: the ink, newest last, when there is some.
+    let ink = board.ink.as_deref().unwrap_or_default();
+    if !ink.is_empty() {
+        let things = drawn_things(&listed);
+        let skipped = ink.len().saturating_sub(INK_LISTED);
+        listed["ink"] = Value::Array(
+            ink[skipped..]
+                .iter()
+                .map(|s| list_stroke(board, s, self_id, &things, &by_id))
+                .collect(),
+        );
+        if skipped > 0 {
+            listed["ink_not_listed"] = json!(skipped);
+        }
+    }
     listed
+}
+
+/// The cards, notes, views and shapes listed, by id and box, for what ink
+/// points at or goes around.
+fn drawn_things(listed: &Value) -> Vec<(String, Rect)> {
+    ["cards", "notes", "views", "shapes"]
+        .iter()
+        .filter_map(|key| listed[*key].as_array())
+        .flatten()
+        .filter_map(|item| {
+            let n = |k: &str| item.get(k).and_then(Value::as_f64);
+            Some((
+                item.get("id")?.as_str()?.to_owned(),
+                Rect {
+                    x: n("x")?,
+                    y: n("y")?,
+                    w: n("w")?,
+                    h: n("h")?,
+                },
+            ))
+        })
+        .collect()
+}
+
+/// An ink stroke as list_board gives it: its kind, colour and box, a
+/// label's words, what an arrow points from and to, and what a stroke
+/// goes around.
+fn list_stroke(
+    board: &BoardState,
+    stroke: &InkStroke,
+    self_id: &str,
+    things: &[(String, Rect)],
+    cards: &HashMap<&str, &SessionListItem>,
+) -> Value {
+    let b = stroke_box(stroke, &fallback_width);
+    let r = Rect {
+        x: b.x,
+        y: b.y,
+        w: b.w,
+        h: b.h,
+    };
+    let mut item = json!({ "id": stroke.id, "kind": stroke.kind, "color": stroke.color });
+    put_box(&mut item, r);
+    let name = |id: &str| {
+        let (kind, name) = name_of(board, id, cards);
+        json!({ "id": id, "kind": kind, "name": name })
+    };
+    match stroke.kind {
+        InkKind::Text => item["text"] = json!(stroke.text.as_deref().unwrap_or_default()),
+        InkKind::Arrow if stroke.points.len() == 4 => {
+            // What's under each end, the smallest thing there, within reach.
+            let under = |x: f64, y: f64| {
+                things
+                    .iter()
+                    .filter(|(_, t)| {
+                        x >= t.x - 24.0 && x <= t.x + t.w + 24.0 && y >= t.y - 24.0 && y <= t.y + t.h + 24.0
+                    })
+                    .min_by(|a, b| (a.1.w * a.1.h).total_cmp(&(b.1.w * b.1.h)))
+                    .map_or_else(|| json!({ "x": js::round(x), "y": js::round(y) }), |(id, _)| name(id))
+            };
+            let p = &stroke.points;
+            item["from"] = under(p[0], p[1]);
+            item["to"] = under(p[2], p[3]);
+        }
+        _ => {
+            // What it goes around: the smaller things with their middles inside it.
+            let around: Vec<Value> = things
+                .iter()
+                .filter(|(_, t)| {
+                    let (cx, cy) = (t.x + t.w / 2.0, t.y + t.h / 2.0);
+                    t.w * t.h < r.w * r.h && cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h
+                })
+                .take(8)
+                .map(|(id, _)| name(id))
+                .collect();
+            if !around.is_empty() {
+                item["around"] = Value::Array(around);
+            }
+        }
+    }
+    if stroke.by() == Some(self_id) {
+        item["yours"] = Value::Bool(true);
+    }
+    item
 }
 
 // ---------------------------------------------------------------------------
@@ -376,19 +492,36 @@ struct Planned {
     /// Where it goes in the drawing, when Claude said.
     at: Option<Point>,
     size: Size,
+    /// A picture's file, copied in.
+    image: Option<String>,
 }
 
-fn plan_shape(item: &Value, index: usize, names: &mut Vec<String>) -> Result<Planned, String> {
+/// A picture file copied into the board's pictures for a shape in a
+/// draw_on_board call (TOOL-112): its name there, and its size in pixels.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Picture {
+    pub name: String,
+    pub size: Option<(u32, u32)>,
+}
+
+fn plan_shape(
+    item: &Value,
+    index: usize,
+    names: &mut Vec<String>,
+    pictures: &HashMap<usize, Picture>,
+) -> Result<Planned, String> {
     let at = format!("shapes[{index}]");
     object(item, &at)?;
-    let kind = match string(item, "kind", &at)?.and_then(ShapeKind::parse) {
-        Some(ShapeKind::Image) => {
-            return Err(format!(
-                "{at}: pictures can’t be drawn with the board tools; kind must be {KINDS}"
-            ));
-        }
-        Some(kind) => kind,
-        None => return Err(format!("{at}: kind must be {KINDS}")),
+    let Some(kind) = string(item, "kind", &at)?.and_then(ShapeKind::parse) else {
+        return Err(format!("{at}: kind must be {KINDS}"));
+    };
+    let picture = match kind {
+        ShapeKind::Image => Some(
+            pictures
+                .get(&index)
+                .ok_or_else(|| format!("{at}: a picture needs path, its file’s absolute path"))?,
+        ),
+        _ => None,
     };
     let name = match string(item, "key", &at)?.map(js::trim) {
         None => index.to_string(),
@@ -414,10 +547,28 @@ fn plan_shape(item: &Value, index: usize, names: &mut Vec<String>) -> Result<Pla
         (None, None) => None,
         _ => return Err(format!("{at}: give both x and y, or neither to put it in the row")),
     };
-    let default = drawn_size(kind);
-    let size = Size {
-        w: side(number(item, "w", &at)?.unwrap_or(default.w)),
-        h: side(number(item, "h", &at)?.unwrap_or(default.h)),
+    let (w, h) = (number(item, "w", &at)?, number(item, "h", &at)?);
+    let size = match picture {
+        // At its own proportions: its size brought within 480, or the
+        // width or height given, the other to match.
+        Some(picture) => {
+            let (fit_w, fit_h) = fitted(picture.size, 1.0);
+            let ratio = fit_h / fit_w;
+            let (w, h) = match (w, h) {
+                (Some(w), Some(h)) => (w, h),
+                (Some(w), None) => (w, w * ratio),
+                (None, Some(h)) => (h / ratio, h),
+                (None, None) => (fit_w, fit_h),
+            };
+            Size { w: side(w), h: side(h) }
+        }
+        None => {
+            let default = drawn_size(kind);
+            Size {
+                w: side(w.unwrap_or(default.w)),
+                h: side(h.unwrap_or(default.h)),
+            }
+        }
     };
     Ok(Planned {
         name,
@@ -426,6 +577,7 @@ fn plan_shape(item: &Value, index: usize, names: &mut Vec<String>) -> Result<Pla
         color,
         at: at_point,
         size,
+        image: picture.map(|p| p.name.clone()),
     })
 }
 
@@ -499,17 +651,18 @@ pub(crate) fn draw(
     starter: Option<&str>,
     args: &Value,
     now: f64,
+    pictures: &HashMap<usize, Picture>,
 ) -> Result<Value, String> {
-    let (shape_args, link_args) = (list(args, "shapes")?, list(args, "links")?);
-    if shape_args.is_empty() && link_args.is_empty() {
-        return Err("Nothing to draw: give shapes, links or both".into());
+    let (shape_args, link_args, ink_args) = (list(args, "shapes")?, list(args, "links")?, list(args, "ink")?);
+    if shape_args.is_empty() && link_args.is_empty() && ink_args.is_empty() {
+        return Err("Nothing to draw: give shapes, links or ink".into());
     }
     let at = at_point(args)?;
     let mut names = Vec::new();
     let planned = shape_args
         .iter()
         .enumerate()
-        .map(|(i, item)| plan_shape(item, i, &mut names))
+        .map(|(i, item)| plan_shape(item, i, &mut names, pictures))
         .collect::<Result<Vec<_>, _>>()?;
     let count = board.shapes.values().count();
     if count + planned.len() > MAX_SHAPES {
@@ -518,6 +671,12 @@ pub(crate) fn draw(
     let count = board.links.values().count();
     if count + link_args.len() > MAX_LINKS {
         return Err(format!("The board keeps at most {MAX_LINKS} links, and has {count}"));
+    }
+    let count = board.ink.as_ref().map_or(0, Vec::len);
+    if count + ink_args.len() > INK_MAX_STROKES {
+        return Err(format!(
+            "The board keeps at most {INK_MAX_STROKES} ink strokes, and has {count}"
+        ));
     }
 
     // Where the drawing goes: at the point given, or beside the session's card.
@@ -547,7 +706,7 @@ pub(crate) fn draw(
             h: rect.h,
             color: plan.color,
             text: plan.text.clone(),
-            image: None,
+            image: plan.image.clone(),
             by: Some(by.to_owned()),
             created_at: now,
             extra: Map::new(),
@@ -597,10 +756,23 @@ pub(crate) fn draw(
         links.push(link);
     }
 
+    let mut strokes = Vec::new();
+    for (i, item) in ink_args.iter().enumerate() {
+        strokes.push(plan_mark(board, by, item, i, &ids)?);
+    }
+
     save_shapes(board, &shapes, now);
     save_links(board, &links, now);
+    if !strokes.is_empty() {
+        add_ink(board, &json!(strokes));
+    }
     // SRV-183: on a server, they're the session's starter's.
     if starter.is_some() {
+        for stroke in board.ink.iter_mut().flatten() {
+            if strokes.iter().any(|s| s.id == stroke.id) {
+                stroke.set_created_by(starter);
+            }
+        }
         for shape in &shapes {
             if let Some(saved) = board.shapes.get_mut(&shape.id) {
                 saved.set_created_by(starter);
@@ -616,6 +788,9 @@ pub(crate) fn draw(
         "shapes": out_shapes,
         "links": links.iter().map(|l| l.id.as_str()).collect::<Vec<_>>(),
     });
+    if !strokes.is_empty() {
+        out["ink"] = json!(strokes.iter().map(|s| s.id.as_str()).collect::<Vec<_>>());
+    }
     if let Some(area) = area {
         let mut placed = json!({});
         put_box(
@@ -629,6 +804,213 @@ pub(crate) fn draw(
         out["area"] = placed;
     }
     Ok(out)
+}
+
+// ---------------------------------------------------------------------------
+// Ink marks (TOOL-113)
+
+/// What a mark points at, goes around or sits beside: a shape key from this
+/// call, "self", or the id of something on the board (ink and frames too).
+fn mark_target(
+    board: &BoardState,
+    self_id: &str,
+    name: &str,
+    keys: &HashMap<String, (String, Rect)>,
+    at: &str,
+) -> Result<Rect, String> {
+    if let Some((_, rect)) = keys.get(name) {
+        return Ok(*rect);
+    }
+    let id = if name == SELF { self_id } else { name };
+    if let Some(rect) = crate::look::box_of(board, id) {
+        return Ok(rect);
+    }
+    if name == SELF {
+        return Err(format!("{at}: this session has no card on the board"));
+    }
+    Err(format!(
+        "{at}: “{name}” isn’t a key from shapes or the id of anything drawn on this board; list_board lists what’s there"
+    ))
+}
+
+/// The box around everything `key` names: one target or a list of them.
+fn mark_targets(
+    board: &BoardState,
+    self_id: &str,
+    item: &Value,
+    key: &str,
+    keys: &HashMap<String, (String, Rect)>,
+    at: &str,
+) -> Result<Rect, String> {
+    let names: Vec<&str> = match item.get(key) {
+        Some(Value::String(name)) => vec![name.as_str()],
+        Some(Value::Array(names)) => names.iter().filter_map(Value::as_str).collect(),
+        _ => Vec::new(),
+    };
+    if names.is_empty() {
+        return Err(format!(
+            "{at}: {key} must be what it marks: an id from list_board, a key from shapes, \"self\", or a list of them"
+        ));
+    }
+    let rects = names
+        .into_iter()
+        .map(|name| mark_target(board, self_id, name, keys, at))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(bounds(&rects))
+}
+
+/// A point given as `{"x", "y"}` or `[x, y]`.
+fn point_of(value: &Value) -> Option<Point> {
+    let (x, y) = match value {
+        Value::Array(pair) if pair.len() == 2 => (pair[0].as_f64()?, pair[1].as_f64()?),
+        Value::Object(_) => (value.get("x")?.as_f64()?, value.get("y")?.as_f64()?),
+        _ => return None,
+    };
+    (x.is_finite() && y.is_finite()).then_some(Point { x, y })
+}
+
+/// One end of an arrow mark: a point, or what it points from or to.
+enum Tip {
+    Point(Point),
+    Box(Rect),
+}
+
+/// A hand-drawn loop around a box: an ellipse a little wider than it, a
+/// touch uneven, its end running past its start.
+fn circle_around(r: Rect, gap: f64) -> Vec<f64> {
+    let (cx, cy) = (r.x + r.w / 2.0, r.y + r.h / 2.0);
+    let (rx, ry) = (r.w / 2.0 * 1.12 + gap, r.h / 2.0 * 1.12 + gap);
+    let steps = 48;
+    let start = -std::f64::consts::FRAC_PI_2 - 0.4;
+    let sweep = std::f64::consts::TAU + 0.55;
+    (0..=steps)
+        .flat_map(|i| {
+            let t = start + sweep * f64::from(i) / f64::from(steps);
+            let wobble = 1.0 + 0.025 * (2.7 * t + 0.6).sin() + 0.04 * f64::from(i) / f64::from(steps);
+            [r1(cx + rx * wobble * t.cos()), r1(cy + ry * wobble * t.sin())]
+        })
+        .collect()
+}
+
+/// An ink mark from draw_on_board's `ink` (TOOL-113), checked, as a stroke
+/// the session `by` drew. Positions are board coordinates.
+fn plan_mark(
+    board: &BoardState,
+    by: &str,
+    item: &Value,
+    index: usize,
+    keys: &HashMap<String, (String, Rect)>,
+) -> Result<InkStroke, String> {
+    let at = format!("ink[{index}]");
+    object(item, &at)?;
+    let marks = MARKS.join(", ");
+    let Some(mark) = string(item, "kind", &at)?.filter(|k| MARKS.contains(k)) else {
+        return Err(format!("{at}: kind must be {marks}"));
+    };
+    let color = color(item, &at)?.unwrap_or(InkColor::Graphite);
+    let size = match number(item, "size", &at)? {
+        None => 1.0,
+        Some(size) if (0.5..=4.0).contains(&size) => js::round(size * 100.0) / 100.0,
+        Some(_) => return Err(format!("{at}: size must be between 0.5 and 4")),
+    };
+    let gap = MARK_GAP + 2.0 * size;
+    let mut text = None;
+    let (kind, points) = match mark {
+        "pen" => {
+            let points: Vec<Point> = match item.get("points") {
+                Some(Value::Array(points)) => points.iter().map(point_of).collect::<Option<_>>().unwrap_or_default(),
+                _ => Vec::new(),
+            };
+            if points.len() < 2 || points.len() > INK_MAX_POINTS {
+                return Err(format!(
+                    "{at}: a pen stroke needs points, 2 to {INK_MAX_POINTS} of them, each [x, y] in board coordinates"
+                ));
+            }
+            (InkKind::Pen, points.iter().flat_map(|p| [r1(p.x), r1(p.y)]).collect())
+        }
+        "arrow" => {
+            let tip = |key: &str| -> Result<Tip, String> {
+                match item.get(key) {
+                    Some(Value::String(name)) => mark_target(board, by, name, keys, &at).map(Tip::Box),
+                    Some(value) => point_of(value).map(Tip::Point).ok_or_else(|| {
+                        format!("{at}: {key} must be an id from list_board, a key from shapes, \"self\", or a point {{\"x\", \"y\"}}")
+                    }),
+                    None => Err(format!("{at}: an arrow needs from and to")),
+                }
+            };
+            let (from, to) = (tip("from")?, tip("to")?);
+            let middle = |tip: &Tip| match tip {
+                Tip::Point(p) => (p.x, p.y),
+                Tip::Box(r) => (r.x + r.w / 2.0, r.y + r.h / 2.0),
+            };
+            let (fm, tm) = (middle(&from), middle(&to));
+            // From the edge of what it points from to just short of what it points at.
+            let end = |tip: &Tip, toward: (f64, f64)| match tip {
+                Tip::Point(p) => (p.x, p.y),
+                Tip::Box(r) => {
+                    let (x, y) = crate::look::edge_toward(*r, toward);
+                    let (dx, dy) = (toward.0 - x, toward.1 - y);
+                    let len = dx.hypot(dy).max(1.0);
+                    let step = (gap * 0.6).min(len / 3.0);
+                    (x + dx / len * step, y + dy / len * step)
+                }
+            };
+            let (a, b) = (end(&from, tm), end(&to, fm));
+            if (a.0 - b.0).hypot(a.1 - b.1) < 8.0 {
+                return Err(format!("{at}: the arrow’s ends are too close together to draw"));
+            }
+            (InkKind::Arrow, vec![r1(a.0), r1(a.1), r1(b.0), r1(b.1)])
+        }
+        "rect" => {
+            let r = mark_targets(board, by, item, "around", keys, &at)?;
+            let pad = gap * 0.7;
+            (
+                InkKind::Rect,
+                vec![r1(r.x - pad), r1(r.y - pad), r1(r.x + r.w + pad), r1(r.y + r.h + pad)],
+            )
+        }
+        "circle" => {
+            let r = mark_targets(board, by, item, "around", keys, &at)?;
+            (InkKind::Pen, circle_around(r, gap))
+        }
+        "underline" => {
+            let r = mark_targets(board, by, item, "under", keys, &at)?;
+            let y = r.y + r.h + gap * 0.6;
+            let (x0, x1) = (r.x, r.x + r.w);
+            (
+                InkKind::Pen,
+                vec![r1(x0), r1(y), r1((x0 + x1) / 2.0), r1(y + 3.0), r1(x1), r1(y - 1.0)],
+            )
+        }
+        _ => {
+            let words = string(item, "text", &at)?.map(js::trim).unwrap_or_default();
+            if words.is_empty() {
+                return Err(format!("{at}: a text mark needs some text"));
+            }
+            text = Some(js::slice_utf16(words, 0, INK_MAX_TEXT));
+            let (x, y) = (number(item, "x", &at)?, number(item, "y", &at)?);
+            let spot = match (x, y, item.get("beside")) {
+                (Some(x), Some(y), _) => Point { x, y },
+                (None, None, Some(Value::String(name))) => {
+                    let r = mark_target(board, by, name, keys, &at)?;
+                    Point {
+                        x: r.x + r.w + gap,
+                        y: r.y,
+                    }
+                }
+                _ => return Err(format!("{at}: a text mark needs x and y, or beside")),
+            };
+            (InkKind::Text, vec![r1(spot.x), r1(spot.y)])
+        }
+    };
+    let mut stroke = json!({ "id": new_id(), "kind": kind, "color": color, "points": points, "size": size });
+    if let Some(text) = text {
+        stroke["text"] = json!(text);
+    }
+    stroke[INK_BY] = json!(by);
+    clean_ink(&json!([stroke]))
+        .pop()
+        .ok_or_else(|| format!("{at} can’t be drawn"))
 }
 
 // ---------------------------------------------------------------------------
@@ -702,6 +1084,11 @@ fn plan_item(board: &BoardState, item: &Value, index: usize, pending: &[BoardSha
     }
     if board.links.get(id).is_some() {
         return Err(format!("{at}: “{id}” is a link; change it under links"));
+    }
+    if board.ink.iter().flatten().any(|s| s.id == id) {
+        return Err(format!(
+            "{at}: “{id}” is ink, which update_drawing doesn’t change; erase it and draw it again"
+        ));
     }
     let what = if board.nodes.contains_key(id) {
         Some((Moved::Card, "a card", ""))
@@ -859,16 +1246,21 @@ pub(crate) fn update(board: &mut BoardState, self_id: &str, args: &Value, now: f
 pub(crate) fn erase(board: &mut BoardState, args: &Value) -> Result<Value, String> {
     let ids: Vec<&str> = match args.get("ids") {
         Some(Value::Array(ids)) => ids.iter().filter_map(Value::as_str).collect(),
-        _ => return Err("ids must be a list of the ids of shapes and links, from list_board".into()),
+        _ => return Err("ids must be a list of the ids of shapes, links and ink, from list_board".into()),
     };
     if ids.is_empty() {
-        return Err("Nothing to erase: give the ids of shapes and links, from list_board".into());
+        return Err("Nothing to erase: give the ids of shapes, links and ink, from list_board".into());
     }
     let mut shapes: Vec<String> = Vec::new();
     let mut links: Vec<String> = Vec::new();
+    let mut ink: Vec<String> = Vec::new();
     let mut skipped = Vec::new();
     for id in ids {
-        if shapes.iter().chain(&links).any(|done| done == id) {
+        if shapes.iter().chain(&links).chain(&ink).any(|done| done == id) {
+            continue;
+        }
+        if board.ink.iter().flatten().any(|s| s.id == id) {
+            ink.push(id.to_owned());
             continue;
         }
         if board.shapes.get(id).is_some() {
@@ -880,11 +1272,11 @@ pub(crate) fn erase(board: &mut BoardState, args: &Value) -> Result<Value, Strin
             continue;
         }
         let reason = if board.nodes.contains_key(id) {
-            "it is a card; only shapes and links can be erased"
+            "it is a card; only shapes, links and ink can be erased"
         } else if board.notes.contains_key(id) {
-            "it is a note; only shapes and links can be erased"
+            "it is a note; only shapes, links and ink can be erased"
         } else if board.views.contains_key(id) {
-            "it is a view; only shapes and links can be erased"
+            "it is a view; only shapes, links and ink can be erased"
         } else {
             "not on the board"
         };
@@ -900,7 +1292,8 @@ pub(crate) fn erase(board: &mut BoardState, args: &Value) -> Result<Value, Strin
     links.extend(held);
     remove_links(board, &links);
     remove_shapes(board, &shapes);
-    let erased: Vec<&String> = shapes.iter().chain(&links).collect();
+    remove_ink(board, &ink);
+    let erased: Vec<&String> = shapes.iter().chain(&links).chain(&ink).collect();
     Ok(json!({ "erased": erased, "skipped": skipped }))
 }
 
@@ -916,6 +1309,7 @@ mod tests {
             color: InkColor::Graphite,
             at: at.map(|(x, y)| Point { x, y }),
             size: Size { w, h },
+            image: None,
         }
     }
 

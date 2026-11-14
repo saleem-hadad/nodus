@@ -12,30 +12,26 @@ impl BoardCanvas {
         self.board.as_ref().map(|b| b.ink.clone()).unwrap_or_default()
     }
 
-    /// INKUI-024: the ink changes at once on the board and is saved. On a
-    /// server board only the strokes that changed are sent, so what others
-    /// drew meanwhile stays (SRV-184).
+    /// INKUI-024: the ink changes at once on the board and is saved, only
+    /// the strokes that changed, so what others drew meanwhile stays: on a
+    /// server board the people on it (SRV-184), and on any board a session
+    /// drawing with its board tools (INKUI-029).
     fn set_ink(&mut self, next: Vec<InkStroke>, cx: &mut Context<'_, Self>) {
-        let before = self.ink_strokes();
+        let (changed, gone) = ink_diff(&self.ink_strokes(), &next);
         if let Some(b) = self.board.as_mut() {
             b.ink = next.clone();
         }
         if let Some(s) = self.source.as_mut() {
-            s.ink = next.clone();
+            s.ink = next;
         }
-        if self.on_server(cx) {
-            let (changed, gone) = ink_diff(&before, &next);
-            self.state.update(cx, |s, cx| s.change_ink(changed, gone, cx));
-        } else {
-            self.state.update(cx, |s, cx| s.save_ink(next, cx));
-        }
+        self.state.update(cx, |s, cx| s.change_ink(changed, gone, cx));
         cx.notify();
     }
 
     /// A change ⌘Z can take back (`commit`).
     pub(crate) fn ink_commit(&mut self, next: Vec<InkStroke>, cx: &mut Context<'_, Self>) {
         let current = self.ink_strokes();
-        let after = self.on_server(cx).then(|| next.clone());
+        let after = Some(next.clone());
         self.overlays
             .ink
             .history
@@ -49,7 +45,7 @@ impl BoardCanvas {
         let current = self.ink_strokes();
         let ink_changed = next != current;
         let out = change.outcome();
-        let after = (ink_changed && self.on_server(cx)).then(|| next.clone());
+        let after = ink_changed.then(|| next.clone());
         self.overlays
             .ink
             .history
@@ -62,9 +58,9 @@ impl BoardCanvas {
 
     /// A step back or forward: its ink, then its shapes and links.
     fn apply_step(&mut self, step: Step, cx: &mut Context<'_, Self>) {
-        // SRV-184: on a server board, only what the step itself changed.
+        // SRV-184, INKUI-029: only what the step itself changed.
         match (&step.ink_change, step.ink) {
-            (Some((from, to)), _) if self.on_server(cx) => {
+            (Some((from, to)), _) => {
                 let next = rebase_ink(&self.ink_strokes(), from, to);
                 self.set_ink(next, cx);
             }

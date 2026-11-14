@@ -143,6 +143,10 @@ pub struct NodusConfig {
     /// GitHub App, and a worktree per card ([`crate::hosting`]). None in the
     /// app, where none of that runs.
     pub hosting: Option<Arc<dyn crate::Hosting>>,
+    /// More folders a board's pictures are in, after `board-images`: a
+    /// server's uploads (SRV-163), which the board tools read pictures
+    /// from (TOOL-111). None in the app.
+    pub picture_dirs: Vec<PathBuf>,
 }
 
 impl NodusConfig {
@@ -165,6 +169,7 @@ impl NodusConfig {
             updates: None,
             secrets: None,
             hosting: None,
+            picture_dirs: Vec::new(),
         }
     }
 }
@@ -341,6 +346,9 @@ impl Nodus {
                 clock: nodus_board::real_clock(),
                 home: Some(config.home.clone()),
                 on_server: config.hosting.is_some(),
+                pictures: std::iter::once(crate::board::images_dir(&config.user_data))
+                    .chain(config.picture_dirs.iter().cloned())
+                    .collect(),
             });
             let server = Arc::new(McpServer::new(crate::VERSION, Some(tools)));
             let agents = Agents::new(&config.home, Arc::new(SystemClock));

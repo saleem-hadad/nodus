@@ -67,7 +67,7 @@ pub fn take_command(text: &str) -> Option<(Target, String)> {
 }
 
 /// Something selected on the board, which a new session gets to read first.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ContextItem {
     Session {
         title: String,
@@ -82,6 +82,50 @@ pub enum ContextItem {
         title: String,
         description: String,
     },
+    /// Shapes, pictures or ink selected (BAR-042, TOOL-111): what they are,
+    /// as words, how many, and the box around them, for the session to look at.
+    Area {
+        what: String,
+        count: usize,
+        x: f64,
+        y: f64,
+        w: f64,
+        h: f64,
+    },
+    /// Where on the board a bubble asked, and the area around it (BUBBLE-033):
+    /// the session's card goes there, over what the user pointed at.
+    Spot {
+        x: f64,
+        y: f64,
+        area: [f64; 4],
+    },
+}
+
+impl ContextItem {
+    /// How many things on the board it stands for.
+    pub fn count(&self) -> usize {
+        match self {
+            Self::Area { count, .. } => *count,
+            Self::Spot { .. } => 0,
+            _ => 1,
+        }
+    }
+}
+
+/// How a session is told to look: `look_at_board` is a board tool, and a
+/// session started with a prompt may build its first turn before its board
+/// tools are listed, so it's told how to load it (BAR-042, BUBBLE-033).
+const LOOK: &str = "look_at_board (a Nodus board tool; if it isn’t in your tools yet, load it first with ToolSearch, query \"select:mcp__nodus__look_at_board\")";
+
+/// `{"x": …, "y": …, "w": …, "h": …}`, rounded, as look_at_board takes an area.
+fn area_arg(x: f64, y: f64, w: f64, h: f64) -> String {
+    format!(
+        "{{\"x\": {}, \"y\": {}, \"w\": {}, \"h\": {}}}",
+        js::round(x),
+        js::round(y),
+        js::round(w),
+        js::round(h)
+    )
 }
 
 fn quote(text: &str) -> String {
@@ -121,6 +165,20 @@ fn describe(item: &ContextItem) -> String {
         }
         ContextItem::Note { text } => format!("## Note\n{}", js::trim(text)),
         ContextItem::View { title, description } => format!("## View “{title}”\n{}", js::trim(description)),
+        ContextItem::Area { what, x, y, w, h, .. } => format!(
+            "## On the board\n{what}, in the area at ({}, {}), {} by {} board units. To see them, call {LOOK} with area {}.",
+            js::round(*x),
+            js::round(*y),
+            js::round(*w),
+            js::round(*h),
+            area_arg(*x, *y, *w, *h)
+        ),
+        ContextItem::Spot { x, y, area } => format!(
+            "## Where I asked\nI asked this at ({}, {}) on my board, pointing at what is there; your card now sits with its top left on that spot. To see what I pointed at, call {LOOK} with area {}, and put what you draw for it near there.",
+            js::round(*x),
+            js::round(*y),
+            area_arg(area[0], area[1], area[2], area[3])
+        ),
     }
 }
 
@@ -130,7 +188,12 @@ pub fn with_context(items: &[ContextItem], prompt: &str) -> String {
     if items.is_empty() {
         return prompt.to_owned();
     }
-    let head = "For context, I selected these on my board:";
+    let selected = items.iter().any(|i| !matches!(i, ContextItem::Spot { .. }));
+    let head = if selected {
+        "For context, I selected these on my board:"
+    } else {
+        "For context:"
+    };
     let body = items.iter().map(describe).collect::<Vec<_>>().join("\n\n");
     format!("{head}\n\n{body}\n\n---\n\n{prompt}")
 }
@@ -176,6 +239,32 @@ mod tests {
         assert_eq!(take_command("/view"), None);
         assert_eq!(take_command("/views of x"), None);
         assert_eq!(take_command("add a /view"), None);
+    }
+
+    #[test]
+    fn with_context_points_the_session_at_what_it_should_look_at() {
+        let area = ContextItem::Area {
+            what: "1 picture and 2 ink marks".into(),
+            count: 3,
+            x: 10.4,
+            y: -20.0,
+            w: 300.0,
+            h: 200.0,
+        };
+        assert_eq!(area.count(), 3);
+        let prompt = with_context(&[area], "What is this?");
+        assert!(prompt.starts_with("For context, I selected these on my board:\n\n## On the board\n1 picture and 2 ink marks, in the area at (10, -20), 300 by 200 board units."));
+        assert!(prompt.contains(r#"with ToolSearch, query "select:mcp__nodus__look_at_board") with area {"x": 10, "y": -20, "w": 300, "h": 200}."#));
+        assert!(prompt.ends_with("---\n\nWhat is this?"));
+        let spot = ContextItem::Spot {
+            x: 100.0,
+            y: 50.0,
+            area: [-500.0, -350.0, 1200.0, 800.0],
+        };
+        assert_eq!(spot.count(), 0);
+        let prompt = with_context(&[spot], "Explain");
+        assert!(prompt.starts_with("For context:\n\n## Where I asked\nI asked this at (100, 50) on my board"));
+        assert!(prompt.contains(r#"area {"x": -500, "y": -350, "w": 1200, "h": 800}"#));
     }
 
     #[test]

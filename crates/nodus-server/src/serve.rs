@@ -142,14 +142,15 @@ async fn run(options: ServeOptions, log: &Logger) -> Result<(), String> {
         .map_err(|err| format!("Can't listen on {address}: {err}"))?;
     let address = listener.local_addr().map_err(|err| err.to_string())?;
     let run_home = env.home.clone();
-    let nodus = start_core(&data, env, options.host_socket, Arc::clone(&hosting) as _).await?;
+    let uploads = options.uploads.unwrap_or_else(|| crate::files::uploads_dir(&data));
+    let nodus = start_core(&data, env, options.host_socket, Arc::clone(&hosting) as _, &uploads).await?;
     // SRV-104: the pool moves sessions and frees accounts from now on.
     tokio::spawn(crate::pool::run(Arc::clone(&hosting.pool), nodus.clone()));
 
     let updates = crate::update::Updates::new(auth.github.api());
     let server = Arc::new(Server {
         nodus: nodus.clone(),
-        uploads: options.uploads.unwrap_or_else(|| crate::files::uploads_dir(&data)),
+        uploads,
         data: data.clone(),
         auth,
         hosting,
@@ -198,6 +199,7 @@ async fn start_core(
     env: ServerEnv,
     host_socket: Option<PathBuf>,
     hosting: Arc<dyn nodus_core::Hosting>,
+    uploads: &Path,
 ) -> Result<Nodus, String> {
     let ServerEnv { vars, home } = env;
     // Never `with_vars`, which asks `claude` its version: the `claude` it
@@ -213,6 +215,8 @@ async fn start_core(
         updates: Some(Arc::new(NoAppUpdates)),
         secrets: Some(Arc::new(SafeStorage::unavailable())),
         hosting: Some(hosting),
+        // Pictures put up on a server board are its uploads (SRV-163).
+        picture_dirs: vec![uploads.to_owned()],
         ..NodusConfig::new(data, tokio::runtime::Handle::current())
     })
     .map_err(|err| format!("Can't open the data in {}: {err}", data.display()))?;

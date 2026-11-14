@@ -7,13 +7,20 @@
 use gpui::{Context, Task};
 use nodus_board::compose::{ContextItem, with_context};
 use nodus_board::geometry::Point;
-use nodus_domain::{BoardNote, BubbleRoute, CreateSessionOptions, FolderColor, SessionModel, SessionStatus, js};
+use nodus_board::ink_draw::{fallback_width, stroke_box};
+use nodus_domain::{
+    BoardNote, BubbleRoute, CreateSessionOptions, FolderColor, Rect, SessionModel, SessionStatus, ShapeKind, js,
+};
 
 use super::canvas::BoardCanvas;
 use super::layout::{
     NEW_CARD_SIZE, NOTE_SIZE, card_obstacles, card_size, card_title, find_free_spot, is_terminal, spot_below,
     spot_for_new_session, truncate,
 };
+
+/// How much of the board around a bubble's spot a session is pointed at
+/// (BUBBLE-033), in board units.
+const SPOT_AREA: (f64, f64) = (1400.0, 1000.0);
 
 /// What the prompt bar sends (`Submission`).
 #[derive(Debug, Clone, PartialEq)]
@@ -80,9 +87,95 @@ impl BoardCanvas {
         (!card.node.archived && !is_terminal(card)).then(|| id.clone())
     }
 
-    /// BOARD-132: what a new session from the bar would read first.
+    /// BOARD-132: what a new session from the bar would read first, each
+    /// shape, picture and ink stroke counted.
     pub fn bar_context_count(&self) -> usize {
-        self.bar_context().1.len()
+        self.bar_context().1.iter().map(ContextItem::count).sum()
+    }
+
+    /// BAR-042: the shapes, pictures and ink stroke selected, as the area
+    /// they take, for a session to look at (TOOL-111).
+    fn selected_area(&self) -> Option<ContextItem> {
+        let shapes: Vec<&nodus_domain::BoardShape> = {
+            let ids = self.selected_shapes();
+            self.shapes().iter().filter(|s| ids.contains(&s.id)).collect()
+        };
+        let stroke = self
+            .overlays
+            .ink
+            .selected
+            .as_ref()
+            .and_then(|id| self.ink_strokes().into_iter().find(|s| &s.id == id));
+        let mut rects: Vec<Rect> = shapes.iter().map(|s| s.rect()).collect();
+        if let Some(stroke) = &stroke {
+            let b = stroke_box(stroke, &fallback_width);
+            rects.push(Rect {
+                x: b.x,
+                y: b.y,
+                w: b.w,
+                h: b.h,
+            });
+        }
+        let first = *rects.first()?;
+        let (x, y) = rects
+            .iter()
+            .fold((first.x, first.y), |(x, y), r| (x.min(r.x), y.min(r.y)));
+        let right = rects.iter().map(|r| r.x + r.w).fold(f64::NEG_INFINITY, f64::max);
+        let bottom = rects.iter().map(|r| r.y + r.h).fold(f64::NEG_INFINITY, f64::max);
+        let pictures = shapes.iter().filter(|s| s.kind == ShapeKind::Image).count();
+        let counts = [
+            (pictures, "picture", "pictures"),
+            (shapes.len() - pictures, "shape", "shapes"),
+            (usize::from(stroke.is_some()), "ink mark", "ink marks"),
+        ];
+        let parts: Vec<String> = counts
+            .iter()
+            .filter(|(n, ..)| *n > 0)
+            .map(|(n, one, many)| format!("{n} {}", if *n == 1 { one } else { many }))
+            .collect();
+        let what = match parts.as_slice() {
+            [one] => one.clone(),
+            [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+            [] => return None,
+        };
+        // A little room around them, so what they mark shows too.
+        let pad = 40.0;
+        Some(ContextItem::Area {
+            what,
+            count: shapes.len() + usize::from(stroke.is_some()),
+            x: x - pad,
+            y: y - pad,
+            w: right - x + pad * 2.0,
+            h: bottom - y + pad * 2.0,
+        })
+    }
+
+    /// BUBBLE-033: where a bubble asked, when something on the board is
+    /// near enough that it may be what the user pointed at.
+    fn bubble_spot(&self, at: Point) -> Option<ContextItem> {
+        let area = Rect {
+            x: at.x - SPOT_AREA.0 / 2.0,
+            y: at.y - SPOT_AREA.1 / 2.0,
+            w: SPOT_AREA.0,
+            h: SPOT_AREA.1,
+        };
+        let meets =
+            |r: Rect| r.x < area.x + area.w && area.x < r.x + r.w && r.y < area.y + area.h && area.y < r.y + r.h;
+        let near = self.nodes.iter().any(|n| !n.hidden && meets(n.rect()))
+            || self.ink_strokes().iter().any(|s| {
+                let b = stroke_box(s, &fallback_width);
+                meets(Rect {
+                    x: b.x,
+                    y: b.y,
+                    w: b.w,
+                    h: b.h,
+                })
+            });
+        near.then_some(ContextItem::Spot {
+            x: at.x,
+            y: at.y,
+            area: [area.x, area.y, area.w, area.h],
+        })
     }
 
     /// The selection as context, in board order: the non-terminal cards
@@ -124,6 +217,7 @@ impl BoardCanvas {
                     description: v.description.clone(),
                 }),
         );
+        items.extend(self.selected_area());
         (sources, items)
     }
 
@@ -131,7 +225,11 @@ impl BoardCanvas {
     pub fn submit_from_bar(&mut self, submission: Submission, cx: &mut Context<'_, Self>) -> Task<bool> {
         match submission {
             Submission::Session { text } => self.start_bar_session(&text, None, None, cx),
-            Submission::Into { session_id, text } => self.send_to_session(session_id, text, cx),
+            // BAR-042: shapes, pictures and ink selected with it go along.
+            Submission::Into { session_id, text } => {
+                let text = with_context(&self.selected_area().into_iter().collect::<Vec<_>>(), &text);
+                self.send_to_session(session_id, text, cx)
+            }
             // BOARD-136.
             Submission::View { text } => {
                 let made = self.create_view(text, None, cx);
@@ -223,7 +321,9 @@ impl BoardCanvas {
         model: Option<SessionModel>,
         cx: &mut Context<'_, Self>,
     ) -> Task<bool> {
-        let (sources, context) = self.bar_context();
+        let (sources, mut context) = self.bar_context();
+        let had_context = !context.is_empty();
+        context.extend(at.and_then(|at| self.bubble_spot(at)));
         let follow = at.is_none();
         let spot = at.unwrap_or_else(|| {
             let dock = self.dock();
@@ -267,7 +367,6 @@ impl BoardCanvas {
             model: model.map(|m| m.as_str().to_owned()),
             ..CreateSessionOptions::default()
         };
-        let had_context = !context.is_empty();
         let nodus = self.state.read(cx).nodus.clone();
         let rt = crate::board::core_rt(cx);
         let project_id = self.project_id.clone();

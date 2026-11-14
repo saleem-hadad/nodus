@@ -10,7 +10,10 @@ use nodus_board::notes::NotePatch;
 use nodus_domain::{FolderColor, json};
 use serde_json::{Map, Value};
 
+use crate::look::Look;
 use crate::schema::{BOARD_SERVER, INSTRUCTIONS, PROTOCOL_VERSION, SESSION_TOOL_NAMES, ToolLists};
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64;
 
 /// A boxed future, for trait methods.
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -92,6 +95,11 @@ pub trait BoardToolHandlers: Send + Sync {
     ) -> BoxFuture<'a, Result<Value, ToolError>>;
     /// What's on the board and where, and the links touching the caller's card.
     fn list_board(&self, project_id: &str, self_id: &str) -> Result<Value, ToolError>;
+    /// The board, or the part of it `args` asks for, as a picture, with the
+    /// key to the tags on it (TOOL-111).
+    fn look_at_board(&self, _project_id: &str, _self_id: &str, _args: &Value) -> Result<Look, ToolError> {
+        Err("The board can’t be shown as a picture here".into())
+    }
     /// Draws shapes and links, `args` as Claude gave them.
     fn draw_on_board(&self, project_id: &str, self_id: &str, args: &Value) -> Result<Value, ToolError>;
     /// Changes shapes and links, and moves cards, notes and views.
@@ -164,6 +172,9 @@ impl<H: BoardToolHandlers + ?Sized> BoardToolHandlers for Arc<H> {
     }
     fn list_board(&self, project_id: &str, self_id: &str) -> Result<Value, ToolError> {
         (**self).list_board(project_id, self_id)
+    }
+    fn look_at_board(&self, project_id: &str, self_id: &str, args: &Value) -> Result<Look, ToolError> {
+        (**self).look_at_board(project_id, self_id, args)
     }
     fn draw_on_board(&self, project_id: &str, self_id: &str, args: &Value) -> Result<Value, ToolError> {
         (**self).draw_on_board(project_id, self_id, args)
@@ -252,8 +263,15 @@ impl<H: BoardToolHandlers> McpServer<H> {
     async fn call_tool(&self, params: &Value, session_id: &str) -> Value {
         match self.dispatch(params, session_id).await {
             // TOOL-023: JSON.stringify(value, null, 2), without `isError`.
-            Ok(value) => serde_json::json!({
+            Ok(Reply::Json(value)) => serde_json::json!({
                 "content": [{ "type": "text", "text": json::to_string_pretty(&value).unwrap_or_default() }]
+            }),
+            // TOOL-111: the picture, then its key.
+            Ok(Reply::Look(look)) => serde_json::json!({
+                "content": [
+                    { "type": "image", "data": BASE64.encode(&look.png), "mimeType": "image/png" },
+                    { "type": "text", "text": json::to_string_pretty(&look.key).unwrap_or_default() }
+                ]
             }),
             // TOOL-024: a result, never a JSON-RPC error.
             Err(err) => serde_json::json!({
@@ -263,7 +281,7 @@ impl<H: BoardToolHandlers> McpServer<H> {
         }
     }
 
-    async fn dispatch(&self, params: &Value, session_id: &str) -> Result<Value, ToolError> {
+    async fn dispatch(&self, params: &Value, session_id: &str) -> Result<Reply, ToolError> {
         // TOOL-022: `arguments` when it's an object (an array is one too), else {}.
         let empty = Value::Object(Map::new());
         let args = match params.get("arguments") {
@@ -296,7 +314,10 @@ impl<H: BoardToolHandlers> McpServer<H> {
         };
         // `switch (params.name)` matches only a string.
         let tool = name_value.and_then(Value::as_str).unwrap_or_default();
-        match tool {
+        if tool == "look_at_board" {
+            return handlers.look_at_board(&project_id, session_id, args).map(Reply::Look);
+        }
+        let value = match tool {
             "create_note" => handlers.create_note(&notes_on()?, session_id, &patch()),
             "update_note" => {
                 // TOOL-031: before the project is looked up.
@@ -343,8 +364,16 @@ impl<H: BoardToolHandlers> McpServer<H> {
                 Ok(crate::chat::page_shown(created))
             }
             _ => Err(format!("Unknown tool {name}").into()),
-        }
+        };
+        value.map(Reply::Json)
     }
+}
+
+/// What a tool answers with: JSON written out for Claude to read, or the
+/// board as a picture with its key.
+enum Reply {
+    Json(Value),
+    Look(Look),
 }
 
 /// `{jsonrpc: '2.0', id, <key>: value}`, the id left out when the request had

@@ -6,7 +6,7 @@ use std::sync::Mutex;
 
 use nodus_board::notes::NotePatch;
 use nodus_domain::json as js_json;
-use nodus_tools::{BOARD_MCP_CONFIG, BOARD_TOOL_RULES, BoardToolHandlers, BoxFuture, McpServer, ToolError};
+use nodus_tools::{BOARD_MCP_CONFIG, BOARD_TOOL_RULES, BoardToolHandlers, BoxFuture, Look, McpServer, ToolError};
 use serde_json::{Value, json};
 
 const RUN: &str = "run-session";
@@ -159,6 +159,16 @@ impl BoardToolHandlers for Mock {
         self.record(json!(["eraseFromBoard", project_id, self_id, args]));
         Ok(json!({ "erased": ["sh1"], "skipped": [] }))
     }
+    fn look_at_board(&self, project_id: &str, self_id: &str, args: &Value) -> Result<Look, ToolError> {
+        self.record(json!(["lookAtBoard", project_id, self_id, args]));
+        if args.get("around") == Some(&json!("nope")) {
+            return Err("“nope” isn’t drawn on this board; list_board lists what’s there".into());
+        }
+        Ok(Look {
+            png: b"\x89PNG fake".to_vec(),
+            key: json!({ "tags": { "c1": { "id": "s1", "kind": "card" } } }),
+        })
+    }
 }
 
 fn server(mock: Mock) -> McpServer<Mock> {
@@ -249,6 +259,7 @@ async fn protocol_gives_every_session_the_note_and_view_tools_and_action_runs_th
         "create_project",
         "archive_self",
         "list_board",
+        "look_at_board",
         "draw_on_board",
         "update_drawing",
         "erase_from_board",
@@ -278,6 +289,7 @@ fn protocol_allows_every_tool_by_name_and_keeps_the_token_out_of_the_config() {
             "mcp__nodus__create_project",
             "mcp__nodus__archive_self",
             "mcp__nodus__list_board",
+            "mcp__nodus__look_at_board",
             "mcp__nodus__draw_on_board",
             "mcp__nodus__update_drawing",
             "mcp__nodus__erase_from_board",
@@ -539,7 +551,7 @@ async fn tools_say_the_board_isnt_there_before_handlers_are_given() {
     let reply = call_none(&server).await;
     assert_eq!(reply["result"]["content"][0]["text"], "The board is not available");
     let tools = server.answer(RUN, &json!({ "id": 1, "method": "tools/list" })).await;
-    assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 17);
+    assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 18);
 }
 
 async fn call_none(server: &McpServer<Mock>) -> Value {
@@ -621,19 +633,59 @@ async fn tools_describe_the_drawing_tools_with_the_ink_colours_and_drawable_kind
     let shape = &draw["inputSchema"]["properties"]["shapes"]["items"];
     assert_eq!(
         shape["properties"]["kind"]["enum"],
-        json!(["rect", "ellipse", "diamond", "text", "sticker"])
+        json!(["rect", "ellipse", "diamond", "text", "sticker", "image"])
     );
+    let mark = &draw["inputSchema"]["properties"]["ink"]["items"];
+    assert_eq!(
+        mark["properties"]["kind"]["enum"],
+        json!(["pen", "arrow", "rect", "text", "circle", "underline"])
+    );
+    assert_eq!(mark["required"], json!(["kind"]));
     assert_eq!(
         shape["properties"]["color"]["enum"],
         json!(["graphite", "red", "orange", "green", "blue", "purple"])
     );
     assert_eq!(shape["required"], json!(["kind"]));
     assert_eq!(tool("erase_from_board")["inputSchema"]["required"], json!(["ids"]));
-    // Each says to draw only when the user asks.
-    for name in ["draw_on_board", "update_drawing", "erase_from_board"] {
-        let description = tool(name)["description"].as_str().unwrap().to_owned();
-        assert!(description.contains("only when the user asks"), "{name}: {description}");
-    }
+    // TOOL-114: a session draws when asked and on its own when it helps,
+    // but changes and erases the user's drawings only when they ask.
+    let description = |name: &str| tool(name)["description"].as_str().unwrap().to_owned();
+    assert!(description("draw_on_board").contains("when the user asks"));
+    assert!(description("draw_on_board").contains("on your own when"));
+    assert!(description("update_drawing").contains("change the user’s own only when they ask"));
+    assert!(description("erase_from_board").contains("erase the user’s own only when they ask"));
+    let look = tool("look_at_board");
+    let area = &look["inputSchema"]["properties"]["area"];
+    assert_eq!(area["required"], json!(["x", "y", "w", "h"]));
+    assert!(look["inputSchema"].get("required").is_none());
+}
+
+#[tokio::test]
+async fn look_at_board_answers_with_the_picture_then_its_key() {
+    // TOOL-111: an image block, base64 PNG, then the key as JSON.
+    let server = server(Mock::default());
+    let reply = call(&server, "s1", "look_at_board", Some(json!({ "around": "self" }))).await;
+    let content = &reply["result"]["content"];
+    assert_eq!(content[0]["type"], "image");
+    assert_eq!(content[0]["mimeType"], "image/png");
+    assert_eq!(content[0]["data"], "iVBORyBmYWtl");
+    assert_eq!(content[1]["type"], "text");
+    let key: Value = serde_json::from_str(content[1]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(key["tags"]["c1"]["id"], "s1");
+    assert!(reply["result"].get("isError").is_none());
+    assert_eq!(
+        mock(&server).called("lookAtBoard"),
+        [json!(["lookAtBoard", "p1", "s1", { "around": "self" }])]
+    );
+    // Its errors are tool errors, as the others' are.
+    let failed = call(&server, "s1", "look_at_board", Some(json!({ "around": "nope" }))).await;
+    assert_eq!(failed["result"]["isError"], true);
+    assert_eq!(
+        text(&failed),
+        "“nope” isn’t drawn on this board; list_board lists what’s there"
+    );
+    let gone = call(&server, "gone", "look_at_board", None).await;
+    assert_eq!(text(&gone), "This session is no longer on a Nodus board");
 }
 
 // ---------------------------------------------------------------------------

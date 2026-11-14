@@ -23,8 +23,8 @@ use tokio_tungstenite::tungstenite::{self, ClientRequestBuilder, Message};
 
 use crate::{
     CallError, CallFrame, Frame, GITHUB_NONCE_PATH, HELLO_PATH, Hello, HttpError, MAX_FRAME, Nonce, NonceRequest,
-    Notice, PORT, Request, SETUP_CLAIM_PATH, SIGN_IN_PATH, SIGN_IN_POLL_PATH, SOCKET_PATH, SetupClaim, SetupClaimed,
-    SignInPoll, SignInPollRequest, SignInStart, SignInStarted,
+    Notice, PORT, PROVE_PATH, Proof, Request, SETUP_CLAIM_PATH, SIGN_IN_PATH, SIGN_IN_POLL_PATH, SOCKET_PATH,
+    SetupClaim, SetupClaimed, SignInPoll, SignInPollRequest, SignInStart, SignInStarted,
 };
 
 /// What a call waiting when the connection goes fails with.
@@ -46,7 +46,15 @@ pub enum ConnectError {
     /// A route answered this HTTP status, saying why.
     #[error("{message}")]
     Answered { status: u16, message: String },
+    /// What answered couldn't prove it's the server the secret is for, so
+    /// the secret wasn't sent (SRV-030).
+    #[error("{NOT_THE_SERVER}")]
+    NotTheServer,
 }
+
+/// What a connection says when the server couldn't prove it's the one a
+/// secret is for (SRV-030).
+pub const NOT_THE_SERVER: &str = "What answered at this address couldn’t prove it’s this server, so nothing secret was sent to it. Check that Tailscale is on, and the address.";
 
 /// How the connection ended: the close frame's code and reason, when the
 /// server sent one (1009 for a frame over the cap, 1013 for a client that
@@ -161,6 +169,8 @@ pub async fn hello(address: &str) -> Result<Hello, ConnectError> {
 }
 
 /// `POST /api/setup/claim` (SRV-060): the setup code for a setup token.
+/// The one secret sent without a proof (SRV-030): a server that proved it
+/// keeps the code would answer guesses at it past its 10 tries an hour.
 pub async fn claim_setup(address: &str, code: &str) -> Result<SetupClaimed, ConnectError> {
     let claim = SetupClaim { code: code.to_owned() };
     post(address, SETUP_CLAIM_PATH, None, &claim).await
@@ -267,8 +277,9 @@ const JSON: &str = "application/json";
 const OCTET_STREAM: &str = "application/octet-stream";
 
 /// One HTTP/1.1 request on its own connection, closed after it: with the
-/// token as `Authorization: Bearer` when there is one, and a body of the
-/// type it's paired with.
+/// token as `Authorization: Bearer` when there is one, sent only once the
+/// server has proved it's the token's (SRV-030), and a body of the type
+/// it's paired with.
 async fn http(
     address: &str,
     method: &str,
@@ -278,6 +289,9 @@ async fn http(
 ) -> Result<FileBody, ConnectError> {
     let authority = authority(address)?;
     let mut stream = TcpStream::connect(&authority).await?;
+    if let Some(token) = token {
+        prove(&mut stream, &authority, token).await?;
+    }
     let mut head = format!("{method} {target} HTTP/1.1\r\nHost: {authority}\r\nConnection: close\r\n");
     if let Some(token) = token {
         head.push_str(&format!("Authorization: Bearer {token}\r\n"));
@@ -315,17 +329,80 @@ async fn http(
     })
 }
 
+/// The most a proof's answer may be: a short JSON object.
+const PROOF_MAX: usize = 16 * 1024;
+
+/// SRV-030: asks the server at the other end of `stream` to prove it keeps
+/// `secret`'s hash, before the secret goes on the same connection. The
+/// answer is read to its exact length, so the connection carries on with
+/// the next request. One that doesn't know the secret (a revoked device's
+/// token, a setup token past its hour) is refused as the request itself
+/// would have been: 401.
+async fn prove(stream: &mut TcpStream, authority: &str, secret: &str) -> Result<(), ConnectError> {
+    let hash = crate::secret_hash(secret);
+    let mut bytes = [0u8; 32];
+    getrandom::fill(&mut bytes).map_err(|err| ConnectError::Protocol(err.to_string()))?;
+    let nonce: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+    let head = format!(
+        "GET {PROVE_PATH}?nonce={nonce}&hint={} HTTP/1.1\r\nHost: {authority}\r\n\r\n",
+        crate::hint(&hash)
+    );
+    stream.write_all(head.as_bytes()).await?;
+    let mut answer = Vec::new();
+    let mut chunk = [0u8; 1024];
+    let (split, length) = loop {
+        if let Some(split) = answer.windows(4).position(|w| w == b"\r\n\r\n") {
+            let head = String::from_utf8_lossy(&answer[..split]).to_ascii_lowercase();
+            match head.get(9..12).and_then(|code| code.parse::<u16>().ok()) {
+                Some(200) => {}
+                Some(404) => return Err(ConnectError::Refused(401)),
+                Some(403) => return Err(ConnectError::Refused(403)),
+                _ => return Err(ConnectError::NotTheServer),
+            }
+            let length = head
+                .split("\r\n")
+                .find_map(|line| line.strip_prefix("content-length:"))
+                .and_then(|len| len.trim().parse::<usize>().ok())
+                .filter(|&len| len <= PROOF_MAX)
+                .ok_or(ConnectError::NotTheServer)?;
+            break (split + 4, length);
+        }
+        if answer.len() > PROOF_MAX {
+            return Err(ConnectError::NotTheServer);
+        }
+        let read = stream.read(&mut chunk).await?;
+        if read == 0 {
+            return Err(ConnectError::NotTheServer);
+        }
+        answer.extend_from_slice(&chunk[..read]);
+    };
+    while answer.len() < split + length {
+        let read = stream.read(&mut chunk[..(split + length - answer.len()).min(1024)]).await?;
+        if read == 0 {
+            return Err(ConnectError::NotTheServer);
+        }
+        answer.extend_from_slice(&chunk[..read]);
+    }
+    let proof: Proof = serde_json::from_slice(&answer[split..split + length]).map_err(|_| ConnectError::NotTheServer)?;
+    if answer.len() != split + length || !crate::proves(&hash, &nonce, &proof.proof) {
+        return Err(ConnectError::NotTheServer);
+    }
+    Ok(())
+}
+
 impl Client {
     /// Opens the WebSocket at `address` (`http://host:port`, or `host:port`;
     /// port 7420 when it has none), with `token` as `Authorization: Bearer`,
-    /// the only place a token goes (SRV-022).
+    /// the only place a token goes (SRV-022), once the server has proved
+    /// it's the token's (SRV-030).
     pub async fn connect(address: &str, token: &str) -> Result<(Self, Events), ConnectError> {
         let authority = authority(address)?;
         let uri: Uri = format!("ws://{authority}{SOCKET_PATH}")
             .parse()
             .map_err(|_| ConnectError::Address(address.to_owned()))?;
         let request = ClientRequestBuilder::new(uri).with_header("Authorization", format!("Bearer {token}"));
-        let stream = TcpStream::connect(&authority).await?;
+        let mut stream = TcpStream::connect(&authority).await?;
+        prove(&mut stream, &authority, token).await?;
         let config = WebSocketConfig::default()
             .max_message_size(Some(MAX_FRAME))
             .max_frame_size(Some(MAX_FRAME));

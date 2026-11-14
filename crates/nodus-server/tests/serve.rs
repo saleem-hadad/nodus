@@ -697,6 +697,63 @@ async fn only_the_token_in_its_header_and_the_servers_own_names_get_in() {
     server.stop();
 }
 
+/// SRV-030: whatever answers at a server's address, a session that took
+/// its port while `serve` restarted or another machine where its name
+/// resolves, is sent no token unless it proves it keeps the token's hash.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_token_goes_only_to_the_server_that_keeps_it() {
+    // Something that answers every request as a server would, with a
+    // proof that isn't one, and keeps all it was sent.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let impostor = format!("http://{}", listener.local_addr().unwrap());
+    let heard = Arc::new(Mutex::new(Vec::<u8>::new()));
+    let kept = Arc::clone(&heard);
+    tokio::spawn(async move {
+        while let Ok((mut stream, _)) = listener.accept().await {
+            let kept = Arc::clone(&kept);
+            tokio::spawn(async move {
+                let mut buf = [0u8; 4096];
+                while let Ok(read) = stream.read(&mut buf).await {
+                    if read == 0 {
+                        break;
+                    }
+                    kept.lock().unwrap().extend_from_slice(&buf[..read]);
+                    let body = format!(r#"{{"proof":"{}"}}"#, "0".repeat(64));
+                    let answer = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}", body.len());
+                    let _ = stream.write_all(answer.as_bytes()).await;
+                }
+            });
+        }
+    });
+    let not_it = |err: ConnectError| assert!(matches!(err, ConnectError::NotTheServer), "{err:?}");
+    not_it(Client::connect(&impostor, TOKEN).await.err().unwrap());
+    not_it(nodus_wire::client::upload(&impostor, TOKEN, "a.txt", b"x").await.unwrap_err());
+    not_it(nodus_wire::client::download(&impostor, TOKEN, "a").await.unwrap_err());
+    let nonce = nodus_wire::client::github_nonce(&impostor, TOKEN, &Default::default()).await;
+    not_it(nonce.unwrap_err());
+    let heard = String::from_utf8_lossy(&heard.lock().unwrap()).into_owned();
+    assert!(heard.contains("GET /api/prove?nonce="), "{heard}");
+    assert!(!heard.contains(TOKEN), "{heard}");
+
+    // The server itself proves it, and only for a token it keeps.
+    let world = World::new();
+    let server = world.serve();
+    let (app, _events) = server.connect().await;
+    drop(app);
+    let hash = nodus_wire::secret_hash(TOKEN);
+    let nonce = "ab".repeat(32);
+    let host = format!("127.0.0.1:{}", server.port());
+    let asked = format!("/api/prove?nonce={nonce}&hint={}", nodus_wire::hint(&hash));
+    let (status, body) = get(server.port(), &asked, &[("Host", &host)]).await;
+    assert_eq!(status, 200, "{body}");
+    let proof: nodus_wire::Proof = serde_json::from_str(&body).unwrap();
+    assert!(nodus_wire::proves(&hash, &nonce, &proof.proof));
+    let other = nodus_wire::hint(&nodus_wire::secret_hash("not-the-token"));
+    let other = format!("/api/prove?nonce={nonce}&hint={other}");
+    assert_eq!(get(server.port(), &other, &[("Host", &host)]).await.0, 404);
+    server.stop();
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_frame_over_4_mb_closes_the_connection() {
     let world = World::new();

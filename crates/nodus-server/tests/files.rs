@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 
-use nodus_wire::client::{download, upload};
+use nodus_wire::client::{ConnectError, download, upload};
 use nodus_wire::{MAX_UPLOAD, Upload};
 use serde_json::json;
 
@@ -205,8 +205,9 @@ async fn turns_away_a_missing_or_wrong_token() {
     let world = World::new();
     let wrong = upload(&world.url(), "not-the-token", "a.txt", b"x").await.unwrap_err();
     assert_eq!(wrong.to_string(), "The server refused the connection (401)");
-    let refused = download(&world.url(), "not-the-token", PICTURE).await.unwrap();
-    assert_eq!(refused.status, 401);
+    // SRV-030: the server keeps no such token, so it isn't even sent.
+    let refused = download(&world.url(), "not-the-token", PICTURE).await.unwrap_err();
+    assert!(matches!(refused, ConnectError::Refused(401)), "{refused:?}");
     let host = format!("Host: 127.0.0.1:{}", world.port);
     let none = world.raw(&format!(
         "GET /api/files/{PICTURE} HTTP/1.1\r\n{host}\r\nConnection: close\r\n\r\n"

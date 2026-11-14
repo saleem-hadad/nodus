@@ -629,6 +629,8 @@ mod tests {
 
     /// A server of another protocol that answers `server:update` on its
     /// WebSocket, as every protocol does, with a `server-update` event first.
+    /// It proves it keeps the token `t` first, on the same connection, as
+    /// every server since SRV-030 does.
     async fn old_server_that_updates() -> String {
         use futures_util::{SinkExt as _, StreamExt as _};
         use tokio_tungstenite::tungstenite::Message;
@@ -636,11 +638,25 @@ mod tests {
         let address = listener.local_addr().unwrap();
         tokio::spawn(async move {
             while let Ok((mut stream, _)) = listener.accept().await {
-                let mut head = [0u8; 64];
-                let n = stream.peek(&mut head).await.unwrap_or(0);
-                if !String::from_utf8_lossy(&head[..n]).starts_with("GET /api/ws") {
-                    let mut request = [0u8; 1024];
-                    let _ = stream.read(&mut request).await;
+                // The request's head, byte by byte, so nothing after it is read.
+                let mut head = Vec::new();
+                let mut byte = [0u8; 1];
+                while !head.ends_with(b"\r\n\r\n") && stream.read(&mut byte).await.unwrap_or(0) == 1 {
+                    head.push(byte[0]);
+                }
+                let head = String::from_utf8_lossy(&head).into_owned();
+                if let Some(query) = head.strip_prefix("GET /api/prove?") {
+                    let nonce = query
+                        .split(['&', ' '])
+                        .find_map(|part| part.strip_prefix("nonce="))
+                        .unwrap();
+                    let body = format!(
+                        r#"{{"proof":"{}"}}"#,
+                        nodus_wire::proof(&nodus_wire::secret_hash("t"), nonce)
+                    );
+                    let answer = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}", body.len());
+                    stream.write_all(answer.as_bytes()).await.unwrap();
+                } else {
                     let body = format!(
                         r#"{{"name":"old","version":"0.1.0","protocol":{},"needsSetup":false}}"#,
                         PROTOCOL + 1
@@ -653,6 +669,7 @@ mod tests {
                     continue;
                 }
                 tokio::spawn(async move {
+                    // The upgrade comes next on the same connection.
                     let mut socket = tokio_tungstenite::accept_async(stream).await.unwrap();
                     while let Some(Ok(Message::Text(text))) = socket.next().await {
                         let call: Value = serde_json::from_str(text.as_str()).unwrap();

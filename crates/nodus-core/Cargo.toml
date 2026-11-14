@@ -34,6 +34,9 @@ tokio = { workspace = true, features = ["fs", "sync"] }
 tracing.workspace = true
 uuid.workspace = true
 
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
 # Members' avatars, from GitHub's avatar host only (SRV-045).
 [target.'cfg(not(windows))'.dependencies]
 reqwest = { workspace = true, features = ["rustls-tls"] }

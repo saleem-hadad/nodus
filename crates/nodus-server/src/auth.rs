@@ -237,6 +237,24 @@ impl Auth {
         self.audit.record(event, member, device, details);
     }
 
+    /// SRV-030: the proof for `nonce` that this server keeps the secret
+    /// `hint` names: a device's token, the dev token, or, while there's no
+    /// member, a setup token. None for any other, and never the setup code.
+    pub(crate) fn prove(&self, nonce: &str, hint: &str) -> Option<String> {
+        if !nodus_wire::is_hex(nonce, 32..=128) || !nodus_wire::is_hex(hint, 16..=16) {
+            return None;
+        }
+        let mut hashes: Vec<String> = self.lock().devices.iter().map(|d| d.token_hash.clone()).collect();
+        hashes.extend(self.dev_token.as_deref().map(sha256_hex));
+        if self.needs_setup() {
+            hashes.extend(setup::token_hashes(&self.data, now_ms()).unwrap_or_default());
+        }
+        hashes
+            .iter()
+            .find(|hash| nodus_wire::hint(hash) == hint)
+            .map(|hash| nodus_wire::proof(hash, nonce))
+    }
+
     // ---- the server and its setup (SRV-060, SRV-061)
 
     /// The server's name: step 1's, else the machine's.

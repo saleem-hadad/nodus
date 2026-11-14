@@ -167,6 +167,20 @@ fn check_token(data: &Path, token: &str, now: f64, using: bool) -> Result<bool, 
     })
 }
 
+/// The hashes of the setup tokens still good: what a proof may be asked
+/// for (SRV-030). Never the code's, which would answer guesses at it.
+pub(crate) fn token_hashes(data: &Path, now: f64) -> Result<Vec<String>, String> {
+    with_file(data, |file| {
+        let hashes = file
+            .tokens
+            .iter()
+            .filter(|kept| now - kept.last_used_at < TOKEN_IDLE_MS)
+            .map(|kept| kept.hash.clone())
+            .collect();
+        (false, hashes)
+    })
+}
+
 /// Setup is over: the code and every setup token go (SRV-060).
 pub(crate) fn finish(data: &Path) -> Result<(), String> {
     with_file(data, |file| {

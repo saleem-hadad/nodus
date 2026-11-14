@@ -125,6 +125,15 @@ impl Fixture {
     /// Project p1 (repo `<home>/repo`) with card s1 at (2000, 0), and project
     /// p2, "Docs", with card d1.
     fn new() -> Self {
+        Self::made(false)
+    }
+
+    /// [`Fixture::new`], as the handlers run on a Nodus server (SRV-146).
+    fn on_a_server() -> Self {
+        Self::made(true)
+    }
+
+    fn made(on_server: bool) -> Self {
         let data = tempfile::TempDir::new().unwrap();
         let home = tempfile::TempDir::new().unwrap();
         let repo = home.path().join("repo");
@@ -159,6 +168,7 @@ impl Fixture {
             views: Arc::new(NoViews),
             clock: Arc::new(|| NOW),
             home: Some(home.path().to_owned()),
+            on_server,
         });
         Self {
             _data: data,
@@ -305,6 +315,18 @@ async fn adds_a_project_making_its_folder() {
         .unwrap();
     assert_eq!(again["alreadyAProject"], true);
     assert!(again.get("madeFolder").is_none());
+}
+
+#[tokio::test]
+async fn a_server_makes_no_project_and_no_folder_for_a_session() {
+    let f = Fixture::on_a_server();
+    let folder = f.home.path().join("made-by-a-session");
+    assert_eq!(
+        err(f.handlers.create_project(Some(&json!(folder.to_string_lossy())), None)),
+        nodus_tools::SERVER_PROJECTS
+    );
+    assert!(!folder.exists());
+    assert!(f.events.take().is_empty());
 }
 
 #[tokio::test]

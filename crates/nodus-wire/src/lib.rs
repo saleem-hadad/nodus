@@ -29,6 +29,7 @@ pub mod files;
 mod frame;
 mod pool;
 mod presence;
+mod proof;
 
 use serde::{Deserialize, Serialize};
 
@@ -38,6 +39,7 @@ pub use files::{FILES_PATH, MAX_UPLOAD, UPLOADS_PATH, Upload};
 pub use frame::{Answer, CallError, CallFrame, Frame, FrameError};
 pub use pool::{ACCOUNT_FAILED, AccountState, ClaudeAccount, UsageWindow};
 pub use presence::{PRESENCE_EVERY, PRESENCE_TIMEOUT, PresenceFrame};
+pub use proof::{PROVE_PATH, Proof, hint, is_hex, proof, proves, secret_hash};
 
 /// What the wire speaks. A client and a server with different protocols
 /// don't talk (SRV-027). 2: presence, `pty-size`, and ink by the stroke

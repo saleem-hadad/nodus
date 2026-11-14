@@ -30,7 +30,7 @@
 #               Owns /home/nodus-run (0750).
 #   /opt/nodus/bin/nodus           the server binary, owned by nodus, 0755
 #   /opt/nodus/bin/shims/gh        a link to it: sessions' gh (SRV-083)
-#   /srv/nodus/uploads             2770 nodus:nodus-run
+#   /srv/nodus/uploads             2750 nodus:nodus-run
 #   /etc/nodus/nftables.nft        the firewall, loaded by nodus-firewall.service
 
 main() {
@@ -282,7 +282,11 @@ create_users() {
 	run usermod --append --groups "$RUN_USER" "$SERVE_USER"
 
 	install -d -o root -g root -m 0755 /srv/nodus
-	install -d -o "$SERVE_USER" -g "$RUN_USER" -m 2770 "$UPLOADS"
+	# Sessions read uploads and write nothing there: a link they left in the
+	# server's folder would be read as nodus (SRV-163). chmod for upgrades
+	# from 2770.
+	install -d -o "$SERVE_USER" -g "$RUN_USER" -m 2750 "$UPLOADS"
+	chmod 2750 "$UPLOADS"
 	install -d -o root -g root -m 0755 /opt/nodus
 	# nodus can replace the binary (updates, SRV-200); nodus-run can only run it.
 	install -d -o "$SERVE_USER" -g "$SERVE_USER" -m 0755 "$BIN_DIR"
@@ -648,6 +652,9 @@ Description=Nodus server
 Documentation=https://github.com/$REPO
 After=network-online.target nodus-host.service tailscaled.service
 Wants=network-online.target nodus-host.service
+# Never give up restarting: if something else holds port 7420 for a while,
+# the server comes back once it's free.
+StartLimitIntervalSec=0
 
 [Service]
 User=$SERVE_USER
@@ -659,6 +666,11 @@ ExecStart=$BIN serve --host-socket $HOST_SOCKET --run-home $RUN_HOME --uploads $
 UMask=0027
 Restart=always
 RestartSec=1
+# $SERVE_USER runs nothing $RUN_USER could have written (SRV-005, SRV-013):
+# not a program in its home, the uploads or a temporary folder.
+NoExecPaths=$RUN_HOME /srv/nodus /tmp /var/tmp /dev/shm
+PrivateTmp=yes
+NoNewPrivileges=yes
 
 [Install]
 WantedBy=multi-user.target" && serve_changed=1

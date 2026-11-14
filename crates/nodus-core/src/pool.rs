@@ -89,7 +89,7 @@ impl Runner for PoolRunner {
                     .unwrap_or_default()
             });
             if !env.get(TOKEN_VAR).is_some_and(|token| !token.is_empty()) {
-                match hosted.hosting.claude_account() {
+                match hosted.hosting.claude_account(None) {
                     Ok(Some(account)) => {
                         env.insert(TOKEN_VAR.into(), account.token);
                     }
@@ -124,7 +124,7 @@ impl Inner {
         if kind == Some(SessionKind::Terminal) {
             return Ok(None);
         }
-        let Some(account) = hosted.hosting.claude_account()? else {
+        let Some(account) = hosted.hosting.claude_account(Some(session_id))? else {
             return Ok(None);
         };
         let recorded = self.store.update(|state| {

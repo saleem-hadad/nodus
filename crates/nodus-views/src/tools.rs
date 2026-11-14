@@ -25,6 +25,10 @@ fn waiting_names(view: &BoardView) -> Value {
     )
 }
 
+/// What a tool that may not let a view start sessions gets (VIEW-157).
+const STARTS_SESSIONS_REFUSED: &str =
+    "Only a session in auto mode, or the view’s own brain, can let a view start sessions";
+
 /// `clampViewSize({w: Number(width), h: Number(height)})` (VIEW-104).
 fn tool_size(args: &Value) -> PartialSize {
     clamp_view_size(PartialSize {
@@ -66,6 +70,17 @@ impl Views {
         self.find_view(project_id, Some(&Value::String(view_of)))
     }
 
+    /// Whether the calling session runs in auto mode: an `autoMode` card, or
+    /// an action run (VIEW-155). A session that isn't on the board doesn't.
+    fn writer_runs_in_auto_mode(&self, project_id: &str, self_id: &str) -> bool {
+        self.inner.store.read(|state| {
+            state
+                .board(project_id)
+                .and_then(|b| b.nodes.get(self_id))
+                .is_some_and(|n| n.auto_mode == Some(true) || n.run_of.is_some())
+        })
+    }
+
     /// The view a tool means: the one it names, or the caller's own when it
     /// names none (VIEW-109, VIEW-113).
     fn tool_view(&self, project_id: &str, self_id: &str, view_id: Option<&Value>) -> Result<BoardView, ViewError> {
@@ -92,6 +107,12 @@ impl Views {
         check_json(data.as_ref(), MAX_DATA_CHARS, "The data")?;
         let commands = args.get("commands").map(|c| normalize_commands(c, None)).transpose()?;
         let refresh = normalize_refresh(args.get("refresh"))?;
+        // VIEW-155, VIEW-157
+        let auto = self.writer_runs_in_auto_mode(project_id, self_id);
+        let start_sessions = args.get("start_sessions") == Some(&Value::Bool(true));
+        if start_sessions && !auto {
+            return Err(ViewError::new(STARTS_SESSIONS_REFUSED));
+        }
         let size = tool_size(args);
         let place = self.place_view(
             project_id,
@@ -119,7 +140,8 @@ impl Views {
             commands: commands.filter(|c| !c.is_empty()),
             refresh: refresh.clone(),
             // VIEW-115: only `true` itself.
-            starts_sessions: (args.get("start_sessions") == Some(&Value::Bool(true))).then_some(true),
+            starts_sessions: start_sessions.then_some(true),
+            auto_mode: Some(auto),
             version: 1,
             created_at: now,
             updated_at: now,
@@ -176,15 +198,27 @@ impl Views {
         let size = tool_size(args);
         let description = args.get("description").map(|d| clip(Some(d), MAX_DESCRIPTION_CHARS));
         let start_sessions = args.get("start_sessions").and_then(Value::as_bool);
+        // VIEW-156, VIEW-157: its own brain runs in the view's mode, so it may
+        // turn starting sessions on when the user asks it to.
+        let auto = self.writer_runs_in_auto_mode(project_id, self_id);
+        let own_brain = view.session_id.as_deref() == Some(self_id);
+        if start_sessions == Some(true) && !auto && !own_brain {
+            return Err(ViewError::new(STARTS_SESSIONS_REFUSED));
+        }
 
         if let Some(html) = &html {
             write_html(&self.inner.user_data, &view.id, html)?;
         }
-        self.update_view(project_id, &view.id, |board, id| {
+        let downgraded = self.update_view(project_id, &view.id, |board, id| {
             if !title.is_empty() {
                 set_title(board, id, &title);
             }
             let v = &mut board.views[id];
+            // VIEW-156: a session not in auto mode takes the view out of it.
+            let downgraded = !auto && v.runs_in_auto_mode();
+            if downgraded {
+                v.auto_mode = Some(false);
+            }
             if let Some(description) = description.filter(|d| !d.is_empty()) {
                 v.description = description;
             }
@@ -209,8 +243,15 @@ impl Views {
                 v.version += 1;
             }
             v.updated_at = now;
-            Ok(())
+            Ok(downgraded)
         })?;
+        // And its brain with it; one that won't stop yet is stopped when it's next asked.
+        if downgraded
+            && let Some(now_view) = self.view(project_id, &view.id)
+            && let Some(brain) = self.brain_node(project_id, &now_view)
+        {
+            let _ = self.settle_brain_mode(project_id, &now_view, brain).await;
+        }
         self.with_runtime(&view.id, |rt| {
             if refresh.is_some() {
                 rt.refreshed_at = Some(now);

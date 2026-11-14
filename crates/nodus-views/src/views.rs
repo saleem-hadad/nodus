@@ -401,6 +401,8 @@ impl Views {
             w: None,
             h: None,
             starts_sessions: None,
+            // VIEW-155: the user's own, so its brain runs in auto mode.
+            auto_mode: Some(true),
             allowed_runs: None,
             denied_runs: None,
             extra: Map::new(),

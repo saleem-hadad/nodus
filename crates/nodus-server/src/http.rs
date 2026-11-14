@@ -15,8 +15,8 @@ use hyper::{Method, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
 use nodus_wire::{
     GITHUB_CALLBACK_PATH, GITHUB_NONCE_PATH, GITHUB_START_PATH, HELLO_PATH, HttpError, MAX_FRAME, NonceRequest,
-    SETUP_CLAIM_PATH, SIGN_IN_PATH, SIGN_IN_POLL_PATH, SOCKET_PATH, SetupClaim, SetupClaimed, SignInPoll,
-    SignInPollRequest, SignInStart,
+    PROVE_PATH, Proof, SETUP_CLAIM_PATH, SIGN_IN_PATH, SIGN_IN_POLL_PATH, SOCKET_PATH, SetupClaim, SetupClaimed,
+    SignInPoll, SignInPollRequest, SignInStart,
 };
 use serde::de::DeserializeOwned;
 use serde_json::json;
@@ -75,6 +75,15 @@ async fn route(server: &Arc<Server>, req: Request<Incoming>, peer: SocketAddr) -
     let auth = &server.auth;
     match (req.method().clone(), req.uri().path()) {
         (Method::GET, HELLO_PATH) => json(&auth.hello()),
+        // SRV-030: before a secret comes on this connection.
+        (Method::GET, PROVE_PATH) => {
+            let query = manifest::query(req.uri());
+            let (nonce, hint) = (query.get("nonce"), query.get("hint"));
+            match nonce.zip(hint).and_then(|(nonce, hint)| auth.prove(nonce, hint)) {
+                Some(proof) => json(&Proof { proof }),
+                None => empty(StatusCode::NOT_FOUND),
+            }
+        }
         (Method::GET, SOCKET_PATH) => upgrade(server, req),
         (Method::POST, SETUP_CLAIM_PATH) => claim(server, req).await,
         (Method::POST, GITHUB_NONCE_PATH) => nonce(server, req).await,

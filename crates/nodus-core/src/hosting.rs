@@ -93,10 +93,13 @@ pub trait Hosting: Send + Sync {
     fn credential_helper(&self) -> String;
     /// SRV-101: the Claude account a Claude Code process about to start
     /// takes from the pool (`ok`, the least used in five hours, then the
-    /// least recently used), marked used. None when there's no pool, and
+    /// least recently used), marked used: a session's (`session_id`), which
+    /// the pool may hold to accounts it has run on (SRV-106), or a
+    /// background run's. None when there's no pool, and
     /// the process gets no token; Err with what to say when no account can
     /// take it.
-    fn claude_account(&self) -> Result<Option<crate::PoolAccount>, String> {
+    fn claude_account(&self, session_id: Option<&str>) -> Result<Option<crate::PoolAccount>, String> {
+        let _ = session_id;
         Ok(None)
     }
     /// SRV-102, SRV-103: a status line or `StopFailure` a session sent with
@@ -117,16 +120,35 @@ pub(crate) struct Hosted {
     preparing: std::sync::Mutex<HashMap<String, watch::Receiver<bool>>>,
     /// Whose client last wrote to each session (SRV-142).
     pub(crate) writers: crate::prompts::Writers,
+    /// Who owns the sessions' home (`nodus-run`, SRV-005): the only user
+    /// whose files the server reads from the sessions' folders (SRV-123).
+    sessions_owner: Option<u32>,
 }
 
 impl Hosted {
-    pub(crate) fn new(hosting: Arc<dyn Hosting>) -> Self {
+    /// `home` is the sessions' home.
+    pub(crate) fn new(hosting: Arc<dyn Hosting>, home: &Path) -> Self {
         Self {
             hosting,
             jobs: std::sync::Mutex::default(),
             preparing: std::sync::Mutex::default(),
             writers: crate::prompts::Writers::default(),
+            sessions_owner: owner_of(home),
         }
+    }
+}
+
+/// Who owns a file or folder, where files have owners.
+fn owner_of(path: &Path) -> Option<u32> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        std::fs::metadata(path).ok().map(|meta| meta.uid())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        None
     }
 }
 
@@ -204,6 +226,55 @@ fn short_id(session_id: &str, n: usize) -> String {
 fn project_home(project: &Project) -> PathBuf {
     let main = Path::new(&project.repo_path);
     main.parent().map_or_else(|| main.to_path_buf(), Path::to_path_buf)
+}
+
+/// How much of a setup log's end is read for its last line (SRV-123).
+const SETUP_TAIL: u64 = 4096;
+
+/// SRV-123: the last line of a card's setup log. The server reads it as its
+/// own user from a folder a session can change, so it takes only a regular
+/// file the sessions' user owns (`owner`), opened without following a link
+/// or waiting on a pipe, and only its last 4 KB. A link to one of the
+/// server's own files, a device that never ends, or a pipe gives nothing.
+async fn setup_line(log: &Path, owner: Option<u32>) -> String {
+    let log = log.to_path_buf();
+    tokio::task::spawn_blocking(move || read_tail(&log, owner, SETUP_TAIL).map(|text| last_line(&text)))
+        .await
+        .ok()
+        .and_then(Result::ok)
+        .unwrap_or_default()
+}
+
+/// At most the last `max` bytes of a regular file `owner` owns, without
+/// following a link at its end.
+fn read_tail(path: &Path, owner: Option<u32>, max: u64) -> std::io::Result<String> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    let mut file = options.open(path)?;
+    let meta = file.metadata()?;
+    let refused = || std::io::Error::other("not the sessions' own file");
+    if !meta.is_file() {
+        return Err(refused());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if owner.is_some_and(|owner| meta.uid() != owner) {
+            return Err(refused());
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = owner;
+    file.seek(SeekFrom::Start(meta.len().saturating_sub(max)))?;
+    let mut bytes = Vec::new();
+    file.take(max).read_to_end(&mut bytes)?;
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 /// What a run printed last, for the card (SRV-123).
@@ -471,12 +542,13 @@ impl Inner {
             .timeout(SETUP_TIMEOUT);
         let running = self.runner.run(request);
         tokio::pin!(running);
+        let owner = self.hosted().and_then(|hosted| hosted.sessions_owner);
         let mut shown = String::new();
         let ended = loop {
             tokio::select! {
                 ended = &mut running => break ended,
                 () = tokio::time::sleep(SETUP_POLL) => {
-                    let line = tokio::fs::read_to_string(&log).await.map(|t| last_line(&t)).unwrap_or_default();
+                    let line = setup_line(&log, owner).await;
                     if line != shown {
                         shown.clone_from(&line);
                         self.set_setup(&project.id, session_id, Some((SetupState::Running, line)));
@@ -484,10 +556,7 @@ impl Inner {
                 }
             }
         };
-        let line = tokio::fs::read_to_string(&log)
-            .await
-            .map(|t| last_line(&t))
-            .unwrap_or_default();
+        let line = setup_line(&log, owner).await;
         match ended {
             Ok(out) if out.succeeded() => self.set_setup(&project.id, session_id, None),
             Ok(out) => {
@@ -952,6 +1021,35 @@ mod tests {
         assert_eq!(last_line("one\n\x1b[32mtwo\x1b[0m\n\n"), "two");
         assert_eq!(last_line("10%\r50%\r100%\n"), "100%");
         assert_eq!(last_line(""), "");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn reads_only_the_end_of_a_setup_log_the_sessions_own() {
+        let dir = tempfile::tempdir().unwrap();
+        let me = owner_of(dir.path());
+        let log = dir.path().join("abcd1234.log");
+        let long = "x".repeat(10_000);
+        std::fs::write(&log, format!("{long}\nInstalling…\nDone\n")).unwrap();
+        assert_eq!(setup_line(&log, me).await, "Done");
+        assert_eq!(read_tail(&log, me, SETUP_TAIL).unwrap().len(), SETUP_TAIL as usize);
+        // Someone else's file is left alone.
+        assert_eq!(setup_line(&log, me.map(|uid| uid + 1)).await, "");
+
+        // SRV-123: a link, to a secret or a device that never ends, or a
+        // pipe in the log's place gives nothing, and never waits.
+        let secret = dir.path().join("session-key");
+        std::fs::write(&secret, "what the server keeps to itself").unwrap();
+        for target in [secret.as_path(), Path::new("/dev/zero")] {
+            std::fs::remove_file(&log).unwrap();
+            std::os::unix::fs::symlink(target, &log).unwrap();
+            assert_eq!(setup_line(&log, me).await, "");
+        }
+        std::fs::remove_file(&log).unwrap();
+        let made = std::process::Command::new("mkfifo").arg(&log).status().unwrap();
+        assert!(made.success());
+        let read = tokio::time::timeout(Duration::from_secs(5), setup_line(&log, me)).await;
+        assert_eq!(read.unwrap(), "");
     }
 
     #[test]

@@ -4,7 +4,10 @@
 //! `GET /api/files/<id>` gives back an upload, a board picture or a view's
 //! page. Both need a device's token (or the dev token, which only a server
 //! on loopback takes), never a setup token, and only ids of the form the
-//! server issues are ever looked up, so no request can name a path.
+//! server issues are ever looked up, so no request can name a path. Only
+//! regular files the server wrote itself are given back: the uploads
+//! folder is one its sessions can read (SRV-163), so a link there, or a
+//! file in the place of one, is never followed or served.
 
 use std::path::{Path, PathBuf};
 
@@ -54,9 +57,10 @@ pub(crate) fn uploads_dir(data: &Path) -> PathBuf {
 }
 
 /// An upload's mode: its group may read it. In `/srv/nodus/uploads`
-/// (2770, `nodus:nodus-run`) every file takes the folder's group, so the
+/// (2750, `nodus:nodus-run`) every file takes the folder's group, so the
 /// sessions, run as `nodus-run`, can read what was dropped on their
-/// terminal; nobody else can. Set outright, whatever the umask.
+/// terminal, and change nothing there; nobody else can. Set outright,
+/// whatever the umask.
 #[cfg(unix)]
 const UPLOAD_MODE: u32 = 0o640;
 
@@ -93,18 +97,11 @@ async fn upload(server: &Server, req: Request<Incoming>) -> Reply {
     let dir = &server.uploads;
     let file = dir.join(&id);
     let size = bytes.len() as u64;
-    let kept = async {
-        tokio::fs::create_dir_all(dir).await?;
-        let partial = dir.join(format!(".{id}.part"));
-        tokio::fs::write(&partial, bytes).await?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt as _;
-            tokio::fs::set_permissions(&partial, std::fs::Permissions::from_mode(UPLOAD_MODE)).await?;
-        }
-        tokio::fs::rename(&partial, &file).await
+    let kept = {
+        let (dir, file) = (dir.clone(), file.clone());
+        tokio::task::spawn_blocking(move || keep(&dir, &file, &bytes))
     };
-    if kept.await.is_err() {
+    if !matches!(kept.await, Ok(Ok(()))) {
         return status(StatusCode::INTERNAL_SERVER_ERROR);
     }
     let upload = Upload {
@@ -129,7 +126,8 @@ async fn download(server: &Server, id: &str) -> Reply {
     }
     let images = nodus_core::board_images_dir(&server.data);
     for dir in [server.uploads.clone(), images] {
-        if let Ok(bytes) = tokio::fs::read(dir.join(id)).await {
+        let path = dir.join(id);
+        if let Ok(Ok(bytes)) = tokio::task::spawn_blocking(move || read_own(&path)).await {
             let mut reply = Response::new(Full::new(Bytes::from(bytes)));
             let headers = reply.headers_mut();
             headers.insert("Content-Type", HeaderValue::from_static(content_type(id)));
@@ -156,6 +154,66 @@ async fn download(server: &Server, id: &str) -> Reply {
         }
     }
     status(StatusCode::NOT_FOUND)
+}
+
+/// Writes an upload as `.<id>.part` beside it, a new file, never one
+/// already there or a link in its place, with its mode set on the file
+/// itself, then renames it into place.
+fn keep(dir: &Path, file: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write as _;
+    std::fs::create_dir_all(dir)?;
+    let id = file.file_name().unwrap_or_default().to_string_lossy();
+    let partial = dir.join(format!(".{id}.part"));
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        options.mode(UPLOAD_MODE);
+    }
+    let mut out = options.open(&partial)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        out.set_permissions(std::fs::Permissions::from_mode(UPLOAD_MODE))?;
+    }
+    out.write_all(bytes)?;
+    out.sync_all()?;
+    drop(out);
+    std::fs::rename(&partial, file)
+}
+
+/// A file the server wrote itself: a regular file it owns, opened without
+/// following a link at its end or waiting on a pipe.
+fn read_own(path: &Path) -> std::io::Result<Vec<u8>> {
+    use std::io::Read as _;
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    let file = options.open(path)?;
+    let meta = file.metadata()?;
+    if !meta.is_file() || !owned_by_me(&meta) {
+        return Err(std::io::Error::other("not a file the server wrote"));
+    }
+    let mut bytes = Vec::new();
+    file.take(MAX_UPLOAD).read_to_end(&mut bytes)?;
+    Ok(bytes)
+}
+
+#[cfg(unix)]
+fn owned_by_me(meta: &std::fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt as _;
+    // SAFETY: geteuid has no preconditions and can't fail.
+    meta.uid() == unsafe { libc::geteuid() }
+}
+
+#[cfg(not(unix))]
+fn owned_by_me(_: &std::fs::Metadata) -> bool {
+    true
 }
 
 /// A file's type by its extension.
@@ -191,5 +249,41 @@ mod tests {
             "application/octet-stream"
         );
         assert_eq!(content_type("a.exe"), "application/octet-stream");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn gives_back_only_a_file_it_wrote_itself() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("0b9c41aa-1d2e-4f3a-8b4c-5d6e7f8a9b0c.txt");
+        keep(dir.path(), &file, b"hello").unwrap();
+        assert_eq!(read_own(&file).unwrap(), b"hello");
+
+        // SRV-163: a link in an upload's place, to the server's own secret
+        // or anything else, and a pipe, give nothing.
+        let secret = dir.path().join("github-app.pem");
+        std::fs::write(&secret, "-----BEGIN-----").unwrap();
+        let planted = dir.path().join("11111111-1111-1111-1111-111111111111.txt");
+        std::os::unix::fs::symlink(&secret, &planted).unwrap();
+        assert!(read_own(&planted).is_err());
+        let pipe = dir.path().join("22222222-2222-2222-2222-222222222222");
+        assert!(
+            std::process::Command::new("mkfifo")
+                .arg(&pipe)
+                .status()
+                .unwrap()
+                .success()
+        );
+        assert!(read_own(&pipe).is_err());
+        // And a link where an upload is being written is never written through.
+        let next = dir.path().join("33333333-3333-3333-3333-333333333333.txt");
+        let target = dir.path().join("target");
+        std::os::unix::fs::symlink(
+            &target,
+            dir.path().join(".33333333-3333-3333-3333-333333333333.txt.part"),
+        )
+        .unwrap();
+        assert!(keep(dir.path(), &next, b"x").is_err());
+        assert!(!target.exists());
     }
 }

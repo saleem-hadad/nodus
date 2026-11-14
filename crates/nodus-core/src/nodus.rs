@@ -337,6 +337,7 @@ impl Nodus {
                 views: Arc::new(CoreViewTools(views.clone())),
                 clock: nodus_board::real_clock(),
                 home: Some(config.home.clone()),
+                on_server: config.hosting.is_some(),
             });
             let server = Arc::new(McpServer::new(crate::VERSION, nodus_views::VIEW_GUIDE, Some(tools)));
             let agents = Agents::new(&config.home, Arc::new(SystemClock));
@@ -443,7 +444,10 @@ impl Nodus {
                 secrets,
                 remotes: Remotes::new(&config.user_data),
                 board_tool_rules: nodus_tools::BOARD_TOOL_RULES.iter().map(|&r| r.to_owned()).collect(),
-                hosted: config.hosting.clone().map(crate::hosting::Hosted::new),
+                hosted: config
+                    .hosting
+                    .clone()
+                    .map(|hosting| crate::hosting::Hosted::new(hosting, &config.home)),
             }
         });
         config

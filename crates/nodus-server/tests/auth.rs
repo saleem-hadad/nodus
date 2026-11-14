@@ -680,13 +680,11 @@ async fn the_wizard_claims_the_code_makes_the_app_and_its_first_member() {
     assert!(err.message.starts_with("Sign in to do that"), "{}", err.message);
 
     // SRV-062: a nonce needs a token, and the start page posts the manifest.
+    // One the server never gave isn't even sent (SRV-030).
     let refused = github_nonce(&server.url, "nope", &NonceRequest::default())
         .await
         .unwrap_err();
-    assert!(
-        matches!(refused, ConnectError::Answered { status: 401, .. }),
-        "{refused:?}"
-    );
+    assert!(matches!(refused, ConnectError::Refused(401)), "{refused:?}");
     let nonce = github_nonce(&server.url, &setup, &NonceRequest::default())
         .await
         .unwrap();
@@ -798,7 +796,7 @@ async fn the_wizard_claims_the_code_makes_the_app_and_its_first_member() {
     let gone = github_nonce(&server.url, &setup, &NonceRequest::default())
         .await
         .unwrap_err();
-    assert!(matches!(gone, ConnectError::Answered { status: 401, .. }), "{gone:?}");
+    assert!(matches!(gone, ConnectError::Refused(401)), "{gone:?}");
     let claimed = claim_setup(&server.url, &code).await.unwrap_err();
     assert!(
         matches!(claimed, ConnectError::Answered { status: 409, .. }),
@@ -1242,8 +1240,9 @@ async fn files_take_a_devices_token_but_never_a_setup_token() {
     assert_eq!(back.status, 200);
     let (studio, _) = server.connect(&token).await;
     let () = call(&studio, Request::DevicesRevoke { id: laptop.id }).await;
-    let gone = download(&server.url, &laptop_token, &kept.id).await.unwrap();
-    assert_eq!(gone.status, 401);
+    // SRV-030: the server no longer keeps its hash, so it isn't even sent.
+    let gone = download(&server.url, &laptop_token, &kept.id).await.unwrap_err();
+    assert!(matches!(gone, ConnectError::Refused(401)), "{gone:?}");
     let refused = upload(&server.url, "not-a-token", "a.txt", b"x").await.unwrap_err();
     assert!(matches!(refused, ConnectError::Refused(401)), "{refused:?}");
 }

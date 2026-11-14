@@ -61,7 +61,7 @@ The server runs Claude in auto mode, so it should reach none of your team's devi
 
 1. In the app, click the chevron beside **New Project** and choose **Connect to Server…** (or Settings → Servers → **Connect to Server…**).
 2. Type the server's address: its Tailscale name (`nodus-box`), its Tailscale IP, or `127.0.0.1` through a tunnel. Port 7420 is assumed.
-3. Type the setup code the installer printed. It works once, and the server takes 10 tries an hour. For a new one, run `sudo -u nodus -H /opt/nodus/bin/nodus setup-code` on the server.
+3. Type the setup code the installer printed. It works once, and the server takes 10 tries an hour. For a new one, run `sudo -u nodus -H /opt/nodus/bin/nodus setup-code` on the server. Do this with Tailscale on (or through the tunnel): the setup code is the one secret the app sends before the server has proved who it is. Every token after it goes only to a server that proves it keeps it.
 4. The setup wizard has five steps. Each is saved as you finish it, so closing the app picks up where you left off.
    1. **Name.** Everyone who connects sees it, and so does the GitHub App.
    2. **GitHub.** Create the server's GitHub App, for your account or an organization. GitHub's page opens: **tick Enable Device Flow before you create the App**, since Nodus signs people in with it. Leave **Let sessions change GitHub Actions workflows** off unless you need it. Then install the App on the repositories sessions may work on (see [Security rules](#security-rules)), and sign in with GitHub by typing the code the app shows on GitHub's page. You're the server's first member.
@@ -109,7 +109,7 @@ An app and a server that speak different protocols don't talk. The app then offe
 
 ## If the server is compromised
 
-A session that ran hostile code, as `nodus-run`, could read the repositories, the environments of the sessions running at the time (their Claude tokens included) and the Docker volumes, and could have left something behind to run later. It couldn't read the App key, the other Claude accounts, members, devices or the audit log. To recover:
+A session that ran hostile code, as `nodus-run`, could read the repositories, the environments of the sessions running at the time (their Claude tokens included) and the Docker volumes, and could have left something behind to run later. Something left behind sees the Claude token of every account a session uses after that, so treat every account as exposed. It couldn't read the App key, the accounts file, members, devices or the audit log, or run anything as `nodus`. To recover:
 
 1. Rebuild the VM from scratch.
 2. Replace the App key (Settings → Servers → GitHub → **Replace App Key…**), and delete the old one on the App's page on GitHub.

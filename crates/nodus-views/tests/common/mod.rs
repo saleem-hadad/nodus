@@ -23,6 +23,8 @@ pub struct FakeSessions {
     pub live: Mutex<HashSet<String>>,
     pub status: Mutex<HashMap<String, SessionStatus>>,
     pub log: Mutex<Vec<String>>,
+    /// Its processes outlive a kill.
+    pub stubborn: Mutex<bool>,
 }
 
 impl FakeSessions {
@@ -64,6 +66,10 @@ impl BoardSessions for FakeSessions {
     }
     fn kill(&self, session_id: &str) -> BoxFuture<'_, ()> {
         self.log.lock().unwrap().push(format!("kill:{session_id}"));
+        // Its process exits, unless it's stubborn.
+        if !*self.stubborn.lock().unwrap() {
+            self.live.lock().unwrap().remove(session_id);
+        }
         Box::pin(async {})
     }
     fn forget_status(&self, session_id: &str) {
@@ -208,7 +214,8 @@ pub fn node(id: &str, x: f64) -> BoardNode {
 
 impl Fixture {
     /// Project p1, whose folder is the data folder as in views.test.ts, with
-    /// card s1 at (2000, 0), telling time by `clock`.
+    /// card s1 at (2000, 0), in auto mode as new cards are (VIEW-155),
+    /// telling time by `clock`.
     pub fn with_clock(clock: Clock) -> Self {
         let home = tempfile::TempDir::new().unwrap();
         let user_data = tempfile::TempDir::new().unwrap();
@@ -220,7 +227,9 @@ impl Fixture {
         .unwrap();
         store.update(|s| {
             s.projects.push(project);
-            s.board_mut(P).nodes.insert("s1".into(), node("s1", 2000.0));
+            let mut s1 = node("s1", 2000.0);
+            s1.auto_mode = Some(true);
+            s.board_mut(P).nodes.insert("s1".into(), s1);
         });
         let transcripts = Arc::new(Transcripts::new(home.path().to_owned()));
         let sessions = Arc::new(FakeSessions::default());

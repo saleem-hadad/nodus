@@ -25,6 +25,13 @@ macro_rules! shot {
 pub const SLIDES: &[Slide] = &[
     Slide {
         version: "1.0.16",
+        title: "A smoother chat",
+        text: "Replies ease in, tool calls sit on tidy cards, and the box lifts as you type.",
+        light: shot!("1.0.16-chat-light"),
+        dark: shot!("1.0.16-chat-dark"),
+    },
+    Slide {
+        version: "1.0.16",
         title: "Frame your work",
         text: "Select a few things and press {⌥⌘G}. Claude names the frame, and it all moves together.",
         light: shot!("1.0.16-frames-light"),
@@ -36,6 +43,13 @@ pub const SLIDES: &[Slide] = &[
         text: "{⌘G} glues cards, notes and shapes together. Click one to grab them all.",
         light: shot!("1.0.16-groups-light"),
         dark: shot!("1.0.16-groups-dark"),
+    },
+    Slide {
+        version: "1.0.16",
+        title: "Talk to Claude",
+        text: "The mic now sits in the chat box, right beside Send.",
+        light: shot!("1.0.16-mic-light"),
+        dark: shot!("1.0.16-mic-dark"),
     },
 ];
 

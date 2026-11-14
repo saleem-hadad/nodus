@@ -336,14 +336,31 @@ pub(crate) fn list_board(board: &BoardState, self_id: &str, cards: &[SessionList
         .map(|l| link_line(board, l, self_id, &by_id))
         .collect();
 
-    json!({
+    let mut listed = json!({
         "linked_to_this_session": mine,
         "cards": card_items,
         "notes": note_items,
         "views": view_items,
         "shapes": shape_items,
         "links": link_items,
-    })
+    });
+    // FRAME-040, GROUP-040: frames and groups, when there are any.
+    let frame_items: Vec<Value> = nodus_board::frames::board_frames(board)
+        .into_iter()
+        .map(|(s, r)| {
+            let mut item = json!({ "id": s.id, "name": s.name });
+            put_box(&mut item, r);
+            item
+        })
+        .collect();
+    if !frame_items.is_empty() {
+        listed["frames"] = Value::Array(frame_items);
+    }
+    let groups: Vec<Value> = board.groups.values().map(|g| json!(g.members)).collect();
+    if !groups.is_empty() {
+        listed["groups"] = Value::Array(groups);
+    }
+    listed
 }
 
 // ---------------------------------------------------------------------------

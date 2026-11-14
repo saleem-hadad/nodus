@@ -7,7 +7,8 @@
 
 use gpui::{Context, Task};
 use nodus_domain::{
-    BoardNote, BoardSection, BoardSnapshot, NodePatch, Rect, SessionCard, SessionStatus, SessionUsage, ViewPatch,
+    BoardGroup, BoardNote, BoardSection, BoardSnapshot, NodePatch, Rect, SessionCard, SessionStatus, SessionUsage,
+    ViewPatch,
 };
 
 use crate::state::AppState;
@@ -260,7 +261,7 @@ impl AppState {
         .detach();
     }
 
-    /// `removeSection`: its cards stay where they are, ungrouped.
+    /// `removeSection`: the frame goes; what was in it stays where it is.
     pub fn remove_section(&mut self, section_id: &str, cx: &mut Context<'_, Self>) {
         let Some(board) = self.board.as_mut() else { return };
         board.sections.retain(|s| s.id != section_id);
@@ -278,6 +279,61 @@ impl AppState {
             crate::board::on_core(&rt, {
                 let (nodus, project_id, section_id) = (nodus.clone(), project_id.clone(), section_id.clone());
                 async move { nodus.board().remove_section(&project_id, &section_id).await }
+            })
+            .await;
+        })
+        .detach();
+    }
+
+    /// GROUP-030: groups saved, new or changed. A thing is in one group at
+    /// most, so each takes its things from any other; one left with fewer
+    /// than two goes, as the core keeps them.
+    pub fn save_groups(&mut self, groups: Vec<BoardGroup>, cx: &mut Context<'_, Self>) {
+        let Some(board) = self.board.as_mut() else { return };
+        if groups.is_empty() {
+            return;
+        }
+        for group in &groups {
+            for other in &mut board.groups {
+                if other.id != group.id {
+                    other.members.retain(|m| !group.members.contains(m));
+                }
+            }
+            match board.groups.iter_mut().find(|g| g.id == group.id) {
+                Some(existing) => *existing = group.clone(),
+                None => board.groups.push(group.clone()),
+            }
+        }
+        board.groups.retain(|g| g.members.len() >= 2);
+        let project_id = board.project.id.clone();
+        cx.notify();
+        let nodus = self.nodus.clone();
+        let rt = crate::board::core_rt(cx);
+        cx.spawn(async move |_, _| {
+            crate::board::on_core(&rt, {
+                let (nodus, project_id, groups) = (nodus.clone(), project_id.clone(), groups.clone());
+                async move { nodus.board().save_groups(&project_id, &groups).await }
+            })
+            .await;
+        })
+        .detach();
+    }
+
+    /// GROUP-031: groups come apart; their things stay.
+    pub fn remove_groups(&mut self, ids: Vec<String>, cx: &mut Context<'_, Self>) {
+        let Some(board) = self.board.as_mut() else { return };
+        if ids.is_empty() {
+            return;
+        }
+        board.groups.retain(|g| !ids.contains(&g.id));
+        let project_id = board.project.id.clone();
+        cx.notify();
+        let nodus = self.nodus.clone();
+        let rt = crate::board::core_rt(cx);
+        cx.spawn(async move |_, _| {
+            crate::board::on_core(&rt, {
+                let (nodus, project_id, ids) = (nodus.clone(), project_id.clone(), ids.clone());
+                async move { nodus.board().remove_groups(&project_id, &ids).await }
             })
             .await;
         })

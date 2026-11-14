@@ -221,6 +221,10 @@ impl BoardCanvas {
 
     /// A press on the empty pane (or inside a section's frame).
     pub(crate) fn pane_mouse_down(&mut self, e: &MouseDownEvent, window: &mut Window, cx: &mut Context<'_, Self>) {
+        // FRAME-013: a frame's edge under the press took it first.
+        if matches!(self.gesture, Gesture::FrameResize { .. }) {
+            return;
+        }
         self.pointer = Some(e.position);
         match e.button {
             MouseButton::Middle => {
@@ -345,6 +349,9 @@ impl BoardCanvas {
                 self.gesture = Gesture::Drag(drag.clone());
                 self.move_dragged(&drag, cx);
             }
+            Gesture::FrameResize { id, edges, start, rect } => {
+                self.frame_resize_move(&id, edges, start, rect, e.position, cx);
+            }
         }
     }
 
@@ -383,6 +390,9 @@ impl BoardCanvas {
                 }
             }
             Gesture::Drag(drag) => self.end_drag(&drag, cx),
+            Gesture::FrameResize { id, edges, start, rect } => {
+                self.end_frame_resize(&id, edges, start, rect, e.position, cx);
+            }
             other => self.gesture = other,
         }
         cx.notify();
@@ -391,22 +401,23 @@ impl BoardCanvas {
     // ---- clicks -----------------------------------------------------------------------
 
     /// `handleNodeClick`: select it (or add it), or with a multi-select key
-    /// held deselect it.
+    /// held deselect it; what's glued to it comes too (GROUP-010).
     fn handle_node_click(&mut self, id: &str, multi: bool, cx: &mut Context<'_, Self>) {
         self.selection_rect = false;
         let Some(selected) = self.node(id).map(|n| n.selected) else {
             return;
         };
         if !selected {
+            let group = self.with_groups(&[id.to_owned()]);
             for n in &mut self.nodes {
-                if n.id == id {
-                    n.selected = true;
+                if group.contains(&n.id) {
+                    n.selected = n.selectable || n.id == id;
                 } else if !multi {
                     n.selected = false;
                 }
             }
-        } else if multi && let Some(n) = self.node_mut(id) {
-            n.selected = false;
+        } else if multi {
+            self.deselect_group_of(id);
         }
         self.sync_selection(cx);
     }
@@ -559,6 +570,7 @@ impl BoardCanvas {
             let h = (y1.min(r.y + r.h) - y0.max(r.y)).max(0.0);
             n.selected = w * h > 0.0;
         }
+        self.select_groups();
         self.sync_selection(cx);
         cx.notify();
     }
@@ -694,17 +706,9 @@ impl BoardCanvas {
             self.busy.insert(self.draft_id.clone());
             return;
         }
+        // FRAME-012: a frame takes what’s in it along.
         if let NodeKind::Section { .. } = node.kind {
-            let members: Vec<String> = self
-                .board
-                .as_ref()
-                .and_then(|b| {
-                    section_views(&b.sections, &b.cards)
-                        .into_iter()
-                        .find(|g| g.section.id == lead)
-                        .map(|g| g.members.iter().map(|&i| b.cards[i].node.session_id.clone()).collect())
-                })
-                .unwrap_or_default();
+            let members = self.frame_contents(lead);
             self.busy.insert(lead.to_owned());
             for m in &members {
                 self.busy.insert(m.clone());
@@ -785,24 +789,11 @@ impl BoardCanvas {
             let card = &board.cards[n.card_index().unwrap_or(0)];
             !is_terminal(card) && is_in_archive(n.position, zone, card_size(card))
         });
-        // The card leading the drag picks the section (notes never do).
-        let lead_node = if node.is_card() {
-            Some(&node)
-        } else {
-            dragged_cards.first().copied()
-        };
-        let hot = if over_archive {
+        // FRAME-015: the frame the grabbed thing would land in lights up.
+        let hot = if over_archive || !super::frames::groupable(&node) {
             None
         } else {
-            lead_node.and_then(|n| {
-                let card = &board.cards[n.card_index().unwrap_or(0)];
-                section_at(
-                    n.position,
-                    &section_views(&board.sections, &board.cards),
-                    card.node.section_id.as_deref(),
-                    card_size(card),
-                )
-            })
+            section_at(node.position, &section_views(&board.sections, &board.cards), node.size)
         };
         if self.archive_hot != over_archive || self.hot_section != hot {
             self.archive_hot = over_archive;
@@ -823,70 +814,22 @@ impl BoardCanvas {
         let Some(node) = self.node(&lead).cloned() else { return };
         let Some(board) = self.board.clone() else { return };
 
-        // BOARD-054.
-        if let NodeKind::Section { index, .. } = node.kind {
+        // BOARD-054, FRAME-014: the frame and what it took along are saved
+        // where they landed; it keeps its size.
+        if let NodeKind::Section { .. } = node.kind {
             let sd = self.section_drag.take();
             self.moving_section = false;
-            let groups = section_views(&board.sections, &board.cards);
-            if let Some(group) = groups.get(index).filter(|g| g.section.id == lead) {
-                let dx = js::round(node.position.x - group.frame.x);
-                let dy = js::round(node.position.y - group.frame.y);
-                let landed = super::layout::SectionView {
-                    frame: Rect {
-                        x: group.frame.x + dx,
-                        y: group.frame.y + dy,
-                        ..group.frame
-                    },
-                    ..group.clone()
-                };
-                let mut patches: Vec<NodePatch> = group
-                    .members
+            let members = sd.map(|s| s.members).unwrap_or_default();
+            let mut moved: Vec<(String, Point)> = vec![(lead.clone(), node.position)];
+            moved.extend(
+                members
                     .iter()
-                    .map(|&i| {
-                        let c = &board.cards[i];
-                        NodePatch {
-                            session_id: c.node.session_id.clone(),
-                            x: Some(c.node.x + dx),
-                            y: Some(c.node.y + dy),
-                            ..NodePatch::default()
-                        }
-                    })
-                    .collect();
-                for c in &board.cards {
-                    if !c.node.archived
-                        && c.node.section_id.is_none()
-                        && section_at(
-                            Point {
-                                x: c.node.x,
-                                y: c.node.y,
-                            },
-                            std::slice::from_ref(&landed),
-                            None,
-                            card_size(c),
-                        )
-                        .as_deref()
-                            == Some(lead.as_str())
-                    {
-                        patches.push(NodePatch {
-                            session_id: c.node.session_id.clone(),
-                            section_id: Some(Some(lead.clone())),
-                            ..NodePatch::default()
-                        });
-                    }
-                }
-                let section = nodus_domain::BoardSection {
-                    x: landed.frame.x,
-                    y: landed.frame.y,
-                    ..group.section.clone()
-                };
-                self.state.update(cx, |s, cx| {
-                    s.patch_cards(patches, cx);
-                    s.save_section(section, cx);
-                });
-            }
+                    .filter_map(|id| self.node(id).map(|n| (id.clone(), n.position))),
+            );
+            self.move_things(&moved, cx);
             self.busy.remove(&lead);
-            for id in sd.map(|s| s.members).unwrap_or_default() {
-                self.busy.remove(&id);
+            for id in &members {
+                self.busy.remove(id);
             }
             self.rebuild(cx);
             return;
@@ -1001,17 +944,7 @@ impl BoardCanvas {
         }
         let is_bounced = |id: &str| bounced.iter().any(|(b, _)| b == id);
 
-        // BOARD-062: everything lands in the lead card's section.
-        let lead_card = if node.is_card() {
-            Some(&node)
-        } else {
-            moved_cards.first().copied()
-        };
-        let groups = section_views(&board.sections, &board.cards);
-        let target = lead_card.and_then(|n| {
-            let card = &board.cards[n.card_index().unwrap_or(0)];
-            section_at(n.position, &groups, card.node.section_id.as_deref(), card_size(card))
-        });
+        // BOARD-062, FRAME-010: what lands in a frame is in it; nothing to save but where.
         let patches: Vec<NodePatch> = moved_cards
             .iter()
             .filter(|n| !is_bounced(&n.id))
@@ -1024,7 +957,6 @@ impl BoardCanvas {
                     x: Some(js::round(n.position.x)),
                     y: Some(js::round(n.position.y)),
                     archived: Some(archived),
-                    section_id: Some(if archived { None } else { target.clone() }),
                     ..NodePatch::default()
                 }
             })
@@ -1322,12 +1254,19 @@ impl BoardCanvas {
                 self.select_all_active(cx);
                 true
             }
-            // BOARD-162.
-            "g" if modk && !m.shift && !m.alt => {
-                if sel.is_empty() {
+            // GROUP-001, GROUP-003, FRAME-020: ⌘G glues the selection
+            // together, ⇧⌘G takes it apart, ⌥⌘G frames it.
+            "g" if modk && !other => {
+                let things = self.selected_things();
+                if things.is_empty() {
                     return false;
                 }
-                self.group_cards(&sel, cx);
+                match (m.shift, m.alt) {
+                    (false, false) => self.group_things(&things, cx),
+                    (true, false) => self.ungroup_things(&things, cx),
+                    (false, true) => self.frame_things(&things, cx),
+                    (true, true) => return false,
+                }
                 true
             }
             // BOARD-178: copy and paste notes.
@@ -1374,11 +1313,11 @@ impl BoardCanvas {
             _ if plain => match ch.as_str() {
                 // BOARD-165.
                 "n" => {
-                    self.create_session(None, SessionKind::Claude, None, cx);
+                    self.create_session(None, SessionKind::Claude, cx);
                     true
                 }
                 "t" => {
-                    self.create_session(None, SessionKind::Terminal, None, cx);
+                    self.create_session(None, SessionKind::Terminal, cx);
                     true
                 }
                 // BOARD-166, BOARD-167, BOARD-169: the prompt bar and ink (spec 11).
@@ -1461,8 +1400,8 @@ impl BoardCanvas {
             return;
         }
         match command {
-            MenuCommand::NewSession => self.create_session(None, SessionKind::Claude, None, cx),
-            MenuCommand::NewTerminal => self.create_session(None, SessionKind::Terminal, None, cx),
+            MenuCommand::NewSession => self.create_session(None, SessionKind::Claude, cx),
+            MenuCommand::NewTerminal => self.create_session(None, SessionKind::Terminal, cx),
             // MODAL-031: over the session window (and the preview), which close.
             MenuCommand::Search => {
                 self.state.update(cx, |s, cx| {

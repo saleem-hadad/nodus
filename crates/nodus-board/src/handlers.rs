@@ -4,12 +4,14 @@
 use indexmap::IndexMap;
 use nodus_domain::js::{self, slice_utf16};
 use nodus_domain::{
-    BoardLink, BoardNode, BoardNote, BoardSection, BoardShape, Event, FolderColor, InkStroke, NodePatch, Rect,
-    SessionKind, SessionSearchHit, SummarizePhase, SummarizeProgress, SummaryResult, TranscriptMessage, Viewport,
+    BoardGroup, BoardLink, BoardNode, BoardNote, BoardSection, BoardShape, Event, FolderColor, InkStroke, NodePatch,
+    Rect, SessionKind, SessionSearchHit, SummarizePhase, SummarizeProgress, SummaryResult, TranscriptMessage, Viewport,
 };
 use nodus_platform::Env;
 use nodus_platform::runner::Runner;
-use nodus_transcripts::{ClaudeCall, NamingSource, SearchTarget, SummarizeTarget, is_agent_id, read_transcript};
+use nodus_transcripts::{
+    ClaudeCall, NamingKind, NamingSource, SearchTarget, SummarizeTarget, is_agent_id, read_transcript,
+};
 use serde_json::{Map, Value};
 
 use crate::archive::{drop_node, is_empty, unstick_notes};
@@ -135,7 +137,8 @@ impl Board {
     }
 
     /// `board:save-section`: ignores input without a string id or a finite
-    /// position (SESS-100, SESS-204).
+    /// position (SESS-100, SESS-204). A frame's size is kept within bounds
+    /// (FRAME-002); one sent without a size keeps the size it has.
     pub fn save_section(&self, project_id: &str, section: &Value) {
         let (Some(id), Some(x), Some(y)) = (
             string(section.get("id")),
@@ -147,7 +150,12 @@ impl Board {
         let now = self.now();
         self.store.update(|state| {
             let board = state.board_mut(project_id);
-            let created_at = board.sections.get(id).map_or(now, |s| s.created_at);
+            let stored = board.sections.get(id);
+            let created_at = stored.map_or(now, |s| s.created_at);
+            let size = match (finite(section.get("w")), finite(section.get("h"))) {
+                (Some(w), Some(h)) => crate::frames::clamp_frame(w, h),
+                _ => stored.and_then(|s| s.w.zip(s.h)),
+            };
             board.sections.insert(
                 id.to_owned(),
                 BoardSection {
@@ -156,6 +164,8 @@ impl Board {
                     color: folder_color(section.get("color")).unwrap_or(FolderColor::Blue),
                     x,
                     y,
+                    w: size.map(|(w, _)| w),
+                    h: size.map(|(_, h)| h),
                     created_at,
                     extra: Map::new(),
                 },
@@ -177,25 +187,57 @@ impl Board {
     }
 
     /// `board:name-section`, once the login-shell environment is ready: a name
-    /// from Claude for the sessions grouped in a section (SESS-102), asked
-    /// through `runner` (SRV-005).
+    /// from Claude for a frame holding these things (SESS-102, FRAME-031),
+    /// asked through `runner` (SRV-005). `ids` are cards' session ids and
+    /// notes', views' and shapes' ids, in the order they're named after.
     pub async fn name_section(
         &self,
         project_id: &str,
-        session_ids: &[String],
+        ids: &[String],
         env: &Env,
         runner: &dyn Runner,
     ) -> Result<String, BoardError> {
         let project = self.project(project_id)?;
-        let nodes = self.read_board(project_id, |_, board| {
-            session_ids
-                .iter()
-                .filter_map(|id| board.nodes.get(id).cloned())
+        enum Thing {
+            Node(Box<BoardNode>),
+            Words(NamingKind, String),
+        }
+        let things = self.read_board(project_id, |_, board| {
+            ids.iter()
+                .filter_map(|id| {
+                    if let Some(node) = board.nodes.get(id) {
+                        return Some(Thing::Node(Box::new(node.clone())));
+                    }
+                    if let Some(note) = board.notes.get(id) {
+                        return Some(Thing::Words(NamingKind::Note, note.text.clone()));
+                    }
+                    if let Some(view) = board.views.get(id) {
+                        return Some(Thing::Words(NamingKind::View, view.title.clone()));
+                    }
+                    let shape = board.shapes.get(id)?;
+                    shape
+                        .kind
+                        .has_text()
+                        .then(|| Thing::Words(NamingKind::Words, shape.text.clone()))
+                })
                 .collect::<Vec<_>>()
         });
         let mut sources = Vec::new();
-        for node in nodes {
-            // A shell says nothing about what the group is for.
+        for thing in things {
+            let node = match thing {
+                Thing::Node(node) => *node,
+                Thing::Words(kind, text) => {
+                    if !js::trim(&text).is_empty() {
+                        sources.push(NamingSource {
+                            kind,
+                            title: text,
+                            first_prompt: None,
+                        });
+                    }
+                    continue;
+                }
+            };
+            // A shell says nothing about what the frame is for.
             if node.kind == Some(SessionKind::Terminal) {
                 continue;
             }
@@ -211,6 +253,7 @@ impl Board {
                 .find(|t| !t.is_empty());
             if let Some(title) = title {
                 sources.push(NamingSource {
+                    kind: NamingKind::Session,
                     title,
                     first_prompt: meta.and_then(|m| m.first_prompt),
                 });
@@ -297,6 +340,19 @@ impl Board {
     pub fn remove_links(&self, project_id: &str, ids: &[String]) {
         self.store
             .update(|state| crate::shapes::remove_links(state.board_mut(project_id), ids));
+    }
+
+    /// `board:save-groups` (GROUP-030): new or changed groups, each checked.
+    pub fn save_groups(&self, project_id: &str, groups: &[BoardGroup]) {
+        let now = self.now();
+        self.store
+            .update(|state| crate::frames::save_groups(state.board_mut(project_id), groups, now));
+    }
+
+    /// `board:remove-groups` (GROUP-031): what was in them stays.
+    pub fn remove_groups(&self, project_id: &str, ids: &[String]) {
+        self.store
+            .update(|state| crate::frames::remove_groups(state.board_mut(project_id), ids));
     }
 
     /// `board:save-ink`, with strokes already cleaned (`cleanInk`, 04) (SESS-105).

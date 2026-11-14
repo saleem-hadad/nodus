@@ -94,7 +94,7 @@ const ADDED_INSTRUCTIONS = " The board also holds shapes (boxes, ellipses, diamo
 const ADDED_TOOLS = [
   {
     "name": "list_board",
-    "description": "Shows what is on this session’s Nodus board and where: the session cards (one of them this session’s), sticky notes, views and shapes, each with its id and its box (x and y are its top left corner in board units, y growing downward), and the links between them. linked_to_this_session says in words what this session’s card is linked to and from. The user links cards to show how their work relates, so look there to see which work bears on yours. Use it before drawing on the board, rearranging it or linking things on it.",
+    "description": "Shows what is on this session’s Nodus board and where: the session cards (one of them this session’s), sticky notes, views and shapes, each with its id and its box (x and y are its top left corner in board units, y growing downward), and the links between them. It lists the user’s frames too, named boxes whose contents move with them (what lies in a frame is what has its centre in its box), and groups, things the user glued together, each as the ids in it. linked_to_this_session says in words what this session’s card is linked to and from. The user links cards to show how their work relates, so look there to see which work bears on yours. Use it before drawing on the board, rearranging it or linking things on it.",
     "inputSchema": {
       "type": "object",
       "properties": {}

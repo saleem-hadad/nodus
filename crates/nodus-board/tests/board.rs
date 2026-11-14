@@ -482,10 +482,7 @@ async fn names_a_section_only_after_sessions_with_something_to_say() {
     let ids = vec!["term".to_owned(), B.to_owned(), "missing".to_owned()];
     // SESS-102
     let err = f.board.name_section("p", &ids, &env, &LocalRunner).await.unwrap_err();
-    assert_eq!(
-        err.to_string(),
-        "These sessions have nothing to name the section after yet"
-    );
+    assert_eq!(err.to_string(), "Nothing in this frame says what to name it yet");
     // With a title, the next thing it needs is claude, which this environment hasn't found.
     f.put(node(A, json!({ "title": "Fix login" })));
     let err = f
@@ -546,9 +543,9 @@ async fn lists_sessions_for_the_board_tools() {
     f.put(node("self", json!({ "createdByApp": true })));
     f.put(node(
         "term",
-        json!({ "kind": "terminal", "createdByApp": true, "createdAt": 1_700_000_000_000.9_f64 }),
+        json!({ "kind": "terminal", "createdByApp": true, "createdAt": 1_700_000_000_000.9_f64, "x": 2000 }),
     ));
-    f.put(node("run", json!({ "runOf": "a", "createdByApp": true })));
+    f.put(node("run", json!({ "runOf": "a", "createdByApp": true, "x": 2000 })));
     f.put(node("old", json!({ "archived": true, "createdByApp": true })));
     f.put(node("brain", json!({ "viewOf": "v", "createdByApp": true })));
     f.sessions.set_live(A, SessionStatus::Waiting);
@@ -558,7 +555,8 @@ async fn lists_sessions_for_the_board_tools() {
             .sections
             .insert("s".into(), serde_json::from_value(section).unwrap());
     });
-    // SESS-159
+    // SESS-159; FRAME-040: a card's frame is the one it lies in, here the
+    // one from before frames had a size, drawn round the card naming it.
     let list = f.board.session_list("p", Some("self"), false).unwrap();
     let json = nodus_domain::json::to_string(&list).unwrap();
     assert_eq!(
@@ -566,7 +564,7 @@ async fn lists_sessions_for_the_board_tools() {
         format!(
             concat!(
                 r#"[{{"id":"{a}","title":"Fix login","kind":"claude","status":"waiting for the user","running":true,"#,
-                r#""section":"Untitled section","branch":"main","lastReply":"Fixed","lastActive":"2026-11-01T10:00:02.000Z"}},"#,
+                r#""section":"Untitled frame","branch":"main","lastReply":"Fixed","lastActive":"2026-11-01T10:00:02.000Z"}},"#,
                 r#"{{"id":"term","title":"Terminal","kind":"terminal","status":"done","running":false,"lastActive":"2023-11-14T22:13:20.000Z"}},"#,
                 r#"{{"id":"run","title":"New session","kind":"claude","status":"done","running":false,"actionRun":true,"lastActive":"1970-01-01T00:00:00.005Z"}}]"#
             ),

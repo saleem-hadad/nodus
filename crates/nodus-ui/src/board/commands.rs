@@ -16,7 +16,7 @@ use nodus_domain::{
 use super::canvas::{BoardCanvas, NAME_LANDING_MS, TITLE_CLICK_MS};
 use super::layout::{
     self, NEW_CARD_SIZE, NOTE_SIZE, VIEW_SIZE, card_obstacles, card_size, card_title, contains_point, find_free_spot,
-    find_spot_beside, is_expanded, is_terminal, layout_group, new_section_corner, note_obstacles, pad_sheet_spot,
+    find_spot_beside, is_expanded, is_terminal, layout_frame, new_section_corner, note_obstacles, pad_sheet_spot,
     section_at, section_views, spot_for_new_session, spot_in_section, spot_right_of_archive, stack_top, view_obstacles,
 };
 use crate::terminal::actions::PreviewFind;
@@ -60,7 +60,8 @@ impl BoardCanvas {
         out
     }
 
-    fn groups(&self) -> Vec<layout::SectionView> {
+    /// The frames, with their boxes.
+    pub(crate) fn groups(&self) -> Vec<layout::SectionView> {
         self.board
             .as_ref()
             .map(|b| section_views(&b.sections, &b.cards))
@@ -102,6 +103,16 @@ impl BoardCanvas {
                 n.selected = ids.contains(&n.id);
             }
         }
+        self.sync_selection(cx);
+        cx.notify();
+    }
+
+    /// FRAME-026: exactly these things, of every kind, selected.
+    pub fn select_things(&mut self, ids: &[String], cx: &mut Context<'_, Self>) {
+        for n in &mut self.nodes {
+            n.selected = n.selectable && !n.hidden && ids.contains(&n.id);
+        }
+        self.selection_rect = false;
         self.sync_selection(cx);
         cx.notify();
     }
@@ -200,13 +211,7 @@ impl BoardCanvas {
     // ---- creating sessions ------------------------------------------------------------
 
     /// `createSession` (BOARD-099…BOARD-102).
-    pub fn create_session(
-        &mut self,
-        at: Option<Point>,
-        kind: SessionKind,
-        section: Option<String>,
-        cx: &mut Context<'_, Self>,
-    ) {
+    pub fn create_session(&mut self, at: Option<Point>, kind: SessionKind, cx: &mut Context<'_, Self>) {
         if self.board.is_none() {
             return;
         }
@@ -221,8 +226,6 @@ impl BoardCanvas {
             None => spot_for_new_session(dock, self.cards(), NEW_CARD_SIZE, &others),
         };
         let pos = round(spot);
-        // BOARD-100: it joins the section a card there would.
-        let joins = section.or_else(|| section_at(pos, &self.groups(), None, CARD_SIZE));
         // BOARD-101.
         let opts = CreateSessionOptions {
             x: pos.x,
@@ -245,16 +248,6 @@ impl BoardCanvas {
                     let id = card.node.session_id.clone();
                     c.state.update(cx, |s, cx| {
                         s.upsert_card(card, cx);
-                        if let Some(joins) = joins {
-                            s.patch_cards(
-                                vec![NodePatch {
-                                    session_id: id.clone(),
-                                    section_id: Some(Some(joins)),
-                                    ..NodePatch::default()
-                                }],
-                                cx,
-                            );
-                        }
                     });
                     c.ensure_visible(pos, NEW_CARD_SIZE, cx);
                     c.state.update(cx, |s, cx| s.open_terminal(&id, cx));
@@ -279,7 +272,7 @@ impl BoardCanvas {
             x: p.x - CARD_SIZE.w / 2.0,
             y: p.y - CARD_SIZE.h / 2.0,
         };
-        self.create_session(Some(at), kind, None, cx);
+        self.create_session(Some(at), kind, cx);
     }
 
     // ---- archiving, stopping, restoring ------------------------------------------------
@@ -486,17 +479,15 @@ impl BoardCanvas {
         .detach();
     }
 
-    // ---- sections --------------------------------------------------------------------
+    // ---- frames ----------------------------------------------------------------------
 
-    /// `addSection` (BOARD-085, BOARD-086).
-    fn add_section(&mut self, corner: Point, rename: bool, cx: &mut Context<'_, Self>) -> BoardSection {
+    /// `addSection` (BOARD-085, BOARD-086): a new frame at `frame`.
+    fn add_section(&mut self, frame: nodus_domain::Rect, rename: bool, cx: &mut Context<'_, Self>) -> BoardSection {
         let used: Vec<FolderColor> = self
             .board
             .as_ref()
             .map(|b| b.sections.iter().map(|s| s.color).collect())
             .unwrap_or_default();
-        let mut distinct = used.clone();
-        distinct.dedup();
         let distinct_count = FolderColor::ALL.iter().filter(|c| used.contains(c)).count();
         let color = FolderColor::ALL
             .iter()
@@ -507,8 +498,10 @@ impl BoardCanvas {
             id: uuid::Uuid::new_v4().to_string(),
             name: String::new(),
             color,
-            x: js::round(corner.x),
-            y: js::round(corner.y),
+            x: js::round(frame.x),
+            y: js::round(frame.y),
+            w: Some(js::round(frame.w)),
+            h: Some(js::round(frame.h)),
             created_at: crate::parity::now_ms(cx),
             extra: serde_json::Map::new(),
         };
@@ -520,7 +513,8 @@ impl BoardCanvas {
         section
     }
 
-    /// `nameSection` (BOARD-089, BOARD-090).
+    /// `nameSection` (BOARD-089, BOARD-090, FRAME-030): Claude names a new
+    /// frame after the things in it, `ids`.
     fn name_section(&mut self, section_id: String, ids: Vec<String>, cx: &mut Context<'_, Self>) {
         self.naming.insert(section_id.clone(), None);
         cx.notify();
@@ -536,7 +530,7 @@ impl BoardCanvas {
             let name = match named {
                 Ok(name) => Some(name),
                 Err(err) => {
-                    tracing::warn!("[sections] naming failed: {}", err.ipc_message());
+                    tracing::warn!("[frames] naming failed: {}", err.ipc_message());
                     None
                 }
             };
@@ -572,57 +566,36 @@ impl BoardCanvas {
         .detach();
     }
 
-    /// `groupCards` (BOARD-087…BOARD-091).
-    pub fn group_cards(&mut self, ids: &[String], cx: &mut Context<'_, Self>) {
+    /// FRAME-020…FRAME-022: a frame round these things (and whatever is
+    /// glued to them), tidied first when it would take in others; Claude
+    /// names it when something in it says what it's about.
+    pub fn frame_things(&mut self, ids: &[String], cx: &mut Context<'_, Self>) {
         let Some(board) = self.board.clone() else { return };
-        let targets: Vec<&SessionCard> = board
-            .cards
+        let ids = self.with_groups(ids);
+        let items: Vec<(String, nodus_domain::Rect)> = ids
             .iter()
-            .filter(|c| ids.contains(&c.node.session_id) && !c.node.archived)
+            .filter_map(|id| self.node(id).filter(|n| super::frames::groupable(n)))
+            .map(|n| (n.id.clone(), n.rect()))
             .collect();
-        if targets.is_empty() {
+        if items.is_empty() {
             return;
         }
-        let moving: Vec<&str> = targets.iter().map(|c| c.node.session_id.as_str()).collect();
-        let rest: Vec<SessionCard> = board
-            .cards
+        let others: Vec<nodus_domain::Rect> = self
+            .nodes
             .iter()
-            .filter(|c| !moving.contains(&c.node.session_id.as_str()))
-            .cloned()
-            .collect();
-        let frames: Vec<nodus_domain::Rect> = section_views(&board.sections, &rest)
-            .into_iter()
-            .map(|g| g.frame)
+            .filter(|n| super::frames::groupable(n) && !ids.contains(&n.id))
+            .map(super::scene::FlowNode::rect)
             .collect();
         let mut zones = vec![self.dock()];
-        zones.extend(frames);
-        let others = card_obstacles(rest.iter().filter(|c| !c.node.archived), &[]);
-        let (frame, positions) = layout_group(&targets, &others, &zones);
-        let nameable: Vec<String> = targets
+        zones.extend(self.groups().into_iter().map(|g| g.frame));
+        let (frame, positions) = layout_frame(&items, &others, &zones);
+        let nameable: Vec<String> = items
             .iter()
-            .filter(|c| !is_terminal(c) && (c.node.title.as_ref().is_some_and(|t| !t.is_empty()) || c.meta.is_some()))
-            .map(|c| c.node.session_id.clone())
+            .map(|(id, _)| id.clone())
+            .filter(|id| super::frames::says_something(&board, id))
             .collect();
-        let section = self.add_section(Point { x: frame.x, y: frame.y }, nameable.is_empty(), cx);
-        self.patch_cards(
-            targets
-                .iter()
-                .map(|c| {
-                    let to = positions
-                        .iter()
-                        .find(|(id, _)| id == &c.node.session_id)
-                        .map(|(_, p)| *p);
-                    NodePatch {
-                        session_id: c.node.session_id.clone(),
-                        section_id: Some(Some(section.id.clone())),
-                        x: to.map(|p| p.x),
-                        y: to.map(|p| p.y),
-                        ..NodePatch::default()
-                    }
-                })
-                .collect(),
-            cx,
-        );
+        let section = self.add_section(frame, nameable.is_empty(), cx);
+        self.move_things(&positions, cx);
         if !nameable.is_empty() {
             self.name_section(section.id, nameable, cx);
         }
@@ -631,27 +604,53 @@ impl BoardCanvas {
         self.ensure_visible(Point { x: frame.x, y: frame.y }, CARD_SIZE, cx);
     }
 
-    /// `createSectionAt` (BOARD-092).
+    /// `createSectionAt` (BOARD-092, FRAME-005): an empty frame one session
+    /// fits in, by the click or at the nearest free spot, shown.
     pub fn create_section_at(&mut self, p: Point, cx: &mut Context<'_, Self>) {
-        let mut obstacles = card_obstacles(self.cards().iter().filter(|c| !c.node.archived), &[]);
+        let mut obstacles: Vec<nodus_domain::Rect> = self
+            .nodes
+            .iter()
+            .filter(|n| super::frames::groupable(n))
+            .map(super::scene::FlowNode::rect)
+            .collect();
         obstacles.push(self.dock());
         obstacles.extend(self.groups().into_iter().map(|g| g.frame));
-        let corner = new_section_corner(p, &obstacles);
-        self.add_section(corner, true, cx);
+        let size = super::frames::NEW_FRAME_SIZE;
+        let corner = new_section_corner(p, &obstacles, size);
+        self.add_section(
+            nodus_domain::Rect {
+                x: corner.x,
+                y: corner.y,
+                w: size.w,
+                h: size.h,
+            },
+            true,
+            cx,
+        );
+        self.ensure_visible(corner, size, cx);
     }
 
-    /// `leaveSection` (BOARD-094).
+    /// `leaveSection` (BOARD-094): a card moved out of the frame it's in,
+    /// to a free spot right of it.
     pub fn leave_section(&mut self, session_id: &str, cx: &mut Context<'_, Self>) {
         let Some(card) = self.card(session_id).cloned() else {
             return;
         };
         let groups = self.groups();
-        let Some(group) = groups
-            .iter()
-            .find(|g| Some(&g.section.id) == card.node.section_id.as_ref())
-        else {
+        let Some(here) = section_at(
+            Point {
+                x: card.node.x,
+                y: card.node.y,
+            },
+            &groups,
+            card_size(&card),
+        ) else {
             return;
         };
+        let Some(group) = groups.iter().find(|g| g.section.id == here) else {
+            return;
+        };
+        let size = card_size(&card);
         let mut obstacles = card_obstacles(self.cards().iter().filter(|c| !c.node.archived), &[session_id]);
         obstacles.extend(self.notes_in_the_way());
         obstacles.push(self.dock());
@@ -668,29 +667,45 @@ impl BoardCanvas {
             },
             &obstacles,
             Some(group.frame),
-            CARD_SIZE,
+            size,
         );
         self.patch_cards(
             vec![NodePatch {
                 session_id: session_id.to_owned(),
                 x: Some(js::round(spot.x)),
                 y: Some(js::round(spot.y)),
-                section_id: Some(None),
                 ..NodePatch::default()
             }],
             cx,
         );
-        self.ensure_visible(spot, CARD_SIZE, cx);
+        self.ensure_visible(spot, size, cx);
     }
 
-    /// `New session in section` / `New terminal in section` (BOARD-097).
+    /// `New session in frame` / `New terminal in frame` (BOARD-097): at a
+    /// free slot inside it. A frame too small for the new card grows to
+    /// hold it (FRAME-024).
     pub fn create_in_section(&mut self, section_id: &str, kind: SessionKind, cx: &mut Context<'_, Self>) {
         let Some(group) = self.groups().into_iter().find(|g| g.section.id == section_id) else {
             return;
         };
-        let obstacles = card_obstacles(self.cards().iter().filter(|c| !c.node.archived), &[]);
-        let spot = spot_in_section(group.frame, &obstacles);
-        self.create_session(Some(spot), kind, Some(section_id.to_owned()), cx);
+        // The obstacles a new session's spot keeps clear of (BOARD-099).
+        let mut obstacles = card_obstacles(self.cards(), &[]);
+        obstacles.extend(self.notes_in_the_way());
+        let spot = spot_in_section(group.frame, &obstacles, Some(self.dock()), NEW_CARD_SIZE);
+        let f = group.frame;
+        let w = f.w.max(spot.x - f.x + NEW_CARD_SIZE.w + layout::SECTION_PAD);
+        let h = f.h.max(spot.y - f.y + NEW_CARD_SIZE.h + layout::SECTION_PAD);
+        if w > f.w || h > f.h {
+            let section = BoardSection {
+                x: f.x,
+                y: f.y,
+                w: Some(js::round(w)),
+                h: Some(js::round(h)),
+                ..group.section.clone()
+            };
+            self.state.update(cx, |s, cx| s.save_section(section, cx));
+        }
+        self.create_session(Some(spot), kind, cx);
     }
 
     /// BOARD-096.
@@ -706,7 +721,7 @@ impl BoardCanvas {
             .update(cx, |s, cx| s.save_section(BoardSection { color, ..section }, cx));
     }
 
-    /// BOARD-095.
+    /// BOARD-095, FRAME-025: the frame goes; what was in it stays.
     pub fn remove_section(&mut self, section_id: &str, cx: &mut Context<'_, Self>) {
         let id = section_id.to_owned();
         self.state.update(cx, |s, cx| s.remove_section(&id, cx));
@@ -849,7 +864,6 @@ impl BoardCanvas {
             NEW_CARD_SIZE,
         );
         let pos = round(spot);
-        let joins = section_at(pos, &self.groups(), None, CARD_SIZE);
         let opts = CreateSessionOptions {
             x: pos.x,
             y: pos.y,
@@ -876,16 +890,6 @@ impl BoardCanvas {
                             .and_then(|b| b.notes.iter().find(|n| n.id == note_id).cloned());
                         c.state.update(cx, |s, cx| {
                             s.upsert_card(card, cx);
-                            if let Some(joins) = joins {
-                                s.patch_cards(
-                                    vec![NodePatch {
-                                        session_id: id.clone(),
-                                        section_id: Some(Some(joins)),
-                                        ..NodePatch::default()
-                                    }],
-                                    cx,
-                                );
-                            }
                             if let Some(latest) = latest {
                                 s.save_note(
                                     BoardNote {
@@ -1110,7 +1114,6 @@ impl BoardCanvas {
         obstacles.extend(self.notes_in_the_way());
         let spot = find_spot_beside(anchor, NEW_CARD_SIZE, &obstacles, Some(self.dock()), VIEW_SESSION_GAP);
         let pos = round(spot);
-        let joins = section_at(pos, &self.groups(), None, CARD_SIZE);
         let opts = CreateSessionOptions {
             x: pos.x,
             y: pos.y,
@@ -1152,16 +1155,6 @@ impl BoardCanvas {
                 };
                 c.state.update(cx, |s, cx| {
                     s.upsert_card(card, cx);
-                    if let Some(joins) = joins {
-                        s.patch_cards(
-                            vec![NodePatch {
-                                session_id: id,
-                                section_id: Some(Some(joins)),
-                                ..NodePatch::default()
-                            }],
-                            cx,
-                        );
-                    }
                     s.save_note(note, cx);
                 });
                 c.ensure_visible(pos, NEW_CARD_SIZE, cx);

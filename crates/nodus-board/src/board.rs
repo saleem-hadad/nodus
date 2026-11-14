@@ -209,6 +209,7 @@ impl Board {
             // Links whose ends went while the board wasn't looking (a view
             // deleted, a card dropped) go too.
             crate::shapes::prune_links(board);
+            crate::frames::prune_groups(board);
             // SESS-078
             project.opened_at = Some(now);
             let snapshot = BoardSnapshot {
@@ -221,6 +222,7 @@ impl Board {
                 ink: board.ink.clone().unwrap_or_default(),
                 shapes: board.shapes.values().cloned().collect(),
                 links: board.links.values().cloned().collect(),
+                groups: board.groups.values().cloned().collect(),
                 viewport: board.viewport,
                 offline: false,
             };

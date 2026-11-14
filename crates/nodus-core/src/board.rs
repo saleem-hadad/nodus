@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 
 use nodus_domain::{
-    BoardLink, BoardNote, BoardPoint, BoardSection, BoardShape, BoardSnapshot, CreatedBy, InkStroke, NodePatch, Rect,
-    Viewport,
+    BoardGroup, BoardLink, BoardNote, BoardPoint, BoardSection, BoardShape, BoardSnapshot, CreatedBy, InkStroke,
+    NodePatch, Rect, Viewport,
 };
 use nodus_store::BoardState;
 use serde_json::Value;
@@ -187,9 +187,10 @@ impl BoardApi<'_> {
             .await;
     }
 
-    /// `board:name-section` (SESS-102): a short name from Claude for a
-    /// section holding these sessions, once the login shell's environment is
-    /// in. `These sessions have nothing to name the section after yet`.
+    /// `board:name-section` (SESS-102, FRAME-031): a short name from Claude
+    /// for a frame holding these things (cards by session id, notes, views
+    /// and shapes by id), once the login shell's environment is in.
+    /// `Nothing in this frame says what to name it yet`.
     pub async fn name_section(&self, project_id: &str, session_ids: &[String]) -> CommandResult<String> {
         if let Some(route) = self.nodus.route_project(project_id) {
             let (project_id, session_ids) = (project_id.to_owned(), session_ids.to_vec());
@@ -383,6 +384,32 @@ impl BoardApi<'_> {
         self.nodus
             .on_core(async {
                 self.nodus.inner.board.remove_links(project_id, ids);
+            })
+            .await;
+    }
+
+    /// `board:save-groups` (GROUP-030): creates or updates groups.
+    pub async fn save_groups(&self, project_id: &str, groups: &[BoardGroup]) {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, groups) = (project_id.to_owned(), groups.to_vec());
+            return route.run(Request::BoardSaveGroups { project_id, groups }).await;
+        }
+        self.nodus
+            .on_core(async {
+                self.nodus.inner.board.save_groups(project_id, groups);
+            })
+            .await;
+    }
+
+    /// `board:remove-groups` (GROUP-031): what was in them stays.
+    pub async fn remove_groups(&self, project_id: &str, ids: &[String]) {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, ids) = (project_id.to_owned(), ids.to_vec());
+            return route.run(Request::BoardRemoveGroups { project_id, ids }).await;
+        }
+        self.nodus
+            .on_core(async {
+                self.nodus.inner.board.remove_groups(project_id, ids);
             })
             .await;
     }

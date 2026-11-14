@@ -35,7 +35,7 @@ pub use chat::ChatLog;
 pub use claude::ClaudeCall;
 pub use lines::{Json, read_lines};
 pub use meta::{DiscoveredSession, MetaCache, meta_signature};
-pub use naming::{NamingError, NamingSource, name_section};
+pub use naming::{NamingError, NamingKind, NamingSource, name_section};
 pub use parse::{
     AssistantParts, HANDBACK_TOOL, UserText, assistant_parts, describe_tool_use, is_task_notification, message_text,
     prompt_full, time_of, tool_name, truncate, user_text,

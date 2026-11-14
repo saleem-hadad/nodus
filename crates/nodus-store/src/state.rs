@@ -2,8 +2,8 @@
 
 use indexmap::IndexMap;
 use nodus_domain::{
-    AppSettings, BoardLink, BoardNode, BoardNote, BoardSection, BoardShape, BoardView, CaptureKind, InkStroke, Project,
-    ProjectAction, ProjectGroup, Rect, ThemePreference, Viewport,
+    AppSettings, BoardGroup, BoardLink, BoardNode, BoardNote, BoardSection, BoardShape, BoardView, CaptureKind,
+    InkStroke, Project, ProjectAction, ProjectGroup, Rect, ThemePreference, Viewport,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -121,6 +121,9 @@ pub struct BoardState {
     /// Links between things on the board, oldest first.
     #[serde(default, skip_serializing_if = "Records::is_empty")]
     pub links: Records<BoardLink>,
+    /// Things glued together, oldest first (spec 17). Added after 1.0.14.
+    #[serde(default, skip_serializing_if = "Records::is_empty")]
+    pub groups: Records<BoardGroup>,
     /// Fields this version doesn't know, written back as they were read.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
@@ -193,6 +196,7 @@ impl Default for BoardState {
             ink: None,
             shapes: Records::default(),
             links: Records::default(),
+            groups: Records::default(),
             extra: Map::new(),
         }
     }

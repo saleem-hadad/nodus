@@ -75,7 +75,7 @@ impl BoardCanvas {
         let t = theme::tokens(cx);
         let rise = leaving.unwrap_or_else(|| enter(window, cx, "selection-bar-rise", DUR_MED, motion::ease_out));
         let me = cx.entity().downgrade();
-        let (merge, group, archive, clear) = (me.clone(), me.clone(), me.clone(), me);
+        let (merge, group, frame, archive, clear) = (me.clone(), me.clone(), me.clone(), me.clone(), me);
         let bar = div()
             .id(if leaving.is_none() {
                 "selection-bar"
@@ -124,18 +124,48 @@ impl BoardCanvas {
                         }),
                 ),
             )
-            .child(
+            .child(if counts.one_group {
+                // GROUP-021: one group selected: it comes apart.
+                button("selection-group")
+                    .ghost()
+                    .icon(Icon::Ungroup, 14., 2.)
+                    .label("Ungroup")
+                    .tooltip(format!("Ungroup ({})", keys("⇧⌘G")))
+                    .on_click(move |_, _, cx| {
+                        if let Some(c) = group.upgrade() {
+                            c.update(cx, |c, cx| {
+                                let ids = c.selected_things();
+                                c.ungroup_things(&ids, cx);
+                            });
+                        }
+                    })
+            } else {
                 button("selection-group")
                     .ghost()
                     .icon(Icon::Group, 14., 2.)
                     .label("Group")
-                    .tooltip(format!("Group into a section ({})", keys("⌘G")))
-                    .disabled(counts.group_count == 0)
+                    .tooltip(format!("Group, to move them together ({})", keys("⌘G")))
+                    .disabled(counts.count < 2)
                     .on_click(move |_, _, cx| {
                         if let Some(c) = group.upgrade() {
                             c.update(cx, |c, cx| {
-                                let ids = c.selected_cards();
-                                c.group_cards(&ids, cx);
+                                let ids = c.selected_things();
+                                c.group_things(&ids, cx);
+                            });
+                        }
+                    })
+            })
+            .child(
+                button("selection-frame")
+                    .ghost()
+                    .icon(Icon::Frame, 14., 2.)
+                    .label("Frame")
+                    .tooltip(format!("Put in a frame Claude names ({})", keys("⌥⌘G")))
+                    .on_click(move |_, _, cx| {
+                        if let Some(c) = frame.upgrade() {
+                            c.update(cx, |c, cx| {
+                                let ids = c.selected_things();
+                                c.frame_things(&ids, cx);
                             });
                         }
                     }),

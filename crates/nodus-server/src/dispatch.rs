@@ -131,6 +131,16 @@ pub(crate) async fn answer(nodus: Nodus, member: Option<String>, request: Reques
             board_changed(&nodus, &project_id);
             DONE
         }
+        Request::BoardSaveGroups { project_id, groups } => {
+            nodus.board().save_groups(&project_id, &groups).await;
+            board_changed(&nodus, &project_id);
+            DONE
+        }
+        Request::BoardRemoveGroups { project_id, ids } => {
+            nodus.board().remove_groups(&project_id, &ids).await;
+            board_changed(&nodus, &project_id);
+            DONE
+        }
 
         Request::SessionCreate { project_id, opts } => {
             let created = by.sessions().create(&project_id, &opts).await;

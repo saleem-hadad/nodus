@@ -14,7 +14,7 @@ When you change a behavior, change its entry in the same commit, and say what 0.
 | `06-updater-release.md` | updates, packaging, signing, CI, releases, the smoke test, the 0.9.4 handoff |
 | `07-capture.md` | floating capture: the panel, the double tap, screen context, the guess, submitting |
 | `08-projects-shell-ui.md` | title bar, settings, projects grid, project rail, theme tokens, menus, modals |
-| `09-board-canvas.md` | pan and zoom, selection, dragging, shortcuts, context menus, sections, archive, layout |
+| `09-board-canvas.md` | pan and zoom, selection, dragging, shortcuts, context menus, sections (now frames, 17), archive, layout |
 | `10-board-cards-notes.md` | session cards, expanded cards, the agent deck, the archive stack, notes and the pad |
 | `11-board-overlays.md` | the prompt bar, ⌘K search, the merge dialog, ink, the selection bar |
 | `12-terminal-ui.md` | terminals, the terminal modal, transcript preview, the agent viewer |
@@ -22,6 +22,7 @@ When you change a behavior, change its entry in the same commit, and say what 0.
 | `14-board-shapes-links.md` | Shapes, stickers, pictures and links on the board, and the dock tools that make them |
 | `15-motion.md` | things arriving and leaving, status changes, and Claude's signature: drawing, working, finishing, building a view, guessing |
 | `16-rich-sessions.md` | Claude cards as a chat: the transcript drawn as messages, charts, forms and pages from Claude, and the prompt queue the Stop hook hands over |
+| `17-frames-groups.md` | frames (what sections became) that hold whatever lies in them and keep their size, Claude naming them, and groups that glue things together |
 | `18-hosted.md` | hosted Nodus: the Linux server, its install, the wire, members and sign-in, GitHub, Claude accounts, worktrees, working together, updates, the security model |
 
 ## Compatibility with 0.9.4

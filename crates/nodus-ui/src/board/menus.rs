@@ -1,6 +1,7 @@
 //! The board's context menus (spec 09 § Context menus; BOARD-172…BOARD-177,
-//! BOARD-128): pane, card, terminal card, section, note, note pad and view,
-//! with 0.9.4's items, hints and enable rules.
+//! BOARD-128): pane, card, terminal card, frame, note, note pad, view and
+//! shape, with 0.9.4's items, hints and enable rules, and the group and frame
+//! items every thing has (spec 17).
 
 use std::rc::Rc;
 
@@ -8,7 +9,7 @@ use gpui::{Context, IntoElement, Pixels, Point as GPoint, WeakEntity};
 use nodus_domain::{FolderColor, SessionCard, SessionKind};
 
 use super::canvas::BoardCanvas;
-use super::layout::{is_expanded, is_terminal, section_views, split_notes};
+use super::layout::{card_size, is_expanded, is_terminal, section_at, section_views, split_notes};
 use super::scene::NodeKind;
 use crate::components::color_swatches::color_swatches;
 use crate::components::context_menu::MenuItem;
@@ -88,7 +89,7 @@ fn swatches(
 }
 
 impl BoardCanvas {
-    /// BOARD-173: right-click on the pane (or inside a section frame).
+    /// BOARD-173: right-click on the pane (or inside a frame).
     pub(crate) fn pane_menu(&mut self, at: GPoint<Pixels>, cx: &mut Context<'_, Self>) {
         if self.link_menu(at, cx) {
             return;
@@ -113,7 +114,7 @@ impl BoardCanvas {
                 in_archive,
             ),
             disabled(
-                item(&me, "New section here", Icon::SquareDashed, move |c, cx| {
+                item(&me, "New frame here", Icon::Frame, move |c, cx| {
                     c.create_section_at(p, cx);
                 }),
                 in_archive || in_section,
@@ -211,11 +212,41 @@ impl BoardCanvas {
             );
             items.push(MenuItem::Separator);
         }
+        items.extend(self.thing_items(&shape.id, me));
+        items.push(MenuItem::Separator);
         items.push(
             item(me, delete_label, Icon::Trash2, move |c, cx| c.delete_shapes(&ids, cx))
                 .hint(keys("⌫"))
                 .danger(),
         );
+        items
+    }
+
+    /// GROUP-020, FRAME-027: what every thing's menu offers for the
+    /// selection it's in (or it and what's glued to it): glue it together,
+    /// take its groups apart, put it in a frame.
+    fn thing_items(&self, id: &str, me: &WeakEntity<BoardCanvas>) -> Vec<MenuItem> {
+        let sel = self.selected_things();
+        let ids = if sel.iter().any(|s| s == id) && sel.len() > 1 {
+            sel
+        } else {
+            self.with_groups(&[id.to_owned()])
+        };
+        let mut items = Vec::new();
+        if ids.len() > 1 && self.exactly_one_group(&ids).is_none() {
+            let group = ids.clone();
+            items.push(item(me, "Group", Icon::Group, move |c, cx| c.group_things(&group, cx)).hint(keys("⌘G")));
+        }
+        if self.any_grouped(&ids) {
+            let ungroup = ids.clone();
+            items.push(
+                item(me, "Ungroup", Icon::Ungroup, move |c, cx| {
+                    c.ungroup_things(&ungroup, cx);
+                })
+                .hint(keys("⇧⌘G")),
+            );
+        }
+        items.push(item(me, "Put in a frame", Icon::Frame, move |c, cx| c.frame_things(&ids, cx)).hint(keys("⌥⌘G")));
         items
     }
 
@@ -278,32 +309,20 @@ impl BoardCanvas {
         }
     }
 
-    /// `cardSectionItems`: group it (or the selection it's in), or take it out.
+    /// `cardSectionItems`: the group and frame items, and moving it out of
+    /// the frame it's in (BOARD-094).
     fn card_section_items(&self, card: &SessionCard, me: &WeakEntity<BoardCanvas>) -> Vec<MenuItem> {
         if card.node.archived {
             return Vec::new();
         }
-        let sel = self.selected_cards();
-        let ids = if sel.contains(&card.node.session_id) && sel.len() > 1 {
-            sel
-        } else {
-            vec![card.node.session_id.clone()]
+        let mut items = self.thing_items(&card.node.session_id, me);
+        let at = nodus_board::geometry::Point {
+            x: card.node.x,
+            y: card.node.y,
         };
-        let count = self.board.as_ref().map_or(0, |b| {
-            b.cards
-                .iter()
-                .filter(|c| ids.contains(&c.node.session_id) && !c.node.archived)
-                .count()
-        });
-        let label = if count > 1 {
-            format!("Group {count} into section")
-        } else {
-            "Group into section".to_owned()
-        };
-        let mut items = vec![item(me, label, Icon::Group, move |c, cx| c.group_cards(&ids, cx)).hint(keys("⌘G"))];
-        if card.node.section_id.is_some() {
+        if section_at(at, &self.groups(), card_size(card)).is_some() {
             let id = card.node.session_id.clone();
-            items.push(item(me, "Remove from section", Icon::Ungroup, move |c, cx| {
+            items.push(item(me, "Move out of frame", Icon::SquareDashed, move |c, cx| {
                 c.leave_section(&id, cx);
             }));
         }
@@ -465,17 +484,17 @@ impl BoardCanvas {
         Some(rest.rsplit_once(':').map_or(rest.clone(), |(host, _)| host.to_owned()))
     }
 
-    /// The section menu.
+    /// The frame menu.
     fn section_menu(&self, index: usize, me: &WeakEntity<BoardCanvas>) -> Vec<MenuItem> {
         let Some(board) = &self.board else { return Vec::new() };
         let Some(group) = section_views(&board.sections, &board.cards).into_iter().nth(index) else {
             return Vec::new();
         };
         let id = group.section.id.clone();
-        let members: Vec<String> = group
-            .members
-            .iter()
-            .map(|&i| board.cards[i].node.session_id.clone())
+        let members: Vec<String> = self
+            .frame_contents(&id)
+            .into_iter()
+            .filter(|m| self.node(m).is_some_and(|n| n.selectable))
             .collect();
         let sessions: Vec<String> = group
             .members
@@ -500,15 +519,15 @@ impl BoardCanvas {
                 c.recolor_section(&recolor, color, cx);
             }),
             MenuItem::Separator,
-            item(me, "New session in section", Icon::Plus, move |c, cx| {
+            item(me, "New session in frame", Icon::Plus, move |c, cx| {
                 c.create_in_section(&new_session, SessionKind::Claude, cx);
             }),
-            item(me, "New terminal in section", Icon::SquareTerminal, move |c, cx| {
+            item(me, "New terminal in frame", Icon::SquareTerminal, move |c, cx| {
                 c.create_in_section(&new_terminal, SessionKind::Terminal, cx);
             }),
             disabled(
-                item(me, "Select cards", Icon::SquareDashed, move |c, cx| {
-                    c.select_cards(&members, cx);
+                item(me, "Select what’s in it", Icon::SquareDashed, move |c, cx| {
+                    c.select_things(&members, cx);
                 }),
                 !has_members,
             ),
@@ -519,12 +538,9 @@ impl BoardCanvas {
                 !has_sessions,
             ),
             MenuItem::Separator,
-            item(
-                me,
-                if has_members { "Ungroup" } else { "Delete section" },
-                Icon::Ungroup,
-                move |c, cx| c.remove_section(&remove, cx),
-            ),
+            item(me, "Delete frame", Icon::Trash2, move |c, cx| {
+                c.remove_section(&remove, cx);
+            }),
         ]
     }
 
@@ -556,11 +572,16 @@ impl BoardCanvas {
                 blank,
             ),
             swatches(me, note.color, move |c, color, cx| c.recolor_notes(&recolor, color, cx)),
+        ]
+        .into_iter()
+        .chain(self.thing_items(&note.id, me))
+        .chain([
             MenuItem::Separator,
             item(me, delete_label, Icon::Trash2, move |c, cx| c.delete_notes(&ids, cx))
                 .hint(keys("⌫"))
                 .danger(),
-        ]
+        ])
+        .collect()
     }
 
     /// The view menu (BOARD-128, VIEW-143): every action on a view, from a
@@ -608,6 +629,7 @@ impl BoardCanvas {
                 c.stop_view_starting(&stop, cx);
             }));
         }
+        items.extend(self.thing_items(&view.id, me));
         items.push(MenuItem::Separator);
         items.push(
             item(me, "Delete view", Icon::Trash2, move |c, cx| {

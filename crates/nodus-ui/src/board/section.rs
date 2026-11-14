@@ -1,7 +1,8 @@
-//! A section's frame (`SectionNode.tsx`, `board.css` › sections): the tinted
-//! frame around its cards, its header with the name, count and status, the
-//! empty placeholder, the rename field, and the "Naming…" state while Claude
-//! names it (BOARD-045, BOARD-080…BOARD-098; spec 09 § UI details › Sections).
+//! A frame (stored as a section; `SectionNode.tsx`, `board.css` › sections):
+//! the tinted box, its header with the name, how many things are in it and
+//! the status of its sessions, the empty placeholder, the rename field, and
+//! the "Naming…" state while Claude names it (BOARD-045, BOARD-080…BOARD-098;
+//! spec 09 § UI details › Sections; spec 17).
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -79,7 +80,7 @@ impl BoardCanvas {
         {
             return field.clone();
         }
-        let field = new_input(&section.name, "Section name", false, window, cx);
+        let field = new_input(&section.name, "Frame name", false, window, cx);
         let initial = section.name.clone();
         let id = section.id.clone();
         let done = Rc::new(Cell::new(false));
@@ -180,7 +181,7 @@ impl BoardCanvas {
                         .text_ellipsis()
                         .when(untitled, |d| d.font_weight(FontWeight::MEDIUM).opacity(0.7))
                         .child(if untitled {
-                            "Untitled section".to_owned()
+                            "Untitled frame".to_owned()
                         } else {
                             props.section.name.clone()
                         })
@@ -239,14 +240,15 @@ impl BoardCanvas {
                     .text_color(header_color)
                     .child(label),
             )
+            // FRAME-004: an empty frame says what it's for, across its body.
             .when(props.count == 0, |d| {
                 d.child(
                     div()
                         .absolute()
                         .left(fu(SECTION_PAD as f32))
                         .top(fu(SECTION_HEADER_H as f32))
-                        .w(fu(288.))
-                        .h(fu(216.))
+                        .right(fu(SECTION_PAD as f32))
+                        .bottom(fu(SECTION_PAD as f32))
                         .rounded(fu(14.))
                         .border(fu(1.5))
                         .border_dashed()
@@ -256,7 +258,7 @@ impl BoardCanvas {
                         .justify_center()
                         .text_size(fu(12.))
                         .text_color(mix(hue, 0.55, t.text_tertiary))
-                        .child("Drag cards here"),
+                        .child("Drag things here"),
                 )
             })
             .into_any_element()

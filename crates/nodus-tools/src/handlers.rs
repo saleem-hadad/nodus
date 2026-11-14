@@ -16,6 +16,10 @@ use serde_json::{Value, json};
 use crate::drawing;
 use crate::server::{BoardToolHandlers, BoxFuture, ToolError};
 
+/// What `create_project` answers on a server (SRV-146).
+pub const SERVER_PROJECTS: &str =
+    "Projects on a Nodus server come from GitHub: ask a member to add the repository with Add from GitHub";
+
 /// Adds a project for a folder (`addProject`, 01 and 08), which nodus-core
 /// has: the folder's real path must be a folder (`Folder not found: <folder>`,
 /// `Not a folder: <real>`); a folder that is already a project gives that
@@ -55,6 +59,7 @@ pub struct StoreHandlers {
     views: Arc<dyn ViewTools>,
     clock: Clock,
     home: Option<PathBuf>,
+    on_server: bool,
 }
 
 /// What the handlers work with. `board` must be on the same `store`.
@@ -69,6 +74,10 @@ pub struct StoreHandlersConfig {
     pub clock: Clock,
     /// `os.homedir()`, for a project path that starts with `~`.
     pub home: Option<PathBuf>,
+    /// On a Nodus server, where these handlers run as the server's own user
+    /// and every request comes from a session that may be steered by what it
+    /// read (SRV-146).
+    pub on_server: bool,
 }
 
 impl StoreHandlers {
@@ -82,6 +91,7 @@ impl StoreHandlers {
             views: config.views,
             clock: config.clock,
             home: config.home,
+            on_server: config.on_server,
         }
     }
 
@@ -202,6 +212,11 @@ impl BoardToolHandlers for StoreHandlers {
 
     /// TOOL-034
     fn create_project(&self, folder: Option<&Value>, name: Option<&Value>) -> Result<Value, ToolError> {
+        // SRV-146: on a server this runs as `nodus`, which mustn't make
+        // folders where a session says. Its projects come from GitHub.
+        if self.on_server {
+            return Err(SERVER_PROJECTS.into());
+        }
         let Some(folder) = trimmed(folder) else {
             return Err("path is required".into());
         };

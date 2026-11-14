@@ -30,7 +30,8 @@ mod schema;
 mod server;
 
 pub use handlers::{
-    ProjectAdder, StoreHandlers, StoreHandlersConfig, ViewTools, expand_home, find_project, is_absolute,
+    ProjectAdder, SERVER_PROJECTS, StoreHandlers, StoreHandlersConfig, ViewTools, expand_home, find_project,
+    is_absolute,
 };
 pub use schema::{
     BOARD_MCP_CONFIG, BOARD_SERVER, BOARD_TOOL_RULES, CHAT_TOOL_NAMES, COMMON_TOOL_NAMES, INSTRUCTIONS,

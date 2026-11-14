@@ -727,7 +727,11 @@ async fn a_token_goes_only_to_the_server_that_keeps_it() {
     });
     let not_it = |err: ConnectError| assert!(matches!(err, ConnectError::NotTheServer), "{err:?}");
     not_it(Client::connect(&impostor, TOKEN).await.err().unwrap());
-    not_it(nodus_wire::client::upload(&impostor, TOKEN, "a.txt", b"x").await.unwrap_err());
+    not_it(
+        nodus_wire::client::upload(&impostor, TOKEN, "a.txt", b"x")
+            .await
+            .unwrap_err(),
+    );
     not_it(nodus_wire::client::download(&impostor, TOKEN, "a").await.unwrap_err());
     let nonce = nodus_wire::client::github_nonce(&impostor, TOKEN, &Default::default()).await;
     not_it(nonce.unwrap_err());

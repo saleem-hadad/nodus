@@ -1032,10 +1032,7 @@ mod tests {
         let long = "x".repeat(10_000);
         std::fs::write(&log, format!("{long}\nInstalling…\nDone\n")).unwrap();
         assert_eq!(setup_line(&log, me).await, "Done");
-        assert_eq!(
-            read_tail(&log, me, SETUP_TAIL).unwrap().len(),
-            SETUP_TAIL as usize
-        );
+        assert_eq!(read_tail(&log, me, SETUP_TAIL).unwrap().len(), SETUP_TAIL as usize);
         // Someone else's file is left alone.
         assert_eq!(setup_line(&log, me.map(|uid| uid + 1)).await, "");
 

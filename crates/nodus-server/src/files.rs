@@ -267,12 +267,22 @@ mod tests {
         std::os::unix::fs::symlink(&secret, &planted).unwrap();
         assert!(read_own(&planted).is_err());
         let pipe = dir.path().join("22222222-2222-2222-2222-222222222222");
-        assert!(std::process::Command::new("mkfifo").arg(&pipe).status().unwrap().success());
+        assert!(
+            std::process::Command::new("mkfifo")
+                .arg(&pipe)
+                .status()
+                .unwrap()
+                .success()
+        );
         assert!(read_own(&pipe).is_err());
         // And a link where an upload is being written is never written through.
         let next = dir.path().join("33333333-3333-3333-3333-333333333333.txt");
         let target = dir.path().join("target");
-        std::os::unix::fs::symlink(&target, dir.path().join(".33333333-3333-3333-3333-333333333333.txt.part")).unwrap();
+        std::os::unix::fs::symlink(
+            &target,
+            dir.path().join(".33333333-3333-3333-3333-333333333333.txt.part"),
+        )
+        .unwrap();
         assert!(keep(dir.path(), &next, b"x").is_err());
         assert!(!target.exists());
     }

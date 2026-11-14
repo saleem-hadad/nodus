@@ -377,13 +377,16 @@ async fn prove(stream: &mut TcpStream, authority: &str, secret: &str) -> Result<
         answer.extend_from_slice(&chunk[..read]);
     };
     while answer.len() < split + length {
-        let read = stream.read(&mut chunk[..(split + length - answer.len()).min(1024)]).await?;
+        let read = stream
+            .read(&mut chunk[..(split + length - answer.len()).min(1024)])
+            .await?;
         if read == 0 {
             return Err(ConnectError::NotTheServer);
         }
         answer.extend_from_slice(&chunk[..read]);
     }
-    let proof: Proof = serde_json::from_slice(&answer[split..split + length]).map_err(|_| ConnectError::NotTheServer)?;
+    let proof: Proof =
+        serde_json::from_slice(&answer[split..split + length]).map_err(|_| ConnectError::NotTheServer)?;
     if answer.len() != split + length || !crate::proves(&hash, &nonce, &proof.proof) {
         return Err(ConnectError::NotTheServer);
     }

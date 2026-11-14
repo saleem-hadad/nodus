@@ -46,7 +46,10 @@ pub fn hint(hash: &str) -> String {
 
 /// The proof for `nonce` from a server that keeps `hash`.
 pub fn proof(hash: &str, nonce: &str) -> String {
-    hex(&hmac_sha256(hash.as_bytes(), format!("nodus-server-proof\n{nonce}").as_bytes()))
+    hex(&hmac_sha256(
+        hash.as_bytes(),
+        format!("nodus-server-proof\n{nonce}").as_bytes(),
+    ))
 }
 
 /// Whether `given` is the proof for `nonce` of a server that keeps `hash`,

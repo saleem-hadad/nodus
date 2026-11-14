@@ -9,13 +9,12 @@ use gpui::{
     AnyElement, Context, Div, FontWeight, InteractiveElement, IntoElement, ParentElement, SharedString,
     StatefulInteractiveElement, Styled, StyledText, Window, div,
 };
-use gpui::{HighlightStyle, StyleRefinement, px, relative, rems};
+use gpui::{HighlightStyle, Rgba, StyleRefinement, px, relative, rems};
 use nodus_domain::{Answers, ChatEntry, SessionStatus};
 use serde_json::Value;
 
 use super::look;
 use super::view::{ChatView, RowKind};
-use crate::board::overlays::spinner;
 use crate::components::icon::{Icon, icon};
 use crate::theme::motion;
 use crate::theme::tokens::Tokens;
@@ -60,8 +59,8 @@ pub(crate) fn markdown_style(t: &Tokens, s: f32) -> TextViewStyle {
 enum Arrival {
     /// The user's bubble pops up from its corner.
     Pop,
-    /// Claude's words show from the top down.
-    Reveal,
+    /// Claude's words arrive a few at a time and settle in (MOTION-041).
+    Words,
     /// A chart, form or page lifts into place.
     Lift,
     /// A notice or a run of tools fades in.
@@ -78,17 +77,19 @@ impl ChatView {
         let first = self.entries.get(entry_index(row.kind));
         let born = first.and_then(|e| self.born.get(e.id()).copied());
         let at = first.map_or(0., ChatEntry::at);
-        let (arrival, ms) = match (row.kind, first) {
-            (RowKind::User(_), _) => (Arrival::Pop, 420),
-            (RowKind::Tools(..), _) | (_, Some(ChatEntry::Notice { .. })) => (Arrival::Fade, 280),
-            (_, Some(ChatEntry::Text { .. })) => (Arrival::Reveal, 900),
-            _ => (Arrival::Lift, 480),
+        let (arrival, duration) = match (row.kind, first) {
+            (RowKind::User(_), _) => (Arrival::Pop, Duration::from_millis(420)),
+            (RowKind::Tools(..), _) | (_, Some(ChatEntry::Notice { .. })) => {
+                (Arrival::Fade, Duration::from_millis(280))
+            }
+            (_, Some(ChatEntry::Text { markdown, .. })) => (Arrival::Words, look::words_duration(markdown)),
+            _ => (Arrival::Lift, Duration::from_millis(480)),
         };
-        let p = look::arrival(born, Duration::from_millis(ms), window, cx);
+        let p = look::arrival(born, duration, window, cx);
         let body = match row.kind {
             RowKind::User(i) => self.render_user(i, &t, cx),
             RowKind::Tools(start, end) => self.render_tools(start, end, &t, window, cx),
-            RowKind::Entry(i) => self.render_entry(i, &t, window, cx),
+            RowKind::Entry(i) => self.render_entry(i, p, &t, window, cx),
         };
         let mut said = div().w_full().flex().flex_col().gap(self.px(8.));
         if row.header {
@@ -101,7 +102,10 @@ impl ChatView {
             Arrival::Pop => look::rise(said, e, 10. * self.scale)
                 .scale(0.9 + 0.1 * motion::ease_spring(p))
                 .transform_origin(1., 1.),
-            Arrival::Reveal => look::reveal(said, e).when(p < 1., |d| d.translate(px(0.), self.px(4. * (1. - e)))),
+            Arrival::Words => {
+                let p = look::arrival(born, Duration::from_millis(280), window, cx);
+                look::rise(said, motion::ease_out(p), 4. * self.scale)
+            }
             Arrival::Lift => look::rise(said, e, 12. * self.scale).when(p < 1., |d| d.scale(0.98 + 0.02 * e)),
             Arrival::Fade => look::rise(said, e, 4. * self.scale),
         };
@@ -134,7 +138,7 @@ impl ChatView {
             .text_size(self.px(13.))
             .font_weight(FontWeight::SEMIBOLD)
             .whitespace_nowrap()
-            .child(look::avatar(22. * self.scale, None, t))
+            .child(look::avatar(22. * self.scale, t))
             .child("Claude")
             .when(at > 0., |d| {
                 d.child(
@@ -299,8 +303,11 @@ impl ChatView {
                 continue;
             };
             let running = !*done && !*failed;
+            // MOTION-042: once it finishes, its tick springs in and its
+            // line's highlight eases away.
+            let ended = look::arrival(self.finished.get(id).copied(), Duration::from_millis(500), window, cx);
             let glyph = if running {
-                spinner("chat-tool-spin", 12. * self.scale, 1.8, t.text_secondary, cx)
+                look::dots(12. * self.scale, look::clock(window, cx), t.text_secondary).into_any_element()
             } else {
                 icon(
                     look::tool_icon(name),
@@ -328,6 +335,12 @@ impl ChatView {
                 .rounded(self.px(8.))
                 .min_w_0()
                 .when(running, |d| d.bg(t.bg_hover))
+                .when(!running && ended < 1., |d| {
+                    d.bg(Rgba {
+                        a: t.bg_hover.a * (1. - motion::ease_out(ended)),
+                        ..t.bg_hover
+                    })
+                })
                 .child(div().flex_none().w(self.px(14.)).flex().justify_center().child(glyph))
                 .child(
                     div()
@@ -348,7 +361,9 @@ impl ChatView {
                         .text_color(t.text_tertiary)
                         .child(SharedString::from(detail.clone())),
                 )
-                .when(!running, |d| d.child(look::outcome(*failed, 11. * self.scale, t)));
+                .when(!running, |d| {
+                    d.child(look::outcome(*failed, 11. * self.scale, ended, t))
+                });
             lines.push(if p < 1. {
                 line.opacity(e).translate(self.px(-8. * (1. - e)), px(0.))
             } else {
@@ -403,7 +418,16 @@ impl ChatView {
             .into_any_element()
     }
 
-    fn render_entry(&mut self, i: usize, t: &Tokens, window: &mut Window, cx: &mut Context<'_, Self>) -> AnyElement {
+    /// A row of its own; Claude's words as far as `share` (0…1) of them
+    /// have arrived (MOTION-041).
+    fn render_entry(
+        &mut self,
+        i: usize,
+        share: f32,
+        t: &Tokens,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> AnyElement {
         let Some(entry) = self.entries.get(i).cloned() else {
             return div().into_any_element();
         };
@@ -413,9 +437,13 @@ impl ChatView {
                 .text_size(self.px(13.5))
                 .line_height(self.px(21.))
                 .child(
-                    TextView::markdown(SharedString::from(format!("chat-md-{id}")), markdown)
-                        .style(markdown_style(t, self.scale))
-                        .selectable(true),
+                    TextView::markdown(
+                        SharedString::from(format!("chat-md-{id}")),
+                        look::words(&markdown, share).to_owned(),
+                    )
+                    .motion(look::settle())
+                    .style(markdown_style(t, self.scale))
+                    .selectable(true),
                 )
                 .into_any_element(),
             // CHAT-039: a notice sits between hairlines, in the middle.
@@ -535,48 +563,168 @@ impl ChatView {
             .into_any_element()
     }
 
-    /// CHAT-019: under the last row, what Claude is doing: its mark with the
-    /// sparkle twinkling, and a light passing through `Thinking…` (before it
-    /// has said anything since the user did) or `Working…`.
+    /// CHAT-019, MOTION-039, MOTION-040: under the last row, what Claude is
+    /// doing: the dots, words that roll up as they change (`Thinking…`
+    /// before it has said anything since the user did, what its running
+    /// tool does, `Working…` otherwise) and the turn's time. When the turn
+    /// ends, the line eases away.
     fn working_line(&self, t: &Tokens, window: &mut Window, cx: &mut Context<'_, Self>) -> Option<AnyElement> {
         let card = self.card(cx)?;
-        if !card.live {
-            return None;
-        }
-        let line = div()
-            .pt(self.px(12.))
-            .flex()
-            .items_center()
-            .gap(self.px(9.))
-            .text_size(self.px(12.5))
-            .font_weight(FontWeight::MEDIUM)
-            .text_color(t.text_secondary);
-        match card.status {
-            SessionStatus::Working => {
+        let line = || {
+            div()
+                .pt(self.px(12.))
+                .flex()
+                .items_center()
+                .gap(self.px(9.))
+                .text_size(self.px(12.5))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(t.text_secondary)
+        };
+        let roll = window.use_keyed_state(("chat-roll", cx.entity_id()), cx, |_, _| look::Roll::new("Thinking…"));
+        match (card.live, card.status) {
+            (true, SessionStatus::Working) => {
                 let ms = self.working_ms(window, cx).unwrap_or(0.);
-                let quiet = matches!(self.rows.last().map(|r| r.kind), Some(RowKind::User(_)));
-                let label = if quiet { "Thinking…" } else { "Working…" };
+                let doing = self.doing();
+                let (now, was, at) = roll.update(cx, |roll, _| {
+                    roll.show(&doing);
+                    (roll.now.clone(), roll.was.clone(), roll.at)
+                });
+                let words = self.rolling_words(now, was, at, ms, t, window, cx);
+                let secs = (ms / 1000.) as u64;
                 let p = look::arrival(self.working_since, Duration::from_millis(320), window, cx);
                 Some(
-                    look::rise(line, motion::ease_out(p), 6. * self.scale)
-                        .child(look::avatar(20. * self.scale, Some(ms), t))
-                        .child(StyledText::new(label).with_highlights(look::shimmer(label, ms, t.text_primary)))
+                    look::rise(line(), motion::ease_out(p), 6. * self.scale)
+                        .child(self.working_dots(t, window, cx))
+                        .child(words)
+                        .when(secs >= 1, |d| {
+                            d.child(
+                                div()
+                                    .flex_none()
+                                    .whitespace_nowrap()
+                                    .font_weight(FontWeight::NORMAL)
+                                    .text_color(t.text_tertiary)
+                                    .child(SharedString::from(format!("· {}", look::elapsed(secs)))),
+                            )
+                        })
                         .into_any_element(),
                 )
             }
-            SessionStatus::Waiting => Some(
-                line.child(
-                    div()
-                        .size(self.px(20.))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child(waiting_dot(t, self.scale)),
-                )
-                .child("Claude needs you below")
-                .into_any_element(),
+            (true, SessionStatus::Waiting) => Some(
+                line()
+                    .child(
+                        div()
+                            .size(self.px(20.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child(waiting_dot(t, self.scale)),
+                    )
+                    .child("Claude needs you below")
+                    .into_any_element(),
             ),
-            SessionStatus::Done => None,
+            _ => {
+                // The turn ended: the line fades, sinks 6px and folds away.
+                let p = look::arrival(self.turn_ended, Duration::from_millis(320), window, cx);
+                if p >= 1. {
+                    return None;
+                }
+                let e = motion::ease_out(p);
+                let words = roll.read(cx).now.clone();
+                Some(
+                    div()
+                        .h(self.px(32. * (1. - e)))
+                        .overflow_hidden()
+                        .child(
+                            line()
+                                .opacity(1. - e)
+                                .translate(px(0.), self.px(6. * e))
+                                .child(self.working_dots(t, window, cx))
+                                .child(div().whitespace_nowrap().child(words)),
+                        )
+                        .into_any_element(),
+                )
+            }
+        }
+    }
+
+    /// What the working line says Claude is doing (MOTION-040): `Thinking…`
+    /// while the last row is the user's, what the tool it's running does,
+    /// or `Working…`.
+    fn doing(&self) -> String {
+        if matches!(self.rows.last().map(|r| r.kind), Some(RowKind::User(_))) {
+            return "Thinking…".to_owned();
+        }
+        for entry in self.entries.iter().rev() {
+            match entry {
+                ChatEntry::User { .. } => break,
+                ChatEntry::Tool {
+                    name,
+                    detail,
+                    done: false,
+                    failed: false,
+                    ..
+                } => return look::doing(name, detail),
+                _ => {}
+            }
+        }
+        "Working…".to_owned()
+    }
+
+    /// MOTION-039: the working line's dots, in a 20px box.
+    fn working_dots(&self, t: &Tokens, window: &mut Window, cx: &gpui::App) -> Div {
+        div()
+            .flex_none()
+            .size(self.px(20.))
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(look::dots(18. * self.scale, look::clock(window, cx), t.text_secondary))
+    }
+
+    /// MOTION-040: the working line's words with the light passing through
+    /// them; new words roll up into place as the old roll up and out (380ms).
+    #[allow(clippy::too_many_arguments)]
+    fn rolling_words(
+        &self,
+        now: SharedString,
+        was: Option<SharedString>,
+        at: Option<std::time::Instant>,
+        ms: f64,
+        t: &Tokens,
+        window: &mut Window,
+        cx: &gpui::App,
+    ) -> AnyElement {
+        const H: f32 = 19.;
+        let words = |text: SharedString| {
+            let light = look::shimmer(&text, ms, t.text_primary);
+            div()
+                .h(self.px(H))
+                .line_height(self.px(H))
+                .min_w_0()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .child(StyledText::new(text).with_highlights(light))
+        };
+        let p = look::arrival(at, Duration::from_millis(380), window, cx);
+        match was {
+            Some(was) if p < 1. => {
+                let e = motion::ease_out(p);
+                div()
+                    .h(self.px(H))
+                    .min_w_0()
+                    .overflow_hidden()
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .translate(px(0.), self.px(-H * e))
+                            .child(words(was).opacity(1. - e))
+                            .child(words(now).opacity(e)),
+                    )
+                    .into_any_element()
+            }
+            _ => words(now).into_any_element(),
         }
     }
 }

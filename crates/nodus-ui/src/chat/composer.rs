@@ -15,7 +15,6 @@ use nodus_domain::SessionStatus;
 use super::look;
 use super::view::ChatView;
 use crate::board::overlays::icons::{OvIcon, ov_icon};
-use crate::board::overlays::spinner;
 use crate::components::icon::{Icon, icon};
 use crate::components::tooltip::native_tooltip;
 use crate::components::tween::transition;
@@ -105,6 +104,21 @@ impl ChatView {
                 rgba(0, 0, 0, focus * if t.dark { 0.3 } else { 0.07 }),
             ));
         }
+        // MOTION-043: while Claude works, a faint light circles the field.
+        let working = live && status == Some(SessionStatus::Working);
+        let lit = transition(
+            window,
+            cx,
+            ("chat-lit", id),
+            if working { 1f32 } else { 0. },
+            Duration::from_millis(600),
+            motion::ease_out,
+        );
+        let light = if lit > 0.01 {
+            look::light(RADIUS * self.scale, lit, t.text_tertiary, window, cx)
+        } else {
+            None
+        };
         let pill = div()
             .relative()
             .flex()
@@ -118,6 +132,7 @@ impl ChatView {
             .border_color(ai::lerp(t.border, t.border_strong, focus))
             .bg(look::field_bg(&t))
             .shadow(shadows)
+            .children(light)
             .child(div().flex_1().min_w_0().child(field))
             .child(mic)
             .children(stop)
@@ -324,7 +339,7 @@ impl ChatView {
         );
         let fg = ai::lerp(t.text_tertiary, t.text_on_accent, ready);
         let glyph = if self.sending {
-            spinner("chat-send-spin", 14. * self.scale, 2., fg, cx)
+            look::dots(15. * self.scale, look::clock(window, cx), fg).into_any_element()
         } else {
             ov_icon(OvIcon::ArrowUp, 15. * self.scale, 2.4, fg).into_any_element()
         };

@@ -148,6 +148,12 @@ pub struct ChatView {
     /// When Claude's turn started, as this chat saw it: the clock its
     /// working motion runs on (CHAT-019).
     pub(crate) working_since: Option<Instant>,
+    /// When Claude's last turn ended, so the working line eases away
+    /// (MOTION-040).
+    pub(crate) turn_ended: Option<Instant>,
+    /// When tool calls that ran while the chat was up finished, by id, so
+    /// their ticks spring in (MOTION-042).
+    pub(crate) finished: HashMap<String, Instant>,
     pub(crate) dock: Dock,
     /// Everything draws this many times its size (a card on a zoomed board).
     pub(crate) scale: f32,
@@ -246,6 +252,8 @@ impl ChatView {
             opened: HashSet::new(),
             born: HashMap::new(),
             working_since: None,
+            turn_ended: None,
+            finished: HashMap::new(),
             dock: Dock::default(),
             scale: 1.0,
             in_card,
@@ -324,6 +332,30 @@ impl ChatView {
                     self.born.insert(entry.id().to_owned(), now);
                 }
             }
+            // MOTION-042: the calls that were running and now aren't.
+            self.finished
+                .retain(|_, at| now.duration_since(*at) < Duration::from_secs(5));
+            let running: HashSet<&str> = self
+                .entries
+                .iter()
+                .filter_map(|e| match e {
+                    ChatEntry::Tool {
+                        id,
+                        done: false,
+                        failed: false,
+                        ..
+                    } => Some(id.as_str()),
+                    _ => None,
+                })
+                .collect();
+            for entry in entries.iter() {
+                if let ChatEntry::Tool { id, done, failed, .. } = entry
+                    && (*done || *failed)
+                    && running.contains(id.as_str())
+                {
+                    self.finished.insert(id.clone(), now);
+                }
+            }
         }
         let rows = rows_of(&entries);
         let from = self
@@ -399,9 +431,12 @@ impl ChatView {
             .card(cx)
             .is_some_and(|c| c.live && c.status == SessionStatus::Working);
         if !working {
-            self.working_since = None;
+            if self.working_since.take().is_some() {
+                self.turn_ended = Some(Instant::now());
+            }
         } else if self.working_since.is_none() {
             self.working_since = Some(Instant::now());
+            self.turn_ended = None;
         }
         let waiting = status == Some(SessionStatus::Waiting);
         let was_waiting = self.last_status == Some(SessionStatus::Waiting);
@@ -712,7 +747,7 @@ impl ChatView {
                 .justify_center()
                 .gap(self.px(4.))
                 .when(self.loaded, |d| {
-                    d.child(super::look::avatar(40. * self.scale, None, &t).mb(self.px(10.)))
+                    d.child(super::look::avatar(40. * self.scale, &t).mb(self.px(10.)))
                 })
                 .child(
                     div()

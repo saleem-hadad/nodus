@@ -324,6 +324,32 @@ pub(crate) fn field_bg(t: &Tokens) -> Rgba {
     if t.dark { hex(0x323236) } else { t.bg_elevated }
 }
 
+/// The purple of code's keywords and of searches (CHAT-047), the page
+/// theme's `--nodus-purple`; not Claude's sparkle.
+pub(crate) fn purple(t: &Tokens) -> Rgba {
+    if t.dark { hex(0xa371f7) } else { hex(0x8250df) }
+}
+
+/// A tool's glyph colour by what it does (CHAT-047): reading blue, searching
+/// purple, editing orange, running green, anything else quiet.
+pub(crate) fn tool_tone(name: &str, t: &Tokens) -> Rgba {
+    match name {
+        "Read" | "NotebookRead" | "WebFetch" | "WebSearch" => t.accent,
+        "Grep" | "Glob" | "LS" | "ToolSearch" => purple(t),
+        "Edit" | "MultiEdit" | "Write" | "NotebookEdit" => t.status_working,
+        "Bash" | "BashOutput" | "KillShell" | "KillBash" => t.diff_add,
+        _ => t.text_tertiary,
+    }
+}
+
+/// The user's bubble (CHAT-037, CHAT-047): a light wash of the accent.
+pub(crate) fn your_bubble(t: &Tokens) -> Rgba {
+    Rgba {
+        a: if t.dark { 0.2 } else { 0.11 },
+        ..t.accent
+    }
+}
+
 /// A tool's glyph by its name, as Claude Code names it.
 pub(crate) fn tool_icon(name: &str) -> Icon {
     match name {
@@ -365,14 +391,14 @@ pub(crate) fn rise(el: Div, e: f32, dy: f32) -> Div {
     el.opacity(e).translate(px(0.), px(dy * (1.0 - e)))
 }
 
-/// A tool's mark at the end of its line: a quiet tick, or a red cross. `p`
+/// A tool's mark at the end of its line: a green tick, or a red cross. `p`
 /// (0…1) into its arrival, it springs in from a fifth of its size, turned
 /// back 25° (MOTION-042).
 pub(crate) fn outcome(failed: bool, size: f32, p: f32, t: &Tokens) -> Div {
     let (glyph, color) = if failed {
         (Icon::X, t.status_waiting)
     } else {
-        (Icon::Check, t.text_tertiary)
+        (Icon::Check, t.diff_add)
     };
     let mark = div().flex_none().child(icon(glyph, size, 2.4, color));
     if p >= 1.0 {

@@ -25,6 +25,13 @@ macro_rules! shot {
 pub const SLIDES: &[Slide] = &[
     Slide {
         version: "1.0.18",
+        title: "Sessions that talk",
+        text: "A dotted line joins sessions that message each other, and each message runs along it as a light.",
+        light: shot!("1.0.18-talk-light"),
+        dark: shot!("1.0.18-talk-dark"),
+    },
+    Slide {
+        version: "1.0.18",
         title: "Watch Claude work",
         text: "Dots wind while Claude works, the line names each step, and replies settle in word by word.",
         light: shot!("1.0.18-working-light"),

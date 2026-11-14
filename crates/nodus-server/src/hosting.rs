@@ -223,8 +223,8 @@ impl Hosting for ServerHosting {
 
     /// SRV-101: a server always has a pool, so a process with no account
     /// to take doesn't start.
-    fn claude_account(&self) -> Result<Option<nodus_core::PoolAccount>, String> {
-        self.pool.pick().map(Some)
+    fn claude_account(&self, session_id: Option<&str>) -> Result<Option<nodus_core::PoolAccount>, String> {
+        self.pool.pick(session_id).map(Some)
     }
 
     fn session_hook(&self, session_id: &str, account: Option<&str>, event: &str, payload: &serde_json::Value) {

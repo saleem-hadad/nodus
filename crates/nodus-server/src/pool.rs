@@ -19,11 +19,18 @@
 //!   removed, has all its live sessions moved the same way. The sessions
 //!   waiting are kept in `claude-waiting.json`, so a restart of `serve`
 //!   still resumes them.
+//! - **Doubt** (SRV-106): what a session reports comes from a process that
+//!   repo content or a web page may steer, and each account it moves to
+//!   hands it that account's token. So a session gets an account it hasn't
+//!   run on at most once in 30 minutes; until then it goes back only to
+//!   one it has, or waits. And no window is taken to reset more than a
+//!   week ahead.
 //!
 //! What a session reports arrives while the session host's messages wait,
 //! so the pool only takes note there; a task of its own ([`run`]) moves
 //! sessions, frees accounts when their windows reset, and tells members.
 
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
@@ -44,6 +51,13 @@ pub(crate) const ACCOUNTS_FILE: &str = "claude-accounts.json";
 pub(crate) const WAITING_FILE: &str = "claude-waiting.json";
 /// How long an account is `limited` when its window's reset isn't known.
 const LIMIT_UNKNOWN_MS: f64 = 60.0 * 60.0 * 1000.0;
+/// The furthest ahead a window resets: Claude's longest is a week (SRV-106).
+const RESET_AHEAD_MS: f64 = 7.0 * 24.0 * 60.0 * 60.0 * 1000.0;
+/// How often a session gets an account it hasn't run on (SRV-106).
+const NEW_ACCOUNT_EVERY_MS: f64 = 30.0 * 60.0 * 1000.0;
+/// What a session's start fails with while it may only go back to the
+/// accounts it has run on and none of those is free (SRV-106).
+pub(crate) const NO_ACCOUNT_YET: &str = "This session moved to another Claude account less than 30 minutes ago, and the ones it has run on are at their limit. It can go on once one is free, or in half an hour.";
 /// The longest label.
 const LABEL_CHARS: usize = 64;
 /// The longest token taken: `claude setup-token`'s are about a hundred.
@@ -110,7 +124,9 @@ impl Stored {
         let reset = |window: Option<UsageWindow>| window.and_then(|w| w.resets_at).filter(|&at| at > now);
         let week_full = self.seven_day.is_some_and(|w| w.used_percentage >= 100.0);
         let week = week_full.then(|| reset(self.seven_day)).flatten();
-        week.or_else(|| reset(self.five_hour)).unwrap_or(now + LIMIT_UNKNOWN_MS)
+        week.or_else(|| reset(self.five_hour))
+            .unwrap_or(now + LIMIT_UNKNOWN_MS)
+            .min(now + RESET_AHEAD_MS)
     }
 }
 
@@ -141,6 +157,26 @@ pub(crate) struct Pool {
     /// as `claude-waiting.json` keeps them.
     waiting: Mutex<Vec<Waiting>>,
     waiting_file: PathBuf,
+    /// The accounts each session has run on (SRV-106).
+    seen: Mutex<HashMap<String, Seen>>,
+}
+
+/// The accounts a session has run on, and when it last got one it hadn't
+/// (SRV-106). Its first account doesn't count.
+#[derive(Debug, Default)]
+struct Seen {
+    accounts: HashSet<String>,
+    new_at: Option<f64>,
+}
+
+impl Seen {
+    /// The accounts it may take now: any once the half hour since its last
+    /// new one has passed, else only those it has run on.
+    fn limited_to(&self, now: f64) -> Option<&HashSet<String>> {
+        self.new_at
+            .is_some_and(|at| now - at < NEW_ACCOUNT_EVERY_MS)
+            .then_some(&self.accounts)
+    }
 }
 
 /// A session waiting for an account.
@@ -179,6 +215,7 @@ impl Pool {
             todo: Mutex::new(Some(todo)),
             waiting: Mutex::new(waiting),
             waiting_file,
+            seen: Mutex::default(),
         })
     }
 
@@ -363,8 +400,11 @@ impl Pool {
         lock(&self.accounts).iter().any(|a| a.state == AccountState::Ok)
     }
 
-    /// SRV-101: the account a Claude Code process takes, marked used.
-    pub(crate) fn pick(&self) -> Result<PoolAccount, String> {
+    /// SRV-101: the account a Claude Code process takes, marked used: a
+    /// session's (`session`), or a background run's. A session that got an
+    /// account it hadn't run on in the last half hour takes only one it has
+    /// (SRV-106).
+    pub(crate) fn pick(&self, session: Option<&str>) -> Result<PoolAccount, String> {
         self.free_due();
         let now = now_ms();
         let picked = {
@@ -372,10 +412,13 @@ impl Pool {
             if accounts.is_empty() {
                 return Err(NO_ACCOUNTS.to_owned());
             }
+            let mut seen = lock(&self.seen);
+            let limited_to = session.and_then(|id| seen.get(id)).and_then(|s| s.limited_to(now));
             let best = accounts
                 .iter()
                 .enumerate()
                 .filter(|(_, a)| a.state == AccountState::Ok)
+                .filter(|(_, a)| limited_to.is_none_or(|ids| ids.contains(&a.id)))
                 .min_by(|(_, a), (_, b)| {
                     a.five_hour_use(now)
                         .total_cmp(&b.five_hour_use(now))
@@ -383,8 +426,20 @@ impl Pool {
                 })
                 .map(|(at, _)| at);
             let Some(at) = best else {
-                return Err(none_free(&accounts, now));
+                let any_free = accounts.iter().any(|a| a.state == AccountState::Ok);
+                return Err(if limited_to.is_some() && any_free {
+                    NO_ACCOUNT_YET.to_owned()
+                } else {
+                    none_free(&accounts, now)
+                });
             };
+            if let Some(id) = session {
+                let seen = seen.entry(id.to_owned()).or_default();
+                if seen.accounts.insert(accounts[at].id.clone()) && seen.accounts.len() > 1 {
+                    seen.new_at = Some(now);
+                }
+            }
+            drop(seen);
             // Strictly after every other use, so picks in the same
             // millisecond still go round the accounts in turn.
             let latest = accounts.iter().filter_map(|a| a.last_used_at).fold(0.0, f64::max);
@@ -432,8 +487,9 @@ impl Pool {
         let Some(limits) = payload.get("rate_limits").filter(|l| l.is_object()) else {
             return;
         };
-        let five_hour = window(limits.get("five_hour"));
-        let seven_day = window(limits.get("seven_day"));
+        let now = now_ms();
+        let five_hour = window(limits.get("five_hour"), now);
+        let seven_day = window(limits.get("seven_day"), now);
         if five_hour.is_none() && seven_day.is_none() {
             return;
         }
@@ -562,13 +618,13 @@ impl Pool {
     /// An account may be free: the waiting sessions resume, oldest first,
     /// while one is.
     async fn resume_waiting(&self, nodus: &Nodus) {
-        loop {
+        // Each is tried once: one that may only go back to an account it
+        // has run on (SRV-106) keeps its place, and the next is tried.
+        let waiting = lock(&self.waiting).clone();
+        for Waiting { session_id, stopped } in waiting {
             if !self.has_free() {
                 return;
             }
-            let Some(Waiting { session_id, stopped }) = lock(&self.waiting).first().cloned() else {
-                return;
-            };
             self.change_waiting(|waiting| waiting.retain(|w| w.session_id != session_id));
             // Someone stopped it meanwhile: it stays stopped.
             if !stopped && !nodus.is_live(&session_id) {
@@ -577,9 +633,21 @@ impl Pool {
             }
             if !self.resume_on_another(nodus, &session_id, true).await {
                 self.wait(nodus, &session_id, stopped);
-                return;
             }
         }
+    }
+
+    /// When the next waiting session may take an account it hasn't run on
+    /// (SRV-106).
+    fn next_new_account(&self) -> Option<f64> {
+        let now = now_ms();
+        let seen = lock(&self.seen);
+        lock(&self.waiting)
+            .iter()
+            .filter_map(|w| seen.get(&w.session_id)?.new_at)
+            .map(|at| at + NEW_ACCOUNT_EVERY_MS)
+            .filter(|&at| at > now)
+            .reduce(f64::min)
     }
 
     /// SRV-104, SRV-105: a removed or failed account's live sessions move;
@@ -615,7 +683,11 @@ pub(crate) async fn run(pool: Arc<Pool>, nodus: Nodus) {
         let _ = pool.work.send(Work::Freed);
     }
     loop {
-        let wait = pool.next_reset().map(|at| {
+        let next = match (pool.next_reset(), pool.next_new_account()) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
+        let wait = next.map(|at| {
             let ms = (at - now_ms()).max(0.0);
             Duration::from_millis(ms as u64 + 50)
         });
@@ -625,7 +697,11 @@ pub(crate) async fn run(pool: Arc<Pool>, nodus: Nodus) {
                 None => return,
             },
             () = sleep(wait) => {
-                pool.free_due();
+                // A reset frees an account, which resumes who waits; else
+                // a session's half hour (SRV-106) has passed.
+                if !pool.free_due() {
+                    pool.resume_waiting(&nodus).await;
+                }
                 continue;
             }
         };
@@ -661,8 +737,9 @@ fn check_label(label: &str) -> Result<String, String> {
 }
 
 /// A usage window from the status line: `used_percentage`, and
-/// `resets_at` in seconds since the epoch.
-fn window(value: Option<&Value>) -> Option<UsageWindow> {
+/// `resets_at` in seconds since the epoch, at most a week after `now`
+/// (SRV-106).
+fn window(value: Option<&Value>, now: f64) -> Option<UsageWindow> {
     let value = value?;
     let used = value.get("used_percentage").and_then(Value::as_f64)?;
     if !used.is_finite() {
@@ -672,7 +749,7 @@ fn window(value: Option<&Value>) -> Option<UsageWindow> {
         .get("resets_at")
         .and_then(Value::as_f64)
         .filter(|at| at.is_finite() && *at > 0.0)
-        .map(|at| at * 1000.0);
+        .map(|at| (at * 1000.0).min(now + RESET_AHEAD_MS));
     Some(UsageWindow {
         used_percentage: used.clamp(0.0, 100.0),
         resets_at,
@@ -804,25 +881,63 @@ mod tests {
             account("old", Some(20.0), Some(5.0)),
         ]);
         // Unknown counts as 0, however recently it was used.
-        assert_eq!(pool.pick().unwrap().id, "unknown");
-        assert_eq!(pool.pick().unwrap().id, "unknown");
+        assert_eq!(pool.pick(None).unwrap().id, "unknown");
+        assert_eq!(pool.pick(None).unwrap().id, "unknown");
         // At its limit. Straight to `limit`, not through the hook: the hook
         // also starts moving the session, whose pick would race these.
         pool.limit("unknown");
         // A tie at 20% goes to the one used longer ago; each pick is a use.
-        let picked = pool.pick().unwrap();
+        let picked = pool.pick(None).unwrap();
         assert_eq!(
             (picked.id.as_str(), picked.label.as_str(), picked.token.as_str()),
             ("old", "Account old", "tok-old")
         );
-        assert_eq!(pool.pick().unwrap().id, "recent");
-        assert_eq!(pool.pick().unwrap().id, "old");
+        assert_eq!(pool.pick(None).unwrap().id, "recent");
+        assert_eq!(pool.pick(None).unwrap().id, "old");
+    }
+
+    #[test]
+    fn a_session_gets_an_account_it_hasnt_run_on_once_in_half_an_hour() {
+        let (_dir, pool) = pool(&[
+            account("a", Some(10.0), None),
+            account("b", Some(20.0), None),
+            account("c", Some(30.0), None),
+        ]);
+        // Its first account, then one more, whenever.
+        assert_eq!(pool.pick(Some("s1")).unwrap().id, "a");
+        pool.limit("a");
+        assert_eq!(pool.pick(Some("s1")).unwrap().id, "b");
+        // SRV-106: a third within the half hour isn't given; back to one it
+        // has run on, or nothing yet.
+        pool.limit("b");
+        assert_eq!(pool.pick(Some("s1")).unwrap_err(), NO_ACCOUNT_YET);
+        lock(&pool.accounts)[0].state = AccountState::Ok;
+        assert_eq!(pool.pick(Some("s1")).unwrap().id, "a");
+        // Other sessions, and background runs, take what's free.
+        pool.limit("a");
+        assert_eq!(pool.pick(Some("s1")).unwrap_err(), NO_ACCOUNT_YET);
+        assert_eq!(pool.pick(Some("s2")).unwrap().id, "c");
+        assert_eq!(pool.pick(None).unwrap().id, "c");
+        // Once the half hour has passed, it may.
+        lock(&pool.seen).get_mut("s1").unwrap().new_at = Some(now_ms() - NEW_ACCOUNT_EVERY_MS - 1.0);
+        assert_eq!(pool.pick(Some("s1")).unwrap().id, "c");
+    }
+
+    #[test]
+    fn no_window_resets_more_than_a_week_ahead() {
+        let now = now_ms();
+        let far = json!({ "used_percentage": 100, "resets_at": 9_999_999_999.0_f64 });
+        let window = window(Some(&far), now).unwrap();
+        assert_eq!(window.resets_at, Some(now + RESET_AHEAD_MS));
+        let mut a = account("a", None, None);
+        a.seven_day = Some(window);
+        assert!(a.limited_until(now) <= now + RESET_AHEAD_MS);
     }
 
     #[test]
     fn says_why_nothing_can_be_picked() {
         let (_dir, empty) = pool(&[]);
-        assert_eq!(empty.pick().unwrap_err(), NO_ACCOUNTS);
+        assert_eq!(empty.pick(None).unwrap_err(), NO_ACCOUNTS);
         let now = now_ms();
         let mut a = account("a", None, None);
         a.state = AccountState::Limited;
@@ -831,7 +946,7 @@ mod tests {
         b.id = "b".into();
         b.resets_at = Some(now + 3_600_000.0);
         let (_dir, limited) = pool(&[a, b.clone()]);
-        let err = limited.pick().unwrap_err();
+        let err = limited.pick(None).unwrap_err();
         assert_eq!(
             err,
             format!(
@@ -843,7 +958,7 @@ mod tests {
         let (_dir, failed) = pool(&[b]);
         assert!(
             failed
-                .pick()
+                .pick(None)
                 .unwrap_err()
                 .starts_with("Every Claude account has stopped working")
         );
@@ -855,7 +970,7 @@ mod tests {
         a.state = AccountState::Limited;
         a.resets_at = Some(now_ms() - 1.0);
         let (_dir, pool) = pool(&[a]);
-        assert_eq!(pool.pick().unwrap().id, "a");
+        assert_eq!(pool.pick(None).unwrap().id, "a");
         assert_eq!(pool.list_raw()[0].state, AccountState::Ok);
     }
 

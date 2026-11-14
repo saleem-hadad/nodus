@@ -227,11 +227,14 @@ pub(crate) fn settle() -> TextViewMotion {
         .with_stream_fade_stagger(Duration::from_millis(28))
 }
 
-/// One lap of the light round the composer.
-const LIGHT_MS: f64 = 2600.;
+/// One lap of the light round the composer: slow, so it doesn't pull the eye.
+const LIGHT_MS: f64 = 4500.;
+/// How strong the light is at its head, of `color`'s own alpha: barely more
+/// than the field's border, a hint that Claude is busy and no more.
+const LIGHT_STRENGTH: f32 = 0.3;
 
-/// A faint light circling the composer while Claude works (MOTION-043): a
-/// head of `color` and a tail fading behind it, along the edge of a field
+/// A very faint light circling the composer while Claude works (MOTION-043):
+/// a head of `color` and a tail fading behind it, along the edge of a field
 /// with corners of `radius`, `lit` (0…1) of full strength. It fills the
 /// field it's put in. None in parity shots or under reduced motion.
 pub(crate) fn light(radius: f32, lit: f32, color: Rgba, window: &mut Window, cx: &App) -> Option<AnyElement> {
@@ -254,10 +257,10 @@ pub(crate) fn light(radius: f32, lit: f32, color: Rgba, window: &mut Window, cx:
 
 /// Paints the light as a run of small dots along the middle of the field's
 /// 1px border, half a pixel out from the padding box `bounds`: a soft front
-/// a fifth as long as the tail, which reaches at most a quarter of the way
-/// round, or 300px.
+/// a fifth as long as the tail, which reaches at most 15% of the way round,
+/// or 180px.
 fn paint_light(bounds: Bounds<Pixels>, radius: f32, head: f32, lit: f32, color: Rgba, window: &mut Window) {
-    const DOT: f32 = 1.6;
+    const DOT: f32 = 1.2;
     let edge = bounds.dilate(px(0.5));
     let (w, h) = (f32::from(edge.size.width), f32::from(edge.size.height));
     let r = (radius - 0.5).max(0.).min(w / 2.).min(h / 2.);
@@ -265,7 +268,7 @@ fn paint_light(bounds: Bounds<Pixels>, radius: f32, head: f32, lit: f32, color: 
     if around <= 0. {
         return;
     }
-    let tail = (0.25f32).min(300. / around);
+    let tail = (0.15f32).min(180. / around);
     let front = tail * 0.2;
     let count = ((tail + front) * around).ceil().min(480.) as usize;
     for k in 0..count {
@@ -278,7 +281,7 @@ fn paint_light(bounds: Bounds<Pixels>, radius: f32, head: f32, lit: f32, color: 
             (1. - back / tail).powi(2)
         };
         let at = ai::outline(edge, r, head - back);
-        let alpha = color.a * lit * strength;
+        let alpha = color.a * LIGHT_STRENGTH * lit * strength;
         window.paint_quad(
             fill(
                 Bounds::new(point(at.x - px(DOT / 2.), at.y - px(DOT / 2.)), size(px(DOT), px(DOT))),

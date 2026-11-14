@@ -5,7 +5,8 @@ use indexmap::IndexMap;
 use nodus_domain::js::{self, slice_utf16};
 use nodus_domain::{
     BoardGroup, BoardLink, BoardNode, BoardNote, BoardSection, BoardShape, Event, FolderColor, InkStroke, NodePatch,
-    Rect, SessionKind, SessionSearchHit, SummarizePhase, SummarizeProgress, SummaryResult, TranscriptMessage, Viewport,
+    Rect, SessionEffort, SessionKind, SessionModel, SessionSearchHit, SummarizePhase, SummarizeProgress, SummaryResult,
+    TranscriptMessage, Viewport,
 };
 use nodus_platform::Env;
 use nodus_platform::runner::Runner;
@@ -117,6 +118,28 @@ impl Board {
                 }
                 if let Some(h) = patch.h.filter(|h| h.is_finite()) {
                     node.h = Some(clamp_size(h));
+                }
+                // MODEL-010: a Claude card's model and effort; a name this
+                // version doesn't know leaves it as it was.
+                if node.kind != Some(SessionKind::Terminal) {
+                    match &patch.model {
+                        Some(None) => node.set_model(None),
+                        Some(Some(model)) => {
+                            if let Some(model) = SessionModel::parse(model) {
+                                node.set_model(Some(model));
+                            }
+                        }
+                        None => {}
+                    }
+                    match &patch.effort {
+                        Some(None) => node.set_effort(None),
+                        Some(Some(effort)) => {
+                            if let Some(effort) = SessionEffort::parse(effort) {
+                                node.set_effort(Some(effort));
+                            }
+                        }
+                        None => {}
+                    }
                 }
                 // SESS-098: an archived card leaves its section, and folds back to a card.
                 if node.archived {

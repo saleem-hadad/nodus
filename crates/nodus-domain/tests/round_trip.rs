@@ -210,6 +210,56 @@ fn board_node_model_is_kept_whatever_its_shape() {
 }
 
 #[test]
+fn model_010_a_switch_is_a_cards_patch() {
+    let to = |switch: ModelSwitch| json::to_string(&switch.patch("s")).unwrap();
+    assert_eq!(
+        to(ModelSwitch::Model(Some(SessionModel::Fable))),
+        r#"{"sessionId":"s","model":"fable"}"#
+    );
+    assert_eq!(to(ModelSwitch::Model(None)), r#"{"sessionId":"s","model":null}"#);
+    assert_eq!(
+        to(ModelSwitch::Effort(Some(SessionEffort::XHigh))),
+        r#"{"sessionId":"s","effort":"xhigh"}"#
+    );
+    assert_eq!(to(ModelSwitch::Effort(None)), r#"{"sessionId":"s","effort":null}"#);
+    let patch: NodePatch = round_trip(r#"{"sessionId":"s","model":null,"effort":"max"}"#);
+    assert_eq!((patch.model, patch.effort), (Some(None), Some(Some("max".into()))));
+}
+
+#[test]
+fn model_031_a_status_line_names_its_models_family() {
+    assert_eq!(SessionModel::of_name("Opus 5.5"), Some(SessionModel::Opus));
+    assert_eq!(SessionModel::of_name("claude-sonnet-5"), Some(SessionModel::Sonnet));
+    assert_eq!(
+        SessionModel::of_name("Fable 5.1 (1M context)"),
+        Some(SessionModel::Fable)
+    );
+    assert_eq!(SessionModel::of_name("Haiku 4.5"), Some(SessionModel::Haiku));
+    assert_eq!(SessionModel::of_name("Mythos"), None);
+    assert!(!SessionModel::Haiku.takes_effort() && SessionModel::Fable.takes_effort());
+}
+
+#[test]
+fn model_020_the_bars_choice_is_kept_with_the_settings() {
+    let mut settings: AppSettings = json::from_str(
+        r#"{"theme":"system","autoUpdate":true,"notify":true,"dockBadge":true,"pinProjectRail":false,"focusFeature":false,"focusMode":false,"capture":true,"sessionModel":"opus","sessionEffort":"turbo"}"#,
+    )
+    .unwrap();
+    assert_eq!(settings.session_model(), Some(SessionModel::Opus));
+    // An effort this version doesn't know is none.
+    assert_eq!(settings.session_effort(), None);
+    settings.merge_session_choice(&SettingsPatch {
+        session_model: Some(String::new()),
+        session_effort: Some("low".into()),
+        ..SettingsPatch::default()
+    });
+    assert_eq!(
+        (settings.session_model(), settings.session_effort()),
+        (None, Some(SessionEffort::Low))
+    );
+}
+
+#[test]
 fn node_patch_tells_null_from_absent() {
     let moved: NodePatch = round_trip(r#"{"sessionId":"s","x":10.5,"y":20}"#);
     assert_eq!(moved.section_id, None);

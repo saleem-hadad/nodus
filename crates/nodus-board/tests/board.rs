@@ -170,6 +170,43 @@ async fn names_a_finished_run_by_its_title_when_the_action_is_gone() {
 }
 
 #[tokio::test]
+async fn model_010_saves_a_cards_model_and_effort() {
+    let f = Fixture::new();
+    f.put(node(A, json!({ "model": "opus" })));
+    f.put(node("term", json!({ "kind": "terminal" })));
+    let patch = |v: serde_json::Value| -> NodePatch { serde_json::from_value(v).unwrap() };
+    let saved = |id: &str| {
+        let n = f.node(id).unwrap();
+        (n.model().map(str::to_owned), n.effort().map(str::to_owned))
+    };
+    f.board
+        .save_nodes(
+            "p",
+            &[
+                patch(json!({ "sessionId": A, "model": "fable", "effort": "xhigh" })),
+                patch(json!({ "sessionId": "term", "model": "opus", "effort": "max" })),
+            ],
+        )
+        .unwrap();
+    assert_eq!(saved(A), (Some("fable".into()), Some("xhigh".into())));
+    // A terminal runs no model.
+    assert_eq!(saved("term"), (None, None));
+    // One this version doesn't know leaves it as it was; null is the default.
+    f.board
+        .save_nodes(
+            "p",
+            &[patch(json!({ "sessionId": A, "model": "mythos", "effort": null }))],
+        )
+        .unwrap();
+    assert_eq!(saved(A), (Some("fable".into()), None));
+    f.board
+        .save_nodes("p", &[patch(json!({ "sessionId": A, "model": null, "x": 4 }))])
+        .unwrap();
+    assert_eq!(saved(A), (None, None));
+    assert_eq!(f.node(A).unwrap().x, 4.0);
+}
+
+#[tokio::test]
 async fn saves_node_patches() {
     let f = Fixture::new();
     f.talk(A, "Say hi", "Hi", 1);

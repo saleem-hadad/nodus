@@ -5,8 +5,8 @@
 
 use nodus_domain::js;
 use nodus_domain::{
-    BoardNode, CreateSessionOptions, CreatedBy, Project, ProjectAction, SessionCard, SessionKind, SessionModel,
-    SessionStatus,
+    BoardNode, CreateSessionOptions, CreatedBy, Project, ProjectAction, SessionCard, SessionEffort, SessionKind,
+    SessionModel, SessionStatus,
 };
 use nodus_store::BoardState;
 
@@ -102,6 +102,12 @@ pub fn new_session(
         opts.model
             .as_deref()
             .and_then(SessionModel::parse)
+            .filter(|_| !terminal),
+    );
+    node.set_effort(
+        opts.effort
+            .as_deref()
+            .and_then(SessionEffort::parse)
             .filter(|_| !terminal),
     );
     // SESS-117

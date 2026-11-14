@@ -163,7 +163,7 @@ mod tests {
 
     #[test]
     fn falls_back_to_a_session_on_sonnet() {
-        let guess = read_reply(&reply(&json!({ "kind": "into", "model": "fable" })));
+        let guess = read_reply(&reply(&json!({ "kind": "into", "model": "mythos" })));
         assert_eq!(
             guess,
             Some(BubbleGuess {

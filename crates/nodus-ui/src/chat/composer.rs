@@ -7,8 +7,8 @@ use gpui::component::Sizable as _;
 use gpui::component::input::{IndentInline, MoveDown, MoveUp, Textarea};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, FontWeight, InteractiveElement, IntoElement, KeyDownEvent, ParentElement, SharedString,
-    StatefulInteractiveElement, Styled, Window, div,
+    AnyElement, Context, FontWeight, InteractiveElement, IntoElement, KeyDownEvent, MouseButton, ParentElement,
+    SharedString, StatefulInteractiveElement, Styled, Window, div, px,
 };
 use nodus_domain::SessionStatus;
 
@@ -18,7 +18,7 @@ use crate::board::overlays::icons::{OvIcon, ov_icon};
 use crate::components::icon::{Icon, icon};
 use crate::components::tooltip::native_tooltip;
 use crate::components::tween::transition;
-use crate::theme::tokens::{Tokens, rgba, shadow};
+use crate::theme::tokens::{DUR_FAST, Tokens, rgba, shadow};
 use crate::theme::{self, ai, motion};
 
 /// The composer's corners.
@@ -39,6 +39,12 @@ impl ChatView {
             // The field sends on Return itself (InputEvent::PressEnter); it
             // goes no further.
             "enter" if !m.shift && !m.alt => cx.stop_propagation(),
+            // MODEL-032: Esc closes the model menu first.
+            "escape" if self.model_open => {
+                cx.stop_propagation();
+                self.model_open = false;
+                cx.notify();
+            }
             "escape" if self.slash_dismiss(window, cx) => cx.stop_propagation(),
             "escape" if busy => {
                 cx.stop_propagation();
@@ -175,7 +181,7 @@ impl ChatView {
                     .children(queue)
                     .children(error)
                     .child(pill)
-                    .child(self.hint(&t, live, status, menu_open, cx)),
+                    .child(self.hint(&t, live, status, menu_open, window, cx)),
             )
             .into_any_element()
     }
@@ -392,6 +398,81 @@ impl ChatView {
             .into_any_element()
     }
 
+    /// MODEL-030, MODEL-033: the chip naming the session's model and effort,
+    /// and the menu it opens above it.
+    fn model_picker(&mut self, t: &Tokens, window: &mut Window, cx: &mut Context<'_, Self>) -> AnyElement {
+        let card = self.card(cx);
+        let choice = card.as_ref().map(crate::model_menu::choice_of).unwrap_or_default();
+        let tip = if card.as_ref().is_some_and(crate::model_menu::pending) {
+            "Model and effort · Claude switches when this turn ends"
+        } else {
+            "Model and effort"
+        };
+        let me = cx.entity().downgrade();
+        let chip = crate::model_menu::chip(t, "chat-model", &choice, self.model_open, self.scale, tip)
+            .relative()
+            .child(crate::model_menu::probe(me.clone(), |this: &mut Self, b| {
+                this.model_chip = Some(b);
+            }))
+            .on_mouse_down(MouseButton::Left, |_, window, cx| {
+                window.prevent_default();
+                cx.stop_propagation();
+            })
+            .on_click({
+                let me = me.clone();
+                move |_, _, cx| {
+                    let _ = me.update(cx, |this, cx| {
+                        this.model_open = !this.model_open;
+                        cx.notify();
+                    });
+                }
+            });
+        let menu = self.model_open.then(|| {
+            let (model_me, effort_me, out_me) = (me.clone(), me.clone(), me.clone());
+            let on_model: crate::model_menu::OnModel = std::rc::Rc::new(move |model, _, cx| {
+                let _ = model_me.update(cx, |this, cx| {
+                    this.switch_model(nodus_domain::ModelSwitch::Model(model), cx);
+                });
+            });
+            let on_effort: crate::model_menu::OnEffort = std::rc::Rc::new(move |effort, _, cx| {
+                let _ = effort_me.update(cx, |this, cx| {
+                    this.switch_model(nodus_domain::ModelSwitch::Effort(effort), cx);
+                });
+            });
+            let body = crate::model_menu::menu(t, "chat-model-row", &choice, self.scale, &on_model, &on_effort);
+            let id = cx.entity_id();
+            let rise = crate::components::tween::enter(window, cx, ("chat-model-in", id), DUR_FAST, motion::ease_out);
+            div().absolute().right_0().bottom_full().pb(self.px(6.)).child(
+                div()
+                    .id("chat-model-menu")
+                    .occlude()
+                    .rounded(self.px(14.))
+                    .border_1()
+                    .border_color(t.border)
+                    .bg(look::field_bg(t))
+                    .shadow(t.lg())
+                    .opacity(rise)
+                    .translate(px(0.), self.px(6. * (1. - rise)))
+                    .on_mouse_down_out(move |e, _, cx| {
+                        let _ = out_me.update(cx, |this, cx| {
+                            if this.model_chip.is_some_and(|b| b.contains(&e.position)) {
+                                return;
+                            }
+                            this.model_open = false;
+                            cx.notify();
+                        });
+                    })
+                    .child(body),
+            )
+        });
+        div()
+            .relative()
+            .flex_none()
+            .child(chip)
+            .children(menu)
+            .into_any_element()
+    }
+
     /// Under the field: what Return does now, and the terminal when it's
     /// needed by hand (CHAT-026).
     fn hint(
@@ -400,6 +481,7 @@ impl ChatView {
         live: bool,
         status: Option<SessionStatus>,
         menu_open: bool,
+        window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
         let text = match (live, status) {
@@ -412,13 +494,24 @@ impl ChatView {
         };
         let open = self.dock.open;
         let me = cx.entity().downgrade();
+        let picker = self.model_picker(t, window, cx);
         div()
             .flex()
             .items_center()
+            .gap(self.px(4.))
             .px(self.px(4.))
             .text_size(self.px(11.))
             .text_color(t.text_tertiary)
-            .child(div().flex_1().child(text))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
+                    .child(text),
+            )
+            .child(picker)
             .when(!open, |d| {
                 d.child(
                     div()

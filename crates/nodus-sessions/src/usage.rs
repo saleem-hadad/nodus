@@ -1,5 +1,6 @@
-//! What a session's status line reports, as the card shows it: the model, how
-//! full the context window is, the cost and how long the session has run.
+//! What a session's status line reports, as the card shows it: the model and
+//! its effort, how full the context window is, the cost and how long the
+//! session has run.
 //!
 //! Every Claude process the app starts sends its status line to the session
 //! host instead of drawing it (the `--settings` from [`crate::hooks`]), and the
@@ -25,6 +26,11 @@ pub fn to_usage(payload: &Value, at: f64) -> SessionUsage {
         model.and_then(|m| get(m, "id")),
     );
     let model = truthy(name).then(|| string(name)).filter(|s| !s.is_empty());
+    // MODEL-012: `effort.level`, when the model takes one.
+    let effort = path(payload, &["effort", "level"])
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned);
 
     // HOST-168: what the next request sends, the reply's input cached or not.
     // Absent before the first reply, when Claude reports null.
@@ -49,6 +55,7 @@ pub fn to_usage(payload: &Value, at: f64) -> SessionUsage {
     // HOST-170
     SessionUsage {
         model,
+        effort,
         context_percent,
         context_tokens,
         context_size,
@@ -58,14 +65,15 @@ pub fn to_usage(payload: &Value, at: f64) -> SessionUsage {
     }
 }
 
-/// What a report is compared on before it's sent (HOST-171): the model, the
-/// context and the cost to the cent, not the clock. The TypeScript joins the
-/// same values with `|`.
+/// What a report is compared on before it's sent (HOST-171): the model and
+/// its effort, the context and the cost to the cent, not the clock. The
+/// TypeScript joins the same values with `|`.
 pub(crate) fn usage_key(usage: &SessionUsage) -> String {
     let number = |n: Option<f64>| n.map(number_to_string).unwrap_or_default();
     let cents = usage.cost_usd.map(|cost| js::round(cost * 100.0));
     [
         usage.model.clone().unwrap_or_default(),
+        usage.effort.clone().unwrap_or_default(),
         number(usage.context_percent),
         number(usage.context_tokens),
         number(usage.context_size),
@@ -101,6 +109,7 @@ mod tests {
             to_usage(&report(&json!({})), 1000.0),
             SessionUsage {
                 model: Some("Opus 5.5".into()),
+                effort: None,
                 context_percent: Some(1.5),
                 context_tokens: Some(3000.0),
                 context_size: Some(200_000.0),
@@ -127,6 +136,7 @@ mod tests {
         let key = |cost: f64| {
             usage_key(&SessionUsage {
                 model: None,
+                effort: None,
                 context_percent: None,
                 context_tokens: None,
                 context_size: None,
@@ -135,10 +145,19 @@ mod tests {
                 at: 0.0,
             })
         };
-        assert_eq!(key(0.1234), "||||12");
+        assert_eq!(key(0.1234), "|||||12");
         assert_eq!(key(0.1249), key(0.1234));
         // Math.round rounds halves up.
-        assert_eq!(key(0.125), "||||13");
-        assert_eq!(key(-0.125), "||||-12");
+        assert_eq!(key(0.125), "|||||13");
+        assert_eq!(key(-0.125), "|||||-12");
+    }
+
+    #[test]
+    fn model_012_reads_the_effort_level() {
+        let usage = to_usage(&report(&json!({"effort": {"level": "xhigh"}})), 0.0);
+        assert_eq!(usage.effort.as_deref(), Some("xhigh"));
+        assert_eq!(to_usage(&report(&json!({"effort": 3})), 0.0).effort, None);
+        // A change of effort alone is a new report.
+        assert_ne!(usage_key(&usage), usage_key(&to_usage(&report(&json!({})), 0.0)));
     }
 }

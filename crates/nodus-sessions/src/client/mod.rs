@@ -194,6 +194,9 @@ struct State {
     connecting: Option<(u64, Shared)>,
     next_request: u64,
     quitting: bool,
+    /// Each session's terminal size, as last started or resized, so a
+    /// restart keeps it (MODEL-011).
+    sizes: HashMap<String, (f64, f64)>,
 }
 
 struct Running {
@@ -482,6 +485,7 @@ impl HostClient {
         let (done, result) = oneshot::channel();
         {
             let mut state = self.inner.lock();
+            state.sizes.insert(opts.session_id.clone(), (cols, rows));
             let id = state.next_request;
             state.next_request += 1;
             state.pending_spawns.insert(
@@ -629,18 +633,26 @@ impl HostClient {
 
     /// HOST-123
     pub fn resize(&self, session_id: &str, cols: f64, rows: f64) {
-        let state = self.inner.lock();
+        let mut state = self.inner.lock();
         if !state.running.contains_key(session_id) || !cols.is_finite() || !rows.is_finite() {
             return;
         }
+        let (cols, rows) = (cols.floor().max(20.0), rows.floor().max(5.0));
+        state.sizes.insert(session_id.to_owned(), (cols, rows));
         Inner::send(
             &state,
             &ClientMessage::Resize {
                 session_id: session_id.into(),
-                cols: cols.floor().max(20.0),
-                rows: rows.floor().max(5.0),
+                cols,
+                rows,
             },
         );
+    }
+
+    /// A session's terminal size, as this client last started or resized
+    /// it; none for one it never did.
+    pub fn size(&self, session_id: &str) -> Option<(f64, f64)> {
+        self.inner.lock().sizes.get(session_id).copied()
     }
 
     /// Asks the host to stop a session; the future resolves when it has

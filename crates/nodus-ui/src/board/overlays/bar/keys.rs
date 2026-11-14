@@ -54,10 +54,14 @@ impl BoardCanvas {
             }
             return false;
         }
-        // BAR-023: Esc closes the picker, else lets go of the keyboard.
+        // BAR-023: Esc closes the picker (MODEL-020: or the model menu),
+        // else lets go of the keyboard.
         if key == "escape" {
             if self.overlays.bar.picking {
                 self.overlays.bar.picking = false;
+                cx.notify();
+            } else if self.overlays.bar.model_open {
+                self.overlays.bar.model_open = false;
                 cx.notify();
             } else {
                 window.focus(&self.focus, cx);

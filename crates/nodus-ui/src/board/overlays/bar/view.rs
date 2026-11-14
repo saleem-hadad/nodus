@@ -168,6 +168,7 @@ impl BoardCanvas {
         let me = cx.entity().downgrade();
         let label = super::text::send_label(target, into.as_ref().map(|i| i.title.as_str()));
         let send = self.render_send(&t, can_send, &label, window, cx);
+        let model = target.is_none().then(|| self.render_model_chip(&t, into.is_some(), cx));
         div()
             .id("bar-pill")
             .relative()
@@ -263,7 +264,43 @@ impl BoardCanvas {
                         .child("view or note"),
                 )
             })
+            .children(model)
             .child(send)
+            .into_any_element()
+    }
+
+    /// MODEL-020: the chip naming the model and effort the bar's session
+    /// runs on, which opens the model menu.
+    fn render_model_chip(&mut self, t: &Tokens, into: bool, cx: &mut Context<'_, Self>) -> AnyElement {
+        let choice = self.bar_model_choice(cx);
+        let pending = self
+            .bar_sends_into()
+            .and_then(|i| self.cards().iter().find(|c| c.node.session_id == i.session_id))
+            .is_some_and(crate::model_menu::pending);
+        let tip = match (into, pending) {
+            (true, true) => "This session’s model and effort · Claude switches when this turn ends",
+            (true, false) => "This session’s model and effort",
+            (false, _) => "Model and effort for new sessions",
+        };
+        let me = cx.entity().downgrade();
+        crate::model_menu::chip(t, "bar-model", &choice, self.overlays.bar.model_open, 1., tip)
+            .relative()
+            .self_center()
+            .child(crate::board::overlays::bounds_probe(cx.entity().downgrade(), |c, b| {
+                c.overlays.bar.model_area[1] = Some(b);
+            }))
+            .on_mouse_down(MouseButton::Left, |_, window, cx| {
+                cx.stop_propagation();
+                window.prevent_default();
+            })
+            .on_click(move |_, _, cx| {
+                if let Some(c) = me.upgrade() {
+                    c.update(cx, |c, cx| {
+                        c.overlays.bar.model_open = !c.overlays.bar.model_open;
+                        cx.notify();
+                    });
+                }
+            })
             .into_any_element()
     }
 

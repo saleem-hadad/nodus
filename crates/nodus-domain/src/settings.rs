@@ -3,6 +3,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+use crate::session::{SessionEffort, SessionModel};
+
 string_enum! {
     /// The app's appearance.
     pub enum ThemePreference {
@@ -60,6 +62,43 @@ impl Default for AppSettings {
     }
 }
 
+impl AppSettings {
+    /// The model the prompt bar starts sessions on (MODEL-020): a
+    /// [`SessionModel`] alias in `sessionModel`, kept with the settings this
+    /// version doesn't know, as a card's model is. None is Claude Code's default.
+    pub fn session_model(&self) -> Option<SessionModel> {
+        self.extra
+            .get(SESSION_MODEL)
+            .and_then(Value::as_str)
+            .and_then(SessionModel::parse)
+    }
+
+    /// The effort the prompt bar starts sessions on, in `sessionEffort`.
+    pub fn session_effort(&self) -> Option<SessionEffort> {
+        self.extra
+            .get(SESSION_EFFORT)
+            .and_then(Value::as_str)
+            .and_then(SessionEffort::parse)
+    }
+
+    /// A patch's model and effort for new sessions, set here as the core
+    /// keeps them: an empty string is none.
+    pub fn merge_session_choice(&mut self, patch: &SettingsPatch) {
+        for (key, value) in [
+            (SESSION_MODEL, &patch.session_model),
+            (SESSION_EFFORT, &patch.session_effort),
+        ] {
+            if let Some(value) = value {
+                self.extra.insert(key.into(), Value::from(value.as_str()));
+            }
+        }
+    }
+}
+
+/// Where [`AppSettings::session_model`] and [`AppSettings::session_effort`] are kept.
+const SESSION_MODEL: &str = "sessionModel";
+const SESSION_EFFORT: &str = "sessionEffort";
+
 /// A switch that starts on, when the file doesn't have it.
 fn on() -> bool {
     true
@@ -92,4 +131,11 @@ pub struct SettingsPatch {
     pub capture: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wheel_zoom: Option<bool>,
+    /// The prompt bar's model for new sessions, a [`SessionModel`] alias;
+    /// an empty string is Claude Code's default (MODEL-020).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_model: Option<String>,
+    /// Its effort, a [`SessionEffort`] level; an empty string is the model's default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_effort: Option<String>,
 }

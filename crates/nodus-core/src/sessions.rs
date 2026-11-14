@@ -3,8 +3,8 @@
 //! `src/main/ipc.ts`).
 
 use nodus_domain::{
-    AgentInfo, CreateSessionOptions, OpenSessionResult, QueuedPrompt, SessionCard, SessionSearchHit, SessionStatus,
-    SummaryResult, TranscriptMessage,
+    AgentInfo, CreateSessionOptions, ModelSwitch, OpenSessionResult, QueuedPrompt, SessionCard, SessionSearchHit,
+    SessionStatus, SummaryResult, TranscriptMessage,
 };
 use nodus_remote::Request;
 use nodus_sessions::launch;
@@ -21,6 +21,8 @@ const QUEUE_ON_SERVER: &str = "Prompts can’t be queued for a session on a serv
 const QUEUE_NOT_RUNNING: &str = "That session isn’t running";
 /// A prompt of nothing but spaces (QUEUE-013).
 const QUEUE_NOTHING: &str = "There’s nothing to queue";
+/// A restart while Claude asks something would lose the question (MODEL-011).
+const SWITCH_WAITING: &str = "Claude is asking you something. Answer it, then switch.";
 
 /// What [`SessionsApi::deliver`] did with a message.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -175,6 +177,40 @@ impl SessionsApi<'_> {
                     .on("session:send")
             })
             .await
+    }
+
+    /// `session:set-model` (MODEL-010, MODEL-011): a Claude card's model or
+    /// effort, saved so it starts and resumes on it. A running Claude here
+    /// is started again on it, resuming its conversation, once it's out of
+    /// its turn: at once when idle, else when the turn ends. `--model` and
+    /// `--effort` are that process's alone, where `/model` and `/effort` at
+    /// its prompt would make them the user's default for every session. A
+    /// session on a server takes it when it next starts. Rejects `Claude is
+    /// asking you something. Answer it, then switch.` while it waits on the
+    /// user, whose answer the restart would lose.
+    pub async fn set_model(&self, project_id: &str, session_id: &str, switch: ModelSwitch) -> CommandResult<()> {
+        const CHANNEL: &str = "session:set-model";
+        let inner = &self.nodus.inner;
+        let live = self.nodus.route_session(session_id).is_none() && inner.host.is_live(session_id);
+        let status = inner.status.status(session_id);
+        if live && status == SessionStatus::Waiting {
+            return Err(CommandError::new(CHANNEL, SWITCH_WAITING));
+        }
+        self.nodus
+            .board()
+            .save_nodes(project_id, &[switch.patch(session_id)])
+            .await?;
+        if !live {
+            return Ok(());
+        }
+        if status == SessionStatus::Working {
+            inner.restart_when_done(project_id, session_id);
+            return Ok(());
+        }
+        self.nodus
+            .on_core(inner.restart_on_model(project_id, session_id))
+            .await
+            .map_err(|err| CommandError::new(CHANNEL, err))
     }
 
     /// The prompts waiting for a running session's turn to end, first to go

@@ -267,13 +267,10 @@ impl Terminals {
 }
 
 impl Terminals {
-    /// An exited terminal of a server session that's live again starts over
-    /// from its replay (SRV-104). A local session is only ever started by
-    /// this app, which opens its terminal as it does.
+    /// An exited terminal of a session that's live again starts over from
+    /// its replay: a server session moved to another Claude account
+    /// (SRV-104), or one the core started again on another model (MODEL-011).
     fn revive(&self, session_id: &str, cx: &mut Context<'_, Self>) {
-        if !self.nodus.sessions().on_server(session_id) {
-            return;
-        }
         let project = match self.projects.lock() {
             Ok(projects) => projects.get(session_id).cloned(),
             Err(_) => None,
@@ -461,9 +458,10 @@ impl Pump {
         }
         let session = match &event {
             Event::PtyData { session_id, .. } | Event::PtyExit { session_id, .. } => session_id.clone(),
-            // SRV-104: a server session whose terminal here shows it exited
-            // is live again (moved to another Claude account): after the
-            // exit, in the same stream, so the terminal knows of it by now.
+            // SRV-104, MODEL-011: a session whose terminal here shows it
+            // exited is live again (moved to another Claude account, or
+            // started again on another model): after the exit, in the same
+            // stream, so the terminal knows of it by now.
             Event::Status {
                 session_id, live: true, ..
             } if !self.held.contains_key(session_id) && self.registry.is_exited(session_id) => {

@@ -24,6 +24,13 @@ macro_rules! shot {
 
 pub const SLIDES: &[Slide] = &[
     Slide {
+        version: "1.0.20",
+        title: "Pick the model",
+        text: "Choose Claude’s model and how hard it thinks, from the chat or the prompt bar.",
+        light: shot!("1.0.20-model-light"),
+        dark: shot!("1.0.20-model-dark"),
+    },
+    Slide {
         version: "1.0.19",
         title: "Claude sees the board",
         text: "Claude looks at your pictures and sketches, then circles, marks and adds to them.",

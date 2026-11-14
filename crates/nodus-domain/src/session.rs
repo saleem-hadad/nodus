@@ -115,6 +115,10 @@ pub struct SessionUsage {
     /// e.g. Opus 5.5
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// The effort level it thinks at, e.g. `high`; none for a model that
+    /// takes none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
     /// Share of the context window in use, 0–100. Unknown before the first reply.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context_percent: Option<f64>,
@@ -164,14 +168,20 @@ pub struct CreateSessionOptions {
     /// when none. Claude sessions only.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// How hard it thinks, a [`SessionEffort`] level; Claude Code's default
+    /// for the model when none. Claude sessions only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
 }
 
 string_enum! {
-    /// The models a session can be started on, as `claude --model` aliases.
+    /// The models a session can be started on, as `claude --model` aliases,
+    /// the most capable first.
     pub enum SessionModel {
-        Haiku = "haiku",
-        Sonnet = "sonnet",
+        Fable = "fable",
         Opus = "opus",
+        Sonnet = "sonnet",
+        Haiku = "haiku",
     }
 }
 
@@ -179,9 +189,92 @@ impl SessionModel {
     /// How it's named to the user.
     pub const fn label(self) -> &'static str {
         match self {
-            Self::Haiku => "Haiku",
-            Self::Sonnet => "Sonnet",
+            Self::Fable => "Fable",
             Self::Opus => "Opus",
+            Self::Sonnet => "Sonnet",
+            Self::Haiku => "Haiku",
+        }
+    }
+
+    /// What it's for, in a few words (MODEL-003).
+    pub const fn blurb(self) -> &'static str {
+        match self {
+            Self::Fable => "Most capable, hardest work",
+            Self::Opus => "Complex, long-running work",
+            Self::Sonnet => "Everyday work",
+            Self::Haiku => "Fastest, for quick tasks",
+        }
+    }
+
+    /// Whether Claude Code lets it think with an effort level: Haiku has none.
+    pub const fn takes_effort(self) -> bool {
+        !matches!(self, Self::Haiku)
+    }
+
+    /// The model a status line names (`Opus 5.5`, `claude-opus-5-5`), by
+    /// its family.
+    pub fn of_name(name: &str) -> Option<Self> {
+        let name = name.to_ascii_lowercase();
+        Self::ALL.iter().copied().find(|m| name.contains(m.as_str()))
+    }
+}
+
+/// A change to a Claude card's model or its effort (MODEL-010).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModelSwitch {
+    /// None is Claude Code's own default.
+    Model(Option<SessionModel>),
+    /// None is the model's own default, Claude Code's `auto`.
+    Effort(Option<SessionEffort>),
+}
+
+impl ModelSwitch {
+    /// The card's change, to save.
+    pub fn patch(self, session_id: &str) -> crate::NodePatch {
+        let (model, effort) = match self {
+            Self::Model(model) => (Some(model.map(|m| m.as_str().to_owned())), None),
+            Self::Effort(effort) => (None, Some(effort.map(|e| e.as_str().to_owned()))),
+        };
+        crate::NodePatch {
+            session_id: session_id.to_owned(),
+            model,
+            effort,
+            ..crate::NodePatch::default()
+        }
+    }
+}
+
+string_enum! {
+    /// How hard Claude thinks, as `claude --effort` levels, least first.
+    pub enum SessionEffort {
+        Low = "low",
+        Medium = "medium",
+        High = "high",
+        XHigh = "xhigh",
+        Max = "max",
+    }
+}
+
+impl SessionEffort {
+    /// How it's named to the user.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Low => "Low",
+            Self::Medium => "Medium",
+            Self::High => "High",
+            Self::XHigh => "Extra high",
+            Self::Max => "Max",
+        }
+    }
+
+    /// Its name where there's little room.
+    pub const fn short(self) -> &'static str {
+        match self {
+            Self::Low => "Low",
+            Self::Medium => "Med",
+            Self::High => "High",
+            Self::XHigh => "XHigh",
+            Self::Max => "Max",
         }
     }
 }

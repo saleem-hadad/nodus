@@ -291,6 +291,7 @@ mod tests {
             session_id: "s1".into(),
             usage: SessionUsage {
                 model: Some("Opus 5.5".into()),
+                effort: None,
                 context_percent: None,
                 context_tokens: None,
                 context_size: None,

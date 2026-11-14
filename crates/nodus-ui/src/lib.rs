@@ -20,6 +20,7 @@ pub mod format;
 pub mod git;
 #[cfg(target_os = "macos")]
 pub mod mac;
+pub mod model_menu;
 pub mod parity;
 pub mod platform;
 pub mod projects;

@@ -882,3 +882,123 @@ async fn queued_prompts_go_to_claude_when_its_turn_ends() {
 
     world.stop(nodus).await;
 }
+
+/// Waits until the stand-in has run `count` times for a session, and gives
+/// every run's arguments.
+async fn runs(world: &World, session_id: &str, count: usize) -> Vec<Vec<String>> {
+    tokio::time::timeout(WAIT, async {
+        loop {
+            let runs = world.argvs(session_id);
+            if runs.len() >= count {
+                return runs;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("no run {count} of {session_id}: {:?}", world.argvs(session_id)))
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_model_switch_starts_claude_again_on_it() {
+    use nodus_core::domain::{ModelSwitch, SessionEffort, SessionModel};
+    let world = World::new().await;
+    let nodus = world.start().await;
+    let repo = world.repo("models").await;
+    let project = nodus
+        .projects()
+        .add(Some(repo.to_string_lossy().into_owned()))
+        .await
+        .unwrap()
+        .unwrap();
+    let mut events = Events::new(&nodus);
+    let sessions = nodus.sessions();
+    // MODEL-001: started on the card's model and effort.
+    let card = sessions
+        .create(
+            &project.id,
+            &CreateSessionOptions {
+                model: Some("opus".into()),
+                effort: Some("high".into()),
+                ..CreateSessionOptions::default()
+            },
+        )
+        .await
+        .unwrap();
+    let id = card.node.session_id.clone();
+    assert_eq!((card.node.model(), card.node.effort()), (Some("opus"), Some("high")));
+    events.printed(&id, "stand-in ready").await;
+    let first = &runs(&world, &id, 1).await[0];
+    assert!(
+        has_pair(first, "--model", "opus") && has_pair(first, "--effort", "high"),
+        "{first:?}"
+    );
+    let node = async || {
+        let board = nodus.board().load(&project.id).await.unwrap();
+        board.cards.into_iter().find(|c| c.node.session_id == id).unwrap().node
+    };
+
+    // MODEL-011: idle, it's started again on the new model at once, its
+    // effort kept.
+    sessions
+        .set_model(&project.id, &id, ModelSwitch::Model(Some(SessionModel::Sonnet)))
+        .await
+        .unwrap();
+    let all = runs(&world, &id, 2).await;
+    assert!(
+        all.iter()
+            .any(|a| has_pair(a, "--model", "sonnet") && has_pair(a, "--effort", "high")),
+        "{all:?}"
+    );
+    assert_eq!(node().await.model(), Some("sonnet"));
+    events.status(&id, SessionStatus::Done, false).await;
+    events.status(&id, SessionStatus::Done, true).await;
+
+    // Mid-turn, the card takes it now and Claude when the turn ends.
+    let (port, token) = hook_target(&world.env_of(&id));
+    hook(port, &token, &id, "UserPromptSubmit", &json!({})).await;
+    events.status(&id, SessionStatus::Working, true).await;
+    sessions
+        .set_model(&project.id, &id, ModelSwitch::Effort(Some(SessionEffort::Max)))
+        .await
+        .unwrap();
+    assert_eq!(node().await.effort(), Some("max"));
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(world.argvs(&id).len(), 2, "not while it works");
+    hook(port, &token, &id, "Stop", &json!({})).await;
+    let all = runs(&world, &id, 3).await;
+    assert!(
+        all.iter()
+            .any(|a| has_pair(a, "--model", "sonnet") && has_pair(a, "--effort", "max")),
+        "{all:?}"
+    );
+
+    // Back to Claude Code's own model: no --model.
+    events.status(&id, SessionStatus::Done, false).await;
+    events.status(&id, SessionStatus::Done, true).await;
+    sessions
+        .set_model(&project.id, &id, ModelSwitch::Model(None))
+        .await
+        .unwrap();
+    let all = runs(&world, &id, 4).await;
+    assert!(
+        all.iter()
+            .any(|a| !a.contains(&"--model".to_owned()) && has_pair(a, "--effort", "max")),
+        "{all:?}"
+    );
+    assert_eq!(node().await.model(), None);
+
+    // Not while Claude asks something: the restart would lose the question.
+    events.status(&id, SessionStatus::Done, true).await;
+    let (port, token) = hook_target(&world.env_of(&id));
+    hook(port, &token, &id, "PermissionRequest", &json!({})).await;
+    events.status(&id, SessionStatus::Waiting, true).await;
+    let err = sessions
+        .set_model(&project.id, &id, ModelSwitch::Model(Some(SessionModel::Haiku)))
+        .await
+        .unwrap_err();
+    assert_eq!(err.message(), "Claude is asking you something. Answer it, then switch.");
+    assert_eq!(node().await.model(), None);
+
+    world.stop(nodus).await;
+}

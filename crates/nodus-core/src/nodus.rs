@@ -2,6 +2,7 @@
 //! order the main process does it (`src/main/index.ts`, `registerIpc` and
 //! `shutdown` in `src/main/ipc.ts`).
 
+use std::collections::HashMap;
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -274,6 +275,9 @@ pub(crate) struct Inner {
     claude_plugin: Option<String>,
     /// A server's part ([`crate::hosting`]); none in the app.
     pub(crate) hosted: Option<crate::hosting::Hosted>,
+    /// Running sessions switched to another model or effort mid-turn, by
+    /// id, with their projects: started again when the turn ends (MODEL-011).
+    pub(crate) model_restarts: Mutex<HashMap<String, String>>,
 }
 
 impl Nodus {
@@ -466,6 +470,7 @@ impl Nodus {
                     .hosting
                     .clone()
                     .map(|hosting| crate::hosting::Hosted::new(hosting, &config.home)),
+                model_restarts: Mutex::new(HashMap::new()),
             }
         });
         config
@@ -837,6 +842,47 @@ impl Inner {
     }
 
     /// A view's brain's extra arguments, every time it starts (SESS-133).
+    /// MODEL-011: starts a running session again on its card's model and
+    /// effort when its turn ends.
+    pub(crate) fn restart_when_done(&self, project_id: &str, session_id: &str) {
+        lock(&self.model_restarts).insert(session_id.to_owned(), project_id.to_owned());
+    }
+
+    fn take_model_restart(&self, session_id: &str) -> Option<String> {
+        lock(&self.model_restarts).remove(session_id)
+    }
+
+    /// MODEL-011: a running Claude stopped and started again on its card's
+    /// model and effort, resuming its conversation, at its terminal's size.
+    /// A card that left the board meanwhile isn't started.
+    pub(crate) async fn restart_on_model(&self, project_id: &str, session_id: &str) -> Result<(), String> {
+        let size = self
+            .host
+            .size(session_id)
+            .unwrap_or((launch::DEFAULT_COLS, launch::DEFAULT_ROWS));
+        self.host.kill(session_id).await;
+        let (project, node) = self.store.read(|state| {
+            (
+                state.project(project_id).ok().cloned(),
+                state.board(project_id).and_then(|b| b.nodes.get(session_id).cloned()),
+            )
+        });
+        let (Some(project), Some(node)) = (project, node.filter(|n| !n.archived)) else {
+            return Ok(());
+        };
+        let brain_args = self.brain_args(project_id, &node);
+        let opts = launch::for_open(
+            project_id,
+            &project.repo_path,
+            session_id,
+            Some(&node),
+            self.board.has_transcript(&project, session_id),
+            brain_args,
+            size,
+        );
+        self.spawn_session(opts).await
+    }
+
     pub(crate) fn brain_args(&self, project_id: &str, node: &BoardNode) -> Option<Vec<String>> {
         self.store.read(|state| {
             state
@@ -865,6 +911,16 @@ async fn follow_status(core: Weak<Inner>, mut changes: mpsc::UnboundedReceiver<S
         core.notify.status_changed(&session_id, status, live);
         if status == SessionStatus::Done {
             core.board.on_done(&session_id);
+            // MODEL-011: a switch made mid-turn, now the turn is over.
+            if let Some(project_id) = core.take_model_restart(&session_id).filter(|_| live) {
+                let restarting = Arc::clone(&core);
+                core.runtime.spawn(async move {
+                    if let Err(err) = restarting.restart_on_model(&project_id, &session_id).await {
+                        tracing::warn!("[model] couldn't start {session_id} again: {err}");
+                    }
+                });
+                continue;
+            }
         }
         core.views.brain_status(&session_id, status, live);
     }

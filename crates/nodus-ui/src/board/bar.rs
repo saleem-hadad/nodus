@@ -9,7 +9,8 @@ use nodus_board::compose::{ContextItem, with_context};
 use nodus_board::geometry::Point;
 use nodus_board::ink_draw::{fallback_width, stroke_box};
 use nodus_domain::{
-    BoardNote, BubbleRoute, CreateSessionOptions, FolderColor, Rect, SessionModel, SessionStatus, ShapeKind, js,
+    BoardNote, BubbleRoute, CreateSessionOptions, FolderColor, Rect, SessionEffort, SessionModel, SessionStatus,
+    ShapeKind, js,
 };
 
 use super::canvas::BoardCanvas;
@@ -224,7 +225,11 @@ impl BoardCanvas {
     /// `submitFromBar`: true when the bar should clear (BOARD-133…BOARD-137).
     pub fn submit_from_bar(&mut self, submission: Submission, cx: &mut Context<'_, Self>) -> Task<bool> {
         match submission {
-            Submission::Session { text } => self.start_bar_session(&text, None, None, cx),
+            // MODEL-022: on the model and effort the bar's chip names.
+            Submission::Session { text } => {
+                let choice = self.bar_model_choice(cx);
+                self.start_bar_session(&text, None, choice.model, choice.effort, cx)
+            }
             // BAR-042: shapes, pictures and ink selected with it go along.
             Submission::Into { session_id, text } => {
                 let text = with_context(&self.selected_area().into_iter().collect::<Vec<_>>(), &text);
@@ -256,8 +261,8 @@ impl BoardCanvas {
         cx: &mut Context<'_, Self>,
     ) -> Task<bool> {
         match route {
-            Some(BubbleRoute::Session(model)) => self.start_bar_session(&text, Some(at), Some(model), cx),
-            None => self.start_bar_session(&text, Some(at), None, cx),
+            Some(BubbleRoute::Session(model)) => self.start_bar_session(&text, Some(at), Some(model), None, cx),
+            None => self.start_bar_session(&text, Some(at), None, None, cx),
             Some(BubbleRoute::Note) => {
                 self.put_note(text, FolderColor::Yellow, at, false, cx);
                 Task::ready(true)
@@ -313,12 +318,13 @@ impl BoardCanvas {
     /// prompt, expanded and in auto mode, below the selected sessions or in
     /// view; the prompt rides on it as a note, or stays as one if it can't
     /// start. With `at` (the bubble's spot), its top left is there and the
-    /// board stays where it is; `model` is the one it runs on.
+    /// board stays where it is; `model` and `effort` are those it runs on.
     fn start_bar_session(
         &mut self,
         text: &str,
         at: Option<Point>,
         model: Option<SessionModel>,
+        effort: Option<SessionEffort>,
         cx: &mut Context<'_, Self>,
     ) -> Task<bool> {
         let (sources, mut context) = self.bar_context();
@@ -365,6 +371,7 @@ impl BoardCanvas {
             expanded: Some(true),
             auto_mode: Some(true),
             model: model.map(|m| m.as_str().to_owned()),
+            effort: effort.map(|e| e.as_str().to_owned()),
             ..CreateSessionOptions::default()
         };
         let nodus = self.state.read(cx).nodus.clone();

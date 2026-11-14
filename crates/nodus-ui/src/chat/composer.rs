@@ -1,5 +1,5 @@
 //! The composer under the chat: the prompts waiting in the queue, the field,
-//! and the buttons that send, queue or stop (CHAT-020…CHAT-023).
+//! and the buttons that send, queue or stop (CHAT-020…CHAT-023, CHAT-049).
 
 use std::time::Duration;
 
@@ -26,6 +26,17 @@ const RADIUS: f32 = 22.;
 
 /// The widest the composer gets in the session window, as the column above.
 const COMPOSER_W: f32 = 780.;
+
+/// Which queued prompts have `Send now` (CHAT-023, CHAT-049).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SendNow {
+    /// None: the session isn't running, or Claude is asking something.
+    Never,
+    /// The first: Claude is idle, interrupted before its turn ended.
+    First,
+    /// Each: Claude works, and takes one at its next step.
+    Any,
+}
 
 impl ChatView {
     /// CHAT-020: Return sends (or queues while Claude works), ⌘Return sends
@@ -69,7 +80,20 @@ impl ChatView {
         };
         self.composer
             .update(cx, |s, cx| s.set_placeholder(placeholder, window, cx));
-        let queue = self.render_queue(&t, busy, cx);
+        // MOTION-043: while Claude works, a faint light circles the field.
+        let working = live && status == Some(SessionStatus::Working);
+        // CHAT-049: a queued prompt can go now while Claude works; not while
+        // it asks something, which the words would answer.
+        let send_now = if !live {
+            SendNow::Never
+        } else if !busy {
+            SendNow::First
+        } else if working && !self.dialog {
+            SendNow::Any
+        } else {
+            SendNow::Never
+        };
+        let queue = self.render_queue(&t, busy, send_now, cx);
         let error = self.error.clone().map(|e| {
             div()
                 .text_size(self.px(12.))
@@ -110,8 +134,6 @@ impl ChatView {
                 rgba(0, 0, 0, focus * if t.dark { 0.3 } else { 0.07 }),
             ));
         }
-        // MOTION-043: while Claude works, a faint light circles the field.
-        let working = live && status == Some(SessionStatus::Working);
         let lit = transition(
             window,
             cx,
@@ -186,13 +208,74 @@ impl ChatView {
             .into_any_element()
     }
 
-    /// CHAT-021, CHAT-023: the prompts waiting for the turn to end.
-    fn render_queue(&mut self, t: &Tokens, busy: bool, cx: &mut Context<'_, Self>) -> Option<AnyElement> {
+    /// CHAT-021, CHAT-023, CHAT-049: the prompts waiting for the turn to end,
+    /// under those sent while Claude works, until it takes them (CHAT-052).
+    fn render_queue(
+        &mut self,
+        t: &Tokens,
+        busy: bool,
+        send_now: SendNow,
+        cx: &mut Context<'_, Self>,
+    ) -> Option<AnyElement> {
         let items = self.queue(cx);
-        if items.is_empty() {
+        if items.is_empty() && self.handed.is_empty() {
             return None;
         }
         let me = cx.entity().downgrade();
+        let tile = |t: &Tokens| {
+            div()
+                .flex_none()
+                .size(self.px(18.))
+                .rounded_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(t.bg_hover)
+                .text_color(t.text_secondary)
+                .text_size(self.px(10.5))
+                .font_weight(FontWeight::SEMIBOLD)
+        };
+        let words = |text: &str| {
+            div()
+                .flex_1()
+                .min_w_0()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .child(SharedString::from(text.replace('\n', " ")))
+        };
+        let row = || {
+            div()
+                .flex()
+                .items_center()
+                .gap(self.px(8.))
+                .px(self.px(6.))
+                .py(self.px(4.))
+                .rounded(self.px(8.))
+        };
+        // With prompts queued under them, they say how they differ; alone,
+        // the box's head says it.
+        let mixed = !items.is_empty();
+        let handed: Vec<AnyElement> = self
+            .handed
+            .iter()
+            .map(|h| {
+                row()
+                    .child(tile(t).child(ov_icon(OvIcon::ArrowUp, 10. * self.scale, 2.4, t.text_secondary)))
+                    .child(words(&h.text))
+                    .when(mixed, |d| {
+                        d.child(
+                            div()
+                                .flex_none()
+                                .whitespace_nowrap()
+                                .px(self.px(5.))
+                                .text_color(t.text_tertiary)
+                                .child("Sent · at Claude’s next step"),
+                        )
+                    })
+                    .into_any_element()
+            })
+            .collect();
         let rows: Vec<AnyElement> = items
             .iter()
             .enumerate()
@@ -202,6 +285,8 @@ impl ChatView {
                 let action = |id: String, label: &'static str| {
                     div()
                         .id(SharedString::from(id))
+                        .flex_none()
+                        .whitespace_nowrap()
                         .cursor_pointer()
                         .px(self.px(5.))
                         .rounded(self.px(4.))
@@ -209,43 +294,26 @@ impl ChatView {
                         .hover(|d| d.text_color(t.text_primary).bg(t.bg_hover))
                         .child(label)
                 };
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(self.px(8.))
-                    .px(self.px(6.))
-                    .py(self.px(4.))
-                    .rounded(self.px(8.))
-                    .child(
-                        div()
-                            .flex_none()
-                            .size(self.px(18.))
-                            .rounded_full()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .bg(t.bg_hover)
-                            .text_color(t.text_secondary)
-                            .text_size(self.px(10.5))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child(SharedString::from((n + 1).to_string())),
+                row()
+                    .child(tile(t).child(SharedString::from((n + 1).to_string())))
+                    .child(words(&item.text))
+                    .when(
+                        send_now == SendNow::Any || (n == 0 && send_now == SendNow::First),
+                        |d| {
+                            let tip = if busy {
+                                "Send it now: Claude reads it at its next step"
+                            } else {
+                                "Send it now"
+                            };
+                            d.child(
+                                action(format!("chat-q-now-{now_id}"), "Send now")
+                                    .tooltip(native_tooltip(tip.into()))
+                                    .on_click(move |_, _, cx| {
+                                        let _ = now_me.update(cx, |this, cx| this.send_queued_now(&now_id, cx));
+                                    }),
+                            )
+                        },
                     )
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .overflow_hidden()
-                            .whitespace_nowrap()
-                            .text_ellipsis()
-                            .child(SharedString::from(item.text.replace('\n', " "))),
-                    )
-                    .when(n == 0 && !busy, |d| {
-                        d.child(
-                            action(format!("chat-q-now-{now_id}"), "Send now").on_click(move |_, _, cx| {
-                                let _ = now_me.update(cx, |this, cx| this.send_queued_now(&now_id, cx));
-                            }),
-                        )
-                    })
                     .child(
                         action(format!("chat-q-edit-{edit_id}"), "Edit").on_click(move |_, window, cx| {
                             let _ = edit_me.update(cx, |this, cx| this.edit_queued(&edit_id, window, cx));
@@ -261,10 +329,18 @@ impl ChatView {
                     .into_any_element()
             })
             .collect();
-        let head = if busy {
-            "sent one at a time, as each turn ends"
+        let (title, head) = if items.is_empty() {
+            ("Sent".to_owned(), "Claude reads it at its next step")
+        } else if busy {
+            (
+                format!("Queued · {}", items.len()),
+                "sent one at a time, as each turn ends",
+            )
         } else {
-            "Claude stopped before its turn ended"
+            (
+                format!("Queued · {}", items.len()),
+                "Claude stopped before its turn ended",
+            )
         };
         Some(
             div()
@@ -290,10 +366,11 @@ impl ChatView {
                                 .whitespace_nowrap()
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(t.text_secondary)
-                                .child(SharedString::from(format!("Queued · {}", items.len()))),
+                                .child(SharedString::from(title)),
                         )
                         .child(div().flex_1().min_w_0().text_color(t.text_tertiary).child(head)),
                 )
+                .children(handed)
                 .children(rows)
                 .into_any_element(),
         )

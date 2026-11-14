@@ -133,8 +133,11 @@ fn mark_summaries(rows: &mut [Row], entries: &[ChatEntry]) {
     let mut used_tools = false;
     for r in 0..rows.len() {
         let i = match rows[r].kind {
-            RowKind::User(_) => {
-                used_tools = false;
+            RowKind::User(i) => {
+                // CHAT-050: what was sent while Claude worked is in its turn.
+                if entries[i].starts_turn() {
+                    used_tools = false;
+                }
                 continue;
             }
             RowKind::Tools(..) => {
@@ -148,7 +151,7 @@ fn mark_summaries(rows: &mut [Row], entries: &[ChatEntry]) {
         }
         rows[r].summary = rows[r + 1..]
             .iter()
-            .take_while(|next| !matches!(next.kind, RowKind::User(_)))
+            .take_while(|next| !matches!(next.kind, RowKind::User(j) if entries[j].starts_turn()))
             .all(|next| match next.kind {
                 RowKind::Entry(j) => matches!(&entries[j], ChatEntry::Notice { text, .. } if text != "Interrupted"),
                 _ => false,
@@ -163,6 +166,57 @@ pub(crate) struct Dock {
     /// Opened by the chat itself (Claude asked, a slash command ran), so it
     /// closes again when that's over.
     pub auto: bool,
+}
+
+/// A message sent while Claude worked, which Claude Code holds until its
+/// next step (CHAT-052).
+pub(crate) struct Handed {
+    pub id: String,
+    pub text: String,
+    /// The chat's entries when it was sent: it's one that comes after.
+    before: HashSet<String>,
+}
+
+/// Words compared as the user said them, whatever the spacing.
+fn said(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// CHAT-052: what was sent while Claude worked goes from the queue's box
+/// once the transcript has it, as the user's message at Claude's next step
+/// (CHAT-050) or at the turn's end: a message of the user's the chat didn't
+/// have when it was sent. It's matched by its words, else the oldest goes,
+/// as Claude Code may have changed them (a long paste).
+fn took_handed(handed: &mut Vec<Handed>, entries: &[ChatEntry]) {
+    for entry in entries {
+        if handed.is_empty() {
+            return;
+        }
+        let ChatEntry::User {
+            id,
+            text,
+            queued: false,
+            ..
+        } = entry
+        else {
+            continue;
+        };
+        let after: Vec<usize> = (0..handed.len()).filter(|&i| !handed[i].before.contains(id)).collect();
+        let Some(&oldest) = after.first() else {
+            continue;
+        };
+        let words = said(text);
+        let at = after
+            .iter()
+            .copied()
+            .find(|&i| said(&handed[i].text) == words)
+            .unwrap_or(oldest);
+        handed.remove(at);
+        // Each poll reads every entry again: this one took its message.
+        for h in handed.iter_mut() {
+            h.before.insert(id.clone());
+        }
+    }
 }
 
 pub struct ChatView {
@@ -221,6 +275,9 @@ pub struct ChatView {
     ticks: u32,
     /// The queue as last seen, to give back what an ended session didn't take.
     last_queue: Vec<QueuedPrompt>,
+    /// What was sent while Claude worked and isn't in the transcript yet
+    /// (CHAT-052).
+    pub(crate) handed: Vec<Handed>,
     last_status: Option<SessionStatus>,
     focus: FocusHandle,
     _poll: Option<Task<()>>,
@@ -315,6 +372,7 @@ impl ChatView {
             screen_dirty: true,
             ticks: 0,
             last_queue: Vec::new(),
+            handed: Vec::new(),
             last_status: None,
             focus: cx.focus_handle(),
             _poll: None,
@@ -407,6 +465,7 @@ impl ChatView {
                 }
             }
         }
+        self.took_handed(&entries);
         let rows = rows_of(&entries);
         let from = self
             .rows
@@ -513,6 +572,9 @@ impl ChatView {
             self.error = Some("Claude stopped before your queued messages went out. They’re back in the box.".into());
         }
         self.last_queue = queue;
+        if !live {
+            self.handed.clear();
+        }
         // CHAT-019: the last row carries the working line, so it's measured again.
         if status != self.last_status && !self.rows.is_empty() {
             let last = self.rows.len() - 1;
@@ -620,6 +682,19 @@ impl ChatView {
             self.dock = Dock { open: true, auto: true };
             self.wake_terminal(cx);
         }
+        // CHAT-052: sent while Claude works, it shows until Claude takes it.
+        let working = self
+            .card(cx)
+            .is_some_and(|c| c.live && c.status == SessionStatus::Working);
+        let handed = (now && working).then(|| {
+            let id = uuid::Uuid::new_v4().to_string();
+            self.handed.push(Handed {
+                id: id.clone(),
+                text: text.clone(),
+                before: self.entries.iter().map(|e| e.id().to_owned()).collect(),
+            });
+            id
+        });
         self.sending = true;
         cx.notify();
         let (project, session) = (self.project_id.clone(), self.session_id.clone());
@@ -633,11 +708,20 @@ impl ChatView {
                 this.sending = false;
                 if let Err(err) = result {
                     this.error = Some(err.ipc_message());
+                    if let Some(id) = handed {
+                        this.handed.retain(|h| h.id != id);
+                    }
                 }
                 cx.notify();
             });
         })
         .detach();
+    }
+
+    fn took_handed(&mut self, entries: &[ChatEntry]) {
+        if !self.handed.is_empty() {
+            took_handed(&mut self.handed, entries);
+        }
     }
 
     /// MODEL-032: the session's model or effort, picked from the menu. Not
@@ -709,8 +793,9 @@ impl ChatView {
         }
     }
 
-    /// CHAT-023: with Claude idle (it was interrupted, so no turn ended),
-    /// the first queued prompt goes now.
+    /// CHAT-023, CHAT-049: a queued prompt goes now, typed in at Claude's
+    /// prompt: with Claude idle (it was interrupted, so no turn ended), or
+    /// while it works, which takes it at its next step.
     pub(crate) fn send_queued_now(&mut self, id: &str, cx: &mut Context<'_, Self>) {
         if let Some(item) = self.unqueue(id, cx) {
             self.deliver(item.text, true, cx);
@@ -1069,8 +1154,56 @@ mod tests {
             at: 0.,
             text: "hi".into(),
             queued: false,
+            mid_turn: false,
             answers: None,
         }
+    }
+
+    fn said_by_user(id: &str, text: &str, queued: bool) -> ChatEntry {
+        ChatEntry::User {
+            id: id.into(),
+            at: 0.,
+            text: text.into(),
+            queued,
+            mid_turn: !queued,
+            answers: None,
+        }
+    }
+
+    fn handed(id: &str, text: &str, before: &[&str]) -> Handed {
+        Handed {
+            id: id.into(),
+            text: text.into(),
+            before: before.iter().map(|s| (*s).to_owned()).collect(),
+        }
+    }
+
+    #[test]
+    fn chat_052_what_was_sent_goes_once_the_transcript_has_it() {
+        let mut sent = vec![
+            handed("h1", "fix  the\ntests", &["u1"]),
+            handed("h2", "then push", &["u1"]),
+        ];
+        // What the chat had when they were sent, and a queued prompt, don't count.
+        took_handed(
+            &mut sent,
+            &[
+                said_by_user("u1", "then push", false),
+                said_by_user("q1", "then push", true),
+            ],
+        );
+        assert_eq!(sent.len(), 2);
+        // Matched by its words, whatever the spacing.
+        let mut seen = vec![said_by_user("u1", "x", false), said_by_user("m1", "then push", false)];
+        took_handed(&mut sent, &seen);
+        assert_eq!(sent.iter().map(|h| h.id.as_str()).collect::<Vec<_>>(), ["h1"]);
+        // The next poll reads them again; m1 took its message already.
+        took_handed(&mut sent, &seen);
+        assert_eq!(sent.len(), 1);
+        // Words Claude Code changed take the oldest.
+        seen.push(said_by_user("m2", "[Pasted text #1]", false));
+        took_handed(&mut sent, &seen);
+        assert!(sent.is_empty());
     }
 
     fn tool(id: &str) -> ChatEntry {
@@ -1180,5 +1313,27 @@ mod tests {
             })
             .collect();
         assert_eq!(summed, ["c", "f"]);
+    }
+
+    #[test]
+    fn chat_050_what_was_sent_while_claude_worked_doesnt_end_its_turn() {
+        let entries = vec![
+            user("u1"),
+            tool("t1"),
+            // Words before what the user sent mid-turn aren't the summary,
+            text("a"),
+            said_by_user("m1", "and the README", false),
+            // and the turn's tools still count after it.
+            text("b"),
+        ];
+        let summed: Vec<_> = rows_of(&entries)
+            .iter()
+            .filter(|r| r.summary)
+            .map(|r| match r.kind {
+                RowKind::Entry(i) => entries[i].id().to_owned(),
+                other => panic!("{other:?} marked"),
+            })
+            .collect();
+        assert_eq!(summed, ["b"]);
     }
 }

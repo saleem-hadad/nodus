@@ -169,7 +169,7 @@ impl ChatView {
     /// none when it opened that way.
     fn turn_over(&self, ix: usize) -> Option<Option<Instant>> {
         let next = self.rows.get(ix + 1..)?.iter().find_map(|r| match r.kind {
-            RowKind::User(i) => self.entries.get(i),
+            RowKind::User(i) => self.entries.get(i).filter(|e| e.starts_turn()),
             _ => None,
         });
         match next {
@@ -195,7 +195,7 @@ impl ChatView {
         let asked = self
             .entries
             .get(..i)
-            .and_then(|before| before.iter().rev().find(|e| e.is_user()))
+            .and_then(|before| before.iter().rev().find(|e| e.starts_turn()))
             .map_or(0., ChatEntry::at);
         let worked = (asked > 0. && at > asked).then(|| look::elapsed(((at - asked) / 1000.) as u64));
         let e = motion::ease_out(look::arrival(from, Duration::from_millis(420), window, cx));
@@ -265,14 +265,25 @@ impl ChatView {
         Some(since.elapsed().as_secs_f64() * 1000.)
     }
 
-    /// CHAT-005, CHAT-006, CHAT-007, CHAT-037: what the user said, in a
-    /// bubble on the right.
+    /// CHAT-005, CHAT-006, CHAT-007, CHAT-037, CHAT-050: what the user
+    /// said, in a bubble on the right.
     fn render_user(&mut self, i: usize, t: &Tokens, _cx: &mut Context<'_, Self>) -> AnyElement {
         let Some(ChatEntry::User {
-            text, queued, answers, ..
+            text,
+            queued,
+            mid_turn,
+            answers,
+            ..
         }) = self.entries.get(i)
         else {
             return div().into_any_element();
+        };
+        let how = if *queued {
+            Some("Queued while Claude worked")
+        } else if *mid_turn {
+            Some("Sent while Claude worked")
+        } else {
+            None
         };
         let inner = match answers {
             Some(answers) => self.answers_card(answers, t),
@@ -288,13 +299,13 @@ impl ChatView {
             .flex_col()
             .items_end()
             .gap(self.px(4.))
-            .when(*queued, |d| {
+            .when_some(how, |d, how| {
                 d.child(
                     div()
                         .pr(self.px(4.))
                         .text_size(self.px(11.))
                         .text_color(t.text_tertiary)
-                        .child("Queued while Claude worked"),
+                        .child(how),
                 )
             })
             .child(
@@ -762,13 +773,15 @@ impl ChatView {
                 line()
                     .child(
                         div()
+                            .flex_none()
                             .size(self.px(20.))
                             .flex()
                             .items_center()
                             .justify_center()
                             .child(waiting_dot(t, self.scale)),
                     )
-                    .child("Claude needs you below")
+                    // Bare text in a row of the list shrinks to its widest word.
+                    .child(div().whitespace_nowrap().child("Claude needs you below"))
                     .into_any_element(),
             ),
             _ => {

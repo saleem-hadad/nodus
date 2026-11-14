@@ -115,7 +115,8 @@ fn read_attr<'a>(head: &'a str, name: &str) -> Option<&'a str> {
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ChatEntry {
     /// Something the user said: typed, queued (handed over by the Stop
-    /// hook), or a form's or page's answers.
+    /// hook), sent while Claude worked (taken at its next step), or a
+    /// form's or page's answers.
     #[serde(rename_all = "camelCase")]
     User {
         id: String,
@@ -123,6 +124,8 @@ pub enum ChatEntry {
         text: String,
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         queued: bool,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        mid_turn: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         answers: Option<Answers>,
     },
@@ -209,6 +212,12 @@ impl ChatEntry {
     /// The user's side of the chat.
     pub fn is_user(&self) -> bool {
         matches!(self, Self::User { .. })
+    }
+
+    /// The user's message that starts a turn: not one sent while Claude
+    /// worked, which it takes within its turn (CHAT-050).
+    pub fn starts_turn(&self) -> bool {
+        matches!(self, Self::User { mid_turn: false, .. })
     }
 }
 

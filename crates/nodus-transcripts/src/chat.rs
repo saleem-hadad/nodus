@@ -27,6 +27,17 @@ use crate::value::{as_str, field, truthy};
 /// opens (CHAT-002).
 pub const CHAT_MAX_BYTES: u64 = 16 * 1024 * 1024;
 
+/// How the user's words reached Claude.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Via {
+    /// Typed at its prompt.
+    Typed,
+    /// Handed over by the Stop hook from the queue (CHAT-006).
+    Queued,
+    /// Sent while it worked, taken at its next step (CHAT-050).
+    MidTurn,
+}
+
 /// The board tools' server, as its tools are named: `mcp__nodus__show_visual`.
 const OUR_TOOLS: &str = "mcp__nodus__";
 
@@ -169,18 +180,44 @@ impl ChatLog {
             Some("user") => self.user(line, uuid, at),
             Some("assistant") => self.assistant(line, &uuid, at),
             Some("system") => self.system(line, uuid, at),
-            Some("attachment") => self.attachment(line),
+            Some("attachment") => self.attachment(line, uuid, at),
             _ => {}
+        }
+    }
+
+    fn attachment(&mut self, line: &Json, uuid: String, at: f64) {
+        let attachment = line.get("attachment");
+        match as_str(field(attachment, "type")) {
+            Some("skill_listing") => self.skill_listing(attachment),
+            Some("queued_command") => self.mid_turn(attachment, uuid, at),
+            _ => {}
+        }
+    }
+
+    /// CHAT-050: what the user sent while Claude worked, which Claude Code
+    /// hands it at its next step. Another session's message (`isMeta`, a
+    /// `peer` origin) and a background task's notification aren't the
+    /// user's.
+    fn mid_turn(&mut self, attachment: Option<&Value>, uuid: String, at: f64) {
+        if as_str(field(attachment, "commandMode")) != Some("prompt") || truthy(field(attachment, "isMeta")) {
+            return;
+        }
+        let origin = field(field(attachment, "origin"), "kind");
+        if truthy(origin) && origin.and_then(Value::as_str) != Some("human") {
+            return;
+        }
+        let Some(prompt) = as_str(field(attachment, "prompt")) else {
+            return;
+        };
+        let words = prompt_full(prompt);
+        if !words.is_empty() {
+            self.user_said(uuid, at, words, Via::MidTurn);
         }
     }
 
     /// CHAT-043: Claude Code lists the skills it offers when the session
     /// starts, and lists those added later as they come.
-    fn attachment(&mut self, line: &Json) {
-        let attachment = line.get("attachment");
-        if as_str(field(attachment, "type")) != Some("skill_listing") {
-            return;
-        }
+    fn skill_listing(&mut self, attachment: Option<&Value>) {
         let Some(Value::Array(names)) = field(attachment, "names") else {
             return;
         };
@@ -227,7 +264,7 @@ impl ChatLog {
         // CHAT-006: a queued prompt, handed to Claude by the Stop hook.
         if let Some(words) = queued_text(trimmed) {
             let words = js::trim(words).to_owned();
-            self.user_said(uuid, at, words, true);
+            self.user_said(uuid, at, words, Via::Queued);
             return;
         }
         if truthy(line.get("isMeta")) || truthy(line.get("isCompactSummary")) {
@@ -277,11 +314,11 @@ impl ChatLog {
                 format!("{words}\n\n{label}")
             };
         }
-        self.user_said(uuid, at, words, false);
+        self.user_said(uuid, at, words, Via::Typed);
     }
 
     /// CHAT-007: a message that answers a form or a page marks it answered.
-    fn user_said(&mut self, id: String, at: f64, text: String, queued: bool) {
+    fn user_said(&mut self, id: String, at: f64, text: String, via: Via) {
         let answers = Answers::from_message(&text);
         if let Some(answers) = &answers {
             self.mark_answered(&answers.to, &answers.answers);
@@ -290,7 +327,8 @@ impl ChatLog {
             id,
             at,
             text,
-            queued,
+            queued: via == Via::Queued,
+            mid_turn: via == Via::MidTurn,
             answers,
         });
     }
@@ -762,6 +800,44 @@ mod tests {
         log.refresh();
         assert_eq!(kinds(&log), ["user", "notice"]);
         assert!(matches!(&log.entries()[0], ChatEntry::User { queued: true, text, .. } if text == "run the tests"));
+    }
+
+    #[test]
+    fn chat_050_what_the_user_sent_while_claude_worked_is_theirs() {
+        let t = Transcript::new();
+        let mut log = ChatLog::new(t.path.clone());
+        let queued = |uuid: &str, attachment: Value| json!({ "type": "attachment", "uuid": uuid, "timestamp": "2026-11-14T10:00:02Z", "attachment": attachment });
+        t.add(&[
+            user("u1", &json!("fix the tests")),
+            queued(
+                "q1",
+                json!({ "type": "queued_command", "commandMode": "prompt", "humanTurn": true,
+                        "origin": { "kind": "human" }, "prompt": "and update the README" }),
+            ),
+            queued(
+                "q2",
+                json!({ "type": "queued_command", "commandMode": "prompt", "isMeta": true,
+                        "origin": { "kind": "peer", "from": "x" }, "prompt": "a peer's words" }),
+            ),
+            queued(
+                "q3",
+                json!({ "type": "queued_command", "commandMode": "task-notification",
+                        "prompt": "<task-notification>done</task-notification>" }),
+            ),
+            queued(
+                "q4",
+                json!({ "type": "queued_command", "commandMode": "prompt",
+                        "prompt": "<pasted_content>long words</pasted_content>" }),
+            ),
+        ]);
+        log.refresh();
+        assert_eq!(kinds(&log), ["user", "user", "user"]);
+        assert!(matches!(
+            &log.entries()[1],
+            ChatEntry::User { mid_turn: true, queued: false, text, id, .. } if text == "and update the README" && id == "q1"
+        ));
+        assert!(matches!(&log.entries()[2], ChatEntry::User { mid_turn: true, text, .. } if text == "long words"));
+        assert!(matches!(&log.entries()[0], ChatEntry::User { mid_turn: false, .. }));
     }
 
     #[test]

@@ -35,9 +35,16 @@ pub(crate) fn markdown_style(t: &Tokens, s: f32) -> TextViewStyle {
         .with_selection(t.bg_selected.into())
         .with_code_background(t.bg_sunken.into())
         .with_border(t.border.into())
-        // Inline code keeps a light wash on the light theme's: name it for both.
+        // CHAT-047: inline code (paths, names) in the accent, on a wash of it.
         .with_inline_code(HighlightStyle {
-            background_color: Some(if t.dark { t.bg_pressed } else { t.bg_hover }.into()),
+            color: Some(t.accent.into()),
+            background_color: Some(
+                Rgba {
+                    a: if t.dark { 0.16 } else { 0.09 },
+                    ..t.accent
+                }
+                .into(),
+            ),
             ..HighlightStyle::default()
         })
         .with_paragraph_gap(rems(0.6 * s))
@@ -203,7 +210,7 @@ impl ChatView {
                     .py(self.px(9.))
                     .rounded(self.px(18.))
                     .rounded_br(self.px(6.))
-                    .bg(t.bg_hover)
+                    .bg(look::your_bubble(t))
                     .child(inner),
             )
             .into_any_element()
@@ -297,6 +304,7 @@ impl ChatView {
                 detail,
                 failed,
                 done,
+                changes,
                 ..
             }) = self.entries.get(i)
             else {
@@ -313,7 +321,11 @@ impl ChatView {
                     look::tool_icon(name),
                     12.5 * self.scale,
                     1.9,
-                    if *failed { t.status_waiting } else { t.text_tertiary },
+                    if *failed {
+                        t.status_waiting
+                    } else {
+                        look::tool_tone(name, t)
+                    },
                 )
                 .into_any_element()
             };
@@ -361,6 +373,31 @@ impl ChatView {
                         .text_color(t.text_tertiary)
                         .child(SharedString::from(detail.clone())),
                 )
+                // CHAT-047: what an edit or a write changed, `+12 −3`.
+                .when_some(changes.filter(|c| c.added + c.removed > 0), |d, c| {
+                    d.child(
+                        div()
+                            .flex_none()
+                            .flex()
+                            .gap(self.px(5.))
+                            .font_family(fonts::mono())
+                            .text_size(self.px(11.5))
+                            .when(c.added > 0, |d| {
+                                d.child(
+                                    div()
+                                        .text_color(t.diff_add)
+                                        .child(SharedString::from(format!("+{}", c.added))),
+                                )
+                            })
+                            .when(c.removed > 0, |d| {
+                                d.child(
+                                    div()
+                                        .text_color(t.diff_del)
+                                        .child(SharedString::from(format!("−{}", c.removed))),
+                                )
+                            }),
+                    )
+                })
                 .when(!running, |d| {
                     d.child(look::outcome(*failed, 11. * self.scale, ended, t))
                 });
@@ -442,6 +479,7 @@ impl ChatView {
                         look::words(&markdown, share).to_owned(),
                     )
                     .motion(look::settle())
+                    .shared_code_block_highlighter(super::syntax::highlighter(t))
                     .style(markdown_style(t, self.scale))
                     .selectable(true),
                 )

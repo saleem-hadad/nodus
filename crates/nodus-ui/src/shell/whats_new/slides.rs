@@ -31,6 +31,13 @@ pub const SLIDES: &[Slide] = &[
         dark: shot!("1.0.18-working-dark"),
     },
     Slide {
+        version: "1.0.18",
+        title: "Easier to read",
+        text: "Code in colour, your messages tinted, and what each edit changed at a glance.",
+        light: shot!("1.0.18-colour-light"),
+        dark: shot!("1.0.18-colour-dark"),
+    },
+    Slide {
         version: "1.0.16",
         title: "A smoother chat",
         text: "Replies ease in, tool calls sit on tidy cards, and the box lifts as you type.",

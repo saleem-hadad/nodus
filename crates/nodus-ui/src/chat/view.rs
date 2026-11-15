@@ -886,6 +886,9 @@ impl Render for ChatView {
             .flex()
             .flex_col()
             .bg(t.bg_elevated)
+            // The session window's body clips square, so its rounded foot is
+            // painted here.
+            .when(!self.in_card, |d| d.rounded_b(theme::tokens::RADIUS_XL))
             .font_family(fonts::UI)
             .text_color(t.text_primary)
             .text_size(self.px(13.5))

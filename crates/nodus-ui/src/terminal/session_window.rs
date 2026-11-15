@@ -512,7 +512,6 @@ impl SessionWindow {
                 .id("chat-body")
                 .flex_1()
                 .min_h_0()
-                .rounded_b(RADIUS_XL)
                 .overflow_hidden()
                 .child(chat.clone())
                 .into_any_element();

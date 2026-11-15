@@ -1384,7 +1384,7 @@ impl BoardCanvas {
     pub(crate) fn cover(&self, typing: bool, cx: &gpui::App) -> Cover {
         let s = self.state.read(cx);
         Cover {
-            modal: s.terminal_session_id.is_some(),
+            modal: s.session_window.is_open(),
             preview: s.preview_session_id.is_some(),
             agents: s.agent_view.is_some(),
             diff: s.diff_open,
@@ -1400,12 +1400,26 @@ impl BoardCanvas {
             return;
         }
         match command {
-            MenuCommand::NewSession => self.create_session(None, SessionKind::Claude, cx),
-            MenuCommand::NewTerminal => self.create_session(None, SessionKind::Terminal, cx),
+            // SPLIT-005: with room in the session window, beside what it shows.
+            MenuCommand::NewSession | MenuCommand::NewTerminal => {
+                let kind = if command == MenuCommand::NewSession {
+                    SessionKind::Claude
+                } else {
+                    SessionKind::Terminal
+                };
+                let beside = {
+                    let panes = &self.state.read(cx).session_window;
+                    panes.has_room().then(|| panes.focused().map(str::to_owned)).flatten()
+                };
+                match beside {
+                    Some(next_to) => self.create_session_beside(&next_to, kind, cx),
+                    None => self.create_session(None, kind, cx),
+                }
+            }
             // MODAL-031: over the session window (and the preview), which close.
             MenuCommand::Search => {
                 self.state.update(cx, |s, cx| {
-                    s.terminal_session_id = None;
+                    s.session_window.clear();
                     s.preview_session_id = None;
                     cx.notify();
                 });

@@ -26,19 +26,21 @@ impl Global for PreviewFindState {}
 
 /// `openTerminal` (MODAL-002): the session window, closing the preview.
 pub fn open_terminal(state: &Entity<AppState>, session_id: &str, cx: &mut App) {
+    state.update(cx, |s, cx| s.open_terminal(session_id, cx));
+}
+
+/// `closeTerminal` (MODAL-006: the process keeps running): every pane,
+/// remembered as they were (SPLIT-022).
+pub fn close_terminal(state: &Entity<AppState>, cx: &mut App) {
     state.update(cx, |s, cx| {
-        s.terminal_session_id = Some(session_id.to_owned());
-        s.preview_session_id = None;
+        s.session_window.clear();
         cx.notify();
     });
 }
 
-/// `closeTerminal` (MODAL-006: the process keeps running).
-pub fn close_terminal(state: &Entity<AppState>, cx: &mut App) {
-    state.update(cx, |s, cx| {
-        s.terminal_session_id = None;
-        cx.notify();
-    });
+/// SPLIT-006: one pane of the session window.
+pub fn close_pane(state: &Entity<AppState>, session_id: &str, cx: &mut App) {
+    state.update(cx, |s, cx| s.close_pane(session_id, cx));
 }
 
 /// `openPreview` (TRANS-002): records the search, closes the session window

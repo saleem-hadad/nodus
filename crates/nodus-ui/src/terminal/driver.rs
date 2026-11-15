@@ -250,7 +250,7 @@ pub async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
         }
         "route" => Ok(cx.update(|cx| {
             let confirm = window::main_shell(cx)
-                .and_then(|shell| shell.read(cx).terminal_layers.read(cx).session_window().cloned())
+                .and_then(|shell| shell.read(cx).terminal_layers.read(cx).session_window(cx))
                 .is_some_and(|w| w.read(cx).asking());
             let search = window::main_shell(cx)
                 .and_then(|shell| shell.read(cx).board().cloned())
@@ -263,7 +263,8 @@ pub async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
                 "confirm": confirm,
                 "route": s.route.project_id(),
                 "board": s.board.as_ref().map(|b| b.project.id.clone()),
-                "terminal": s.terminal_session_id,
+                "terminal": s.session_window.focused(),
+                "panes": s.session_window.ids(),
                 "preview": s.preview_session_id,
                 "agents": s.agent_view.as_ref().map(|(id, _)| id.clone()),
                 "search": search,

@@ -119,11 +119,7 @@ impl CardActions for CanvasActions {
     }
     fn open_terminal(&self, session_id: &str, cx: &mut App) {
         if let Some(state) = self.state(cx) {
-            let id = session_id.to_owned();
-            state.update(cx, |s, cx| {
-                s.terminal_session_id = Some(id);
-                cx.notify();
-            });
+            state.update(cx, |s, cx| s.open_terminal(session_id, cx));
         }
     }
     fn remove_notes(&self, note_ids: &[String], cx: &mut App) {
@@ -232,7 +228,7 @@ pub fn env(board: &BoardCx, zoom: f32, window: &Window, cx: &mut App) -> Rc<Boar
         board_bounds: Bounds::new(point(px(0.), px(52.)), size(viewport.width, viewport.height - px(52.))),
         now_ms: parity::now_ms(cx),
         text_focus: board.renaming.is_some(),
-        terminal_modal: state.and_then(|s| s.terminal_session_id.clone()),
+        terminal_modal: state.map(|s| s.session_window.ids().to_vec()).unwrap_or_default(),
         platform: Platform::CURRENT,
         actions: Rc::new(CanvasActions(board.actions.clone())),
         terminals: Some(Rc::new(CardHost {

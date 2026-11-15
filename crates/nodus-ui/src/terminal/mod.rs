@@ -21,6 +21,8 @@ pub mod layers;
 pub mod messages;
 pub mod metrics;
 pub mod overlays;
+pub mod pane_window;
+pub mod panes;
 pub mod preview;
 pub mod session_window;
 pub mod store;

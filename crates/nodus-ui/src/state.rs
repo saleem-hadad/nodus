@@ -101,7 +101,8 @@ pub struct AppState {
     pub board: Option<BoardSnapshot>,
     pub board_loading: bool,
     pub diff_open: bool,
-    pub terminal_session_id: Option<String>,
+    /// The session window's panes (MODAL-001, SPLIT-001); empty while it's closed.
+    pub session_window: crate::terminal::panes::Panes,
     pub preview_session_id: Option<String>,
     pub agent_view: Option<(String, Option<String>)>,
     pub selection: Vec<String>,
@@ -167,7 +168,7 @@ impl AppState {
             board: None,
             board_loading: false,
             diff_open: false,
-            terminal_session_id: None,
+            session_window: Default::default(),
             preview_session_id: None,
             agent_view: None,
             selection: Vec::new(),
@@ -291,8 +292,13 @@ impl AppState {
         } else if self.agent_view.is_some() {
             self.agent_view = None;
             cx.notify();
-        } else if self.terminal_session_id.is_some() {
-            self.terminal_session_id = None;
+        } else if self.session_window.len() > 1 {
+            // SPLIT-007: the pane the keyboard is in first.
+            if let Some(focused) = self.session_window.focused().map(str::to_owned) {
+                self.close_pane(&focused, cx);
+            }
+        } else if self.session_window.is_open() {
+            self.session_window.clear();
             cx.notify();
         } else if self.preview_session_id.is_some() {
             self.preview_session_id = None;
@@ -316,7 +322,7 @@ impl AppState {
         self.route = route.clone();
         self.board = None;
         self.selection.clear();
-        self.terminal_session_id = None;
+        self.session_window.clear();
         self.preview_session_id = None;
         self.agent_view = None;
         self.diff_open = false;
@@ -432,7 +438,7 @@ impl AppState {
         if self.route.project_id() != Some(request.project_id.as_str()) {
             self.navigate(Route::Board(request.project_id.clone()), cx);
         } else {
-            self.terminal_session_id = None;
+            self.session_window.clear();
             self.preview_session_id = None;
             self.agent_view = None;
             self.diff_open = false;
@@ -713,7 +719,7 @@ impl AppState {
 
     /// CHAT-028: the session window closes and the board shows the node.
     pub fn show_node(&mut self, id: String, cx: &mut Context<'_, Self>) {
-        self.terminal_session_id = None;
+        self.session_window.clear();
         cx.emit(StateEvent::ShowNode(id));
         cx.notify();
     }

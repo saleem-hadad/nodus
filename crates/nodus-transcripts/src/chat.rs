@@ -13,7 +13,7 @@ use std::fs::{self, File};
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock};
 
-use nodus_domain::{Answers, ChatEntry, LineChanges, js, queued_text};
+use nodus_domain::{Answers, ChatEntry, LineChanges, is_passing_api_error, js, queued_text};
 use nodus_visual::{Segment, split_fences};
 use regex::Regex;
 use serde_json::Value;
@@ -43,6 +43,22 @@ const OUR_TOOLS: &str = "mcp__nodus__";
 
 /// A notice's text is cut to this many characters (CHAT-015).
 const NOTICE_MAX_CHARS: usize = 2000;
+
+/// A notice's words: its terminal colours taken out, trimmed and cut
+/// (CHAT-015); none when nothing's left.
+fn notice_text(text: &str) -> Option<String> {
+    let text = ANSI.replace_all(text, "");
+    let text = js::trim(&text);
+    if text.is_empty() {
+        return None;
+    }
+    Some(if text.chars().count() > NOTICE_MAX_CHARS {
+        let cut: String = text.chars().take(NOTICE_MAX_CHARS).collect();
+        format!("{}…", cut.trim_end())
+    } else {
+        text.to_owned()
+    })
+}
 
 static ANSI: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\x1b\[[0-9;?]*[A-Za-z]").expect("a valid pattern"));
 static LOCAL_OUTPUT: LazyLock<Regex> = LazyLock::new(|| {
@@ -155,18 +171,9 @@ impl ChatLog {
     }
 
     fn notice(&mut self, id: String, at: f64, text: &str) {
-        let text = ANSI.replace_all(text, "");
-        let text = js::trim(&text);
-        if text.is_empty() {
-            return;
+        if let Some(text) = notice_text(text) {
+            self.push(ChatEntry::Notice { id, at, text });
         }
-        let text = if text.chars().count() > NOTICE_MAX_CHARS {
-            let cut: String = text.chars().take(NOTICE_MAX_CHARS).collect();
-            format!("{}…", cut.trim_end())
-        } else {
-            text.to_owned()
-        };
-        self.push(ChatEntry::Notice { id, at, text });
     }
 
     fn apply(&mut self, line: &Json) {
@@ -350,7 +357,15 @@ impl ChatLog {
     fn assistant(&mut self, line: &Json, uuid: &str, at: f64) {
         // CHAT-016
         if truthy(line.get("isApiErrorMessage")) {
-            self.notice(uuid.to_owned(), at, &message_text(line));
+            if let Some(text) = notice_text(&message_text(line)) {
+                let passing = as_str(line.get("error")).is_some_and(is_passing_api_error);
+                self.push(ChatEntry::Error {
+                    id: uuid.to_owned(),
+                    at,
+                    text,
+                    passing,
+                });
+            }
             return;
         }
         let blocks = match field(line.get("message"), "content") {
@@ -659,6 +674,7 @@ mod tests {
                 ChatEntry::Questions { .. } => "questions",
                 ChatEntry::Page { .. } => "page",
                 ChatEntry::Notice { .. } => "notice",
+                ChatEntry::Error { .. } => "error",
             })
             .collect()
     }
@@ -800,6 +816,46 @@ mod tests {
         log.refresh();
         assert_eq!(kinds(&log), ["user", "notice"]);
         assert!(matches!(&log.entries()[0], ChatEntry::User { queued: true, text, .. } if text == "run the tests"));
+    }
+
+    #[test]
+    fn chat_016_the_api_error_a_turn_ended_on() {
+        let t = Transcript::new();
+        let mut log = ChatLog::new(t.path.clone());
+        let failed = |uuid: &str, error: &str, text: &str| {
+            let mut line = assistant(uuid, &json!({ "type": "text", "text": text }));
+            line["isApiErrorMessage"] = json!(true);
+            line["error"] = json!(error);
+            line
+        };
+        t.add(&[
+            user("u1", &json!("open the PR")),
+            assistant(
+                "a1",
+                &json!({ "type": "text", "text": "Committing, then opening the PR." }),
+            ),
+            failed(
+                "e1",
+                "server_error",
+                "API Error: Connection lost mid-response. The response above may be incomplete.",
+            ),
+            json!({ "type": "system", "subtype": "turn_duration", "uuid": "s1", "durationMs": 1000 }),
+            user("u2", &json!("continue")),
+            failed("e2", "rate_limit", "You've hit your session limit · resets 2pm"),
+        ]);
+        log.refresh();
+        assert_eq!(kinds(&log), ["user", "text", "error", "user", "error"]);
+        assert_eq!(
+            log.entries()[2],
+            ChatEntry::Error {
+                id: "e1".into(),
+                at: log.entries()[2].at(),
+                text: "API Error: Connection lost mid-response. The response above may be incomplete.".into(),
+                passing: true,
+            }
+        );
+        // A limit doesn't pass with another request.
+        assert!(matches!(&log.entries()[4], ChatEntry::Error { passing: false, .. }));
     }
 
     #[test]

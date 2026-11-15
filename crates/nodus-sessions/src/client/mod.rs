@@ -38,7 +38,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use indexmap::IndexMap;
-use nodus_domain::{Event, EventSink, QueuedPrompt, SessionStatus};
+use nodus_domain::{Event, EventSink, QueuedPrompt, SessionStatus, is_passing_api_error};
 use nodus_host_proto::{
     ClientMessage, ExecResult, HistoryEntry, HostMessage, HostPaths, PROTOCOL, Platform, ReplayBuffer,
     STATUS_LINE_EVENT, SpawnRequest, Welcome, encode, host_paths, trusts_host, write_hook_config,
@@ -52,7 +52,7 @@ pub use launcher::{HostLauncher, ProcessLauncher};
 pub use runner::HostRunner;
 
 use self::connection::{Conn, Greeting, Reader};
-use crate::hooks::{HookEndpoint, SessionInput};
+use crate::hooks::{HookEndpoint, STOP_FAILURE_EVENT, SessionInput};
 use crate::launch::{self, Command, SpawnOptions};
 
 /// How often output reaches the window, at most, per session.
@@ -896,9 +896,9 @@ impl Inner {
 
     /// QUEUE-011: the session's turn ended and the host didn't hand Claude
     /// its next queued prompt (it doesn't keep queues, the session's hook
-    /// is from an older app, or the queue changed while the hook was on its
-    /// way), so it's typed in, unless something is asking the user. Called
-    /// with the order lock held.
+    /// is from an older app, the queue changed while the hook was on its
+    /// way, or the turn failed, QUEUE-014), so it's typed in, unless
+    /// something is asking the user. Called with the order lock held.
     fn type_next_queued(&self, session_id: &str) {
         if self.wiring.status.is_waiting(session_id) {
             return;
@@ -1002,7 +1002,7 @@ impl Inner {
                     server.hook(&session_id, &event, &payload);
                 }
                 // QUEUE-011: the main thread's turn ended.
-                if event == STOP_EVENT && !from_agent(&payload) {
+                if queue_goes_on(&event, &payload) && !from_agent(&payload) {
                     self.type_next_queued(&session_id);
                 }
             }
@@ -1199,6 +1199,20 @@ impl Inner {
         for session_id in ids {
             self.exited(&session_id, -1);
         }
+    }
+}
+
+/// A turn ended and its session's next queued prompt can go: at `Stop`
+/// (QUEUE-011), or at a `StopFailure` another request can get past
+/// (QUEUE-014), which the host never answers with a queued prompt.
+fn queue_goes_on(event: &str, payload: &Value) -> bool {
+    match event {
+        STOP_EVENT => true,
+        STOP_FAILURE_EVENT => payload
+            .get("error")
+            .and_then(Value::as_str)
+            .is_some_and(is_passing_api_error),
+        _ => false,
     }
 }
 

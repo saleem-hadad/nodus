@@ -21,6 +21,16 @@ pub struct QueuedPrompt {
     pub at: f64,
 }
 
+/// Whether the API error a turn ended on (Claude Code's `error`, as its
+/// transcript and its `StopFailure` hook name it) is one another request can
+/// get past: a dropped connection or stream (`server_error`), an overloaded
+/// API, an unknown failure, a reply cut off at its length. The rest (a usage
+/// limit, a login, billing, a bad request) fail again until the user does
+/// something about them.
+pub fn is_passing_api_error(error: &str) -> bool {
+    matches!(error, "server_error" | "overloaded" | "unknown" | "max_output_tokens")
+}
+
 /// What Claude Code puts before a Stop hook's reason when it hands it to
 /// Claude (and writes to the transcript as a user line).
 pub const STOP_FEEDBACK_PREFIX: &str = "Stop hook feedback:\n";
@@ -182,6 +192,18 @@ pub enum ChatEntry {
     /// task finishing, a command's output.
     #[serde(rename_all = "camelCase")]
     Notice { id: String, at: f64, text: String },
+    /// The API error Claude's turn ended on, as Claude Code worded it
+    /// (CHAT-016).
+    #[serde(rename_all = "camelCase")]
+    Error {
+        id: String,
+        at: f64,
+        text: String,
+        /// Another request can get past it ([`is_passing_api_error`]), so
+        /// Claude can be asked to carry on.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        passing: bool,
+    },
 }
 
 impl ChatEntry {
@@ -193,7 +215,8 @@ impl ChatEntry {
             | Self::Visual { id, .. }
             | Self::Questions { id, .. }
             | Self::Page { id, .. }
-            | Self::Notice { id, .. } => id,
+            | Self::Notice { id, .. }
+            | Self::Error { id, .. } => id,
         }
     }
 
@@ -205,7 +228,8 @@ impl ChatEntry {
             | Self::Visual { at, .. }
             | Self::Questions { at, .. }
             | Self::Page { at, .. }
-            | Self::Notice { at, .. } => *at,
+            | Self::Notice { at, .. }
+            | Self::Error { at, .. } => *at,
         }
     }
 

@@ -121,11 +121,12 @@ async fn session_status_is_working_through_a_turn_and_done_when_it_stops() {
 
 #[tokio::test(start_paused = true)]
 async fn session_status_ends_a_turn_that_failed_on_an_api_error() {
-    // HOST-146: a server's sessions report `StopFailure` (SRV-103) in place of Stop.
+    // HOST-146: Claude Code reports `StopFailure` in place of Stop (HOST-226),
+    // here for a connection lost mid-reply.
     let h = Harness::new();
     let id = h.new_session("s1");
     h.hook("UserPromptSubmit", &id, &json!({}));
-    h.hook("StopFailure", &id, &json!({ "error": "rate_limit" }));
+    h.hook("StopFailure", &id, &json!({ "error": "server_error" }));
     assert_eq!(h.statuses(&id), vec![Done, Working, Done]);
 }
 
@@ -365,14 +366,19 @@ const STOP_VIA_URL: &str = r#"curl -s -m 2 -X POST -H 'Content-Type: application
 const STOP_POWERSHELL: &str = r#"$ProgressPreference = 'SilentlyContinue'; $body = [IO.MemoryStream]::new(); [Console]::OpenStandardInput().CopyTo($body); try { $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 -Method Post -ContentType 'application/json' -Headers @{ Authorization = "Bearer $env:NODUS_TOKEN" } -Body $body.ToArray() -Uri "http://127.0.0.1:$env:NODUS_PORT/hook?evt=Stop&sid=$env:NODUS_SESSION&reply=1"; if ($r.Content) { [Console]::Out.Write($r.Content) } } catch {}; exit 0"#;
 
 /// A fixture's settings as 0.9.4 wrote them, with its Stop command swapped
-/// for `stop` (QUEUE-008); every other byte stays.
+/// for `stop` (QUEUE-008) and `StopFailure` after its hooks, as
+/// `SubagentStop` is but for the event (HOST-226); every other byte stays.
 fn with_stop(fixture_name: &str, stop: &str) -> String {
     let fixture = fixture(fixture_name);
     let settings: Value = serde_json::from_str(&fixture).unwrap();
     let old = settings["hooks"]["Stop"][0]["hooks"][0]["command"].as_str().unwrap();
     let old = serde_json::to_string(old).unwrap();
     assert_eq!(fixture.matches(&old).count(), 1);
-    fixture.replace(&old, &serde_json::to_string(stop).unwrap())
+    let fixture = fixture.replace(&old, &serde_json::to_string(stop).unwrap());
+    let (hooks, status_line) = fixture.split_once(r#"},"statusLine":"#).unwrap();
+    let last = &hooks[hooks.find(r#","SubagentStop":"#).unwrap()..];
+    let failure = last.replace("SubagentStop", "StopFailure");
+    format!(r#"{hooks}{failure}}},"statusLine":{status_line}"#)
 }
 
 #[test]
@@ -433,7 +439,7 @@ fn queue_008_every_other_hook_and_the_status_line_are_as_0_9_4_wrote_them() {
             .as_object()
             .unwrap()
             .iter()
-            .filter(|(name, _)| *name != "Stop")
+            .filter(|(name, _)| !["Stop", "StopFailure"].contains(&name.as_str()))
             .map(|(_, hook)| hook.clone())
             .collect();
         others.push(settings["statusLine"].clone());
@@ -461,24 +467,20 @@ fn queue_008_every_other_hook_and_the_status_line_are_as_0_9_4_wrote_them() {
 }
 
 #[test]
-fn a_servers_sessions_also_report_turns_that_fail() {
-    // SRV-103: StopFailure after the others, on a server only.
+fn every_session_reports_turns_that_fail() {
+    // HOST-226: StopFailure after the others, printing nothing, so a turn
+    // that dies on an API error (a dropped connection) still ends.
     let endpoint = HookEndpoint::new();
     endpoint.set(4000, "secret-token", Some("/tmp/hook.curlrc"));
-    let local: Value = serde_json::from_str(&endpoint.settings(false)).unwrap();
-    assert!(local["hooks"].get("StopFailure").is_none());
-    let server: Value = serde_json::from_str(&endpoint.server_settings(false)).unwrap();
-    let names: Vec<&String> = server["hooks"].as_object().unwrap().keys().collect();
+    let settings: Value = serde_json::from_str(&endpoint.settings(false)).unwrap();
+    let names: Vec<&String> = settings["hooks"].as_object().unwrap().keys().collect();
     assert_eq!(names.last().map(|n| n.as_str()), Some("StopFailure"));
-    let command = server["hooks"]["StopFailure"][0]["hooks"][0]["command"]
-        .as_str()
-        .unwrap();
-    assert!(command.contains("evt=StopFailure&sid=$NODUS_SESSION"), "{command}");
+    let hook = &settings["hooks"]["StopFailure"][0]["hooks"][0];
+    let command = hook["command"].as_str().unwrap();
+    assert!(command.contains("evt=StopFailure&sid=$NODUS_SESSION\""), "{command}");
     assert!(command.contains(r#"-K "$NODUS_HOOK_CONFIG""#));
-    // The rest is the same, byte for byte.
-    let mut without = server.clone();
-    without["hooks"].as_object_mut().unwrap().shift_remove("StopFailure");
-    assert_eq!(without, local);
+    assert!(command.ends_with(">/dev/null 2>&1; exit 0"), "{command}");
+    assert_eq!(hook["timeout"], json!(5));
 }
 
 #[test]
@@ -524,7 +526,8 @@ fn hook_commands_on_windows_without_git_bash_run_in_powershell_with_the_token_fr
     endpoint.set(4000, "secret-token", Some(r"C:\Users\me\hook.curlrc"));
     let settings = endpoint.settings(true);
     let hooks = commands(&settings);
-    assert_eq!(hooks.len(), 11);
+    // HOST-138's ten, StopFailure (HOST-226) and the status line.
+    assert_eq!(hooks.len(), 12);
     for hook in hooks {
         assert_eq!(hook["shell"], "powershell");
         let command = hook["command"].as_str().unwrap();

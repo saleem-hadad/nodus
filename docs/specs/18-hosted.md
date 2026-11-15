@@ -248,7 +248,7 @@ Sessions on a server run on Claude accounts its members add, from `claude setup-
   - and, on a tie, was used least recently.
   The process gets it as `CLAUDE_CODE_OAUTH_TOKEN`, and the card records `account` and `accountLabel` (CARD-058). With none to take, the start fails with `No Claude accounts yet. Add one in Settings → Servers.`, `Every Claude account is at its limit until <time>.` or `Every Claude account has stopped working. Add one in Settings → Servers.` A `CLAUDE_CODE_OAUTH_TOKEN` in the server's `env` file is ignored, with a warning in the log, so it can't put everything on one account.
 - **SRV-102** **Usage.** The status line reports each session's `rate_limits.five_hour` and `rate_limits.seven_day` (`used_percentage`, `resets_at`), which become its account's usage, only with the session's own token (HOST-226, SRV-143).
-- **SRV-103** **Limits.** A server's sessions have a `StopFailure` hook (HOST-226).
+- **SRV-103** **Limits.** A server's sessions, like every session, have a `StopFailure` hook (HOST-226).
   - With `rate_limit`, the account becomes `limited` until `resetsAt`, or for an hour when that's unknown.
   - With `authentication_failed`, `account_on_hold` or `billing_error`, it becomes `failed`, and every member is told `<label>'s Claude account stopped working.`
   - A limited account goes back to `ok` by itself at `resetsAt`.

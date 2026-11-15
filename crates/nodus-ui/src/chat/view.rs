@@ -92,7 +92,7 @@ pub(crate) fn rows_of(entries: &[ChatEntry]) -> Vec<Row> {
             i += 1;
             continue;
         }
-        if let ChatEntry::Notice { .. } = entry {
+        if let ChatEntry::Notice { .. } | ChatEntry::Error { .. } = entry {
             rows.push(Row {
                 kind: RowKind::Entry(i),
                 header: false,
@@ -128,7 +128,8 @@ pub(crate) fn rows_of(entries: &[ChatEntry]) -> Vec<Row> {
 
 /// CHAT-051: a turn's summary is Claude's words after it used a tool, with
 /// nothing after them before the user's next message (or the chat's end)
-/// but notices, and none of those `Interrupted`.
+/// but notices, and none of those `Interrupted` (an API error the turn
+/// ended on isn't a notice).
 fn mark_summaries(rows: &mut [Row], entries: &[ChatEntry]) {
     let mut used_tools = false;
     for r in 0..rows.len() {
@@ -258,6 +259,8 @@ pub struct ChatView {
     /// What the last send or queue couldn't do.
     pub(crate) error: Option<String>,
     pub(crate) sending: bool,
+    /// The API error whose `Continue` was pressed, which offers it once (CHAT-053).
+    pub(crate) continued: Option<String>,
     /// Words for the composer that came without a window (the card's mic).
     pending_text: Option<String>,
     /// Claude shows a dialog in its terminal (a trust check, a permission
@@ -364,6 +367,7 @@ impl ChatView {
             terminal_enabled: true,
             error: None,
             sending: false,
+            continued: None,
             pending_text: None,
             dialog: false,
             model_open: false,
@@ -1292,6 +1296,16 @@ mod tests {
             tool("t2"),
             text("d"),
             notice("n2", "Interrupted"),
+            // Nor do words cut off by an API error, which ends the turn.
+            user("u3b"),
+            tool("t2b"),
+            text("d2"),
+            ChatEntry::Error {
+                id: "e1".into(),
+                at: 0.,
+                text: "API Error: Connection lost mid-response.".into(),
+                passing: true,
+            },
             // Nor do words before a form.
             user("u4"),
             tool("t3"),

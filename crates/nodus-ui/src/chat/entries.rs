@@ -24,6 +24,8 @@ use crate::theme::{self, fonts};
 const COLUMN_W: f32 = 780.;
 /// A run of tool calls shows this many of its last calls until opened (CHAT-009).
 const TOOLS_SHOWN: usize = 3;
+/// What an API error's `Continue` sends Claude (CHAT-053).
+const CONTINUE: &str = "Continue.";
 
 /// The Markdown look in the theme's colours, every size at `s` (CHAT-009).
 pub(crate) fn markdown_style(t: &Tokens, s: f32) -> TextViewStyle {
@@ -86,7 +88,7 @@ impl ChatView {
         let at = first.map_or(0., ChatEntry::at);
         let (arrival, duration) = match (row.kind, first) {
             (RowKind::User(_), _) => (Arrival::Pop, Duration::from_millis(420)),
-            (RowKind::Tools(..), _) | (_, Some(ChatEntry::Notice { .. })) => {
+            (RowKind::Tools(..), _) | (_, Some(ChatEntry::Notice { .. } | ChatEntry::Error { .. })) => {
                 (Arrival::Fade, Duration::from_millis(280))
             }
             (_, Some(ChatEntry::Text { markdown, .. })) => (Arrival::Words, look::words_duration(markdown)),
@@ -589,30 +591,40 @@ impl ChatView {
                     .selectable(true),
                 )
                 .into_any_element(),
-            // CHAT-039: a notice sits between hairlines, in the middle.
-            ChatEntry::Notice { text, .. } => {
-                let rule = || div().flex_1().min_w(self.px(16.)).h(px(1.)).bg(t.separator);
-                div()
-                    .w_full()
-                    .flex()
-                    .items_center()
-                    .gap(self.px(10.))
-                    .text_size(self.px(11.5))
-                    .line_height(self.px(16.))
-                    .text_color(t.text_tertiary)
-                    .child(rule())
-                    .child(
+            // CHAT-039: a notice sits between hairlines, in the middle. Text
+            // in a row of the list shrinks to its widest word, so the pill is
+            // a column's child, as wide as its words up to 80% of it, and one
+            // hairline runs behind it, cut by a margin of the chat's surface.
+            ChatEntry::Notice { text, .. } => div()
+                .relative()
+                .w_full()
+                .flex()
+                .flex_col()
+                .items_center()
+                .text_size(self.px(11.5))
+                .line_height(self.px(16.))
+                .text_color(t.text_tertiary)
+                .child(
+                    div()
+                        .absolute()
+                        .left_0()
+                        .right_0()
+                        .top(relative(0.5))
+                        .h(px(1.))
+                        .bg(t.separator),
+                )
+                .child(
+                    div().max_w(relative(0.8)).px(self.px(10.)).bg(t.bg_elevated).child(
                         div()
-                            .max_w(relative(0.8))
                             .px(self.px(10.))
                             .py(self.px(3.))
                             .rounded(self.px(10.))
                             .bg(t.bg_sunken)
                             .child(SharedString::from(text)),
-                    )
-                    .child(rule())
-                    .into_any_element()
-            }
+                    ),
+                )
+                .into_any_element(),
+            ChatEntry::Error { id, text, passing, .. } => self.render_error(i, &id, &text, passing, t, cx),
             ChatEntry::Visual { id, spec, .. } => self.render_visual(&id, &spec, t, window, cx),
             ChatEntry::Questions { id, spec, answered, .. } => {
                 self.render_questions(&id, &spec, answered.as_ref(), t, window, cx)
@@ -625,6 +637,79 @@ impl ChatView {
             } => self.render_page(&title, view_id.as_deref(), answered.is_some(), t, cx),
             ChatEntry::User { .. } | ChatEntry::Tool { .. } => div().into_any_element(),
         }
+    }
+
+    /// CHAT-016, CHAT-053: the API error Claude's turn ended on, on a card in
+    /// Claude's column. The chat's last one offers `Continue` once while
+    /// Claude is idle, when another request can get past it.
+    fn render_error(
+        &mut self,
+        i: usize,
+        id: &str,
+        text: &str,
+        passing: bool,
+        t: &Tokens,
+        cx: &mut Context<'_, Self>,
+    ) -> AnyElement {
+        let words = text.strip_prefix("API Error: ").unwrap_or(text).to_owned();
+        let offer = passing
+            && i + 1 == self.entries.len()
+            && self.continued.as_deref() != Some(id)
+            && !self.sending
+            && !self.busy(cx);
+        let me = cx.entity().downgrade();
+        let id = id.to_owned();
+        let button = offer.then(|| {
+            div()
+                .id("chat-error-continue")
+                .flex_none()
+                .cursor_pointer()
+                .px(self.px(12.))
+                .py(self.px(5.))
+                .rounded_full()
+                .border_1()
+                .border_color(t.border)
+                .bg(t.bg_elevated)
+                .hover(|d| d.bg(t.bg_hover))
+                .text_size(self.px(12.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(t.text_primary)
+                .whitespace_nowrap()
+                .child("Continue")
+                .on_click(move |_, _, cx| {
+                    let _ = me.update(cx, |this, cx| {
+                        this.continued = Some(id.clone());
+                        this.deliver(CONTINUE.to_owned(), false, cx);
+                    });
+                })
+        });
+        div()
+            .w_full()
+            .flex()
+            .items_center()
+            .gap(self.px(10.))
+            .px(self.px(12.))
+            .py(self.px(9.))
+            .rounded(self.px(12.))
+            .border_1()
+            .border_color(t.border)
+            .bg(t.bg_sunken)
+            .child(
+                div()
+                    .flex_none()
+                    .child(icon(Icon::CircleAlert, 14. * self.scale, 2., t.status_waiting)),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .text_size(self.px(13.))
+                    .line_height(self.px(20.))
+                    .text_color(t.text_secondary)
+                    .child(SharedString::from(words)),
+            )
+            .children(button)
+            .into_any_element()
     }
 
     /// CHAT-048: how a view handed to its brain is getting on, until it has

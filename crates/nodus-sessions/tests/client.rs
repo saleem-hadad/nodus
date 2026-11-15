@@ -1301,6 +1301,36 @@ async fn queue_011_with_a_host_that_keeps_queues_what_it_didnt_hand_over_is_type
     setup.record.wait_for("queue s1 [q2]").await;
 }
 
+#[tokio::test(start_paused = true)]
+async fn queue_014_a_turn_that_failed_on_a_passing_error_hands_over_the_next_one() {
+    let setup = Setup::new();
+    let mut s1 = session("s1", "p1", "");
+    s1["queue"] = json!([queued_json("q1", "fix it"), queued_json("q2", "then this")]);
+    let (client, mut conn) = adopted_keeping_queues(&setup, json!([s1])).await;
+    let failed =
+        |error: &str| json!({"type": "hook", "sessionId": "s1", "event": "StopFailure", "payload": {"error": error}});
+    // A limit or a login fails again: the queue stays for the user.
+    conn.send(&[failed("rate_limit"), failed("authentication_failed")])
+        .await;
+    setup
+        .record
+        .wait_for(r#"hook s1 StopFailure {"error":"authentication_failed"} None"#)
+        .await;
+    assert_eq!(
+        client.queue("s1"),
+        vec![queued("q1", "fix it"), queued("q2", "then this")]
+    );
+    // A dropped connection doesn't: the host never answers StopFailure, so it's typed.
+    conn.send(&[failed("server_error")]).await;
+    assert_eq!(
+        conn.recv().await,
+        Some(json!({"type": "queue-set", "sessionId": "s1", "items": [queued_json("q2", "then this")]}))
+    );
+    assert_eq!(conn.recv().await, Some(paste("fix it")));
+    assert_eq!(conn.recv().await, Some(enter()));
+    assert_eq!(client.queue("s1"), vec![queued("q2", "then this")]);
+}
+
 #[tokio::test]
 async fn queue_012_a_session_that_ends_takes_its_queue_with_it() {
     let setup = Setup::new();

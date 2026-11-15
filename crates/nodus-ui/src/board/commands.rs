@@ -225,8 +225,58 @@ impl BoardCanvas {
             }
             None => spot_for_new_session(dock, self.cards(), NEW_CARD_SIZE, &others),
         };
-        let pos = round(spot);
-        // BOARD-101.
+        self.start_session(round(spot), kind, false, cx);
+    }
+
+    /// SPLIT-005: a new card on the board beside `next_to`'s card, shown in
+    /// the session window in a pane of its own.
+    pub fn create_session_beside(&mut self, next_to: &str, kind: SessionKind, cx: &mut Context<'_, Self>) {
+        if self.board.is_none() {
+            return;
+        }
+        let dock = self.dock();
+        let others = self.notes_in_the_way();
+        // The cards on show expand when their panes close (BOARD-103), so
+        // they're taken at that size.
+        let shown = self.state.read(cx).session_window.ids().to_vec();
+        let as_closed: Vec<SessionCard> = self
+            .cards()
+            .iter()
+            .map(|c| {
+                let mut c = c.clone();
+                if !c.node.archived && shown.contains(&c.node.session_id) {
+                    c.node.expanded = Some(true);
+                }
+                c
+            })
+            .collect();
+        let spot = match as_closed.iter().find(|c| c.node.session_id == next_to) {
+            Some(card) => {
+                let size = card_size(card);
+                let anchor = nodus_domain::Rect {
+                    x: card.node.x,
+                    y: card.node.y,
+                    w: size.w,
+                    h: size.h,
+                };
+                let mut obstacles = card_obstacles(&as_closed, &[]);
+                obstacles.extend(others);
+                find_spot_beside(
+                    anchor,
+                    NEW_CARD_SIZE,
+                    &obstacles,
+                    Some(dock),
+                    nodus_board::geometry::GAP * 2.0,
+                )
+            }
+            None => spot_for_new_session(dock, self.cards(), NEW_CARD_SIZE, &others),
+        };
+        self.start_session(round(spot), kind, true, cx);
+    }
+
+    /// Starts a session at `pos` (BOARD-101) and opens it: in the window on
+    /// its own, or `beside` the cards on show (SPLIT-005).
+    fn start_session(&mut self, pos: Point, kind: SessionKind, beside: bool, cx: &mut Context<'_, Self>) {
         let opts = CreateSessionOptions {
             x: pos.x,
             y: pos.y,
@@ -249,8 +299,13 @@ impl BoardCanvas {
                     c.state.update(cx, |s, cx| {
                         s.upsert_card(card, cx);
                     });
-                    c.ensure_visible(pos, NEW_CARD_SIZE, cx);
-                    c.state.update(cx, |s, cx| s.open_terminal(&id, cx));
+                    if beside {
+                        // The board pans to it when its pane closes (BOARD-103).
+                        c.state.update(cx, |s, cx| s.open_beside(&id, cx));
+                    } else {
+                        c.ensure_visible(pos, NEW_CARD_SIZE, cx);
+                        c.state.update(cx, |s, cx| s.open_terminal(&id, cx));
+                    }
                 }
                 // BOARD-102.
                 Err(err) => {
@@ -1248,12 +1303,7 @@ impl BoardCanvas {
         }
         let id = run.session_id.clone();
         crate::terminal::store::dispose(&id, cx);
-        self.state.update(cx, |s, cx| {
-            if s.terminal_session_id.as_deref() == Some(id.as_str()) {
-                s.terminal_session_id = None;
-                cx.notify();
-            }
-        });
+        self.state.update(cx, |s, cx| s.drop_pane(&id, cx));
         let text = match run.message.as_deref() {
             Some(m) if !m.is_empty() => format!("{}: {}", run.action_name, layout::truncate(m, 180)),
             _ => format!("{} finished", run.action_name),

@@ -366,7 +366,7 @@ fn env(zoom: f32, stack: StackView, renaming: Option<&str>, archive_hot: bool) -
         board_bounds: Bounds::new(point(px(0.), px(52.)), size(px(W), px(H - 52.))),
         now_ms: NOW,
         text_focus: renaming.is_some(),
-        terminal_modal: None,
+        terminal_modal: Vec::new(),
         platform: Platform::CURRENT,
         actions: Rc::new(NoActions),
         terminals: None,

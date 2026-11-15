@@ -260,7 +260,9 @@ pub struct BoardCanvas {
 
     pub(crate) draft_id: String,
     pub(crate) starting_notes: HashSet<String>,
-    pub(crate) last_in_modal: Option<String>,
+    pub(crate) last_in_modal: Vec<String>,
+    /// The pane the keyboard was last in (SPLIT-022).
+    pub(crate) last_focused: Option<String>,
     pub(crate) run_ids: HashSet<String>,
     pub(crate) view_starts: HashMap<String, f64>,
     pub(crate) section_field: Option<(String, Entity<gpui::component::input::InputState>)>,
@@ -359,7 +361,8 @@ impl BoardCanvas {
             flight_timer: None,
             draft_id: uuid::Uuid::new_v4().to_string(),
             starting_notes: HashSet::new(),
-            last_in_modal: None,
+            last_in_modal: Vec::new(),
+            last_focused: None,
             run_ids: HashSet::new(),
             view_starts: HashMap::new(),
             section_field: None,
@@ -407,7 +410,13 @@ impl BoardCanvas {
         let (snapshot, in_modal) = {
             let s = self.state.read(cx);
             let snapshot = s.board.clone().filter(|b| b.project.id == self.project_id);
-            (snapshot, s.terminal_session_id.clone())
+            (
+                snapshot,
+                (
+                    s.session_window.ids().to_vec(),
+                    s.session_window.focused().map(str::to_owned),
+                ),
+            )
         };
         if snapshot != self.source {
             let first = self.source.is_none();
@@ -423,14 +432,20 @@ impl BoardCanvas {
             self.settle_frames(cx);
             self.join_taken_over_runs(cx);
         }
+        let (in_modal, focused) = in_modal;
         if in_modal != self.last_in_modal {
-            let closed = std::mem::replace(&mut self.last_in_modal, in_modal);
-            if let Some(closed) = closed
-                && self.last_in_modal.as_ref() != Some(&closed)
-            {
-                self.expand_after_modal(&closed, cx);
+            let before = std::mem::replace(&mut self.last_in_modal, in_modal);
+            let mut closed: Vec<String> = before
+                .into_iter()
+                .filter(|id| !self.last_in_modal.contains(id))
+                .collect();
+            // SPLIT-022: the board pans to the card the keyboard was in, so to it last.
+            closed.sort_by_key(|id| self.last_focused.as_ref() == Some(id));
+            for id in closed {
+                self.expand_after_modal(&id, cx);
             }
         }
+        self.last_focused = focused;
         cx.notify();
     }
 

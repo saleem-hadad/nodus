@@ -5,9 +5,10 @@
 //! TRANS-001, AGV-001). The agents viewer sits above the session window,
 //! which sits above the preview, as ⌘W closes them (MODAL-005).
 
-use gpui::{AppContext as _, Context, Entity, IntoElement, ParentElement, Render, Subscription, Window, div};
+use gpui::{App, AppContext as _, Context, Entity, IntoElement, ParentElement, Render, Subscription, Window, div};
 
 use super::agents::AgentViewer;
+use super::pane_window::PaneWindow;
 use super::preview::TranscriptPreview;
 use super::session_window::SessionWindow;
 use crate::state::AppState;
@@ -15,7 +16,7 @@ use crate::state::AppState;
 /// The layers the shell draws above the main area.
 pub struct TerminalLayers {
     state: Entity<AppState>,
-    session: Option<Entity<SessionWindow>>,
+    session: Option<Entity<PaneWindow>>,
     preview: Option<Entity<TranscriptPreview>>,
     agents: Option<Entity<AgentViewer>>,
     _subscriptions: Vec<Subscription>,
@@ -33,8 +34,13 @@ impl TerminalLayers {
         }
     }
 
-    /// The open session window, if any.
-    pub fn session_window(&self) -> Option<&Entity<SessionWindow>> {
+    /// The open session window's focused pane, if any.
+    pub fn session_window(&self, cx: &App) -> Option<Entity<SessionWindow>> {
+        self.session.as_ref().and_then(|w| w.read(cx).focused(cx))
+    }
+
+    /// The open session window, if any (SPLIT-010).
+    pub fn pane_window(&self) -> Option<&Entity<PaneWindow>> {
         self.session.as_ref()
     }
 
@@ -42,7 +48,7 @@ impl TerminalLayers {
         let (terminal, preview, agents, project) = {
             let s = self.state.read(cx);
             (
-                s.terminal_session_id.clone(),
+                s.session_window.is_open(),
                 s.preview_session_id.clone(),
                 s.agent_view.as_ref().map(|(id, _)| id.clone()),
                 s.board.as_ref().map(|b| b.project.id.clone()),
@@ -55,13 +61,14 @@ impl TerminalLayers {
             return;
         };
         let state = self.state.clone();
+        // The panes follow the sessions on show (SPLIT-010).
         match terminal {
-            Some(id) if self.session.as_ref().is_none_or(|w| w.read(cx).session_id != id) => {
+            true if self.session.as_ref().is_none_or(|w| w.read(cx).project_id() != project) => {
                 let (state, project) = (state.clone(), project.clone());
-                self.session = Some(cx.new(|cx| SessionWindow::new(state, id, project, window, cx)));
+                self.session = Some(cx.new(|cx| PaneWindow::new(state, project, window, cx)));
             }
-            Some(_) => {}
-            None => self.session = None,
+            true => {}
+            false => self.session = None,
         }
         match preview {
             Some(id) if self.preview.as_ref().is_none_or(|w| w.read(cx).session_id != id) => {

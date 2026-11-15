@@ -332,7 +332,7 @@ Cursor visibility: the cursor is not drawn until the terminal has been focused o
 
 ### Session window (MODAL)
 
-- **MODAL-001** The session window is open while a terminal session id is set and a board is loaded; it shows one session and switching session rebuilds its content.
+- **MODAL-001** The session window is open while a terminal session id is set and a board is loaded; it shows one session and switching session rebuilds its content. Added after 1.0.21: it can show up to four, side by side (SPLIT), and everything here holds for each pane.
 - **MODAL-002** Opening the window closes the transcript preview; opening the preview, navigating, or a notification's `showCard` closes the window.
 - **MODAL-003** Escape never closes the window.
 - **MODAL-004** Pointer-down on the dimmed backdrop closes the window.
@@ -363,7 +363,30 @@ Cursor visibility: the cursor is not drawn until the terminal has been focused o
 - **MODAL-029** When an action run finishes, its terminal is disposed and the window closes if it shows that run.
 - **MODAL-030** Removing a view closes the window if it shows that view's brain.
 - **MODAL-031** While the window is open, board keyboard shortcuts and ⌘K search don't fire; the menu's Search Sessions… closes the window (and the preview) and opens search.
-- **MODAL-032** The window is `min(1400px, 92vw)` wide and `88vh` tall (clamped to 100vw−48 / 100vh−48).
+- **MODAL-032** The window is `min(1400px, 92vw)` wide and `88vh` tall (clamped to 100vw−48 / 100vh−48). With more than one pane, SPLIT-011.
+
+### Panes side by side (SPLIT, added after 1.0.21)
+
+The session window can show up to four sessions at once: a Claude session's chat, a shell, any card on the board. Each pane is the window as MODAL describes it for its own session, with its own header and buttons.
+
+- **SPLIT-001** The window holds an ordered list of panes, one session each, and the one the keyboard is in (focused). Closed, the list is empty. A session is in at most one pane.
+- **SPLIT-002** At most four panes.
+- **SPLIT-003** `Split` (Columns2 icon, ghost square button, tooltip `Open something beside it`) sits in the top right pane's header, left of the separator and the close button, while there's room for another pane. It drops a menu (right-aligned 4px under it, UI-158…): `New terminal` (SquareTerminal, hint `⌘T`), `New session` (Plus, hint `⌘N`), a separator, then up to 12 of the board's cards that aren't archived, aren't action runs or views' brains, and aren't on show, most recently active first (transcript `updatedAt`, else the card's `createdAt`), titled as MODAL-014, with SquareTerminal for a shell and Sparkles for Claude. A card picked opens beside (SPLIT-004).
+- **SPLIT-004** A card opened beside the others gets a new pane after them, focused; one already on show is only focused. With the window closed it opens as MODAL-001 does (SPLIT-021).
+- **SPLIT-005** `New terminal` and `New session` (the menu, File › New Terminal / New Session, ⌘T / ⌘N), with the window open and room in it, start the card on the board beside the focused pane's card (`findSpotBeside` its rect, the new card's 720×750, gap 64; BOARD-099's spot when that card isn't on the board), not expanded, and open it beside. The board doesn't pan until the pane closes (BOARD-103). With the window full or closed they work as before (BOARD-101).
+- **SPLIT-006** With more than one pane, each pane's header has a close-pane button (Minimize2, ghost square, left of the window's buttons, tooltip `Close this pane (⌘W). Its card stays on the board, still running.`, `Ctrl+Shift+W` off a Mac). It closes that pane only: the session keeps running (MODAL-006) and its card leaves the cards it was beside (SPLIT-020). The focus stays where it was, or moves to the pane before the one that closed (the next one when it was first). Archive and Remove (MODAL-025, MODAL-026) close their own pane; the window closes with its last pane.
+- **SPLIT-007** ⌘W (MODAL-005) with more than one pane closes the focused pane (SPLIT-006); with one, the window.
+- **SPLIT-008** A press anywhere in a pane focuses it. The others' titles are in the secondary text colour and their bodies sit under a veil of their own background at 30% (the terminal's or the chat's), which takes no presses; the focused pane's title is in the primary colour, its body clear.
+- **SPLIT-009** The window's close button (MODAL-027) is in the top right pane's header and closes every pane. With more than one pane its tooltip reads `Close the window. Every session keeps running.`
+- **SPLIT-010** Layout: one column for one pane; two columns side by side for two; for three the third under the second; for four the fourth under the first (so new panes go clockwise). A 1px line in the separator colour divides columns, and the two panes in a column.
+- **SPLIT-011** With more than one pane the window is `96vw` wide and `92vh` tall, clamped as MODAL-032. Only the window's outer corners are rounded: each pane's header rounds the top corners it has and a shell's body the bottom ones.
+- **SPLIT-012** A line between panes can be dragged (resize cursor, a press within 4px of it): between columns it moves left or right, between rows up or down, each kept within 25%…75% of the window. It shows in the tertiary text colour while hovered or held. A double press puts it back in the middle. The lines start in the middle, and again whenever a pane comes or goes.
+- **SPLIT-013** The window's buttons (Split, close) are in the top right pane: the first pane's with one pane, the second's with more.
+- **SPLIT-020** The board keeps lists of the cards last shown together, each in its window's order. This person's own, on this computer, for server projects too (state.json `panes`, by project id; dropped with the project). Whenever the window's panes change by Split, a card opened beside, a pane closed, Archive or Remove: the panes on show replace the lists that held any of their cards, cards that just left the window leave their lists, archived and removed cards leave every list, and a list of one card isn't kept. Closing the window keeps them.
+- **SPLIT-021** Opening a card (BOARD-044, a notification, search, a new card) opens the window on the list holding it, of those cards still on the board and not archived, in order, with it focused; otherwise on the card alone. Of panes opened together the focused one takes the keyboard (MODAL-007).
+- **SPLIT-022** Closing the window, or one pane, leaves each card that left expanded on the board (BOARD-103); the board pans to the one the keyboard was in last, else the last of them.
+- **SPLIT-023** A pane's card that comes back archived (MODAL-028), whose action run finishes (MODAL-029), or whose view is removed (MODAL-030) loses its pane; the window closes with its last. Navigating, a notification's `showCard`, opening the preview or Search Sessions… close the whole window (MODAL-002, MODAL-031).
+- **SPLIT-024** While any pane is open, MODAL-031 holds, and the expanded card of each session on show leaves its terminal to the pane (TERM, never both).
 
 ### Transcript preview (TRANS)
 
@@ -772,6 +795,8 @@ No Vitest exists for the registry, the modal, the preview or the viewer. New Rus
 - [x] MODAL-030 removed view closes its brain's window
 - [x] MODAL-031 board shortcuts/search suppressed; menu search closes window
 - [x] MODAL-032 window size
+- [x] SPLIT-001…SPLIT-013 panes side by side: Split menu, beside, close pane, ⌘W, focus, layout, size, lines
+- [x] SPLIT-020…SPLIT-024 remembered lists, reopening, BOARD-103 per pane, panes that go
 - [x] TRANS-001 open condition, rebuild on switch
 - [x] TRANS-002 records search, closes session window
 - [x] TRANS-003 close by Esc/backdrop/⌘W/X

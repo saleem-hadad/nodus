@@ -167,6 +167,7 @@ impl ProjectsApi<'_> {
         self.nodus.inner.store.update(|state| {
             state.projects.retain(|p| p.id != id);
             state.boards.shift_remove(id);
+            state.panes.shift_remove(id);
         });
     }
 

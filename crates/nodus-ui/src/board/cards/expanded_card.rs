@@ -113,7 +113,7 @@ pub fn body(
     if effect.is_some() {
         cx.default_global::<Wakes>().pending.remove(&id);
     }
-    let in_modal = env.terminal_modal.as_deref() == Some(id.as_str());
+    let in_modal = env.terminal_modal.iter().any(|m| m == &id);
     let enabled = state.read(cx).start.enabled(in_modal, !env.project_id.is_empty());
     if let Some(host) = &host {
         host.set_enabled(&id, shell, enabled, cx);

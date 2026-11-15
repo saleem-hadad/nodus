@@ -13,6 +13,7 @@ use nodus_domain::{
 
 use crate::state::AppState;
 use crate::terminal::actions::{PreviewFind, PreviewFindState};
+use crate::terminal::panes::{Panes, panes_for, remember};
 
 /// `unstickNotes`: stickers on cards leaving the board fall off, onto the
 /// board where an active card was, or back where they were from an archived one.
@@ -73,13 +74,20 @@ impl AppState {
                             ..shown.clone()
                         };
                     }
-                    if came_back_archived(state.terminal_session_id.as_deref(), &board.cards) {
-                        state.terminal_session_id = None;
+                    let archived: Vec<String> = state
+                        .session_window
+                        .ids()
+                        .iter()
+                        .filter(|id| came_back_archived(Some(id), &board.cards))
+                        .cloned()
+                        .collect();
+                    for id in archived {
+                        state.session_window.remove(&id);
                     }
                     // SRV-028: a board read-only while its server is away
                     // has no session window, preview or agents open over it.
                     if board.offline {
-                        state.terminal_session_id = None;
+                        state.session_window.clear();
                         state.preview_session_id = None;
                         state.agent_view = None;
                         state.selection.clear();
@@ -443,9 +451,7 @@ impl AppState {
         board.views.retain(|v| v.id != view_id);
         if let Some(brain) = &brain {
             board.cards.retain(|c| &c.node.session_id != brain);
-            if self.terminal_session_id.as_ref() == Some(brain) {
-                self.terminal_session_id = None;
-            }
+            self.session_window.remove(brain);
         }
         let project_id = board.project.id.clone();
         cx.notify();
@@ -519,11 +525,77 @@ impl AppState {
         }
     }
 
-    /// `openTerminal`: the terminal modal, over the preview.
+    /// `openTerminal`: the terminal modal, over the preview, on the card and
+    /// the cards it was last beside (SPLIT-021).
     pub fn open_terminal(&mut self, session_id: &str, cx: &mut Context<'_, Self>) {
-        self.terminal_session_id = Some(session_id.to_owned());
+        let ids = panes_for(&self.pane_lists(), session_id, |id| self.openable(id));
+        self.session_window = Panes::open(ids, session_id);
         self.preview_session_id = None;
         cx.notify();
+    }
+
+    /// SPLIT-004: the card in a pane of its own beside those on show, or the
+    /// window on it (and what it was beside) while the window is closed.
+    pub fn open_beside(&mut self, session_id: &str, cx: &mut Context<'_, Self>) {
+        if !self.session_window.is_open() {
+            return self.open_terminal(session_id, cx);
+        }
+        let before = self.session_window.ids().to_vec();
+        if self.session_window.add(session_id) {
+            self.remember_panes(&before);
+            cx.notify();
+        }
+    }
+
+    /// SPLIT-006: one pane closes; its card stays, still running, and leaves
+    /// the cards it was beside. The window closes with its last pane.
+    pub fn close_pane(&mut self, session_id: &str, cx: &mut Context<'_, Self>) {
+        let before = self.session_window.ids().to_vec();
+        if self.session_window.remove(session_id) {
+            self.remember_panes(&before);
+            cx.notify();
+        }
+    }
+
+    /// SPLIT-008: the pane the keyboard is in.
+    pub fn focus_pane(&mut self, session_id: &str, cx: &mut Context<'_, Self>) {
+        if self.session_window.focus(session_id) {
+            cx.notify();
+        }
+    }
+
+    /// A card's pane closes because the card went (archived, removed, its
+    /// run over): the lists drop it the next time they're kept.
+    pub fn drop_pane(&mut self, session_id: &str, cx: &mut Context<'_, Self>) {
+        if self.session_window.remove(session_id) {
+            cx.notify();
+        }
+    }
+
+    /// The board's lists of cards shown side by side (SPLIT-020).
+    fn pane_lists(&self) -> Vec<Vec<String>> {
+        self.board
+            .as_ref()
+            .map(|b| self.nodus.board().panes(&b.project.id))
+            .unwrap_or_default()
+    }
+
+    /// A card that can be shown in the session window: on the board and not archived.
+    fn openable(&self, session_id: &str) -> bool {
+        self.board.as_ref().is_some_and(|b| {
+            b.cards
+                .iter()
+                .any(|c| c.node.session_id == session_id && !c.node.archived)
+        })
+    }
+
+    /// SPLIT-020: keeps what the window shows now, after it showed `before`.
+    fn remember_panes(&self, before: &[String]) {
+        let Some(board) = &self.board else { return };
+        let lists = remember(&self.pane_lists(), before, self.session_window.ids(), |id| {
+            self.openable(id)
+        });
+        self.nodus.board().save_panes(&board.project.id, lists);
     }
 
     /// `openPreview(sessionId)`: the transcript preview, closing the terminal
@@ -538,7 +610,7 @@ impl AppState {
     pub fn open_preview_at(&mut self, session_id: &str, find: Option<PreviewFind>, cx: &mut Context<'_, Self>) {
         cx.set_global(PreviewFindState(find));
         self.preview_session_id = Some(session_id.to_owned());
-        self.terminal_session_id = None;
+        self.session_window.clear();
         cx.notify();
     }
 

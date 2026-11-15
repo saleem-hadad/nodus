@@ -482,7 +482,7 @@ pub struct BoardEnv {
     /// the archive's search mustn't take it (ARCH-020).
     pub text_focus: bool,
     /// The session the terminal modal shows, if open.
-    pub terminal_modal: Option<String>,
+    pub terminal_modal: Vec<String>,
     pub platform: Platform,
     pub actions: Rc<dyn CardActions>,
     pub terminals: Option<Rc<dyn TerminalHost>>,

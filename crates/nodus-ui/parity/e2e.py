@@ -399,6 +399,32 @@ def run(a):
     close(a)
     a.until("Claude's session still live too", lambda: (a.card(claude) or {}).get("live") is True)
 
+    print("15. Side by side (SPLIT): New Terminal beside an open card, ⌘W one pane, the panes come back")
+    pid = a.project_id()
+    a.steps([T("open", session=claude), W(1200)])
+    before = a.cards()
+    a.steps([{"cmd": "menu", "command": "new-terminal"}, W(1500)])
+    r = a.route()
+    beside = [c["sessionId"] for c in new_cards(before, a.cards())]
+    a.expect("New Terminal with the window open adds a pane beside it (SPLIT-005)",
+             len(beside) == 1 and r.get("panes") == [claude] + beside, r)
+    a.expect("…which has the keyboard", bool(beside) and r.get("terminal") == beside[0], r)
+    a.drive({"cmd": "screenshot", "path": a.path("e2e-split.png")})
+    a.until("the two are remembered (SPLIT-020)", lambda: (a.state().get("panes") or {}).get(pid) == [[claude] + beside])
+    # The window's X, in the top right pane's header (1440×900: the window is 96vw wide).
+    a.steps([M("click", 1386, 59), W(900)])
+    a.expect("its X closes both panes (SPLIT-009)", a.route().get("panes") == [], a.route())
+    a.until("…leaving both cards expanded (SPLIT-022)",
+            lambda: all((a.card(s) or {}).get("expanded") is True for s in [claude] + beside))
+    a.steps([T("open", session=claude), W(1200)])
+    a.expect("opening one card brings the other back beside it (SPLIT-021)",
+             a.route().get("panes") == [claude] + beside and a.route().get("terminal") == claude, a.route())
+    a.steps([{"cmd": "menu", "command": "close"}, W(600)])
+    a.expect("⌘W closes the pane with the keyboard (SPLIT-007)", a.route().get("panes") == beside, a.route())
+    a.until("…and the card that left is forgotten (SPLIT-020)", lambda: not (a.state().get("panes") or {}).get(pid))
+    a.steps([{"cmd": "menu", "command": "close"}, W(600)])
+    a.expect("⌘W again closes the window", a.route().get("panes") == [], a.route())
+
 
 # Where things are -------------------------------------------------------
 

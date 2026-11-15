@@ -47,6 +47,10 @@ Terminal cards run `$SHELL -l` in the repo folder with your login-shell environm
 
 A card can expand in place to show its terminal on the board, so you can watch several sessions at once. It's the same terminal as the modal's, so moving between the two keeps the screen. Drag a card's edges or corners to resize it. The board saves each card's size and whether it's expanded. After a restart, an expanded card whose session is still running shows its terminal right away. One whose session has stopped waits for you to click **Resume session** or **Start shell** before it starts anything.
 
+## Side by side
+
+An open card's window can hold up to four sessions at once: a Claude chat beside a terminal, two sessions working on related things, or a dev server under them. Press the split button in the window's top right corner for a new terminal, a new session, or any card on the board, or press ⌘T or ⌘N while the window is open. Each pane keeps its own header and buttons. Click a pane to type in it (the others dim), drag the lines between them to resize, and double-click a line to even it out. The close-pane button, or ⌘W, closes just the pane you're in: its card stays on the board, still running. Next time you open any of those cards, the others come back beside it. Nodus remembers this on your computer, for server projects too.
+
 ## Status
 
 Status comes from hooks that the app adds for its own processes with `--settings`. Each hook POSTs its payload to a token-protected server on 127.0.0.1, run by the session host:
@@ -227,6 +231,8 @@ On the server, two Unix users split the work. `nodus` runs `nodus serve` and kee
 | | Settings (theme: System, Light or Dark) | ⌘, |
 | | Quit and stop every session | ⌥⌘Q |
 | | Close the modal, or go back to projects | ⌘W |
+| Session window | Open a new terminal or session beside it | ⌘T · ⌘N · the split button |
+| | Close the pane you're in (its card keeps running) | ⌘W |
 | | Floating capture, from any app | Double-tap ⇧ · File › Capture… |
 | Capture panel | Send | Return |
 | | New line | ⇧Return |

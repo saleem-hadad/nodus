@@ -139,6 +139,27 @@ impl BoardApi<'_> {
             .await;
     }
 
+    /// The cards last opened side by side in the session window on a
+    /// project's board, each list one window's panes (SPLIT-020). This
+    /// person's own: kept on this computer, a server project's too.
+    pub fn panes(&self, project_id: &str) -> Vec<Vec<String>> {
+        self.nodus
+            .inner
+            .store
+            .read(|state| state.panes.get(project_id).cloned().unwrap_or_default())
+    }
+
+    /// Keeps a board's pane lists (SPLIT-020); none forgets them.
+    pub fn save_panes(&self, project_id: &str, panes: Vec<Vec<String>>) {
+        self.nodus.inner.store.update(|state| {
+            if panes.is_empty() {
+                state.panes.shift_remove(project_id);
+            } else {
+                state.panes.insert(project_id.to_owned(), panes);
+            }
+        });
+    }
+
     /// `board:remove-node` (SESS-107, SESS-108): the card goes, its session
     /// is hidden for good unless it's a terminal, and this waits for its
     /// process to stop. The transcript stays.

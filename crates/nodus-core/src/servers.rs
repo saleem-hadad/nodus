@@ -166,6 +166,7 @@ impl ServersApi<'_> {
             state.projects.retain(|p| p.server.as_deref() != Some(id));
             for project_id in &unlinked {
                 state.server_boards.shift_remove(project_id);
+                state.panes.shift_remove(project_id);
             }
             unlinked
         });
@@ -239,6 +240,7 @@ impl ServersApi<'_> {
                 .ok_or_else(|| CommandError::new(CHANNEL, format!("Not a server project: {project_id}")))?;
             state.projects.retain(|p| p.id != project_id);
             state.server_boards.shift_remove(project_id);
+            state.panes.shift_remove(project_id);
             Ok::<_, CommandError>(server_id)
         })?;
         self.nodus.inner.remotes.forget_projects(&[project_id.to_owned()]);

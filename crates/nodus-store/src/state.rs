@@ -42,6 +42,11 @@ pub struct State {
     /// id: kept here, never on the server (SRV-164).
     #[serde(skip_serializing_if = "IndexMap::is_empty")]
     pub server_boards: IndexMap<String, ServerBoardState>,
+    /// The cards opened side by side in the session window (SPLIT-020), by
+    /// project id: each list is one window's panes, in order. This person's
+    /// own, kept here for server projects too. Added after 1.0.21.
+    #[serde(skip_serializing_if = "IndexMap::is_empty")]
+    pub panes: IndexMap<String, Vec<Vec<String>>>,
     /// Fields this version doesn't know, written back as they were read.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
@@ -172,6 +177,7 @@ impl Default for State {
             captures: None,
             servers: Vec::new(),
             server_boards: IndexMap::new(),
+            panes: IndexMap::new(),
             extra: Map::new(),
         }
     }
@@ -231,6 +237,11 @@ impl State {
             Some(boards @ Value::Object(_)) => serde_json::from_value(boards)?,
             _ => IndexMap::new(),
         };
+        // SPLIT-020: what can't be read is forgotten, never a reason to fail.
+        let panes = match raw.shift_remove("panes") {
+            Some(panes @ Value::Object(_)) => serde_json::from_value(panes).unwrap_or_default(),
+            _ => IndexMap::new(),
+        };
         Ok(Self {
             projects,
             groups,
@@ -241,6 +252,7 @@ impl State {
             captures,
             servers,
             server_boards,
+            panes,
             extra: raw,
         })
     }
@@ -453,6 +465,20 @@ mod tests {
         assert_eq!(written["projects"][0]["server"], "s1");
         let empty = serde_json::to_value(State::default()).unwrap();
         assert!(empty.get("servers").is_none() && empty.get("serverBoards").is_none());
+    }
+
+    #[test]
+    fn split_020_keeps_pane_lists_and_forgets_what_it_cant_read() {
+        let raw = json!({ "panes": { "p1": [["c1", "c2"], ["c3", "c4", "c5"]] } });
+        let state = State::from_json(raw.clone()).unwrap();
+        assert_eq!(state.panes["p1"], [vec!["c1", "c2"], vec!["c3", "c4", "c5"]]);
+        let written: Value = serde_json::to_value(&state).unwrap();
+        assert_eq!(written["panes"], raw["panes"]);
+        // A shape this version can't hold is dropped, and the rest still loads.
+        let state = State::from_json(json!({ "panes": { "p1": "c1" }, "groups": [] })).unwrap();
+        assert!(state.panes.is_empty());
+        let empty = serde_json::to_value(State::default()).unwrap();
+        assert!(empty.get("panes").is_none());
     }
 
     #[test]

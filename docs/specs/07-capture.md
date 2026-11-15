@@ -19,7 +19,7 @@ Sources:
 
 ## Summary
 
-Double-tapping ⇧ in any app (or File › Capture…) floats a panel up over whatever is in front, on the screen the pointer is on, over full-screen apps and on every Space, without bringing Nodus forward. The user types (or speaks) something. On each pause in the typing, a headless `claude -p` call to Haiku guesses what it is (a new session, the next prompt **into** an existing session, a **note**, or a **view**) and which project it belongs to; the header shows the guess, Tab/⇧Tab or a menu changes it. The browser tab in front, a screenshot, copied text or image and files come along as attachment tiles. Return makes it on the project's board (session in auto mode as an expanded card with a yellow note stuck on it; note; view; or a prompt sent into a running session), a receipt card shows for 2.6 s while the keyboard goes back to the previous app, and the panel hides. Recent captures (up to 20, stored in `state.json`) show under the empty panel with live status. Screenshots and copied images live in `<userData>/captures/` and are deleted after 30 days.
+Double-tapping ⇧ in any app (or File › Capture…) floats a panel up over whatever is in front, on the screen the pointer is on, over full-screen apps and on every Space, without bringing Nodus forward. The user types (or speaks) something. When it is sent, unless the user picked with Tab/⇧Tab or the menu, a headless `claude -p` call to Haiku decides what it is (a new session, the next prompt **into** an existing session, a **note**, or a **view**) and which project it belongs to. Nothing goes to Claude while the user types (0.9.4 to 1.0.21 asked on each pause in the typing). The browser tab in front, a screenshot, copied text or image and files come along as attachment tiles. Return (after Claude's answer) makes it on the project's board (session in auto mode as an expanded card with a yellow note stuck on it; note; view; or a prompt sent into a running session), a receipt card shows for 2.6 s while the keyboard goes back to the previous app, and the panel hides. Recent captures (up to 20, stored in `state.json`) show under the empty panel with live status. Screenshots and copied images live in `<userData>/captures/` and are deleted after 30 days.
 
 The panel is a second window loading the renderer at `#capture`; in Rust it is a second GPUI window (an `NSPanel` on macOS) driven by `nodus-capture` through `nodus-core`.
 
@@ -49,7 +49,7 @@ The panel is a second window loading the renderer at `#capture`; in Rust it is a
   5. Record `shownAt = now`, clear `resting`, show the window and give it focus.
   6. Then read the clipboard (CAP-052); if there is something and the panel is still open, send `{ clipboard }` as an update.
   7. Then, if the front app is a readable browser (CAP-048), read its tab (CAP-050); if there is one and the panel is still open, send `{ tab }` as an update. The clipboard read always finishes before the tab read starts.
-- **CAP-016** Hiding the panel (`hidePanel`) cancels any guess in progress (CAP-074), clears `resting`, and hides the window if it exists and is visible. The window is never closed.
+- **CAP-016** Hiding the panel (`hidePanel`) clears `resting`, and hides the window if it exists and is visible. The window is never closed. A guess in progress goes on, since a send is waiting on it (CAP-162; up to 1.0.21 hiding cancelled it).
 - **CAP-017** Toggle (used by the double tap): if the panel is open (visible) **and** focused, hide it; otherwise open it (CAP-015). A double tap while the receipt is resting (visible but not focused) therefore re-opens the panel with focus.
 - **CAP-018** "Open" means visible: the panel counts as open when it exists, is not destroyed and is visible (including while resting with the receipt).
 - **CAP-019** Resting: after a successful submit (CAP-131) the panel sets `resting = true`, hides, and immediately shows again **without** taking focus (Electron `showInactive`), so the keyboard goes back to the app the user was in while the receipt stays on screen. While resting, blurs never hide it (CAP-012).
@@ -106,7 +106,7 @@ The panel is a second window loading the renderer at `#capture`; in Rust it is a
 
 ### Guess (Claude's guess)
 
-- **CAP-064** The page asks for a guess 700 ms (`GUESS_AFTER_MS`) after the last change of the text or the attachments, only when: the trimmed text is at least 3 characters (`MIN_GUESS_CHARS`), the user has not made their own choice (CAP-084), and the trimmed text differs from the text the shown guess was made for. Each change restarts the 700 ms timer.
+- **CAP-064** The page asks for a guess only when a capture is sent (CAP-123): never while the user types, speaks, or adds or removes attachments. Up to 1.0.21 it asked 700 ms (`GUESS_AFTER_MS`) after each change once the trimmed text had 3 characters (`MIN_GUESS_CHARS`); both are gone.
 - **CAP-065** Clearing the text (trimmed empty) resets the guess: in-flight answers are invalidated, the "guessed for" text is cleared, the pending guess is forgotten, the guess and the guessing flag are cleared, and the user's choice is cleared.
 - **CAP-066** Asking: a run counter is bumped; `guessing = true`; `capture.guess(text, attachments)` is called with the untrimmed text; a rejection counts as `null`. When it settles and is still the latest run: the pending guess is cleared, `guessing = false`, and if the answer is non-null the "guessed for" text becomes the trimmed text and the guess is replaced. A `null` answer keeps the previous guess on screen. Answers from older runs are dropped entirely.
 - **CAP-067** Main side of `capture:guess`: uses the targets remembered when the panel opened (refreshed by every `capture:targets` call, CAP-149), or a fresh `targets()` if the panel has not opened; the text cut to 20 000 chars; the attachments cleaned (CAP-135); the front app's name from when the panel opened.
@@ -116,7 +116,7 @@ The panel is a second window loading the renderer at `#capture`; in Rust it is a
 - **CAP-071** A spawn error logs `[capture] guess failed` with the error and resolves `null`.
 - **CAP-072** When the process closes, stdout (UTF-8, trimmed) is parsed as JSON; if `is_error` is truthy → `null`; otherwise `readGuess(structured_output, targets)` (CAP-080). Invalid JSON → `null`. Exit code is not checked.
 - **CAP-073** A guess resolves exactly once (later settle calls are ignored), clears its timeout, and stops being "the running guess" if it still was.
-- **CAP-074** `cancelGuess`: if a guess is running, it stops being the running one, its process is killed with SIGKILL and its promise resolves `null` immediately. Called before every new guess and whenever the panel hides.
+- **CAP-074** `cancelGuess`: if a guess is running, it stops being the running one, its process is killed with SIGKILL and its promise resolves `null` immediately. Called before every new guess.
 - **CAP-075** The guess prompt (user message) is built exactly as in Data & formats: a `Projects` header naming the default project, each project with up to 8 (`SESSIONS_PER_PROJECT`) of its sessions in `targets.sessions` order (most recently active first) or `  (no sessions)`, then (if any) a blank line and the screen lines, then a blank line and the capture text (trimmed, cut to 4000 chars) between `"""` fences.
 - **CAP-076** Relative time in the prompt (`ago`): `min = round(ms / 60 000)`; `min < 1` → `just now`; `min < 60` → `<min> min ago`; else `h = round(min / 60)`; `h < 48` → `<h> h ago`; else `<round(h / 24)> days ago`.
 - **CAP-077** Flattening (`flat(s, max)`): every run of whitespace becomes one space, trimmed; if longer than `max`, cut to `max − 1` chars plus `…`. Session titles are flattened to 80, tab titles to 120, copied text to 200, reasons to 120.
@@ -133,10 +133,11 @@ The panel is a second window loading the renderer at `#capture`; in Rust it is a
 - **CAP-085** "No projects" is true once targets have loaded and there are zero (non-archived) projects. "Has text" is true when the trimmed text is non-empty.
 - **CAP-086** Header button content (left of the header):
   - No text, or targets not loaded yet: folder swatch in the route project's colour (blue when none) + the project's name, or `No projects yet` when there is no project + chevron-down.
-  - Has text, a guess is in flight, and there is neither a guess nor a choice yet: the twinkling sparkle + `Working out where this goes…` with Claude's light passing through it (MOTION-034; 0.9.4 showed a spinning loader and pulsed the whole line).
+  - Has text, and neither a guess nor a choice, with no guess in flight: the same as with no text (Claude is asked on send, CAP-064).
+  - Has text, a guess is in flight (a send is waiting on it), and there is neither a guess nor a choice yet: the twinkling sparkle + `Working out where this goes…` with Claude's light passing through it (MOTION-034; 0.9.4 showed a spinning loader and pulsed the whole line).
   - Otherwise: a kind badge with the kind's icon, then for `into`: bold `Into “<session title>”` (title of the route's session from targets, or `a session` if not found), ellipsized; for other kinds: bold `New session` / `Note` / `View`, then faint `on` (note) or `in` (session, view), the project's folder swatch and the project's name; then the chevron-down.
 - **CAP-087** The header button is disabled until targets have loaded and while there are no projects. Clicking it toggles the menu and returns focus to the field.
-- **CAP-088** Header right side: when there is text and (a guess or a choice): `Your choice` if the user chose, else a small accent dot (twinkling through Claude's colours while a guess is in flight, MOTION-034; 0.9.4 pulsed it) + `Claude's guess`; in both cases followed by a `Tab` key cap. When there is no text: `Claude works out what it is as you type`. When there is text but neither a guess nor a choice: nothing.
+- **CAP-088** Header right side: when there is text and (a guess or a choice): `Your choice` if the user chose, else a small accent dot (twinkling through Claude's colours while a guess is in flight, MOTION-034; 0.9.4 pulsed it) + `Claude's guess`; in both cases followed by a `Tab` key cap. Otherwise `Claude works out where it goes when you send`, except while a guess is in flight with neither a guess nor a choice (the header's left side says it is working it out): nothing.
 - **CAP-089** The field: a multi-line text area labelled `What to capture`, 3 rows by default, autofocused, spell-checked; placeholder `Add a project in Nodus to capture into` when there are no projects, else `Ask Claude to do something, or jot a note`. Typing sets the text, resets the history position to −1 and clears the error.
 - **CAP-090** The field grows with its content: height = min(content height, line height × 8 + 24) where the line height is 22 px (so at most 200 px), never below its 90 px min-height; beyond that it scrolls. Recomputed whenever the text or the receipt changes.
 - **CAP-091** The attachments row shows when there is at least one attachment or a clipboard offer: one tile per attachment in order, then the offer tile last.
@@ -154,7 +155,7 @@ The panel is a second window loading the renderer at `#capture`; in Rust it is a
 - **CAP-103** Voice: the mic button records with the voice hook owned by 05 (the transcript's project is the route's project, or `''`). A transcript is appended to the text with one space after the trimmed-end text (or replaces an all-whitespace text) and the field is focused. The mic button: `Speak` (title and label), mic icon 16; while recording `Stop and transcribe`, filled square icon 13, red background; disabled while the mic is opening or transcribing. While voice is not idle the footer hint is replaced by the voice status (clock and meter while recording, `Transcribing…` while transcribing, nothing while opening). Voice notices (owned by 05) show inside the card under the error/notice line. A voice notice's **Settings** button, and a missing voice key, call `capture:settings` (CAP-159) instead of opening a dialog in the panel.
 - **CAP-104** Esc while the voice hook is opening, recording or transcribing cancels the voice (05) and does not reach the field: the panel stays up and the menu stays as it is.
 - **CAP-105** Footer hint (when voice is idle): key cap `⇧↩` (Windows: `Shift+Enter`) + ` new line`.
-- **CAP-106** Send button: label is the route kind's verb (`Start session`, `Send`, `Put up note`, `Build view`), followed by a key cap `↩` (Windows: `Enter`). While sending, a spinning loader precedes the label, and the label is `Working it out…` when there is no choice and the shown guess was not made for the current trimmed text. Disabled when there is no text, while sending, or when there are no projects.
+- **CAP-106** Send button: label is the route kind's verb (`Start session`, `Send`, `Put up note`, `Build view`), or `Send` when there is no choice and no guess for the current trimmed text, empty text included (Claude decides on send), followed by a key cap `↩` (Windows: `Enter`). While sending, a spinning loader precedes the label, and the label is `Working it out…` when there is no choice and the shown guess was not made for the current trimmed text. Disabled when there is no text, while sending, or when there are no projects.
 - **CAP-107** The menu (role dialog, `Where it goes`) opens under the header when the header is clicked and targets are loaded. Any pointer-down outside the menu and outside the header button closes it (the click still goes on to its target). Esc in the field closes it (CAP-121). Picking a project or a session closes it; picking a kind does not.
 - **CAP-108** Menu reason: when there is no choice and the guess's reason is non-empty, the menu starts with an accent dot + bold `Claude's guess:` + ` ` + the reason.
 - **CAP-109** Menu left column `Make` (listbox `What to make`): one option per kind in order session, into, note, view: icon (16), label (`New session`, `Send into a session`, `Note`, `View`) and hint (`Claude starts on it, in auto mode`, `Adds to its conversation`, `A sticky on the board, nothing runs`, `A live page Claude keeps up to date`). When no session anywhere is sendable (status ≠ `waiting`), the into option is disabled and its hint is `No sessions are running`. The route's kind is selected. Clicking an option picks that kind (CAP-113) and returns focus to the field.
@@ -453,7 +454,7 @@ interface CaptureSubmission { text; kind; projectId; sessionId?; attachments: Ca
 interface CaptureReceipt { kind; projectId; projectName; title; sessionId?; noteId?; viewId? }
 ```
 
-Constants: `CAPTURE_KINDS = ['session','into','note','view']`, `MAX_COPIED_CHARS = 20000`, `TAP_MS = 350`, `GAP_MS = 400`, `SHIFT_KEYS = [42, 54]`, panel `652 × 320` (height 120–900), `CARD_TOP = 40`, `PANEL_TOP = 0.2`, `MAX_RECORDS = 20`, main `MAX_TEXT_CHARS = 20000`, `BLUR_GRACE_MS = 250`, blur re-check 50 ms, hook pre-create 3000 ms, permission poll 3000 ms, screenshot settle 150 ms, guess `TIMEOUT_MS = 30000`, guess `MAX_TEXT_CHARS = 4000`, `SESSIONS_PER_PROJECT = 8`, `MAX_REASON_CHARS = 120`, page `GUESS_AFTER_MS = 700`, `MIN_GUESS_CHARS = 3`, `RECEIPT_MS = 2600`, `POLL_MS = 2000`, `MAX_HISTORY = 50`, `MAX_ROWS = 8`, `MENU_ROOM = 48`, `KEEP_MS = 30 days`, thumbnail width 360.
+Constants: `CAPTURE_KINDS = ['session','into','note','view']`, `MAX_COPIED_CHARS = 20000`, `TAP_MS = 350`, `GAP_MS = 400`, `SHIFT_KEYS = [42, 54]`, panel `652 × 320` (height 120–900), `CARD_TOP = 40`, `PANEL_TOP = 0.2`, `MAX_RECORDS = 20`, main `MAX_TEXT_CHARS = 20000`, `BLUR_GRACE_MS = 250`, blur re-check 50 ms, hook pre-create 3000 ms, permission poll 3000 ms, screenshot settle 150 ms, guess `TIMEOUT_MS = 30000`, guess `MAX_TEXT_CHARS = 4000`, `SESSIONS_PER_PROJECT = 8`, `MAX_REASON_CHARS = 120`, `RECEIPT_MS = 2600`, `POLL_MS = 2000`, `MAX_HISTORY = 50`, `MAX_ROWS = 8`, `MENU_ROOM = 48`, `KEEP_MS = 30 days`, thumbnail width 360.
 
 ## API surface
 
@@ -599,7 +600,7 @@ Values are CSS px at 1×. Token values are given as `light / dark`. The panel fo
 | Header, no project | `No projects yet` |
 | Header, thinking | `Working out where this goes…` |
 | Header, kinds | `New session`, `Note`, `View`, `Into “<title>”`, fallback title `a session`, joiners `on` (note), `in` |
-| Header right | `Your choice`, `Claude's guess`, `Claude works out what it is as you type`, key `Tab` |
+| Header right | `Your choice`, `Claude's guess`, `Claude works out where it goes when you send`, key `Tab` |
 | Field label / placeholders | `What to capture`; `Add a project in Nodus to capture into`; `Ask Claude to do something, or jot a note` |
 | Tiles | `Screenshot`, `Copied image`, `Copied text`, remove `Remove` |
 | Screenshot notice | `macOS kept the screenshot from Nodus. Turn Nodus on in Screen & System Audio Recording, then take it again.`, button `Open System Settings` |
@@ -674,8 +675,8 @@ Logged only: `[capture] the key hook failed to start`, `[capture] the key hook f
 
 Other edge cases (each covered by the behavior cited):
 
-- **CAP-161** The panel hides while a guess is in flight (Esc, click away): the guess process is killed and resolves `null`; the page keeps whatever guess it showed (CAP-016, CAP-066).
-- **CAP-162** Return while the guess is still thinking: the send waits for it; if the panel is hidden meanwhile, the guess resolves `null`, the send continues with the route as it was and the capture is still made; `rest()` does nothing because the panel isn't visible; the receipt is set on the hidden page and is cleared on the next show (CAP-123, CAP-131, CAP-083).
+- **CAP-161** The panel hides while a guess is in flight (Esc, click away): the guess goes on, because only a send asks for one (CAP-016, CAP-064).
+- **CAP-162** Return asks Claude and the send waits for its answer; if the panel is hidden meanwhile, the guess still answers and the capture is made where Claude said; `rest()` does nothing because the panel isn't visible; the receipt is set on the hidden page and is cleared on the next show (CAP-123, CAP-131, CAP-083).
 - **CAP-163** A session picked for into that started waiting before send: main rejects with `It’s waiting for your answer. Open it to reply.`; the text stays (CAP-127).
 - **CAP-164** The route's into session vanished from targets: the header shows `Into “a session”`; sending fails with `That session is no longer on the board` (CAP-086, CAP-127).
 - **CAP-165** Allow… while the switch is still off in System Settings: the state stays `needs-permission`, the banner stays until the next show, even after the poll starts the hook (the page is only told on show) (CAP-117, CAP-037).
@@ -795,7 +796,7 @@ Suggested new Rust tests (not in 0.9.4, for behaviors with no test): `ago`/`flat
 - [x] CAP-013 Closed window reference dropped
 - [x] CAP-014 Shown/context events; nothing sent while loading; `capture:ready` returns stored context while open
 - [x] CAP-015 Open order: own-focus check, front app, place, targets snapshot, shown event, show+focus, then clipboard, then tab
-- [x] CAP-016 Hide cancels the guess, clears resting, hides (never closes)
+- [x] CAP-016 Hide leaves the guess running, clears resting, hides (never closes)
 - [x] CAP-017 Toggle: hide only if open and focused, else open
 - [x] CAP-018 Open = exists and visible (resting counts)
 - [x] CAP-019 Rest after submit: hide + show without focus; blur ignored
@@ -843,7 +844,7 @@ Suggested new Rust tests (not in 0.9.4, for behaviors with no test): `ago`/`flat
 - [x] CAP-061 Describe ≤ 20 files/dirs: name, size (0 for dirs); errors skipped
 - [x] CAP-062 Drag over/leave/drop on the card; paths from dropped files
 - [x] CAP-063 Launch sweep of captures/ older than 30 days by mtime
-- [x] CAP-064 Guess after 700 ms pause, ≥ 3 chars, no choice, text changed
+- [x] CAP-064 Guess only on send, never while typing
 - [x] CAP-065 Empty text resets guess, choice and in-flight state
 - [x] CAP-066 Ask: run counter, stale answers dropped, null keeps previous guess
 - [x] CAP-067 Main guess uses opened-on targets and app, text ≤ 20 000, cleaned attachments
@@ -867,7 +868,7 @@ Suggested new Rust tests (not in 0.9.4, for behaviors with no test): `ago`/`flat
 - [x] CAP-085 No projects / has text definitions
 - [x] CAP-086 Header contents: project / thinking line / kind badge + label + project
 - [x] CAP-087 Header disabled until targets load and when no projects; click toggles menu
-- [x] CAP-088 Header right: `Your choice` / `Claude's guess` + Tab cap / empty-state line
+- [x] CAP-088 Header right: `Your choice` / `Claude's guess` + Tab cap / `…when you send` line
 - [x] CAP-089 Field: label, placeholders, 3 rows, autofocus, spellcheck; typing resets history/error
 - [x] CAP-090 Field auto-height max 200 px, min 90
 - [x] CAP-091 Tiles row when attachments or offer; offer last
@@ -940,7 +941,7 @@ Suggested new Rust tests (not in 0.9.4, for behaviors with no test): `ago`/`flat
 - [x] CAP-158 captures/<uuid>.png, never deleted except by the sweep
 - [x] CAP-159 `capture:settings` hides and opens Settings in the board window
 - [x] CAP-160 `capture:hide` hides
-- [x] CAP-161 Hide during guess → null, previous guess kept
+- [x] CAP-161 Hide during guess → the guess goes on
 - [x] CAP-162 Send while hidden still makes it; receipt cleared on next show
 - [x] CAP-163 Into a session that became waiting → error, text kept
 - [x] CAP-164 Vanished into session → `a session`, then error on send

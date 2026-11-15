@@ -55,7 +55,6 @@ pub struct CapturePanel {
     pub(super) attachments: Vec<CaptureAttachment>,
     pub(super) guess: GuessState,
     pending: Option<Pending>,
-    guess_timer: Option<Task<()>>,
     /// What the user picked, which stands over Claude's guess until the text is cleared.
     pub(super) choice: Option<Route>,
     pub(super) menu_open: bool,
@@ -196,7 +195,7 @@ impl CapturePanel {
                 })
             },
         ];
-        let mut panel = Self {
+        let panel = Self {
             nodus: nodus.clone(),
             targets: None,
             context: CaptureContext {
@@ -211,7 +210,6 @@ impl CapturePanel {
             attachments,
             guess: GuessState::default(),
             pending: None,
-            guess_timer: None,
             choice: None,
             menu_open: false,
             sending: false,
@@ -244,8 +242,6 @@ impl CapturePanel {
             _events: events,
             _subscriptions: subscriptions,
         };
-        // A draft restored asks Claude once the page is up, as typing it would.
-        panel.reschedule_guess(cx);
         // The panel came up while this page was being made.
         cx.spawn_in(window, async move |this, cx| {
             if let Some(context) = nodus.capture().ready().await {
@@ -284,9 +280,15 @@ impl CapturePanel {
             .filter(|offer| Some(offer_key(offer)) != self.offer_done)
     }
 
+    /// Where it goes is Claude's to say when it's sent: the user hasn't
+    /// chosen, and Claude hasn't said for this text (CAP-106, CAP-123).
+    pub(super) fn claude_decides(&self) -> bool {
+        self.choice.is_none() && (self.guess.guess.is_none() || self.guess.must_wait(&self.text, false))
+    }
+
     /// While sending: still waiting for Claude to say where (CAP-106).
     pub(super) fn working_it_out(&self) -> bool {
-        self.sending && self.guess.must_wait(&self.text, self.choice.is_some())
+        self.sending && self.claude_decides()
     }
 
     /// A data URL's picture, decoded once.
@@ -346,7 +348,7 @@ impl CapturePanel {
                 if attachments != self.attachments {
                     self.attachments = attachments;
                     self.save_attachments();
-                    self.reschedule_guess(cx);
+                    self.forget_if_cleared();
                 }
             }
         }
@@ -404,7 +406,7 @@ impl CapturePanel {
         self.save_draft();
         self.history_at = -1;
         self.error = None;
-        self.reschedule_guess(cx);
+        self.forget_if_cleared();
         self.note_recents();
         cx.notify();
     }
@@ -417,32 +419,19 @@ impl CapturePanel {
         self.setting_text = false;
         self.text = text;
         self.save_draft();
-        self.reschedule_guess(cx);
+        self.forget_if_cleared();
         self.note_recents();
         cx.notify();
     }
 
-    /// CAP-064, CAP-065: each pause in the typing asks again, until the user
-    /// picks for themselves; clearing the text forgets the guess and the choice.
-    fn reschedule_guess(&mut self, cx: &mut Context<'_, Self>) {
-        self.guess_timer = None;
+    /// CAP-064, CAP-065: Claude is asked where it goes only when it's sent,
+    /// never while typing; clearing the text forgets the guess and the choice.
+    fn forget_if_cleared(&mut self) {
         if js::trim(&self.text).is_empty() {
             self.guess.clear();
             self.pending = None;
             self.choice = None;
-            return;
         }
-        if !self.guess.wants_guess(&self.text, self.choice.is_some()) {
-            return;
-        }
-        self.guess_timer = Some(cx.spawn(async move |this, cx| {
-            cx.background_executor()
-                .timer(Duration::from_millis(page::GUESS_AFTER_MS))
-                .await;
-            let _ = this.update(cx, |p, cx| {
-                p.ask_guess(cx);
-            });
-        }));
     }
 
     /// CAP-066: asks Claude; only the latest answer counts, and none keeps
@@ -539,7 +528,7 @@ impl CapturePanel {
 
     fn choose(&mut self, choice: Route, cx: &mut Context<'_, Self>) {
         self.choice = Some(choice);
-        self.reschedule_guess(cx);
+        self.forget_if_cleared();
         cx.notify();
     }
 
@@ -599,7 +588,7 @@ impl CapturePanel {
         if !more.is_empty() {
             self.attachments.extend(more);
             self.save_attachments();
-            self.reschedule_guess(cx);
+            self.forget_if_cleared();
         }
         self.focus_field(window, cx);
         cx.notify();
@@ -610,7 +599,7 @@ impl CapturePanel {
         if index < self.attachments.len() {
             self.attachments.remove(index);
             self.save_attachments();
-            self.reschedule_guess(cx);
+            self.forget_if_cleared();
         }
         self.focus_field(window, cx);
         cx.notify();
@@ -706,9 +695,9 @@ impl CapturePanel {
 
     // ---- sending ------------------------------------------------------------------
 
-    /// CAP-123, CAP-124: waits for Claude's guess when it hasn't looked at
-    /// this text, then makes it; the receipt follows, or the error shows and
-    /// the draft stays.
+    /// CAP-123, CAP-124: asks Claude where it goes, unless the user chose or
+    /// it already said for this text, then makes it; the receipt follows, or
+    /// the error shows and the draft stays.
     pub(super) fn send(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         let trimmed = js::trim(&self.text).to_owned();
         if trimmed.is_empty() || self.sending {

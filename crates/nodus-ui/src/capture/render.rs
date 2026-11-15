@@ -178,7 +178,10 @@ impl CapturePanel {
             .as_ref()
             .and_then(|ts| ts.projects.iter().find(|p| Some(&p.id) == route.project_id.as_ref()))
             .cloned();
-        let thinking = self.guess.guessing && self.guess.guess.is_none() && self.choice.is_none();
+        // Neither Claude nor the user has said where it goes yet: Claude is
+        // asked when it's sent (CAP-064).
+        let undecided = self.guess.guess.is_none() && self.choice.is_none();
+        let thinking = self.guess.guessing && undecided;
         let frozen = parity::frozen(cx);
         let ink = style::inks(&t);
         // MOTION-034: a route Claude's guess puts in the header, new since
@@ -199,7 +202,7 @@ impl CapturePanel {
         });
 
         // CAP-086
-        let content: Vec<AnyElement> = if !has_text || !targets_loaded {
+        let content: Vec<AnyElement> = if !has_text || !targets_loaded || (undecided && !thinking) {
             vec![
                 swatch(project.as_ref().map(|p| p.color)).into_any_element(),
                 div()
@@ -326,10 +329,10 @@ impl CapturePanel {
                 who = who.child(who_dot(t, glint)).child("Claude's guess");
             }
             Some(who.child(kbd("Tab", t)).into_any_element())
-        } else if !has_text {
+        } else if !thinking {
             Some(
                 who_row(&t)
-                    .child("Claude works out what it is as you type")
+                    .child("Claude works out where it goes when you send")
                     .into_any_element(),
             )
         } else {
@@ -609,9 +612,11 @@ impl CapturePanel {
         let route = self.route();
         let frozen = parity::frozen(cx);
         let enabled = self.has_text() && !self.sending && !self.no_projects();
-        // CAP-106
+        // CAP-106: plain `Send` while Claude is still to say where it goes.
         let label = if self.working_it_out() {
             "Working it out…"
+        } else if self.claude_decides() {
+            "Send"
         } else {
             kind_copy(route.kind).verb
         };

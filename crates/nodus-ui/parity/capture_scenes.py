@@ -43,6 +43,10 @@ def typed(text):
     return {"cmd": "type", "text": text, **P}
 
 
+# Claude is asked where a capture goes only when it's sent (CAP-064).
+ENTER = {"cmd": "key", "keystroke": "enter", **P}
+
+
 def press(control):
     return {"cmd": "capture", "action": "press", "control": control}
 
@@ -68,12 +72,12 @@ SCENES = {
     "capture-recents": ({}, lambda ids: [stub("statuses", {ids["sfTax"]: "waiting"})] + show() + [wait(600)]),
     "capture-guessing": (
         {"noCaptures": True, "responses": {"delayMs": 120000}},
-        lambda ids: show() + [typed(TEXT), wait(1500)],
+        lambda ids: show() + [typed(TEXT), ENTER, wait(1500)],
     ),
-    "capture-guess": ({"noCaptures": True}, lambda ids: show() + [typed(TEXT), wait(3500)]),
+    "capture-guess": ({"noCaptures": True}, lambda ids: show() + [typed(TEXT), wait(500)]),
     "capture-kind-menu": (
         {"noCaptures": True},
-        lambda ids: show() + [typed(TEXT), wait(3500), mouse("click", 150, 64), wait(500)],
+        lambda ids: show() + [typed(TEXT), wait(500), mouse("click", 150, 64), wait(500)],
     ),
     "capture-attachments": (
         {"noCaptures": True, "thumb": True},
@@ -95,21 +99,20 @@ SCENES = {
             press("offer"),
             wait(300),
             typed("The coupon field breaks on this page"),
-            wait(3500),
+            wait(500),
             mouse("move", 2, 2),
         ],
     ),
     "capture-receipt-note": (
         {"noCaptures": True, "guessNote": True},
-        lambda ids: show() + [typed("Remember to ask Sam about the coupon limits"), wait(3500),
-                              {"cmd": "key", "keystroke": "enter", **P}, wait(200)],
+        lambda ids: show() + [typed("Remember to ask Sam about the coupon limits"), ENTER, wait(1500)],
     ),
     "capture-receipt-session": (
         {"noCaptures": True},
         lambda ids: [stub("submit", {"kind": "session", "projectId": ids["storefront"], "projectName": "storefront",
                                      "title": TEXT, "sessionId": ids["capNew"]})]
         + show()
-        + [typed(TEXT), wait(3500), {"cmd": "key", "keystroke": "enter", **P}, wait(200)],
+        + [typed(TEXT), ENTER, wait(1500)],
     ),
     "capture-permission": (
         {"noCaptures": True},

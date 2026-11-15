@@ -11,10 +11,6 @@ use nodus_domain::{
     SessionStatus, TabAttachment,
 };
 
-/// How long typing has to pause before Claude is asked again (CAP-064).
-pub const GUESS_AFTER_MS: u64 = 700;
-/// Shorter than this, there's nothing to guess from yet (CAP-064).
-pub const MIN_GUESS_CHARS: usize = 3;
 /// How long the receipt shows before the panel goes (CAP-147).
 pub const RECEIPT_MS: u64 = 2600;
 /// How often the targets are read while the panel is up (CAP-118).
@@ -175,9 +171,10 @@ pub fn pick_session(session: &CaptureSession) -> Route {
     }
 }
 
-/// Claude's guess as the page keeps it (CAP-064…CAP-066): a run counter so
-/// a slow answer to old text is dropped, the text the guess on screen was
-/// for, and whether one is in flight.
+/// Claude's guess as the page keeps it (CAP-064…CAP-066): asked only when
+/// the capture is sent, never while typing; a run counter so a slow answer
+/// to old text is dropped, the text the guess on screen was for, and whether
+/// one is in flight.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct GuessState {
     run: u64,
@@ -188,12 +185,6 @@ pub struct GuessState {
 }
 
 impl GuessState {
-    /// Whether to ask 700 ms after this text last changed (CAP-064).
-    pub fn wants_guess(&self, text: &str, has_choice: bool) -> bool {
-        let trimmed = js::trim(text);
-        !has_choice && js::utf16_len(trimmed) >= MIN_GUESS_CHARS && trimmed != self.guessed_for
-    }
-
     /// The text was cleared (CAP-065): answers in flight are dropped and the
     /// guess forgotten. The caller clears the user's choice too.
     pub fn clear(&mut self) {

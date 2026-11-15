@@ -764,8 +764,7 @@ async fn remembers_the_board_opened_last() {
     assert!(s.capture.deps.store.read(|st| st.board("a").is_some()));
 }
 
-/// CAP-068, CAP-016, CAP-161: a guess with nothing to go on is none; with
-/// no Claude Code it fails; hiding stops a guess.
+/// CAP-068: a guess with nothing to go on is none; with no Claude Code it fails.
 #[tokio::test(start_paused = true)]
 async fn guesses_through_the_panel() {
     let s = Setup::new(&seeded());
@@ -809,31 +808,35 @@ impl ClaudeEnv for StandIn {
     }
 }
 
-/// CAP-161, CAP-016: hiding the panel stops a guess in flight, which is no guess.
+/// CAP-161, CAP-162, CAP-016: hiding the panel leaves a guess in flight
+/// alone, since a send is waiting on it.
 #[cfg(unix)]
 #[tokio::test]
-async fn hiding_stops_a_guess() {
+async fn hiding_keeps_the_guess_a_send_waits_on() {
     use std::os::unix::fs::PermissionsExt;
 
     let dir = tempfile::tempdir().unwrap();
     let script = dir.path().join("claude");
     std::fs::write(
         &script,
-        format!("#!/bin/sh\ntouch '{}/started'\nsleep 30\n", dir.path().display()),
+        format!(
+            "#!/bin/sh\ncd '{}'\ntouch started\nwhile [ ! -e go ]; do sleep 0.05; done\necho '{{\"structured_output\":{{\"kind\":\"note\",\"project\":\"p\",\"session\":\"\",\"reason\":\"An idea.\"}}}}'\n",
+            dir.path().display()
+        ),
     )
     .unwrap();
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
     let s = Setup::with_claude(&seeded(), Arc::new(StandIn(script)));
     s.capture.show().await;
     let capture = s.capture.clone();
-    let guess = tokio::spawn(async move { capture.guess("fix the coupon path", &json!([])).await });
+    let guess = tokio::spawn(async move { capture.guess("remember the coupon path", &json!([])).await });
     while !dir.path().join("started").exists() {
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
-    let started = std::time::Instant::now();
     s.capture.hide();
-    assert_eq!(guess.await.unwrap(), Ok(None));
-    assert!(started.elapsed() < Duration::from_secs(5));
+    std::fs::write(dir.path().join("go"), "").unwrap();
+    let guess = guess.await.unwrap().unwrap().unwrap();
+    assert_eq!((guess.kind, guess.project_id.as_str()), (CaptureKind::Note, "p"));
 }
 
 // The guess goes on what the panel opened over: a stand-in claude logs it.

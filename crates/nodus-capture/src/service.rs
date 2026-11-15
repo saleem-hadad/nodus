@@ -349,10 +349,10 @@ impl Capture {
         }
     }
 
-    /// `hidePanel` (CAP-016): stops a guess in progress and hides the panel;
-    /// it's never closed.
+    /// `hidePanel` (CAP-016): hides the panel; it's never closed. A guess in
+    /// progress goes on: Claude is only asked when a capture is sent, and the
+    /// send waits for its answer (CAP-161, CAP-162).
     pub fn hide_panel(&self) {
-        self.guesser.cancel();
         lock(&self.state).resting = false;
         let panel = &self.deps.panel;
         if panel.exists() && panel.is_visible() {

@@ -59,7 +59,7 @@ Then choose **Connect to Server…** in the app. [Running a server](docs/server.
 
 ## 🔒 Private by design
 
-Everything stays on your machine. With a server, its projects and sessions live on that server, which you run. Nodus reads transcripts where Claude Code keeps them and saves only the board layout. Spoken prompts use xAI's speech to text with your own key. Floating capture asks Claude where each capture goes, so what you type there reaches Anthropic as you type it.
+Everything stays on your machine. With a server, its projects and sessions live on that server, which you run. Nodus reads transcripts where Claude Code keeps them and saves only the board layout. Spoken prompts use xAI's speech to text with your own key. Floating capture asks Claude where each capture goes when you send it, so what you send there reaches Anthropic.
 
 ## 📖 Learn more
 

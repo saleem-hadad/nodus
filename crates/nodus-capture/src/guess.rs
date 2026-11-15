@@ -4,8 +4,8 @@
 //! A quick headless claude call, like naming a section: Haiku with thinking,
 //! tools and MCP servers off, outside any repository. It reads the projects,
 //! their recent sessions, the app in front and what was typed, and answers in
-//! a JSON schema. The panel asks again each time the typing pauses, and a new
-//! question stops the one before it.
+//! a JSON schema. The panel asks once a capture is sent, never while it's
+//! being typed, and a new question stops the one before it.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -287,7 +287,7 @@ impl ClaudeEnv for nodus_platform::Env {
     }
 }
 
-/// The guess running now, which a new one or the panel hiding stops.
+/// The guess running now, which a new one stops.
 struct Running {
     id: u64,
     cancelled: Arc<Notify>,
@@ -319,7 +319,7 @@ impl Guesser {
 
     /// `cancelGuess`: stops a guess still in progress (SIGKILL, as its run
     /// is dropped); it resolves `None` at once (CAP-074). Called before every
-    /// new guess and whenever the panel hides.
+    /// new guess.
     pub fn cancel(&self) {
         let Some(running) = self.lock().take() else {
             return;
@@ -333,7 +333,7 @@ impl Guesser {
     }
 
     /// `guessCapture`: asks Claude, `None` if it can't say or a newer guess
-    /// (or the panel hiding) stopped this one. Fails only when Claude Code
+    /// stopped this one. Fails only when Claude Code
     /// isn't installed (CAP-068).
     pub async fn guess(&self, input: GuessInput<'_>, now: f64) -> Result<Option<CaptureGuess>, ClaudeNotFound> {
         self.cancel();

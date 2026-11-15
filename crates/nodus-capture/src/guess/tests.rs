@@ -517,7 +517,7 @@ mod process {
         assert!(second.is_some());
         assert!(started.elapsed() < Duration::from_secs(5));
 
-        // Hiding the panel: cancel.
+        // Cancelling stops it.
         std::fs::remove_file(dir.path().join("first")).unwrap();
         let third = {
             let (guesser, targets) = (guesser.clone(), targets.clone());

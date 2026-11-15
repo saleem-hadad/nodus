@@ -157,9 +157,9 @@ fn keeps_claudes_guess() {
         reason: String::new(),
     };
     let mut g = GuessState::default();
-    assert!(!g.wants_guess("  ab ", false));
-    assert!(g.wants_guess(" abc ", false));
-    assert!(!g.wants_guess("abc", true));
+    // Sending waits for one unless the user chose.
+    assert!(g.must_wait(" abc ", false));
+    assert!(!g.must_wait("abc", true));
     // An older run's answer is dropped.
     let first = g.begin();
     let second = g.begin();
@@ -167,7 +167,6 @@ fn keeps_claudes_guess() {
     assert!(g.guessing);
     assert!(g.settle(second, Some(guess("b")), "  new text "));
     assert_eq!((g.guessed_for.as_str(), g.guessing), ("new text", false));
-    assert!(!g.wants_guess("new text ", false));
     assert!(!g.must_wait(" new text", false));
     assert!(g.must_wait("newer", false));
     assert!(!g.must_wait("newer", true));

@@ -19,7 +19,7 @@ On first boot the instance downloads `install-server.sh` from the release, check
    "tagOwners": { "tag:nodus": ["autogroup:admin"] },
    "grants": [
      { "src": ["autogroup:member"], "dst": ["tag:nodus"], "ip": ["tcp:22", "tcp:7420", "tcp:8100-8999"] },
-     { "src": ["autogroup:member"], "dst": ["autogroup:member"], "ip": ["*"] }
+     { "src": ["autogroup:member"], "dst": ["autogroup:self"], "ip": ["*"] }
    ]
    ```
    Then make an auth key under **Settings → Keys**: not reusable, pre-approved, tagged `tag:nodus`. Being single-use, it's worthless once the server has joined, which matters because the instance's user data holds it.

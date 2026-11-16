@@ -17,7 +17,7 @@ use gpui::{
     IntoElement, MouseButton, ParentElement, SharedString, StatefulInteractiveElement, Styled, Subscription, Task,
     Window, deferred, div, px,
 };
-use nodus_domain::{Event, GitCommit, GitStatus};
+use nodus_domain::{Event, GitCommit, GitFileChange, GitStatus, SessionCard};
 use nodus_git::labels;
 
 use crate::actions::icons::{Glyph, glyph};
@@ -330,6 +330,23 @@ impl GitModel {
             .filter(|c| !c.is_empty())
     }
 
+    /// CARD-060: the changes among the files a card's session changed, when
+    /// the status is of the folder the card works in: the board's project
+    /// folder, or on a server board its worktree while it's the one card
+    /// selected (SRV-128). None otherwise, or before the status is read.
+    pub fn card_changes(&self, project_id: &str, card: &SessionCard) -> Option<Vec<GitFileChange>> {
+        let git = self.status.as_ref()?;
+        if self.route_project.as_deref() != Some(project_id) {
+            return None;
+        }
+        let own = match card.node.worktree() {
+            Some(_) => self.card.as_deref() == Some(card.node.session_id.as_str()),
+            None => self.card.is_none(),
+        };
+        let edited = card.edited_files.as_deref().filter(|_| own)?;
+        Some(labels::session_changes(&git.files, edited))
+    }
+
     /// GIT-032: the Changes window shows while `diffOpen` is set on a board.
     fn sync_diff(&mut self, cx: &mut Context<'_, Self>) {
         let (open, project) = {
@@ -370,12 +387,33 @@ impl GitModel {
     }
 }
 
-/// `openDiff`.
+/// `openDiff`: every change.
 pub fn open_diff(state: &Entity<AppState>, cx: &mut App) {
+    open_diff_for(state, None, cx);
+}
+
+/// CARD-060: the Changes window, listing only the files a session changed
+/// (GIT-057), or every change.
+pub fn open_diff_for(state: &Entity<AppState>, session_id: Option<&str>, cx: &mut App) {
     state.update(cx, |s, cx| {
         s.diff_open = true;
+        s.diff_session = session_id.map(str::to_owned);
         cx.notify();
     });
+}
+
+/// GIT-057: the window lists every change again.
+pub fn show_all_changes(state: &Entity<AppState>, cx: &mut App) {
+    state.update(cx, |s, cx| {
+        if s.diff_session.take().is_some() {
+            cx.notify();
+        }
+    });
+}
+
+/// The window's model, once the title bar has made it.
+pub fn model(cx: &App) -> Option<Entity<GitModel>> {
+    cx.try_global::<GitGlobal>().map(|g| g.0.clone())
 }
 
 /// `closeDiff`.

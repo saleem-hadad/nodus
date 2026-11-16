@@ -266,6 +266,7 @@ mod tests {
             live: false,
             agents: None,
             agent_count: None,
+            edited_files: None,
             usage: None,
         };
         assert_eq!(card_title(Some(&card)), "New session");

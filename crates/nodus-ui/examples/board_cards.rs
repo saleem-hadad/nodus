@@ -52,6 +52,7 @@ impl CardActions for NoActions {
     fn open_session(&self, _: &str, _: &mut App) {}
     fn show_card(&self, _: &str, _: Option<&str>, _: &mut App) {}
     fn open_agents(&self, _: &str, _: Option<&str>, _: &mut App) {}
+    fn open_changes(&self, _: &str, _: &mut App) {}
     fn open_terminal(&self, _: &str, _: &mut App) {}
     fn remove_notes(&self, _: &[String], _: &mut App) {}
     fn resize(&self, _: &Resized, _: (f32, f32, f32, f32), _: bool, _: &mut App) {}

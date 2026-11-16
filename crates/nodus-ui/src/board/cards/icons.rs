@@ -29,10 +29,11 @@ pub enum CardIcon {
     Archive,
     Search,
     X,
+    FileDiff,
 }
 
 impl CardIcon {
-    const ALL: [Self; 20] = [
+    const ALL: [Self; 21] = [
         Self::Bot,
         Self::GitBranch,
         Self::GitMerge,
@@ -53,6 +54,7 @@ impl CardIcon {
         Self::Archive,
         Self::Search,
         Self::X,
+        Self::FileDiff,
     ];
 
     pub fn name(self) -> &'static str {
@@ -77,6 +79,7 @@ impl CardIcon {
             Self::Archive => "archive",
             Self::Search => "search",
             Self::X => "x",
+            Self::FileDiff => "file-diff",
         }
     }
 
@@ -129,6 +132,9 @@ impl CardIcon {
             }
             Self::Search => r#"<path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/>"#,
             Self::X => r#"<path d="M18 6 6 18"/><path d="m6 6 12 12"/>"#,
+            Self::FileDiff => {
+                r#"<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M9 10h6"/><path d="M12 13V7"/><path d="M9 17h6"/>"#
+            }
         }
     }
 

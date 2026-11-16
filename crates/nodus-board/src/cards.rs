@@ -23,6 +23,7 @@ pub fn to_card(node: &BoardNode, found: Option<&DiscoveredSession>, sessions: &d
         live: sessions.is_live(id),
         agents: None,
         agent_count: None,
+        edited_files: None,
         usage: sessions.usage(id),
     }
 }

@@ -775,6 +775,7 @@ mod tests {
             live: false,
             agents: None,
             agent_count: None,
+            edited_files: None,
             usage: None,
         }
     }

@@ -137,7 +137,7 @@ Everything here is UI-free and lands in `nodus-sessions`, `nodus-transcripts` an
 - **SESS-076 · Section cleanup** — A node keeps `sectionId` only when it is not archived and that section still exists; otherwise `sectionId` is removed.
 - **SESS-077 · Sticker cleanup** — A note whose `sessionId` names a node no longer on the board loses its `sessionId` (and stays where it is).
 - **SESS-078 · Opened time** — The project's `openedAt` is set to now and the state is saved (debounced, 01).
-- **SESS-079 · Cards** — Every node (archived, terminals, runs and views' brains included) becomes a card via `toCard(node, diskEntry)`, then `attachAgents(card, repoPath, diskEntry?.lastPromptAt)` (02) adds `agentCount`/`agents`. Cards come in node insertion order.
+- **SESS-079 · Cards** — Every node (archived, terminals, runs and views' brains included) becomes a card via `toCard(node, diskEntry)`, then `attachAgents(card, repoPath, diskEntry?.lastPromptAt)` (02) adds `agentCount`/`agents`. An active Claude card also gets `editedFiles` (added after 1.0.22, CARD-060): the files its transcript's and its agents' transcripts' `Edit`, `MultiEdit`, `Write` and `NotebookEdit` calls changed (`file_path`, `notebook_path`), less those whose every call came back an error, first changed first, kept to the git repository the card's folder is in and made relative to its root; none when there are none. Each transcript is read whole once, then only what's appended, parsing just the lines that name such a path or an error. Cards come in node insertion order.
 - **SESS-080 · Card shape** — `toCard(node, found?)` = all node fields, plus `meta` (only when `found.hasContent`), `status` (`'done'` when archived, else the status machine's `getStatus`, which is `'done'` for a process that isn't live), `live` (process running; an archived card can be live) and `usage` (02's `getUsage`, may be absent).
 - **SESS-081 · Snapshot** — The snapshot is `{ project, cards, archive, sections, notes, views, ink, viewport }`: sections, notes and views each sorted by `createdAt` ascending (notes oldest first so newer draw on top), `ink` = stored ink or `[]`, `viewport` as stored (may be absent), `archive` the (grown) archive rect.
 
@@ -404,7 +404,7 @@ Layout on disk:
 ```ts
 SessionMeta { sessionId; title; firstPrompt?; lastPrompt?; lastAssistantText?; gitBranch?; messageCount; createdAt; updatedAt; transcriptPath }
 TranscriptMessage { role: 'user'|'assistant'; text; timestamp; tools?: string[]; calls?: { name; detail? }[]; notice?: boolean }
-SessionCard = BoardNode & { meta?; status: 'working'|'waiting'|'done'; live: boolean; agents?: AgentInfo[]; agentCount?: number; usage?: SessionUsage }
+SessionCard = BoardNode & { meta?; status: 'working'|'waiting'|'done'; live: boolean; agents?: AgentInfo[]; agentCount?: number; editedFiles?: string[]; usage?: SessionUsage }
 BoardSnapshot { project; cards; archive: Rect; sections; notes; views; ink; viewport? }
 OpenSessionResult { replay: string; live: boolean }
 SummaryResult { sessionId; title; summary; error? }

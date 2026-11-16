@@ -15,6 +15,7 @@ use gpui::{
     canvas, div, px, radians, svg,
 };
 use nodus_domain::{AgentInfo, SessionUsage};
+use nodus_git::labels;
 
 use super::agent_deck::{self, DeckHandles};
 use super::icons::{CardIcon, GRIP_PATH, card_icon};
@@ -23,7 +24,7 @@ use super::present::{
     running,
 };
 use super::resize::resize_zones;
-use super::session_card::{SessionNode, apply, heading, surface};
+use super::session_card::{SessionNode, apply, changed_files, heading, surface};
 use super::{BoardEnv, anim, fade};
 use crate::components::tooltip::native_tooltip;
 use crate::components::tween::transition;
@@ -475,6 +476,24 @@ fn tools(
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .on_click(|_, _, cx| cx.stop_propagation());
 
+    // CARD-060: the files the session changed, as the compact card's footer has them.
+    let changed = changed_files(env, card, cx);
+    if changed > 0 {
+        let (b, color) = tool(env, &id, "tool-files", false, false, None, window, cx);
+        let env = env.clone();
+        let sid = id.clone();
+        group = group.child(
+            b.aria_label(labels::session_files_title(changed))
+                .px(z.px(7.))
+                .tooltip(native_tooltip(labels::session_files_title(changed).into()))
+                .on_click(move |_, _, cx| {
+                    cx.stop_propagation();
+                    env.actions.open_changes(&sid, cx);
+                })
+                .child(card_icon(CardIcon::FileDiff, z.f(14.), 2.0, color))
+                .child(super::text_tab(z, changed.to_string(), 12.0, FontWeight::MEDIUM, color)),
+        );
+    }
     if !agents.is_empty() {
         // XCARD-009
         let open = handles.open(cx);

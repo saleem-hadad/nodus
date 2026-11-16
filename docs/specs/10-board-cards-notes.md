@@ -86,6 +86,7 @@ All values below are resolved for **light** and **dark**. The theme follows `nat
 - **CARD-057** A server card's footer shows the transcript's branch, else its worktree's branch, and a server terminal's preview shows its worktree's folder rather than the project's.
 - **CARD-058** A server card that took a Claude account from the pool (`accountLabel`, SRV-101) says which: its title's tooltip adds a line `Claude account: <label>` after `Started by <login>`, and its menu ends with a disabled `Claude account: <label>` row after `Started by`.
 - **CARD-059** A server card with an `accountNote` (SRV-104) shows it as a pill under its heading, where the `merged from` chip goes (after it when both are there, and the preview clamps to 3 lines either way): `Moved to <label>` (or `Resumed on <label>`) in `--accent` on 10% accent with an arrow, tooltip `Its turn hit its Claude account’s limit, so it carried on on another.`; `Waiting for a Claude account until <time>` in `--status-waiting` on 10% of it with a loader, tooltip `<the note>. Every Claude account on the server is at its limit; it carries on by itself once one is free.` An open card's title bar shows the same pill after its title (`Waiting for an account` there, the time in its tooltip).
+- **CARD-060** What the session changed (added after 1.0.22): an active Claude card whose session, or one of its agents, changed files with Claude's `Edit`, `MultiEdit`, `Write` or `NotebookEdit` (a call whose result was an error doesn't count) shows how many of those files the Changes window lists now: a footer button after the messages count, lucide `FileDiff` and `1 file` / `N files`, looking and behaving like CARD-039's, tooltip and accessible name `Review the file this session changed` / `Review the N files this session changed`. It hides at 0, so files that were committed, reverted, outside the repository or in another worktree don't count, and so does a change Claude made through `Bash`. Clicking it opens the Changes window listing only those files (GIT-057). An open card's title bar has the same as a tool before Agents (`FileDiff` 14px and the count). The files come with the board (`editedFiles`, relative to the repository's root, SESS-079); the count follows git status (GIT-023). On a server board a card with a worktree shows it only while it's the one card selected, as that's when git is of its worktree (GIT-056).
 
 ### Expanded card — XCARD
 
@@ -559,6 +560,7 @@ Lineage: stroke `--border-strong`, width 1.5, no dash; animated (child working):
 | Rename field | Enter / blur / Escape | commit / commit / cancel; all keys swallowed | CARD-046…048 |
 | Footer agents (deck) | point / click | fan open / pin toggle | CARD-037, DECK-008/009 |
 | Footer agents (no deck) | click | open Agents viewer | CARD-038 |
+| Footer files / title-bar files | click | open the Changes window for the session's files | CARD-060, GIT-057 |
 | Deck layer | point / click | fan open / pin toggle | DECK-008/009 |
 | Anywhere (fan pinned) | pointer-down outside card node / Escape | close fan | DECK-011 |
 | Fan row / pill | click | close fan, open Agents viewer (on agent / all) | DECK-027 |
@@ -745,6 +747,7 @@ Cross-domain dependencies: 09 (node z-order incl. select elevation +1000, drag/d
 - [x] CARD-057 worktree branch and folder (server)
 - [x] CARD-058 `Claude account` in the title tooltip and the menu (server)
 - [x] CARD-059 `Moved to` / `Waiting for a Claude account` pill (server)
+- [x] CARD-060 `N files` footer button and title-bar tool → the session's changes
 - [x] XCARD-001 expanded condition + default 720×480
 - [x] XCARD-002 expanded surface, clip, no drag scale
 - [x] XCARD-003 title bar 40px layout

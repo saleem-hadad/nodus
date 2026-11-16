@@ -1,6 +1,7 @@
 //! The Changes window (`DiffModal.tsx`, `git.css`; GIT-032…GIT-047): the
 //! project's uncommitted changes, a file list beside the selected file's
-//! diff, like GitHub Desktop.
+//! diff, like GitHub Desktop. Opened from a card's `N files`, it lists only
+//! the files that session changed (CARD-060, GIT-057).
 
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -17,11 +18,13 @@ use nodus_git::labels::{self, DiffSelection, ListKey};
 use nodus_git::{DiffLine, DiffLineKind, ParsedDiff, parse_diff};
 
 use crate::actions::icons::{Glyph, glyph};
+use crate::board::cards::present;
 use crate::components::button;
 use crate::components::modal::Modal;
 use crate::components::native_tooltip;
 use crate::components::selectable;
-use crate::git::{GIT_POLL, GitEvent, GitModel, close_diff};
+use crate::git::{GIT_POLL, GitEvent, GitModel, close_diff, show_all_changes};
+use crate::state::AppState;
 use crate::theme::tokens::*;
 use crate::theme::{self, fonts};
 
@@ -125,12 +128,29 @@ impl DiffModal {
     }
 
     fn files(&self, cx: &App) -> Vec<GitFileChange> {
-        self.git
-            .read(cx)
-            .status
-            .as_ref()
-            .map(|g| g.files.clone())
-            .unwrap_or_default()
+        self.listed(cx).0
+    }
+
+    /// GIT-057: the files it lists, every change or those of the session it's
+    /// for; and then that session's title and how many changes there are in all.
+    fn listed(&self, cx: &App) -> (Vec<GitFileChange>, Option<(String, usize)>) {
+        let git = self.git.read(cx);
+        let all = git.status.as_ref().map(|g| g.files.clone()).unwrap_or_default();
+        let state = git.state.read(cx);
+        let card = state
+            .diff_session
+            .as_deref()
+            .and_then(|id| state.board.as_ref()?.cards.iter().find(|c| c.node.session_id == id));
+        match card {
+            Some(card) => {
+                let edited = card.edited_files.as_deref().unwrap_or_default();
+                (
+                    labels::session_changes(&all, edited),
+                    Some((present::title(card), all.len())),
+                )
+            }
+            None => (all, None),
+        }
     }
 
     /// GIT-041: the selected file is read now, then every 4 s while the
@@ -251,7 +271,8 @@ impl Render for DiffModal {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let t = theme::tokens(cx);
         let git: Option<GitStatus> = self.git.read(cx).status.clone();
-        let files = git.as_ref().map(|g| g.files.clone()).unwrap_or_default();
+        let (files, session) = self.listed(cx);
+        let state = self.git.read(cx).state.clone();
         let index = self.selection.index(&files);
         let file = index.map(|i| files[i].clone());
         self.sync_reads(file.as_ref(), cx);
@@ -327,7 +348,10 @@ impl Render for DiffModal {
                                             .child(glyph(Glyph::GitBranch, 12., 2.2, t.text_secondary))
                                             .child(labels::branch_label(git)),
                                     )
-                                    .child(labels::changed_files(count)),
+                                    .child(labels::changed_files(count))
+                                    .when_some(session.clone(), |d, (title, all)| {
+                                        d.child(session_token(&state, title, all, &t))
+                                    }),
                             )
                         }),
                 )
@@ -371,6 +395,30 @@ impl Render for DiffModal {
                 },
                 &t,
             ),
+            // GIT-057
+            Some(_) if count == 0 && session.is_some() => {
+                let all = session.as_ref().map_or(0, |(_, all)| *all);
+                let state = state.clone();
+                let mut children = vec![
+                    empty_title("No changes from this session"),
+                    div()
+                        .child("The files it changed have no uncommitted changes now.")
+                        .into_any_element(),
+                ];
+                if all > 0 {
+                    children.push(
+                        div()
+                            .mt(px(8.))
+                            .child(
+                                button("diff-empty-all")
+                                    .label("Show all changes")
+                                    .on_click(move |_, _, cx| show_all_changes(&state, cx)),
+                            )
+                            .into_any_element(),
+                    );
+                }
+                empty(children, &t)
+            }
             Some(git) if count == 0 => empty(
                 vec![
                     empty_title("No local changes"),
@@ -575,6 +623,55 @@ impl DiffModal {
             )
             .into_any_element()
     }
+}
+
+/// GIT-057: the session the list is for, after its count: its title in an
+/// accent token whose ✕ lists every change again.
+fn session_token(state: &Entity<AppState>, title: String, all: usize, t: &Tokens) -> AnyElement {
+    let state = state.clone();
+    let tip = match all {
+        1 => "Show the 1 change".to_owned(),
+        n => format!("Show all {n} changes"),
+    };
+    div()
+        .id("diff-session")
+        .flex()
+        .flex_none()
+        .items_center()
+        .gap(px(3.))
+        .max_w(px(360.))
+        // 18px tall in the 16.8px row, which keeps its height.
+        .h(px(18.))
+        .my(px(-0.6))
+        .pl(px(8.))
+        .pr(px(2.))
+        .rounded_full()
+        .bg(alpha(t.accent, 0.10))
+        .text_color(t.accent)
+        .text_size(TEXT_XS)
+        .line_height(px(15.4))
+        .font_weight(FontWeight::MEDIUM)
+        .tooltip(native_tooltip("Only the files this session changed".into()))
+        .child(div().min_w_0().truncate().child(title))
+        .child(
+            div()
+                .id("diff-show-all")
+                .flex()
+                .flex_none()
+                .items_center()
+                .justify_center()
+                .size(px(14.))
+                .rounded_full()
+                .hover(|s| s.bg(alpha(t.accent, 0.16)))
+                .tooltip(native_tooltip(tip.into()))
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .on_click(move |_, _, cx| {
+                    cx.stop_propagation();
+                    show_all_changes(&state, cx);
+                })
+                .child(glyph(Glyph::X, 10., 2.4, t.accent)),
+        )
+        .into_any_element()
 }
 
 /// The Changes list's empty and placeholder states (GIT-033, GIT-035).

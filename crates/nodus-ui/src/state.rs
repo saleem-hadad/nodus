@@ -101,6 +101,9 @@ pub struct AppState {
     pub board: Option<BoardSnapshot>,
     pub board_loading: bool,
     pub diff_open: bool,
+    /// The session whose files the Changes window lists (CARD-060, GIT-057);
+    /// none for every change.
+    pub diff_session: Option<String>,
     /// The session window's panes (MODAL-001, SPLIT-001); empty while it's closed.
     pub session_window: crate::terminal::panes::Panes,
     pub preview_session_id: Option<String>,
@@ -168,6 +171,7 @@ impl AppState {
             board: None,
             board_loading: false,
             diff_open: false,
+            diff_session: None,
             session_window: Default::default(),
             preview_session_id: None,
             agent_view: None,

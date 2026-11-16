@@ -1281,13 +1281,19 @@ impl BoardCanvas {
                 if !any {
                     return false;
                 }
-                self.delete_notes(&note_sel, cx);
-                // SHAPE-020.
-                if !shape_sel.is_empty() {
-                    self.delete_shapes(&shape_sel, cx);
-                }
-                self.archive_cards(&sel, cx);
-                self.delete_views(&view_sel, cx);
+                // BOARD-121: the rest waits for the notes' answer, if they ask.
+                self.delete_notes_then(
+                    &note_sel,
+                    move |c, cx| {
+                        // SHAPE-020.
+                        if !shape_sel.is_empty() {
+                            c.delete_shapes(&shape_sel, cx);
+                        }
+                        c.archive_cards(&sel, cx);
+                        c.delete_views(&view_sel, cx);
+                    },
+                    cx,
+                );
                 true
             }
             // BOARD-164.

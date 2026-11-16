@@ -38,6 +38,36 @@ fn round(p: Point) -> Point {
     }
 }
 
+/// How much of a note's first line a question quotes.
+const NOTE_QUOTE_CHARS: usize = 60;
+
+/// BOARD-121: the title and message deleting `notes` asks with, or none when
+/// none of them has writing (blank notes go at once).
+fn delete_notes_question(notes: &[BoardNote]) -> Option<(String, String)> {
+    let written = notes.iter().find(|n| !js::trim(&n.text).is_empty())?;
+    if notes.len() > 1 {
+        return Some((
+            format!("Delete {} notes?", notes.len()),
+            "The notes and what’s written on them go for good.".to_owned(),
+        ));
+    }
+    let line = written
+        .text
+        .lines()
+        .map(js::trim)
+        .find(|l| !l.is_empty())
+        .unwrap_or_default();
+    let quote = if line.chars().count() > NOTE_QUOTE_CHARS {
+        format!(
+            "{}…",
+            js::trim_end(&line.chars().take(NOTE_QUOTE_CHARS - 1).collect::<String>())
+        )
+    } else {
+        line.to_owned()
+    };
+    Some(("Delete note?".to_owned(), format!("“{quote}” goes for good.")))
+}
+
 impl BoardCanvas {
     pub(crate) fn cards(&self) -> &[SessionCard] {
         self.board.as_ref().map_or(&[], |b| b.cards.as_slice())
@@ -856,20 +886,41 @@ impl BoardCanvas {
 
     /// BOARD-121.
     pub fn delete_notes(&mut self, ids: &[String], cx: &mut Context<'_, Self>) {
-        let targets: Vec<String> = self
+        self.delete_notes_then(ids, |_, _| {}, cx);
+    }
+
+    /// BOARD-121: deletes the notes, asking first when any has writing, then
+    /// does `then`. A cancel leaves the notes and skips `then` too, so one ⌫
+    /// asks one question at a time (the board holds a single confirm).
+    pub fn delete_notes_then(
+        &mut self,
+        ids: &[String],
+        then: impl FnOnce(&mut Self, &mut Context<'_, Self>) + 'static,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let targets: Vec<BoardNote> = self
             .board
             .as_ref()
-            .map(|b| {
-                b.notes
-                    .iter()
-                    .filter(|n| ids.contains(&n.id))
-                    .map(|n| n.id.clone())
-                    .collect()
-            })
+            .map(|b| b.notes.iter().filter(|n| ids.contains(&n.id)).cloned().collect())
             .unwrap_or_default();
-        if !targets.is_empty() {
-            self.remove_notes(targets, cx);
-        }
+        let Some((title, body)) = delete_notes_question(&targets) else {
+            if !targets.is_empty() {
+                self.remove_notes(targets.into_iter().map(|n| n.id).collect(), cx);
+            }
+            then(self, cx);
+            return;
+        };
+        let ask = self.confirm(title, body, "Delete", true, cx);
+        cx.spawn(async move |this, cx| {
+            if !ask.await.unwrap_or(false) {
+                return;
+            }
+            let _ = this.update(cx, |c, cx| {
+                c.remove_notes(targets.into_iter().map(|n| n.id).collect(), cx);
+                then(c, cx);
+            });
+        })
+        .detach();
     }
 
     /// BOARD-124: typing outlives a board closed mid-note.
@@ -1386,5 +1437,40 @@ impl BoardCanvas {
     /// Whether a flow point is inside any section frame.
     pub(crate) fn in_section(&self, p: Point) -> bool {
         self.groups().iter().any(|g| contains_point(g.frame, p))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn note(text: &str) -> BoardNote {
+        serde_json::from_value(serde_json::json!({
+            "id": "n", "text": text, "color": "yellow", "x": 0, "y": 0, "createdAt": 0,
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn blank_notes_go_without_asking() {
+        assert_eq!(delete_notes_question(&[]), None);
+        assert_eq!(delete_notes_question(&[note(""), note("  \n\t")]), None);
+    }
+
+    #[test]
+    fn a_written_note_asks_with_its_first_line() {
+        let (title, body) = delete_notes_question(&[note("\n  Buy milk  \nfor the team")]).unwrap();
+        assert_eq!(title, "Delete note?");
+        assert_eq!(body, "“Buy milk” goes for good.");
+        let long = "a".repeat(80);
+        let (_, body) = delete_notes_question(&[note(&long)]).unwrap();
+        assert_eq!(body, format!("“{}…” goes for good.", "a".repeat(59)));
+    }
+
+    #[test]
+    fn several_ask_once_if_any_is_written() {
+        let (title, body) = delete_notes_question(&[note(""), note("Ship it"), note("")]).unwrap();
+        assert_eq!(title, "Delete 3 notes?");
+        assert_eq!(body, "The notes and what’s written on them go for good.");
     }
 }

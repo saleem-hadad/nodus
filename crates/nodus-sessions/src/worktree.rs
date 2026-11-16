@@ -81,13 +81,12 @@ mod tests {
     #[test]
     fn names_a_cards_worktree_for_claude_code() {
         let worktree = for_card(Path::new("/code/shop"), ID);
+        // Compared as paths: Windows joins the folders with `\`.
         assert_eq!(
-            worktree,
-            Worktree {
-                path: "/code/shop/.claude/worktrees/nodus-0123abcd".into(),
-                branch: "worktree-nodus-0123abcd".into(),
-            }
+            Path::new(&worktree.path),
+            Path::new("/code/shop/.claude/worktrees/nodus-0123abcd")
         );
+        assert_eq!(worktree.branch, "worktree-nodus-0123abcd");
         assert_eq!(claude_name(&worktree).as_deref(), Some("nodus-0123abcd"));
     }
 

@@ -245,7 +245,16 @@ impl Server {
         assert!(status.success());
         let exited = self.child.wait().unwrap();
         assert!(exited.success(), "{}", self.output.lock().unwrap());
-        assert!(self.output.lock().unwrap().contains("stopping"));
+        // The thread reading its output may not have the last line yet.
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while !self.output.lock().unwrap().contains("stopping") {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "it never said stopping: {}",
+                self.output.lock().unwrap()
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
     }
 }
 

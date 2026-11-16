@@ -287,6 +287,44 @@ pub fn parse(words: &str) -> Option<ActionSchedule> {
     })
 }
 
+/// SCHED-060: words as minutes between runs, for a view's schedules, which
+/// only run every so often: `every 15 minutes`, `15m`, `hourly`, `every 2
+/// hours`, `daily`, `every day`, `every 3 days`, `weekly`. A bare number is
+/// minutes. None for anything else. Not clamped: views keep their own limits.
+pub fn parse_interval(words: &str) -> Option<f64> {
+    let toks = tokens(words);
+    let mut count: Option<f64> = None;
+    for (i, tok) in toks.iter().enumerate() {
+        match tok {
+            Token::Number(n) => count = Some(n.parse::<f64>().ok()?),
+            Token::Word(w) => {
+                let unit = match w.as_str() {
+                    "m" | "min" | "mins" | "minute" | "minutes" => 1.0,
+                    "h" | "hr" | "hrs" | "hour" | "hours" => 60.0,
+                    "d" | "day" | "days" => 1440.0,
+                    "w" | "wk" | "week" | "weeks" => 10_080.0,
+                    "hourly" => return Some(60.0),
+                    "daily" | "everyday" => return Some(1440.0),
+                    "weekly" => return Some(10_080.0),
+                    "half" => {
+                        count = Some(count.unwrap_or(1.0) * 0.5);
+                        continue;
+                    }
+                    "other" => {
+                        count = Some(2.0);
+                        continue;
+                    }
+                    _ => continue,
+                };
+                let minutes = count.unwrap_or(1.0) * unit;
+                return (minutes > 0.0 && minutes.is_finite() && i < toks.len()).then_some(minutes);
+            }
+            Token::Dash => {}
+        }
+    }
+    count.filter(|c| *c > 0.0 && c.is_finite())
+}
+
 /// SCHED-003: whole minutes within MIN_EVERY…MAX_EVERY.
 pub fn clamp_every(minutes: f64) -> f64 {
     nodus_domain::js::round(minutes).clamp(MIN_EVERY, MAX_EVERY)
@@ -633,6 +671,27 @@ mod tests {
         // SCHED-003: within ten minutes and twelve hours.
         assert_eq!(p("every 2 minutes"), (vec![], None, Some(10.0)));
         assert_eq!(p("every 30 hours"), (vec![], None, Some(720.0)));
+    }
+
+    #[test]
+    fn reads_intervals_for_views() {
+        for (words, minutes) in [
+            ("every 15 minutes", Some(15.0)),
+            ("15m", Some(15.0)),
+            ("5", Some(5.0)),
+            ("hourly", Some(60.0)),
+            ("every 2 hours", Some(120.0)),
+            ("every half hour", Some(30.0)),
+            ("every other day", Some(2880.0)),
+            ("daily", Some(1440.0)),
+            ("every day", Some(1440.0)),
+            ("every 3 days", Some(4320.0)),
+            ("weekly", Some(10_080.0)),
+            ("now and then", None),
+            ("", None),
+        ] {
+            assert_eq!(parse_interval(words), minutes, "{words:?}");
+        }
     }
 
     #[test]

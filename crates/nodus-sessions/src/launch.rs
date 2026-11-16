@@ -65,11 +65,19 @@ pub struct SpawnOptions {
     pub effort: Option<String>,
     /// More `claude` options, such as an action run's system prompt.
     pub extra_args: Option<Vec<String>>,
+    /// Claude Code's Remote Control, so the user can answer from the Claude
+    /// app (SESS-216): the title the session gets there, empty for the one
+    /// Claude Code picks. None leaves it off.
+    pub remote_control: Option<String>,
     pub cols: Option<f64>,
     pub rows: Option<f64>,
     /// Its own token, on a server (SRV-143), which the host makes its hook
     /// commands send. None in the app.
     pub session_token: Option<String>,
+    /// The card's own worktree, by the name Claude Code makes it under
+    /// (SESS-217): `--worktree <name>` when it starts afresh. A resume goes
+    /// back into it by itself.
+    pub worktree: Option<String>,
 }
 
 /// What a process is started as: a program, its arguments and its whole
@@ -159,6 +167,10 @@ pub fn command_for(
     if let Some(name) = opts.name.as_deref().filter(|n| !n.is_empty()) {
         args.extend(["--name".to_owned(), name.to_owned()]);
     }
+    // SESS-219: made the first time, entered again after that.
+    if let Some(worktree) = opts.worktree.as_deref().filter(|_| !opts.resume) {
+        args.extend(["--worktree".to_owned(), worktree.to_owned()]);
+    }
     // SESS-122
     let mode = opts.permission_mode.unwrap_or(PermissionMode::AcceptEdits);
     args.extend(["--permission-mode".to_owned(), mode.as_str().to_owned()]);
@@ -169,6 +181,14 @@ pub fn command_for(
     // MODEL-001: and its effort, the same way.
     if let Some(effort) = opts.effort.as_deref().and_then(SessionEffort::parse) {
         args.extend(["--effort".to_owned(), effort.as_str().to_owned()]);
+    }
+    // SESS-216: one argument, so a title that starts with a dash stays a title.
+    if let Some(title) = &opts.remote_control {
+        args.push(if title.is_empty() {
+            "--remote-control".to_owned()
+        } else {
+            format!("--remote-control={title}")
+        });
     }
     // SESS-123: the board tools, allowed outright so they never stop to ask.
     // Both lists are followed by another option, so neither swallows the prompt.
@@ -263,9 +283,11 @@ pub fn for_create(
         model: node.model().map(str::to_owned),
         effort: node.effort().map(str::to_owned),
         extra_args: action.map(|a| a.args),
+        remote_control: None,
         cols: None,
         rows: None,
         session_token: None,
+        worktree: worktree_name(node),
     }
 }
 
@@ -294,6 +316,7 @@ pub fn for_open(
         model: node.and_then(BoardNode::model).map(str::to_owned),
         effort: node.and_then(BoardNode::effort).map(str::to_owned),
         extra_args: brain_args.filter(|_| node.is_some_and(is_brain)),
+        worktree: node.and_then(worktree_name),
         cols: Some(cols),
         rows: Some(rows),
         ..SpawnOptions::default()
@@ -320,12 +343,34 @@ pub fn for_send(
         model: node.model().map(str::to_owned),
         effort: node.effort().map(str::to_owned),
         extra_args: brain_args.filter(|_| is_brain(node)),
+        worktree: worktree_name(node),
         ..SpawnOptions::default()
     }
 }
 
+/// What a Claude card is started with while Remote Control is on (SESS-216):
+/// its title, trimmed, which is what the Claude app lists it under. A view's
+/// brain works in the background and stays off it. The card may not be on
+/// the board.
+pub fn remote_control(node: Option<&BoardNode>) -> Option<String> {
+    if node.is_some_and(is_brain) {
+        return None;
+    }
+    let title = node.and_then(|n| n.title.as_deref()).unwrap_or_default();
+    Some(nodus_domain::js::trim(title).to_owned())
+}
+
 fn is_brain(node: &BoardNode) -> bool {
     node.view_of.as_deref().is_some_and(|v| !v.is_empty())
+}
+
+/// The card's worktree when Claude Code makes it, for a Claude card
+/// (SESS-217); a server's own are left to it (SRV-122).
+fn worktree_name(node: &BoardNode) -> Option<String> {
+    if node.kind == Some(SessionKind::Terminal) || is_brain(node) {
+        return None;
+    }
+    node.worktree().as_ref().and_then(crate::worktree::claude_name)
 }
 
 /// A prompt typed into a live session as a paste, so its lines don't send it
@@ -512,6 +557,84 @@ mod tests {
             assert_eq!(args[at + 1], "opus");
             let at = args.iter().position(|a| a == "--effort").expect("an --effort");
             assert_eq!(args[at + 1], "xhigh");
+        }
+    }
+
+    #[test]
+    fn turns_on_remote_control_under_the_cards_title() {
+        // After the model and effort, before the board tools.
+        let card = node(json!({ "title": "Fix login", "model": "opus" }));
+        let mut opts = for_create("p", "/work/repo", &card, None, Some("go"));
+        opts.remote_control = remote_control(Some(&card));
+        let args = argv(&opts, true);
+        let at = args
+            .iter()
+            .position(|a| a == "--remote-control=Fix login")
+            .expect("Remote Control");
+        assert_eq!(args[at - 2..at], s(&["--model", "opus"]));
+        assert_eq!(args[at + 1], "--mcp-config");
+        // No title: Claude Code names it. A dash can't make the title an option.
+        for (title, arg) in [
+            (json!(null), "--remote-control"),
+            (json!("  "), "--remote-control"),
+            (json!("-v"), "--remote-control=-v"),
+        ] {
+            let card = node(json!({ "title": title }));
+            let mut opts = for_open("p", "/r", ID, Some(&card), true, None, (80.0, 24.0));
+            opts.remote_control = remote_control(Some(&card));
+            assert_eq!(argv(&opts, false)[4], arg);
+        }
+        assert_eq!(remote_control(None).as_deref(), Some(""));
+        // A view's brain stays off the phone; off, nothing is added.
+        let brain = node(json!({ "title": "View: Stats", "viewOf": "v1" }));
+        assert_eq!(remote_control(Some(&brain)), None);
+        let off = for_send("p", "/r", &card, true, "hi", None);
+        assert!(!argv(&off, false).iter().any(|a| a.starts_with("--remote-control")));
+    }
+
+    #[test]
+    fn starts_a_card_in_its_own_worktree_and_resumes_into_it() {
+        let worktree =
+            json!({ "path": "/work/repo/.claude/worktrees/nodus-00000000", "branch": "worktree-nodus-00000000" });
+        let card = node(json!({ "title": "Fix login", "worktree": worktree }));
+        // SESS-219: made with the card, and entered again by a card never used.
+        let created = for_create("p", "/work/repo", &card, None, Some("go"));
+        assert_eq!(
+            argv(&created, false)[..6],
+            s(&[
+                "--session-id",
+                ID,
+                "--name",
+                "Fix login",
+                "--worktree",
+                "nodus-00000000"
+            ])
+        );
+        let fresh = for_open("p", "/work/repo", ID, Some(&card), false, None, (80.0, 24.0));
+        assert_eq!(
+            argv(&fresh, false)[..4],
+            s(&["--session-id", ID, "--worktree", "nodus-00000000"])
+        );
+        assert_eq!(fresh.cwd, "/work/repo");
+        // A resume goes back into it by itself.
+        let opened = for_open("p", "/work/repo", ID, Some(&card), true, None, (80.0, 24.0));
+        let sent = for_send("p", "/work/repo", &card, true, "and test it", None);
+        for opts in [&opened, &sent] {
+            assert!(!argv(opts, false).iter().any(|a| a == "--worktree"));
+        }
+        // A server's worktree is its own (SRV-122), and a view's brain or a
+        // terminal never gets one.
+        let server = node(
+            json!({ "worktree": { "path": "/home/nodus-run/projects/shop/worktrees/00000000", "branch": "nodus/x-0000" } }),
+        );
+        let brain = node(json!({ "viewOf": "v1", "worktree": worktree }));
+        let terminal = node(json!({ "kind": "terminal", "worktree": worktree }));
+        for card in [&server, &brain, &terminal] {
+            assert_eq!(for_create("p", "/r", card, None, None).worktree, None);
+            assert_eq!(
+                for_open("p", "/r", ID, Some(card), false, None, (80.0, 24.0)).worktree,
+                None
+            );
         }
     }
 

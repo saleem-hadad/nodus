@@ -74,11 +74,9 @@ impl BoardApi<'_> {
             .await
     }
 
-    /// The cards among `ids` that have worktrees (SRV-122), on a server.
+    /// The cards among `ids` that have worktrees: a server's (SRV-122), or
+    /// Claude Code's in the app (SESS-217).
     fn worktree_cards(&self, project_id: &str, ids: &[&str]) -> Vec<nodus_domain::BoardNode> {
-        if self.nodus.inner.hosted().is_none() {
-            return Vec::new();
-        }
         self.nodus.inner.store.read(|state| {
             let Some(board) = state.board(project_id) else {
                 return Vec::new();
@@ -91,8 +89,8 @@ impl BoardApi<'_> {
         })
     }
 
-    /// SRV-124: the worktrees of those cards that have left the board go,
-    /// with their unpushed work saved first. Archived cards keep theirs.
+    /// SRV-124, SESS-220: the worktrees of those cards that have left the
+    /// board go, with their work saved first. Archived cards keep theirs.
     async fn retire_gone(&self, project_id: &str, cards: Vec<nodus_domain::BoardNode>) {
         if cards.is_empty() {
             return;
@@ -107,8 +105,13 @@ impl BoardApi<'_> {
                     .board(project_id)
                     .is_none_or(|board| !board.nodes.contains_key(&node.session_id))
             });
-            if gone {
+            if !gone {
+                continue;
+            }
+            if inner.hosted().is_some() {
                 inner.retire_worktree(&project, &node).await;
+            } else {
+                inner.retire_claude_worktree(&project, &node).await;
             }
         }
     }

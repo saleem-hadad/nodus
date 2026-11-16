@@ -15,6 +15,7 @@ use gpui::{
     Styled, Subscription, Window, canvas, div, px,
 };
 use nodus_domain::{AgentInfo, BoardNote, SessionCard, SessionStatus};
+use nodus_git::labels;
 
 use super::agent_deck::{self, DeckHandles};
 use super::icons::{CardIcon, card_icon};
@@ -854,6 +855,30 @@ fn footer(
                 .child(words(n.to_string(), t.text_tertiary)),
         );
     }
+    let changed = changed_files(env, card, cx);
+    if changed > 0 {
+        let env = env.clone();
+        let sid = id.clone();
+        foot = foot.child(
+            foot_button(
+                z,
+                &t,
+                &id,
+                ("foot-files", "foot-files-bg"),
+                CardIcon::FileDiff,
+                labels::session_files(changed),
+                None,
+                window,
+                cx,
+            )
+            .aria_label(labels::session_files_title(changed))
+            .tooltip(native_tooltip(labels::session_files_title(changed).into()))
+            .on_click(move |_, _, cx| {
+                cx.stop_propagation();
+                env.actions.open_changes(&sid, cx);
+            }),
+        );
+    }
     // CARD-039: the agents button.
     let fan_open = handles.open(cx) && !agents.is_empty();
     let agents_button = |count: String,
@@ -861,53 +886,30 @@ fn footer(
                          hook: Option<agent_deck::HoverHook>,
                          window: &mut Window,
                          cx: &mut App| {
-        let hover = window.use_keyed_state(anim::key(&id, "foot-agents"), cx, |_, _| false);
-        let on = *hover.read(cx);
-        let bg = transition(
+        foot_button(
+            z,
+            &t,
+            &id,
+            ("foot-agents", "foot-agents-bg"),
+            CardIcon::Bot,
+            count,
+            hook,
             window,
             cx,
-            anim::key(&id, "foot-agents-bg"),
-            if on { t.bg_hover } else { transparent() },
-            Duration::from_millis(120),
-            motion::ease,
-        );
-        let fg = if on { t.text_primary } else { t.text_tertiary };
-        let h2 = hover.clone();
-        div()
-            .id(anim::key(&id, "foot-agents"))
-            .aria_expanded(fan_open)
-            .flex()
-            .flex_none()
-            .items_center()
-            .gap(z.px(4.))
-            .h(z.px(18.))
-            .my(z.px(-2.))
-            .mx(z.px(-5.))
-            .px(z.px(5.))
-            .rounded(z.px(5.))
-            .bg(bg)
-            .on_hover(move |h, window, cx| {
-                h2.update(cx, |s, _| *s = *h);
-                if let Some(hook) = &hook {
-                    hook(*h, window, cx);
-                }
-                window.refresh();
-            })
-            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .child(card_icon(CardIcon::Bot, z.f(11.), 2.2, fg))
-            .child(words(count, fg))
-            .when_some(running, |d, (dot, run)| {
-                // The running badge, `--text-secondary`.
-                d.child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(z.px(4.))
-                        .ml(z.px(3.))
-                        .child(dot)
-                        .child(words(run.to_string(), t.text_secondary)),
-                )
-            })
+        )
+        .aria_expanded(fan_open)
+        .when_some(running, |d, (dot, run)| {
+            // The running badge, `--text-secondary`.
+            d.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(z.px(4.))
+                    .ml(z.px(3.))
+                    .child(dot)
+                    .child(words(run.to_string(), t.text_secondary)),
+            )
+        })
     };
     if !agents.is_empty() {
         // CARD-036, CARD-037
@@ -946,6 +948,67 @@ fn footer(
             .child(words(time_ago(updated_at(card), env.now_ms), t.text_tertiary)),
     );
     foot.into_any_element()
+}
+
+/// CARD-060: how many of the files the card's session changed have
+/// uncommitted changes; none on an archived card or a terminal.
+pub fn changed_files(env: &BoardEnv, card: &SessionCard, cx: &App) -> usize {
+    if card.node.archived || is_terminal(card) {
+        return 0;
+    }
+    crate::git::model(cx)
+        .and_then(|git| git.read(cx).card_changes(&env.project_id, card))
+        .map_or(0, |files| files.len())
+}
+
+/// CARD-039: a footer button (the agents', CARD-060's files): its icon and
+/// words, 18px tall, `--bg-hover` under the pointer, never starting a drag.
+/// `parts` names it and its background's transition.
+#[allow(clippy::too_many_arguments)]
+fn foot_button(
+    z: Z,
+    t: &Tokens,
+    id: &str,
+    (part, bg_part): (&'static str, &'static str),
+    icon: CardIcon,
+    words: String,
+    hook: Option<agent_deck::HoverHook>,
+    window: &mut Window,
+    cx: &mut App,
+) -> gpui::Stateful<gpui::Div> {
+    let hover = window.use_keyed_state(anim::key(id, part), cx, |_, _| false);
+    let on = *hover.read(cx);
+    let bg = transition(
+        window,
+        cx,
+        anim::key(id, bg_part),
+        if on { t.bg_hover } else { transparent() },
+        Duration::from_millis(120),
+        motion::ease,
+    );
+    let fg = if on { t.text_primary } else { t.text_tertiary };
+    div()
+        .id(anim::key(id, part))
+        .flex()
+        .flex_none()
+        .items_center()
+        .gap(z.px(4.))
+        .h(z.px(18.))
+        .my(z.px(-2.))
+        .mx(z.px(-5.))
+        .px(z.px(5.))
+        .rounded(z.px(5.))
+        .bg(bg)
+        .on_hover(move |h, window, cx| {
+            hover.update(cx, |s, _| *s = *h);
+            if let Some(hook) = &hook {
+                hook(*h, window, cx);
+            }
+            window.refresh();
+        })
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .child(card_icon(icon, z.f(11.), 2.2, fg))
+        .child(super::text_tab(z, words, 11.0, FontWeight::NORMAL, fg))
 }
 
 fn transparent() -> Rgba {

@@ -417,6 +417,8 @@ pub trait CardActions {
     fn show_card(&self, project_id: &str, session_id: Option<&str>, cx: &mut App);
     /// The agents viewer, on an agent or none.
     fn open_agents(&self, session_id: &str, agent_id: Option<&str>, cx: &mut App);
+    /// CARD-060: the Changes window, listing the files the session changed.
+    fn open_changes(&self, session_id: &str, cx: &mut App);
     /// The terminal modal.
     fn open_terminal(&self, session_id: &str, cx: &mut App);
     fn remove_notes(&self, note_ids: &[String], cx: &mut App);

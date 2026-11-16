@@ -13,6 +13,7 @@
 pub mod chat;
 mod claude;
 pub mod date;
+pub mod edits;
 pub mod lines;
 pub mod meta;
 pub mod naming;
@@ -35,6 +36,7 @@ use nodus_domain::{SessionSearchHit, TranscriptMessage};
 
 pub use chat::ChatLog;
 pub use claude::ClaudeCall;
+pub use edits::EditCache;
 pub use lines::{Json, read_lines};
 pub use meta::{DiscoveredSession, MetaCache, meta_signature};
 pub use naming::{NamingError, NamingKind, NamingSource, name_section};
@@ -55,6 +57,7 @@ pub use watch::{OnChange, Watcher};
 pub struct Transcripts {
     home: PathBuf,
     meta: Arc<MetaCache>,
+    edits: EditCache,
     search: SearchIndex,
 }
 
@@ -64,6 +67,7 @@ impl Transcripts {
         Self {
             home,
             meta: Arc::new(MetaCache::new()),
+            edits: EditCache::new(),
             search: SearchIndex::new(),
         }
     }
@@ -111,6 +115,17 @@ impl Transcripts {
     /// `readSession(id, transcriptPath(repoPath, id))`.
     pub fn session(&self, repo_path: &str, session_id: &str) -> Option<DiscoveredSession> {
         self.read_session(session_id, &self.transcript_path(repo_path, session_id))
+    }
+
+    /// The files a session and its agents changed with Claude's file tools,
+    /// relative to the root of the repository `repo_path` is in, first
+    /// changed first (CARD-060).
+    pub fn edited_files(&self, repo_path: &str, session_id: &str) -> Vec<String> {
+        let mut paths = self.edits.edited(&self.transcript_path(repo_path, session_id));
+        for agent in self.list_agent_files(repo_path, session_id) {
+            paths.extend(self.edits.edited(&agent.file));
+        }
+        edits::in_repo(&paths, Path::new(repo_path))
     }
 
     /// Every session on disk for a repo, by id, in the folder's order.

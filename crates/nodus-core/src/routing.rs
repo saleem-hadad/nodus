@@ -180,6 +180,7 @@ impl Route {
         snapshot.project = project.unwrap_or_else(|| Project {
             repo_path: String::new(),
             server: Some(self.home.server_id.clone()),
+            worktrees: None,
             ..snapshot.project
         });
         snapshot.viewport = person.viewport;

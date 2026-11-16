@@ -39,6 +39,11 @@ pub struct AppSettings {
     /// turned it off is written back as it was read.
     #[serde(default = "on", skip_serializing_if = "is_on")]
     pub wheel_zoom: bool,
+    /// Start Claude sessions with Claude Code's Remote Control, so the user
+    /// can answer them from the Claude app (SESS-216). Added after 1.0.22
+    /// and written only when on.
+    #[serde(default, skip_serializing_if = "is_off")]
+    pub remote_control: bool,
     /// Settings this version doesn't know, written back as they were read.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
@@ -57,6 +62,7 @@ impl Default for AppSettings {
             focus_mode: false,
             capture: true,
             wheel_zoom: true,
+            remote_control: false,
             extra: Map::new(),
         }
     }
@@ -109,6 +115,11 @@ fn is_on(value: &bool) -> bool {
     *value
 }
 
+/// A switch left off, which isn't written.
+fn is_off(value: &bool) -> bool {
+    !*value
+}
+
 /// The settings `settings.update` changes; the rest stay as they are.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -131,6 +142,8 @@ pub struct SettingsPatch {
     pub capture: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wheel_zoom: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remote_control: Option<bool>,
     /// The prompt bar's model for new sessions, a [`SessionModel`] alias;
     /// an empty string is Claude Code's default (MODEL-020).
     #[serde(skip_serializing_if = "Option::is_none")]

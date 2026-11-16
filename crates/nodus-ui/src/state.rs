@@ -103,6 +103,9 @@ pub struct AppState {
     pub board: Option<BoardSnapshot>,
     pub board_loading: bool,
     pub diff_open: bool,
+    /// The session whose files the Changes window lists (CARD-060, GIT-057);
+    /// none for every change.
+    pub diff_session: Option<String>,
     /// The session window's panes (MODAL-001, SPLIT-001); empty while it's closed.
     pub session_window: crate::terminal::panes::Panes,
     pub preview_session_id: Option<String>,
@@ -170,6 +173,7 @@ impl AppState {
             board: None,
             board_loading: false,
             diff_open: false,
+            diff_session: None,
             session_window: Default::default(),
             preview_session_id: None,
             edit_action: None,
@@ -824,6 +828,9 @@ pub fn merge_settings(settings: &mut AppSettings, patch: &SettingsPatch) {
     if let Some(v) = patch.wheel_zoom {
         settings.wheel_zoom = v;
     }
+    if let Some(v) = patch.remote_control {
+        settings.remote_control = v;
+    }
     settings.merge_session_choice(patch);
 }
 
@@ -907,6 +914,7 @@ mod tests {
             focused: None,
             archived: None,
             server: None,
+            worktrees: None,
             extra: Map::new(),
         }
     }

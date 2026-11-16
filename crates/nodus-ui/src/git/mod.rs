@@ -17,7 +17,7 @@ use gpui::{
     IntoElement, MouseButton, ParentElement, SharedString, StatefulInteractiveElement, Styled, Subscription, Task,
     Window, deferred, div, px,
 };
-use nodus_domain::{Event, GitCommit, GitStatus};
+use nodus_domain::{Event, GitCommit, GitFileChange, GitStatus, SessionCard};
 use nodus_git::labels;
 
 use crate::actions::icons::{Glyph, glyph};
@@ -50,8 +50,8 @@ pub struct GitModel {
     pub status: Option<GitStatus>,
     /// The board the status belongs to.
     route_project: Option<String>,
-    /// On a server board, the selected card whose worktree it's of
-    /// (SRV-128); none for the project's own folder.
+    /// The selected card whose worktree it's of (SRV-128, SESS-221); none
+    /// for the project's own folder.
     pub card: Option<String>,
     /// GIT-021: the read in flight, shared by calls for the same project.
     reading: Option<(String, u64)>,
@@ -79,22 +79,14 @@ pub struct GitModel {
 
 impl EventEmitter<GitEvent> for GitModel {}
 
-/// SRV-128: on a server board, the one selected card when it has a
-/// worktree, whose git the chip and the Changes window show; none otherwise,
-/// for the project's own folder.
+/// SRV-128, SESS-221: the one selected card when it has a worktree of its
+/// own, on a server or in the app, whose git the chip and the Changes window
+/// show; none otherwise, for the project's own folder.
 fn worktree_card(state: &AppState) -> Option<String> {
     let [selected] = state.selection.as_slice() else {
         return None;
     };
     let board = state.board.as_ref()?;
-    if board.project.server.is_none()
-        && !state
-            .projects
-            .iter()
-            .any(|p| p.id == board.project.id && p.server.is_some())
-    {
-        return None;
-    }
     board
         .cards
         .iter()
@@ -330,6 +322,23 @@ impl GitModel {
             .filter(|c| !c.is_empty())
     }
 
+    /// CARD-060: the changes among the files a card's session changed, when
+    /// the status is of the folder the card works in: the board's project
+    /// folder, or on a server board its worktree while it's the one card
+    /// selected (SRV-128). None otherwise, or before the status is read.
+    pub fn card_changes(&self, project_id: &str, card: &SessionCard) -> Option<Vec<GitFileChange>> {
+        let git = self.status.as_ref()?;
+        if self.route_project.as_deref() != Some(project_id) {
+            return None;
+        }
+        let own = match card.node.worktree() {
+            Some(_) => self.card.as_deref() == Some(card.node.session_id.as_str()),
+            None => self.card.is_none(),
+        };
+        let edited = card.edited_files.as_deref().filter(|_| own)?;
+        Some(labels::session_changes(&git.files, edited))
+    }
+
     /// GIT-032: the Changes window shows while `diffOpen` is set on a board.
     fn sync_diff(&mut self, cx: &mut Context<'_, Self>) {
         let (open, project) = {
@@ -370,12 +379,33 @@ impl GitModel {
     }
 }
 
-/// `openDiff`.
+/// `openDiff`: every change.
 pub fn open_diff(state: &Entity<AppState>, cx: &mut App) {
+    open_diff_for(state, None, cx);
+}
+
+/// CARD-060: the Changes window, listing only the files a session changed
+/// (GIT-057), or every change.
+pub fn open_diff_for(state: &Entity<AppState>, session_id: Option<&str>, cx: &mut App) {
     state.update(cx, |s, cx| {
         s.diff_open = true;
+        s.diff_session = session_id.map(str::to_owned);
         cx.notify();
     });
+}
+
+/// GIT-057: the window lists every change again.
+pub fn show_all_changes(state: &Entity<AppState>, cx: &mut App) {
+    state.update(cx, |s, cx| {
+        if s.diff_session.take().is_some() {
+            cx.notify();
+        }
+    });
+}
+
+/// The window's model, once the title bar has made it.
+pub fn model(cx: &App) -> Option<Entity<GitModel>> {
+    cx.try_global::<GitGlobal>().map(|g| g.0.clone())
 }
 
 /// `closeDiff`.

@@ -101,6 +101,11 @@ pub struct SessionCard {
     /// How many subagents the session has started in all.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agent_count: Option<u32>,
+    /// The files the session and its agents changed with Claude's file
+    /// tools, relative to the repository's root, first changed first. Active
+    /// Claude cards that changed any only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub edited_files: Option<Vec<String>>,
     /// What Claude last reported about the session's model, context and cost. Claude cards only.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<SessionUsage>,

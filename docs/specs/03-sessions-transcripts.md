@@ -137,7 +137,7 @@ Everything here is UI-free and lands in `nodus-sessions`, `nodus-transcripts` an
 - **SESS-076 · Section cleanup** — A node keeps `sectionId` only when it is not archived and that section still exists; otherwise `sectionId` is removed.
 - **SESS-077 · Sticker cleanup** — A note whose `sessionId` names a node no longer on the board loses its `sessionId` (and stays where it is).
 - **SESS-078 · Opened time** — The project's `openedAt` is set to now and the state is saved (debounced, 01).
-- **SESS-079 · Cards** — Every node (archived, terminals, runs and views' brains included) becomes a card via `toCard(node, diskEntry)`, then `attachAgents(card, repoPath, diskEntry?.lastPromptAt)` (02) adds `agentCount`/`agents`. Cards come in node insertion order.
+- **SESS-079 · Cards** — Every node (archived, terminals, runs and views' brains included) becomes a card via `toCard(node, diskEntry)`, then `attachAgents(card, repoPath, diskEntry?.lastPromptAt)` (02) adds `agentCount`/`agents`. An active Claude card also gets `editedFiles` (added after 1.0.22, CARD-060): the files its transcript's and its agents' transcripts' `Edit`, `MultiEdit`, `Write` and `NotebookEdit` calls changed (`file_path`, `notebook_path`), less those whose every call came back an error, first changed first, kept to the git repository the card's folder is in and made relative to its root; none when there are none. Each transcript is read whole once, then only what's appended, parsing just the lines that name such a path or an error. Cards come in node insertion order.
 - **SESS-080 · Card shape** — `toCard(node, found?)` = all node fields, plus `meta` (only when `found.hasContent`), `status` (`'done'` when archived, else the status machine's `getStatus`, which is `'done'` for a process that isn't live), `live` (process running; an archived card can be live) and `usage` (02's `getUsage`, may be absent).
 - **SESS-081 · Snapshot** — The snapshot is `{ project, cards, archive, sections, notes, views, ink, viewport }`: sections, notes and views each sorted by `createdAt` ascending (notes oldest first so newer draw on top), `ink` = stored ink or `[]`, `viewport` as stored (may be absent), `archive` the (grown) archive rect.
 
@@ -192,7 +192,7 @@ Everything here is UI-free and lands in `nodus-sessions`, `nodus-transcripts` an
 - **SESS-116 · New node** — The node is `{ sessionId, kind: 'terminal' | absent, x: opts.x, y: opts.y, archived: false, title: opts.name trimmed or absent, parents: opts.parents when non-terminal and non-empty, createdByApp: true, runOf: action id or absent, expanded: true when opts.expanded is truthy else absent, autoMode: true when non-terminal and opts.autoMode truthy else absent, fromView: opts.fromView when non-terminal, a string, and an own key of this board's views else absent, h: 750, createdAt: now }`. A new card so expands to 720 × 750. `x`/`y` aren't validated or rounded; `parents` aren't validated. A terminal keeps the trimmed `name` as its title.
 - **SESS-117 · Action title** — For an action run, the node's title is the action's name (overriding `opts.name`).
 - **SESS-118 · Node before process** — The node is added to the board before the process starts; if starting fails, the node is removed and the error is the call's error (nothing saved).
-- **SESS-119 · Create launch options** — The process starts with: cwd = project folder (a card's worktree on a server project from GitHub, SESS-206); kind = node kind; `resume: false`; `name` = node title for Claude sessions (none for terminals); first prompt = the action's prompt for a run, else `opts.initialPrompt` trimmed (none if empty), none for terminals; permission mode `auto` for a run or `autoMode` node, else default; extra args = `runArgs(action)` for a run; no size (defaults 120 × 36).
+- **SESS-119 · Create launch options** — The process starts with: cwd = project folder (a card's worktree on a server project from GitHub, SESS-206; in the app, Claude Code moves into the card's own worktree itself, SESS-217); kind = node kind; `resume: false`; `name` = node title for Claude sessions (none for terminals); first prompt = the action's prompt for a run, else `opts.initialPrompt` trimmed (none if empty), none for terminals; permission mode `auto` for a run or `autoMode` node, else default; extra args = `runArgs(action)` for a run; no size (defaults 120 × 36).
 - **SESS-120 · Create result** — After the process started, the state is saved and the call returns `toCard(node)` with no `meta`; its status is `working` when a first prompt was given, else `done` (initial status, SESS-129), and `live: true`.
 
 ### How processes are launched
@@ -210,7 +210,18 @@ Everything here is UI-free and lands in `nodus-sessions`, `nodus-transcripts` an
 - **SESS-131 · Host first** — Starting a process connects to the session host first, starting one if none runs (the hook endpoint in the command comes from the host) (02). Host errors fail the start (see Edge cases).
 - **SESS-132 · Action run args** — An action run's extra args are `--append-system-prompt <runSystemPrompt(action)>` (verbatim in *Data & formats*), only on the run's first start.
 - **SESS-133 · Brain args** — A view's brain gets `--append-system-prompt <brainPrompt(view)>` every time it starts or resumes, via `session:open`, `session:send` and 04's `startBrain`/`askBrain`; no args when the view is gone.
+- **SESS-216 · Remote Control** — While `settings.remoteControl` is on (01, UI-338), every start of a Claude card's process in the app (create, open, send, a model switch's restart) passes Claude Code's Remote Control right after `--effort` (after `--permission-mode` when there's no model or effort), so the user can answer the session from the Claude app: `--remote-control=<the card's title, trimmed>` as one argument, so a title starting with `-` stays a title, or a bare `--remote-control` for a card with no title (Claude Code then names it) or one not on the board. A view's brain and a terminal never get it, and neither does a session on a server. The switch takes effect as a session next starts: a running one isn't restarted. Where Remote Control isn't available (an API key, Bedrock or Vertex, or a Team or Enterprise organization that hasn't turned it on), Claude Code ignores the flag and the session runs as usual; it says why only in its debug log. Added after 1.0.22.
 - **SESS-134 · Brain launches** — 04 starts a brain with node `{ title: "View: <view title>", createdByApp: true, viewOf, autoMode: true, x/y of the view }`, `resume: false`, permission `auto`, optional first prompt; and resumes one with `resume` = transcript exists, the asked prompt as first prompt, permission `auto`. Neither passes `--name`.
+
+### A worktree per card in the app (added after 1.0.23)
+
+Off until the user ticks **Own worktree per session** for a project (09 BOARD-147). Parallel sessions then never write over each other's files. Claude Code makes each worktree (`--worktree`), so it's where Claude Code would put it and a resume finds it again. A server makes its cards' worktrees itself (SESS-206), and none of this runs there.
+
+- **SESS-217 · The switch** — A project's `worktrees: true` (absent when off; `projects:update` takes `worktrees: true | false`, false removing it) gives each new Claude card created on it its own worktree. Terminals, action runs and views' brains run in the project's folder as before, and a card created before it was ticked keeps the folder it had. The card records `worktree: { path, branch }` before its process starts: `path` = `<repository>/.claude/worktrees/nodus-<first 8 of its id>`, `branch` = `worktree-nodus-<first 8 of its id>`, where the repository is the nearest folder up from the project's holding a `.git` (a folder outside one gets none).
+- **SESS-218 · Trust first** — Claude Code refuses `--worktree` in a folder it hasn't been trusted in (`Workspace trust not yet accepted…`) and exits. So a card gets a worktree only when Claude Code's `.claude.json` (`$CLAUDE_CONFIG_DIR`, else the login env's `HOME`) has `hasTrustDialogAccepted: true` for the project's folder or a folder above it up to the repository's root, as the project names it or after resolving links. Folders above the root don't count, as they don't for Claude Code. An untrusted folder's card starts in the project's folder with no worktree, so Claude Code's own trust dialog shows (SESS-205), and the next card, once it's accepted, gets one. Nodus never marks a folder trusted in the app.
+- **SESS-219 · Launch** — A Claude card whose `worktree.path` is in a `.claude/worktrees` folder starts with `--worktree <its folder's name>` (after `--session-id` and `--name`, SESS-121) whenever it starts afresh: created, or opened or sent to before it has a transcript, where Claude Code enters the worktree it already made. A resume (`--resume`) passes nothing, since Claude Code goes back into the worktree its transcript records. The process's cwd stays the project folder. A server's worktrees, terminals and views' brains never get `--worktree`. Its transcript and agents are read from the worktree's folder (SESS-211), and ⌘K searches it there (SESS-215).
+- **SESS-220 · Removing a card** — `board:remove-node`, or a card dropped rather than archived (SESS-091), removes its worktree once its process has stopped. First, when it has uncommitted changes (new files too), they're saved to `<userData>/saved/<cardId>-<yyyymmdd-HHMMSS>/changes.patch` (`git add -A`, then `git diff --binary --cached HEAD`). Then `git worktree remove --force --force` (Claude Code locks the worktrees it makes) and `git worktree prune`. The branch is deleted (`git branch -D`) only when it has no commits that no other branch or remote has; otherwise it stays, for the user to merge. Saved changes older than 30 days go then too. When saving fails the worktree is kept. Archived cards keep their worktrees.
+- **SESS-221 · Git panels** — On a local board too, the branch chip, its log and the Changes window follow the one selected card when it has a worktree, and the main checkout otherwise (05 GIT-056).
 
 ### On a server (`nodus serve`, spec 18's SRV-120…145)
 
@@ -403,7 +414,7 @@ Layout on disk:
 ```ts
 SessionMeta { sessionId; title; firstPrompt?; lastPrompt?; lastAssistantText?; gitBranch?; messageCount; createdAt; updatedAt; transcriptPath }
 TranscriptMessage { role: 'user'|'assistant'; text; timestamp; tools?: string[]; calls?: { name; detail? }[]; notice?: boolean }
-SessionCard = BoardNode & { meta?; status: 'working'|'waiting'|'done'; live: boolean; agents?: AgentInfo[]; agentCount?: number; usage?: SessionUsage }
+SessionCard = BoardNode & { meta?; status: 'working'|'waiting'|'done'; live: boolean; agents?: AgentInfo[]; agentCount?: number; editedFiles?: string[]; usage?: SessionUsage }
 BoardSnapshot { project; cards; archive: Rect; sections; notes; views; ink; viewport? }
 OpenSessionResult { replay: string; live: boolean }
 SummaryResult { sessionId; title; summary; error? }
@@ -454,14 +465,15 @@ A node created by `session:create` is written with its keys in this order (absen
 New session:
 
 ```
-<claude> --session-id <uuid> [--name <title>] --permission-mode <auto|acceptEdits>
+<claude> --session-id <uuid> [--name <title>] [--worktree nodus-<uuid 8>] --permission-mode <auto|acceptEdits>
+         [--model <alias>] [--effort <level>] [--remote-control[=<title>]]
          [--mcp-config <BOARD_MCP_CONFIG> --allowedTools <rule1> … <rule16>]
          [<extra args>]
          --settings <hookSettings()>
          [-- <first prompt>]
 ```
 
-Resumed session: same with `--resume <uuid>` instead of `--session-id <uuid>`, and never `--name`.
+Resumed session: same with `--resume <uuid>` instead of `--session-id <uuid>`, and never `--name` or `--worktree` (SESS-219).
 
 `BOARD_MCP_CONFIG` (one argument, exactly this string; `${…}` are expanded by Claude Code from the env, not by Nodus):
 
@@ -922,6 +934,7 @@ Cross-domain dependencies: 01 (store `getBoard`/`getProject`/`save`, env `spawnE
 - [x] SESS-132 Action run args
 - [x] SESS-133 Brain args
 - [x] SESS-134 Brain launches
+- [x] SESS-216 Remote Control for the app's cards (added after 1.0.22)
 - [x] SESS-135 Open a live session
 - [x] SESS-136 Open a stopped session
 - [x] SESS-137 Reopened runs
@@ -971,6 +984,11 @@ Cross-domain dependencies: 01 (store `getBoard`/`getProject`/`save`, env `spawnE
 - [x] SESS-181 Repo roots
 - [x] SESS-182 Files searched
 - [x] SESS-215 A worktree card's transcripts are searched in its worktree
+- [x] SESS-217 A project's worktree switch gives each new Claude card a worktree
+- [x] SESS-218 A worktree only where Claude Code already trusts the folder
+- [x] SESS-219 `--worktree <name>` on a fresh start, nothing on a resume
+- [x] SESS-220 Removing a card saves its changes, then removes its worktree
+- [x] SESS-221 Local git panels follow a selected worktree card
 - [x] SESS-183 Yield
 - [x] SESS-184 Searchable documents
 - [x] SESS-185 Tool documents

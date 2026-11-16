@@ -7,7 +7,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use indexmap::IndexMap;
 use nodus_domain::{
-    BoardNode, BoardSnapshot, Event, EventSink, Project, ProjectStats, RunningCounts, SessionCard, SessionStatus,
+    BoardNode, BoardSnapshot, Event, EventSink, Project, ProjectStats, RunningCounts, SessionCard, SessionKind,
+    SessionStatus,
 };
 use nodus_store::{BoardState, State, Store};
 use nodus_transcripts::{DiscoveredSession, Transcripts, Watcher};
@@ -254,6 +255,11 @@ impl Board {
                 let folder = node.worktree().map_or_else(|| repo_path.clone(), |w| w.path);
                 self.sessions
                     .attach_agents(&mut card, &folder, found.and_then(|f| f.last_prompt_at));
+                // CARD-060: what an active Claude card's session changed.
+                if !node.archived && node.kind != Some(SessionKind::Terminal) {
+                    let files = self.transcripts.edited_files(&folder, &node.session_id);
+                    card.edited_files = (!files.is_empty()).then_some(files);
+                }
                 card
             })
             .collect();
@@ -398,7 +404,7 @@ fn stats(board: &BoardState, disk: &IndexMap<String, DiscoveredSession>, session
         }
         if set(node.view_of.as_deref()) || set(node.run_of.as_deref()) {
             running.background += 1;
-        } else if node.kind == Some(nodus_domain::SessionKind::Terminal) {
+        } else if node.kind == Some(SessionKind::Terminal) {
             running.terminals += 1;
         } else {
             running.sessions += 1;

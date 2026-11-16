@@ -661,6 +661,7 @@ mod tests {
                 focused: None,
                 archived: None,
                 server: None,
+                worktrees: None,
                 extra: serde_json::Map::new(),
             },
             cards: vec![],

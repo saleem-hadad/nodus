@@ -118,6 +118,11 @@ impl CardActions for CanvasActions {
             });
         }
     }
+    fn open_changes(&self, session_id: &str, cx: &mut App) {
+        if let Some(state) = self.state(cx) {
+            crate::git::open_diff_for(&state, Some(session_id), cx);
+        }
+    }
     fn open_terminal(&self, session_id: &str, cx: &mut App) {
         if let Some(state) = self.state(cx) {
             state.update(cx, |s, cx| s.open_terminal(session_id, cx));

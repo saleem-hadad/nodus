@@ -198,9 +198,9 @@ It owns the native application menu on macOS, and the same menu as a popup from 
 - **PLAT-063** Normalizing settings fills in defaults and drops unknown keys. The input is any value, and non-objects count as `{}`.
   - `theme`: kept if it is one of `system`, `light`, `dark`, else `system`.
   - `autoUpdate`, `notify`, `dockBadge`, `capture`, `wheelZoom`: `true` unless the value is exactly `false`.
-  - `pinProjectRail`, `focusFeature`, `focusMode`: `true` only if the value is exactly `true`.
+  - `pinProjectRail`, `focusFeature`, `focusMode`, `remoteControl`: `true` only if the value is exactly `true`.
 
-  Output key order: `theme, autoUpdate, notify, dockBadge, pinProjectRail, focusFeature, focusMode, capture, wheelZoom`. `wheelZoom` (added after 1.0.7) is written only when `false`, so a file that never turned it off is written back as it was read.
+  Output key order: `theme, autoUpdate, notify, dockBadge, pinProjectRail, focusFeature, focusMode, capture, wheelZoom`. `wheelZoom` (added after 1.0.7) is written only when `false`, so a file that never turned it off is written back as it was read. `remoteControl` (added after 1.0.22) comes last and is written only when `true`.
 - **PLAT-064** `settings:get` returns the current settings object.
 - **PLAT-065** `settings:update(patch)`:
   1. settings = normalize({…current, …patch}).
@@ -445,6 +445,7 @@ Top level (`State`):
 | `focusMode` | bool | `false` | the Focus switch: only focused projects show |
 | `capture` | bool | `true` | double-tap Shift opens floating capture (07) |
 | `wheelZoom` | bool | `true` | a mouse's wheel zooms the board (09, BOARD-179); added after 1.0.7 |
+| `remoteControl` | bool | `false` | start the app's Claude sessions with Claude Code's Remote Control, to answer them from the Claude app (03, SESS-216); added after 1.0.22 |
 
 `Project`:
 

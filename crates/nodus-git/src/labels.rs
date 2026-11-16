@@ -2,6 +2,7 @@
 //! say, and how the modal picks its file: the pure parts of `GitControls.tsx`
 //! and `DiffModal.tsx`, for nodus-ui to draw.
 
+use std::collections::HashSet;
 use std::time::Duration;
 
 use nodus_domain::js::slice_utf16;
@@ -104,6 +105,32 @@ pub fn changed_files(count: usize) -> String {
         0 => "No changes".into(),
         1 => "1 changed file".into(),
         n => format!("{n} changed files"),
+    }
+}
+
+/// CARD-060, GIT-057: of the changed files, those among a session's edited
+/// ones, by path or, for a rename, its path in HEAD; in the list's order.
+pub fn session_changes(files: &[GitFileChange], edited: &[String]) -> Vec<GitFileChange> {
+    let edited: HashSet<&str> = edited.iter().map(String::as_str).collect();
+    files
+        .iter()
+        .filter(|f| edited.contains(f.path.as_str()) || f.old_path.as_deref().is_some_and(|p| edited.contains(p)))
+        .cloned()
+        .collect()
+}
+
+/// CARD-060: the card's count of them, and its tooltip.
+pub fn session_files(count: usize) -> String {
+    match count {
+        1 => "1 file".into(),
+        n => format!("{n} files"),
+    }
+}
+
+pub fn session_files_title(count: usize) -> String {
+    match count {
+        1 => "Review the file this session changed".into(),
+        n => format!("Review the {n} files this session changed"),
     }
 }
 
@@ -292,6 +319,22 @@ mod tests {
         assert_eq!(changed_files(0), "No changes");
         assert_eq!(changed_files(1), "1 changed file");
         assert_eq!(changed_files(2), "2 changed files");
+    }
+
+    #[test]
+    fn card_060_picks_a_sessions_changes() {
+        let mut renamed = file("src/new.ts");
+        renamed.status = GitFileStatus::Renamed;
+        renamed.old_path = Some("src/old.ts".into());
+        let files = [file("a.ts"), file("b.ts"), renamed, file("c.ts")];
+        let edited = ["c.ts", "src/old.ts", "a.ts", "gone.ts"].map(String::from);
+        let paths: Vec<String> = session_changes(&files, &edited).into_iter().map(|f| f.path).collect();
+        assert_eq!(paths, ["a.ts", "src/new.ts", "c.ts"]);
+        assert!(session_changes(&files, &[]).is_empty());
+        assert_eq!(session_files(1), "1 file");
+        assert_eq!(session_files(4), "4 files");
+        assert_eq!(session_files_title(1), "Review the file this session changed");
+        assert_eq!(session_files_title(4), "Review the 4 files this session changed");
     }
 
     #[test]

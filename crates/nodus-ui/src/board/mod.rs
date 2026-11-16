@@ -49,7 +49,7 @@ use gpui::{
     Animation, AnimationExt as _, AnyElement, App, Entity, IntoElement, ParentElement, Styled, Transformation, Window,
     div, percentage,
 };
-use nodus_domain::SessionKind;
+use nodus_domain::{ProjectPatch, SessionKind};
 
 use crate::components::context_menu::{MenuItem, MenuLayer};
 use crate::components::icon::{Icon, icon};
@@ -124,7 +124,8 @@ pub fn loading(spinning: bool, cx: &App) -> AnyElement {
 }
 
 /// BOARD-147: the title bar's split button: `New Session`, and its menu
-/// `More ways to start` (spec 09 § Title-bar actions).
+/// `More ways to start` (spec 09 § Title-bar actions), with the project's
+/// worktree switch on a board in the app (SESS-217).
 pub fn title_bar_button(
     board: &Entity<canvas::BoardCanvas>,
     menus: &Entity<MenuLayer>,
@@ -132,6 +133,21 @@ pub fn title_bar_button(
     cx: &mut App,
 ) -> AnyElement {
     let (main, terminal, view) = (board.downgrade(), board.downgrade(), board.downgrade());
+    let mut items = vec![
+        MenuItem::item("New terminal", Icon::SquareTerminal, move |_, cx| {
+            if let Some(b) = terminal.upgrade() {
+                b.update(cx, |b, cx| b.create_session(None, SessionKind::Terminal, cx));
+            }
+        })
+        .hint(keys("⌘T")),
+        // BOARD-144: the New view dialog (spec 04), centred in view.
+        MenuItem::item("New view…", Icon::LayoutDashboard, move |_, cx| {
+            if let Some(b) = view.upgrade() {
+                b.update(cx, |b, cx| b.open_view_dialog(None, cx));
+            }
+        }),
+    ];
+    items.extend(worktree_switch(board, cx).into_iter().flatten());
     SplitButton {
         id: "new-session".into(),
         label: "New Session".into(),
@@ -142,21 +158,32 @@ pub fn title_bar_button(
                 b.update(cx, |b, cx| b.create_session(None, SessionKind::Claude, cx));
             }
         }),
-        items: vec![
-            MenuItem::item("New terminal", Icon::SquareTerminal, move |_, cx| {
-                if let Some(b) = terminal.upgrade() {
-                    b.update(cx, |b, cx| b.create_session(None, SessionKind::Terminal, cx));
-                }
-            })
-            .hint(keys("⌘T")),
-            // BOARD-144: the New view dialog (spec 04), centred in view.
-            MenuItem::item("New view…", Icon::LayoutDashboard, move |_, cx| {
-                if let Some(b) = view.upgrade() {
-                    b.update(cx, |b, cx| b.open_view_dialog(None, cx));
-                }
-            }),
-        ],
+        items,
         menu_label: "More ways to start".into(),
     }
     .render(menus, window, cx)
+}
+
+/// SESS-217: `Own worktree per session`, a checkbox for the board's project,
+/// off until it's ticked. None on a server's board, whose cards have theirs
+/// anyway (SRV-122).
+fn worktree_switch(board: &Entity<canvas::BoardCanvas>, cx: &App) -> Option<[MenuItem; 2]> {
+    let canvas = board.read(cx);
+    if canvas.on_server(cx) {
+        return None;
+    }
+    let state = canvas.state.clone();
+    let project = state.read(cx).projects.iter().find(|p| p.id == canvas.project_id)?;
+    let (id, on) = (project.id.clone(), project.worktrees == Some(true));
+    let check = if on { Icon::SquareCheck } else { Icon::Square };
+    Some([
+        MenuItem::Separator,
+        MenuItem::item("Own worktree per session", check, move |_, cx| {
+            let patch = ProjectPatch {
+                worktrees: Some(!on),
+                ..ProjectPatch::default()
+            };
+            state.update(cx, |s, cx| s.update_project(id.clone(), patch, cx));
+        }),
+    ])
 }

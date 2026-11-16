@@ -609,6 +609,7 @@ mod tests {
             live: false,
             agents: None,
             agent_count: None,
+            edited_files: None,
             usage: None,
         }
     }
@@ -627,6 +628,7 @@ mod tests {
                 focused: None,
                 archived: None,
                 server: None,
+                worktrees: None,
                 extra: Map::new(),
             },
             cards,

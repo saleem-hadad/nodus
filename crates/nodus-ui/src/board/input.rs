@@ -1310,6 +1310,11 @@ impl BoardCanvas {
                     false
                 }
             }
+            // BOARD-185: ⇧1 zooms to fit, as the pane menu's Zoom to fit does.
+            "1" if plain && m.shift => {
+                self.fit_active(320.0, cx);
+                true
+            }
             _ if plain => match ch.as_str() {
                 // BOARD-165.
                 "n" => {

@@ -178,6 +178,7 @@ Connections (`nodesConnectable={false}`), edge selection/focus, React Flow's del
 
 - **BOARD-032** `fitActive(duration = 320)`: if the board has any active cards, free notes (notes without `sessionId`) or views, fit the viewport to those nodes plus every section frame that has members, with padding 0.2, max zoom 1, the given duration; otherwise fit the rect `{x: dock.x, y: dock.y, w: dock.w + 760, h: min(dock.h, 784)}` (dock = archive zone ∪ pad) with padding 0.06 and the given duration.
 - **BOARD-033** The zoom pill's fit button calls `fitActive` with the click event as its argument, which is not a number, so that fit is **instant** (no animation); the pane menu's `Zoom to fit` animates over 320ms.
+- **BOARD-185** ⇧1 (key `1` with Shift and no other modifier; guard G) calls `fitActive(320)`, as the pane menu's `Zoom to fit` does (added after 1.0.23). The pane menu item shows `⇧1` as its hint, and the fit button's tooltip reads `Zoom to fit (⇧1)` (`Zoom to fit (Shift+1)` off a Mac).
 - **BOARD-034** `ensureVisible(p, size = 288×216)`: if the rect is already fully inside the visible flow rect (canvas size / zoom) nothing happens; otherwise the viewport animates (320ms, zoom unchanged) to centre it; on an axis where the rect is longer than the view, it instead puts the rect's start 24px (`24/zoom` flow) from that view edge.
 - **BOARD-035** `viewportCentre(size)` = the top-left that centres something of `size` in the visible flow rect; `(0, 0)` when the canvas element is not available.
 - **BOARD-036** Jumping to a search result for an active card: closes search, makes that card the only selected card (notes/views keep their selection), animates the viewport (320ms) to centre the card at zoom `max(current, 0.8)`, then flashes the card: two iterations of 800ms (ease cubic-bezier(0.2, 0.8, 0.2, 1)) of a box-shadow going from `0 0 0 2px <accent>, 0 0 0 2px <accent 55%>` to `0 0 0 2px <accent>, 0 0 0 18px <accent 0%>` (accent read from the card's computed `--accent`).
@@ -467,7 +468,7 @@ Fill accent 8%, border `1px solid` accent 55%, square corners. Selection rectang
 
 - Position: 16px from the canvas's left and bottom; z 5; `role="group"`, label `Zoom`.
 - Pill: flex row, centred, height 34px, padding 0 3px, radius 11px, fill bg-elevated 86%, backdrop blur 20px + saturate 1.6, `--shadow-md`.
-- Buttons, in order: `−` (lucide `Minus` 14px stroke 2.2, tooltip `Zoom out`), zoom label (tooltip `Reset to 100%`), `+` (`Plus` 14px stroke 2.2, tooltip `Zoom in`), a 1×16px separator (`--separator`, margin 0 3px), fit (`Maximize` 13px stroke 2.2, tooltip `Zoom to fit`).
+- Buttons, in order: `−` (lucide `Minus` 14px stroke 2.2, tooltip `Zoom out`), zoom label (tooltip `Reset to 100%`), `+` (`Plus` 14px stroke 2.2, tooltip `Zoom in`), a 1×16px separator (`--separator`, margin 0 3px), fit (`Maximize` 13px stroke 2.2, tooltip `Zoom to fit (⇧1)`, BOARD-185).
 - Each button: min 28×28, padding 0 4px, radius 8px, transparent, icon `--text-secondary`, cursor default; hover fill `--bg-hover` + text `--text-primary`; pressed fill `--bg-pressed`.
 - Zoom label: `round(zoom × 100)` + `%` (e.g. `78%`), min width 50px, 12px weight 500, tabular; live during gestures.
 - Actions: `−` zooms out ×1/1.2 over 160ms; label zooms to 100% over 200ms; `+` zooms in ×1.2 over 160ms (about the canvas centre); fit = `fitActive` (instant, see Behaviors).
@@ -554,6 +555,7 @@ Guard **G** (applies unless noted): no terminal modal, transcript preview, agent
 | V | G; no ⌘/Ctrl/Alt; not repeat | toggle voice prompt |
 | / | G; no ⌘/Ctrl/Alt | focus prompt bar with `/` |
 | E | G; no ⌘/Ctrl/Alt; ≥1 active card selected | expand all selected, or collapse all if all expanded |
+| ⇧1 | G; Shift only | zoom to fit, animated (BOARD-185) |
 | P / A / X | G; no ⌘/Ctrl/Alt | ink tool pen / arrow / eraser |
 | ⌘N, ⌘T (Mac menu accelerators); Ctrl+N, Ctrl+T (Windows, outside terminals, via App → main → `ev:menu`) | no overlay, diff or agents viewer (modal/preview allowed) | new session / new terminal at the default spot |
 | Edit › Search Sessions… (menu click; its ⌘K label isn't a registered accelerator) | same as above | close terminal modal + preview, open search |
@@ -810,6 +812,7 @@ New Rust tests to add in `nodus-board` (pure functions, ported from layout.ts/se
 - [x] BOARD-184 Two active cards whose sessions messaged each other with Claude Code's SendMessage are joined by a dotted line…
 - [x] BOARD-032 `fitActive(duration = 320)`: if the board has any active cards, free notes (notes without `sessionId`) or views, fit…
 - [x] BOARD-033 The zoom pill's fit button calls `fitActive` with the click event as its argument, which is not a number, so that…
+- [x] BOARD-185 ⇧1 zooms to fit (`fitActive(320)`); hint on the pane menu item, key in the fit button's tooltip
 - [x] BOARD-034 `ensureVisible(p, size = 288×216)`: if the rect is already fully inside the visible flow rect (canvas size / zoom)…
 - [x] BOARD-035 `viewportCentre(size)` = the top-left that centres something of `size` in the visible flow rect; `(0, 0)` when the…
 - [x] BOARD-036 Jumping to a search result for an active card: closes search, makes that card the only selected card (notes/views…

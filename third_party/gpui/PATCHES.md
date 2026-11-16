@@ -219,6 +219,10 @@ The board is one view, and each card and note in it is a cached child view (`nod
 
 Nothing in GPUI reads them; `window.rs` is one of the six files copied into `gpui-pre-apple/vendor/gpui/src/`.
 
+### 22. A press cancels a tooltip waiting to show (Nodus)
+
+A hover schedules a tooltip, and when the delay runs out GPUI shows it if the pointer is still inside the element's bounds. That check can't see what's drawn over the element (upstream's TODO on `handle_tooltip_mouse_move`), and a press dropped only a tooltip already on screen. So clicking the board's Changes button and waiting showed "Show 5 changed files" over the Changes window it had just opened, and the tooltip stayed while the pointer was over the covered button. A press now drops a tooltip still waiting to show as well (`cancel_pending_tooltip` in `elements/div.rs`), as AppKit's does. The next move over the element asks its hitbox, which knows what covers it, before scheduling another.
+
 Measured on the parity world's storefront board with one new session (`bench.py` in the idle-redraw PR; release build, M4, 60 Hz): working and expanded with a spinner line every 100 ms, 111% CPU at 57 frames/s → about 28% at 27 frames/s; collapsed and working or waiting, 101–102% at 49 frames/s → about 15–25% at 20 frames/s (the ambient clock, `components::ambient`). Screenshots of four seeded boards with every node forced through its cache matched the unpatched build pixel for pixel.
 
 ## Verification

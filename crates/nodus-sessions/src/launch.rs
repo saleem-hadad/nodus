@@ -74,6 +74,10 @@ pub struct SpawnOptions {
     /// Its own token, on a server (SRV-143), which the host makes its hook
     /// commands send. None in the app.
     pub session_token: Option<String>,
+    /// The card's own worktree, by the name Claude Code makes it under
+    /// (SESS-217): `--worktree <name>` when it starts afresh. A resume goes
+    /// back into it by itself.
+    pub worktree: Option<String>,
 }
 
 /// What a process is started as: a program, its arguments and its whole
@@ -162,6 +166,10 @@ pub fn command_for(
     // SESS-125: only session:create names a session.
     if let Some(name) = opts.name.as_deref().filter(|n| !n.is_empty()) {
         args.extend(["--name".to_owned(), name.to_owned()]);
+    }
+    // SESS-219: made the first time, entered again after that.
+    if let Some(worktree) = opts.worktree.as_deref().filter(|_| !opts.resume) {
+        args.extend(["--worktree".to_owned(), worktree.to_owned()]);
     }
     // SESS-122
     let mode = opts.permission_mode.unwrap_or(PermissionMode::AcceptEdits);
@@ -279,6 +287,7 @@ pub fn for_create(
         cols: None,
         rows: None,
         session_token: None,
+        worktree: worktree_name(node),
     }
 }
 
@@ -307,6 +316,7 @@ pub fn for_open(
         model: node.and_then(BoardNode::model).map(str::to_owned),
         effort: node.and_then(BoardNode::effort).map(str::to_owned),
         extra_args: brain_args.filter(|_| node.is_some_and(is_brain)),
+        worktree: node.and_then(worktree_name),
         cols: Some(cols),
         rows: Some(rows),
         ..SpawnOptions::default()
@@ -333,6 +343,7 @@ pub fn for_send(
         model: node.model().map(str::to_owned),
         effort: node.effort().map(str::to_owned),
         extra_args: brain_args.filter(|_| is_brain(node)),
+        worktree: worktree_name(node),
         ..SpawnOptions::default()
     }
 }
@@ -351,6 +362,15 @@ pub fn remote_control(node: Option<&BoardNode>) -> Option<String> {
 
 fn is_brain(node: &BoardNode) -> bool {
     node.view_of.as_deref().is_some_and(|v| !v.is_empty())
+}
+
+/// The card's worktree when Claude Code makes it, for a Claude card
+/// (SESS-217); a server's own are left to it (SRV-122).
+fn worktree_name(node: &BoardNode) -> Option<String> {
+    if node.kind == Some(SessionKind::Terminal) || is_brain(node) {
+        return None;
+    }
+    node.worktree().as_ref().and_then(crate::worktree::claude_name)
 }
 
 /// A prompt typed into a live session as a paste, so its lines don't send it
@@ -570,6 +590,52 @@ mod tests {
         assert_eq!(remote_control(Some(&brain)), None);
         let off = for_send("p", "/r", &card, true, "hi", None);
         assert!(!argv(&off, false).iter().any(|a| a.starts_with("--remote-control")));
+    }
+
+    #[test]
+    fn starts_a_card_in_its_own_worktree_and_resumes_into_it() {
+        let worktree =
+            json!({ "path": "/work/repo/.claude/worktrees/nodus-00000000", "branch": "worktree-nodus-00000000" });
+        let card = node(json!({ "title": "Fix login", "worktree": worktree }));
+        // SESS-219: made with the card, and entered again by a card never used.
+        let created = for_create("p", "/work/repo", &card, None, Some("go"));
+        assert_eq!(
+            argv(&created, false)[..6],
+            s(&[
+                "--session-id",
+                ID,
+                "--name",
+                "Fix login",
+                "--worktree",
+                "nodus-00000000"
+            ])
+        );
+        let fresh = for_open("p", "/work/repo", ID, Some(&card), false, None, (80.0, 24.0));
+        assert_eq!(
+            argv(&fresh, false)[..4],
+            s(&["--session-id", ID, "--worktree", "nodus-00000000"])
+        );
+        assert_eq!(fresh.cwd, "/work/repo");
+        // A resume goes back into it by itself.
+        let opened = for_open("p", "/work/repo", ID, Some(&card), true, None, (80.0, 24.0));
+        let sent = for_send("p", "/work/repo", &card, true, "and test it", None);
+        for opts in [&opened, &sent] {
+            assert!(!argv(opts, false).iter().any(|a| a == "--worktree"));
+        }
+        // A server's worktree is its own (SRV-122), and a view's brain or a
+        // terminal never gets one.
+        let server = node(
+            json!({ "worktree": { "path": "/home/nodus-run/projects/shop/worktrees/00000000", "branch": "nodus/x-0000" } }),
+        );
+        let brain = node(json!({ "viewOf": "v1", "worktree": worktree }));
+        let terminal = node(json!({ "kind": "terminal", "worktree": worktree }));
+        for card in [&server, &brain, &terminal] {
+            assert_eq!(for_create("p", "/r", card, None, None).worktree, None);
+            assert_eq!(
+                for_open("p", "/r", ID, Some(card), false, None, (80.0, 24.0)).worktree,
+                None
+            );
+        }
     }
 
     #[test]

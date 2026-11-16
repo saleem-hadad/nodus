@@ -78,6 +78,7 @@ mod updates;
 mod views;
 mod voice;
 mod wiring;
+mod worktrees;
 pub mod zoom;
 
 pub use actions::ActionsApi;

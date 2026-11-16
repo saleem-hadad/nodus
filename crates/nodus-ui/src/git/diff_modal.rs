@@ -173,7 +173,7 @@ impl DiffModal {
         let file = file.clone();
         let project = self.project_id.clone();
         let nodus = self.git.read(cx).state.read(cx).nodus.clone();
-        // SRV-128: the selected card's worktree, on a server board.
+        // SRV-128, SESS-221: the selected card's worktree.
         let card = self.git.read(cx).card.clone();
         let git = self.git.clone();
         self.read_loop = Some(cx.spawn(async move |this, cx| {

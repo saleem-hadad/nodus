@@ -231,7 +231,7 @@ All values below are resolved for **light** and **dark**. The theme follows `nat
 - **NOTEUI-027** Free notes sit above cards (z 2), below the open archive panel and any selected card (09 select elevation).
 - **NOTEUI-028** When the board moves a note (pad click, bounce back) it glides over 420ms `cubic-bezier(0.2,0.8,0.2,1)`; a note being dragged, and notes/pad while the archive is dragged, follow directly.
 - **NOTEUI-029** A note dropped with its centre on the archive frame or the pad returns to where its drag started; notes never join sections (09).
-- **NOTEUI-030** Deleting notes (⌫/Del with notes selected, note menu `Delete note`/`Delete N notes`) removes them immediately with no confirmation, written on or not. (docs/how-it-works.md §Notes claims "Deleting a note that has writing on it asks first" — the code at BoardView.tsx:1209 does not; the code wins.)
+- **NOTEUI-030** Deleting notes (⌫/Del with notes selected, note menu `Delete note`/`Delete N notes`) asks first when any of them has writing, and removes blank ones at once (copy in BOARD-121). 0.9.4 never asked, though docs/how-it-works.md §Notes said it did; the app now does what the docs say.
 - **NOTEUI-031** New notes (pad, menu, board tools default) are `yellow`; a note's colour is one of `blue`, `purple`, `pink`, `red`, `orange`, `yellow`, `green`, `graphite` (recolour via the note menu, 09).
 - **NOTEUI-032** A note whose `sessionId` is a card currently on the board (active) is drawn as a sticker on that card instead of on the board; a note whose card is not on the board stays a free note; an archived card's stickers are not drawn (they reappear on restore); removing a card drops its notes back onto the board at the card's position (active) or where the note was (archived) (03).
 - **NOTEUI-033** Stickers line up along the card's top edge from the right: sticker i (0-based, in note order) has its right edge `18 + 30·i` px from the card's right edge and its bottom edge 6px below the card's top edge, above the card (z 2 within the node).
@@ -581,7 +581,7 @@ Lineage: stroke `--border-strong`, width 1.5, no dash; animated (child working):
 | Note | hover → ▶ click | start session | NOTEUI-022…024 |
 | Note signature | click | open writer session (here or its project) | NOTEUI-018/019 |
 | Note (selected) | drag corners/edges | resize, min 120×120 | NOTEUI-025/026 |
-| Note(s) selected | ⌫ / Del | delete, no confirm (09) | NOTEUI-030 |
+| Note(s) selected | ⌫ / Del | delete, asking first if any has writing (09) | NOTEUI-030 |
 | Sticker | hover / click × | lift + × / delete note | NOTEUI-035/037 |
 | Pad top sheet | hover / drag off / drop back / single click | peel / new note at drop / return / new note beside pad | NOTEUI-044…047 |
 
@@ -623,7 +623,6 @@ Other copy and edge cases:
 - Empty notes persist; a note with only whitespace has no ▶ and `Start session` is disabled (09 menu).
 - Clicking ▶ twice quickly starts only one session (in-flight guard).
 - A note stuck to a card whose card leaves the board (removed) drops onto the board at the card's last position; from an archived card, back where it was (03).
-- Discrepancy: docs say deleting a written note asks first; code deletes immediately (NOTEUI-030).
 - Screenshots `board*.png`/`expanded*.png` show an older corner/tool layout (single glyph top-right, 3 title-bar icons); the code's layout (CARD-020, XCARD-007) is the spec.
 
 ## Tests to port
@@ -880,7 +879,7 @@ Cross-domain dependencies: 09 (node z-order incl. select elevation +1000, drag/d
 - [x] NOTEUI-027 notes z 2
 - [x] NOTEUI-028 note glide 420ms
 - [x] NOTEUI-029 note bounces off archive/pad
-- [x] NOTEUI-030 delete without confirm
+- [x] NOTEUI-030 delete, asking first if any has writing
 - [x] NOTEUI-031 new notes yellow; 8 colours
 - [x] NOTEUI-032 sticker vs free note rules
 - [x] NOTEUI-033 sticker placement

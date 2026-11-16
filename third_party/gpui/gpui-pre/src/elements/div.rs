@@ -3787,6 +3787,17 @@ pub(crate) fn clear_active_tooltip(
     }
 }
 
+/// Nodus patch: drops a tooltip that is still waiting to show (patch 22).
+fn cancel_pending_tooltip(active_tooltip: &Rc<RefCell<Option<ActiveTooltip>>>) {
+    let pending = matches!(
+        active_tooltip.borrow().as_ref(),
+        Some(ActiveTooltip::WaitingForShow { .. })
+    );
+    if pending {
+        active_tooltip.borrow_mut().take();
+    }
+}
+
 pub(crate) fn clear_active_tooltip_if_not_hoverable(
     active_tooltip: &Rc<RefCell<Option<ActiveTooltip>>>,
     window: &mut Window,
@@ -3853,6 +3864,11 @@ pub(crate) fn register_tooltip_mouse_handlers(
         let active_tooltip = active_tooltip.clone();
         move |_: &MouseDownEvent, _phase, window: &mut Window, _cx| {
             if !tooltip_id.is_some_and(|tooltip_id| tooltip_id.is_hovered(window)) {
+                // Nodus patch: a press also cancels a tooltip still waiting to show, as
+                // AppKit's does. The delayed show checks only the element's bounds, so a
+                // tooltip whose element the press covered (with the modal it opened) showed
+                // over that modal and stayed while the pointer was in those bounds.
+                cancel_pending_tooltip(&active_tooltip);
                 clear_active_tooltip_if_not_hoverable(&active_tooltip, window);
             }
         }

@@ -600,6 +600,7 @@ mod tests {
                 focused: None,
                 archived: None,
                 server: None,
+                worktrees: None,
                 extra: Map::new(),
             },
             cards,

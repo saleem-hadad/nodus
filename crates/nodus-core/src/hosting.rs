@@ -48,9 +48,9 @@ pub const PREVIEW_PORTS: std::ops::RangeInclusive<u16> = 8100..=8999;
 const CLONE_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const FETCH_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const SETUP_TIMEOUT: Duration = Duration::from_secs(30 * 60);
-const GIT_TIMEOUT: Duration = Duration::from_secs(2 * 60);
+pub(crate) const GIT_TIMEOUT: Duration = Duration::from_secs(2 * 60);
 /// How long saved work is kept (SRV-124).
-const SAVED_DAYS: u32 = 30;
+pub(crate) const SAVED_DAYS: u32 = 30;
 /// How often a card's setup line and its preview port are looked at.
 const SETUP_POLL: Duration = Duration::from_secs(1);
 const PREVIEW_POLL: Duration = Duration::from_secs(3);
@@ -405,7 +405,13 @@ impl Inner {
 
     /// Runs git through the runner: in the session host on a server
     /// (SRV-005).
-    async fn git_run(&self, env: &EnvMap, cwd: &Path, args: &[&str], timeout: Duration) -> Result<Output, String> {
+    pub(crate) async fn git_run(
+        &self,
+        env: &EnvMap,
+        cwd: &Path,
+        args: &[&str],
+        timeout: Duration,
+    ) -> Result<Output, String> {
         let request = RunRequest::new("git")
             .args(args.iter().copied())
             .cwd(cwd)
@@ -415,7 +421,13 @@ impl Inner {
     }
 
     /// Like [`Inner::git_run`], failing with git's own words when it does.
-    async fn git_ok(&self, env: &EnvMap, cwd: &Path, args: &[&str], timeout: Duration) -> Result<String, String> {
+    pub(crate) async fn git_ok(
+        &self,
+        env: &EnvMap,
+        cwd: &Path,
+        args: &[&str],
+        timeout: Duration,
+    ) -> Result<String, String> {
         let out = self.git_run(env, cwd, args, timeout).await?;
         if out.succeeded() {
             Ok(out.stdout_text())
@@ -734,7 +746,7 @@ impl Inner {
 }
 
 /// `yyyymmdd-HHMMSS`, in UTC.
-fn time_stamp() -> String {
+pub(crate) fn time_stamp() -> String {
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());

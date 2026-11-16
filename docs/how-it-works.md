@@ -263,7 +263,7 @@ On the server, two Unix users split the work. `nodus` runs `nodus serve` and kee
 | | Start a session with the selection as context | Select several, then type in the bar · Return |
 | | Speak a prompt · stop | V · the mic beside the bar |
 | | Speak into an open session, typed in but not sent | The mic in its title bar |
-| | Delete the selected notes | ⌫ |
+| | Delete the selected notes (asks first if they have writing) | ⌫ |
 | | New view | **New view…** beside New Session in the title bar · right-click › New view here… · /view in the bar |
 | | Use a view's page | Click in it · right-click › Open large |
 | | Change a view | Right-click › Ask Claude to change it… · Open its session to talk to its brain |

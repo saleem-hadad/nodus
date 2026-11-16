@@ -218,6 +218,7 @@ impl ServersApi<'_> {
                 focused: focusing.then_some(true),
                 archived: None,
                 server: Some(server_id.to_owned()),
+                worktrees: None,
                 extra: Map::new(),
             };
             state.projects.push(project.clone());
@@ -946,6 +947,7 @@ mod tests {
                 focused: None,
                 archived: None,
                 server: Some("srv".into()),
+                worktrees: None,
                 extra: Map::new(),
             });
         });

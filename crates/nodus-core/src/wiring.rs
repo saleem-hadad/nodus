@@ -149,7 +149,7 @@ impl Launcher for CoreLauncher {
                 prompt: &action.prompt,
                 args,
             });
-            let opts = launch::for_create(
+            let mut opts = launch::for_create(
                 &start.project.id,
                 &start.project.repo_path,
                 &start.node,
@@ -160,6 +160,11 @@ impl Launcher for CoreLauncher {
             // own worktree first. Its process waits for the worktree's setup
             // on a task of its own, so the card is on the board meanwhile.
             core.prepare_card(&start.project, &start.node).await?;
+            // SESS-217: in the app, one Claude Code makes, when the project asks.
+            let run = start.action.is_some();
+            if let Some(name) = core.claim_worktree(&start.project, &start.node, run).await {
+                opts.worktree = Some(name);
+            }
             if core.is_setting_up(&start.node.session_id) {
                 let core = Arc::clone(&core);
                 core.runtime.clone().spawn(async move {

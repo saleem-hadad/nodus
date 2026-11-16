@@ -50,8 +50,8 @@ pub struct GitModel {
     pub status: Option<GitStatus>,
     /// The board the status belongs to.
     route_project: Option<String>,
-    /// On a server board, the selected card whose worktree it's of
-    /// (SRV-128); none for the project's own folder.
+    /// The selected card whose worktree it's of (SRV-128, SESS-221); none
+    /// for the project's own folder.
     pub card: Option<String>,
     /// GIT-021: the read in flight, shared by calls for the same project.
     reading: Option<(String, u64)>,
@@ -79,22 +79,14 @@ pub struct GitModel {
 
 impl EventEmitter<GitEvent> for GitModel {}
 
-/// SRV-128: on a server board, the one selected card when it has a
-/// worktree, whose git the chip and the Changes window show; none otherwise,
-/// for the project's own folder.
+/// SRV-128, SESS-221: the one selected card when it has a worktree of its
+/// own, on a server or in the app, whose git the chip and the Changes window
+/// show; none otherwise, for the project's own folder.
 fn worktree_card(state: &AppState) -> Option<String> {
     let [selected] = state.selection.as_slice() else {
         return None;
     };
     let board = state.board.as_ref()?;
-    if board.project.server.is_none()
-        && !state
-            .projects
-            .iter()
-            .any(|p| p.id == board.project.id && p.server.is_some())
-    {
-        return None;
-    }
     board
         .cards
         .iter()

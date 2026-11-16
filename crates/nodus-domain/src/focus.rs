@@ -49,6 +49,7 @@ mod tests {
             focused: focused.then_some(true),
             archived: archived.then_some(true),
             server: None,
+            worktrees: None,
             extra: Map::new(),
         }
     }

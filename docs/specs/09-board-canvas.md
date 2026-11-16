@@ -293,7 +293,7 @@ Connections (`nodesConnectable={false}`), edge selection/focus, React Flow's del
 - **BOARD-118** Clicking the pad's top sheet (or the pad/top-sheet menu's `New note`) peels a note to the nearest free 216×216 spot to (pad right + 32, pad y + 52) — clear of every card, notes and views, avoiding the dock — and pans to show it.
 - **BOARD-119** `New note here` at p places a note at the nearest free spot to (p.x − 108, p.y − 108) and pans to show it.
 - **BOARD-120** Recolouring from the note menu closes the menu and saves every target note with the new colour.
-- **BOARD-121** Deleting notes removes them immediately with no confirmation, written on or not (the docs claim otherwise; the code wins).
+- **BOARD-121** Deleting notes asks first when any of them has writing: one note, `Delete note?` over `“<its first non-blank line, trimmed, cut to 59 characters and …>” goes for good.`; several, `Delete N notes?` over `The notes and what’s written on them go for good.`; confirm `Delete`, danger. Blank notes go at once, without asking. A ⌫ that also takes cards, shapes or views does the rest only once the notes are answered, and nothing on Cancel. (0.9.4 never asked, though the docs said it did.)
 - **BOARD-122** Starting a session from a note requires that the note exists, has no session, has non-blank text and is not already starting (a second start while one is pending is ignored).
 - **BOARD-123** A note's session reserves 720×750 at the nearest free spot to the note's position (clear of every card, the other notes and views; avoiding the dock), joins the section there, is created with `{x, y, initialPrompt: note text, autoMode: true}`, and the note — as it is now, in case it moved or changed colour meanwhile — is saved with that `sessionId`; the board pans to show a 288×216 rect there. Failure toasts `Couldn't start a session: <message>`.
 - **BOARD-124** Editing a note's text saves it through the store when this board is still the open board, else straight to main (`board.saveNote`) so typing survives the board closing (⌘W) mid-note.
@@ -507,7 +507,7 @@ Toast strings (verbatim; `<m>` = the error's message, or `String(err)` for non-E
 
 ### Title-bar actions (component chrome: 08)
 
-Split button in the title bar's action slot: main part `New Session` with a `Plus` icon (15px, stroke 2.2), tooltip `New session (⌘N)` (Windows `New session (Ctrl+N)`); its menu, labelled `More ways to start`, has `New terminal` (`SquareTerminal`, hint `⌘T` / `Ctrl+T`) and `New view…` (`LayoutDashboard`, no hint).
+Split button in the title bar's action slot: main part `New Session` with a `Plus` icon (15px, stroke 2.2), tooltip `New session (⌘N)` (Windows `New session (Ctrl+N)`); its menu, labelled `More ways to start`, has `New terminal` (`SquareTerminal`, hint `⌘T` / `Ctrl+T`) and `New view…` (`LayoutDashboard`, no hint). On a board in the app (not a server's), a separator and `Own worktree per session` follow, a checkbox for the project (`Square` when off, `SquareCheck` when on; off by default) that toggles its `worktrees` (03 SESS-217).
 
 ### Selection bar wiring (content and look: 11)
 
@@ -546,7 +546,7 @@ Guard **G** (applies unless noted): no terminal modal, transcript preview, agent
 | Esc | G | ink escape, else close stack (if open) + clear selection (if any) |
 | mod+A | G; no Shift/Alt | select all active cards |
 | mod+G | G; no Shift/Alt; ≥1 card selected | group selected cards into a new section |
-| ⌫ / Delete | G; no mod/Alt | ink delete-stroke, else delete selected notes + archive selected cards + delete selected views (asks) |
+| ⌫ / Delete | G; no mod/Alt | ink delete-stroke, else delete selected notes (asks if any has writing), then the rest: archive selected cards + delete selected views (asks) |
 | Enter | G; no mod/Shift; exactly 1 card selected | open it |
 | Enter | G; no mod/Shift; 0 cards, exactly 1 note selected | write in the note |
 | N | G; no ⌘/Ctrl/Alt | new session (default spot) |
@@ -902,7 +902,7 @@ New Rust tests to add in `nodus-board` (pure functions, ported from layout.ts/se
 - [x] BOARD-118 Clicking the pad's top sheet (or the pad/top-sheet menu's `New note`) peels a note to the nearest free 216×216 spot…
 - [x] BOARD-119 `New note here` at p places a note at the nearest free spot to (p.x − 108, p.y − 108) and pans to show it.
 - [x] BOARD-120 Recolouring from the note menu closes the menu and saves every target note with the new colour.
-- [x] BOARD-121 Deleting notes removes them immediately with no confirmation, written on or not (the docs claim otherwise; the code…
+- [x] BOARD-121 Deleting notes asks first when any of them has writing; blank notes go at once…
 - [x] BOARD-122 Starting a session from a note requires that the note exists, has no session, has non-blank text and is not already…
 - [x] BOARD-123 A note's session reserves 720×750 at the nearest free spot to the note's position (clear of every card, the other…
 - [x] BOARD-124 Editing a note's text saves it through the store when this board is still the open board, else straight to main…

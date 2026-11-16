@@ -204,6 +204,7 @@ async fn host_220_sess_154_the_window_hears_first_then_notifications_then_the_ru
             prompt: "Ship it".into(),
             global: None,
             created_at: 1.0,
+            schedule: None,
             extra: Map::new(),
         }]);
         let mut run = node("run-1");

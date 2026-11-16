@@ -62,9 +62,37 @@ pub struct ProjectAction {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub global: Option<bool>,
     pub created_at: f64,
+    /// When it runs on its own, besides its button (SCHED-001). Only a
+    /// project's own actions have one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schedule: Option<ActionSchedule>,
     /// Fields this version doesn't know, written back as they were read.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
+}
+
+/// When a scheduled action runs (SCHED-001): on some days of the week, at a
+/// time of day or every so many minutes from midnight, in local time.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActionSchedule {
+    /// What the user typed, such as `every weekday at 9`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub words: String,
+    /// The days it runs on, 0 for Sunday to 6 for Saturday as JavaScript's
+    /// `getDay` counts them, in order. Empty means every day.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub days: Vec<u8>,
+    /// The time of day it runs, `HH:MM` on a 24-hour clock. Absent when it
+    /// runs every so often instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<String>,
+    /// Minutes between runs, counted from midnight each day it runs on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub every: Option<f64>,
+    /// Only `true`, while the user has paused it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paused: Option<bool>,
 }
 
 /// A project's own actions, and the global ones every project shares.
@@ -82,6 +110,10 @@ pub struct ActionDraft {
     pub name: String,
     pub icon: String,
     pub prompt: String,
+    /// When the description says the action should run on its own, in a few
+    /// words (`every weekday at 9`); empty when it doesn't (SCHED-008).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub when: String,
 }
 
 /// An action run that finished and left the board, with Claude's last word on it.

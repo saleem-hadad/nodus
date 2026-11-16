@@ -22,6 +22,7 @@ mod lists;
 mod normalize;
 pub mod rail;
 mod run;
+pub mod schedule;
 
 pub use draft::{
     DRAFT_SYSTEM_PROMPT, DRAFT_TIMEOUT, DraftError, draft_action, draft_args, draft_prompt, draft_schema_json,

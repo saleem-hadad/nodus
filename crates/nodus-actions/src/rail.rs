@@ -300,6 +300,7 @@ mod tests {
             prompt: "p".into(),
             global: global.then_some(true),
             created_at: 0.0,
+            schedule: None,
             extra: Map::new(),
         }
     }

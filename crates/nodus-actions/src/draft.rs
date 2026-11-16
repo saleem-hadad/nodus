@@ -31,6 +31,7 @@ From the user's description, write:
 - name: 1 to 3 words in Title Case, for the button.
 - icon: the best fit from the list.
 - prompt: the run's instructions, addressed to the session (\"you\"). Say what to do, step by step: what to check first, when to stop without changing anything, and how to handle the likely failures. If the run may need the user to decide something, tell it to ask with AskUserQuestion. Don't add requirements the user didn't ask for.
+- when: if the user says the button should also run on its own at certain times (such as \"every weekday at 9\" or \"every 2 hours\"), those words, as short as you can make them; otherwise an empty string. Leave the timing out of the name and the prompt.
 
 You can read the repository to fit the prompt to it (for example, to find the real test command), but be quick about it.";
 
@@ -42,7 +43,7 @@ const GLOBAL_NOTE: &str = "The button is global: it shows in every project, so t
 pub fn draft_schema_json() -> String {
     let icons: Vec<String> = ActionIcon::ALL.iter().map(|i| format!("\"{i}\"")).collect();
     format!(
-        r#"{{"type":"object","properties":{{"name":{{"type":"string"}},"icon":{{"type":"string","enum":[{}]}},"prompt":{{"type":"string"}}}},"required":["name","icon","prompt"],"additionalProperties":false}}"#,
+        r#"{{"type":"object","properties":{{"name":{{"type":"string"}},"icon":{{"type":"string","enum":[{}]}},"prompt":{{"type":"string"}},"when":{{"type":"string"}}}},"required":["name","icon","prompt","when"],"additionalProperties":false}}"#,
         icons.join(",")
     )
 }
@@ -137,6 +138,8 @@ pub fn read_draft(stdout: &str, stderr: &str, code: Option<i32>) -> Result<Actio
                 name,
                 icon: icon_or_default(draft.get("icon")),
                 prompt,
+                // SCHED-008
+                when: clip(draft.get("when"), crate::schedule::MAX_WORDS),
             });
         }
     }
@@ -221,7 +224,7 @@ mod tests {
     fn asks_for_the_answer_in_the_exact_shape() {
         assert_eq!(
             draft_schema_json(),
-            r#"{"type":"object","properties":{"name":{"type":"string"},"icon":{"type":"string","enum":["zap","refresh-cw","git-merge","git-pull-request","git-commit-horizontal","upload","download","archive","brush-cleaning","eraser","sparkles","wand-sparkles","test-tube","bug","rocket","package","file-text","book-open","list-checks","search","shield-check","hammer","square-terminal","gauge","lightbulb","message-square"]},"prompt":{"type":"string"}},"required":["name","icon","prompt"],"additionalProperties":false}"#
+            r#"{"type":"object","properties":{"name":{"type":"string"},"icon":{"type":"string","enum":["zap","refresh-cw","git-merge","git-pull-request","git-commit-horizontal","upload","download","archive","brush-cleaning","eraser","sparkles","wand-sparkles","test-tube","bug","rocket","package","file-text","book-open","list-checks","search","shield-check","hammer","square-terminal","gauge","lightbulb","message-square"]},"prompt":{"type":"string"},"when":{"type":"string"}},"required":["name","icon","prompt","when"],"additionalProperties":false}"#
         );
         // The schema as JSON.stringify writes it.
         let reparsed: Value = serde_json::from_str(&draft_schema_json()).unwrap();
@@ -270,14 +273,15 @@ mod tests {
     fn reads_claudes_answer() {
         let ok = json!({
             "is_error": false,
-            "structured_output": { "name": "  Run Tests ", "icon": "test-tube", "prompt": " Run them. " }
+            "structured_output": { "name": "  Run Tests ", "icon": "test-tube", "prompt": " Run them. ", "when": " weekdays at 9 " }
         });
         assert_eq!(
             read_draft(&format!("\n{ok}\n"), "", Some(0)).unwrap(),
             ActionDraft {
                 name: "Run Tests".into(),
                 icon: "test-tube".into(),
-                prompt: "Run them.".into()
+                prompt: "Run them.".into(),
+                when: "weekdays at 9".into(),
             }
         );
         // ACT-026: a bad icon is zap, a missing name is Action.

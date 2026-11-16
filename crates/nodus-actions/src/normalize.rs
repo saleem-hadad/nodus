@@ -56,6 +56,8 @@ pub fn normalize_action(raw: &Value, existing: Option<&ProjectAction>, now: f64)
     let name = Some(clip(field("name"), MAX_NAME_CHARS))
         .filter(|n| !n.is_empty())
         .unwrap_or_else(|| "Action".to_owned());
+    // ACT-010
+    let global = (field("global") == Some(&Value::Bool(true))).then_some(true);
     // ACT-012: the fields are written in this order, and nothing else is kept.
     Ok(ProjectAction {
         id,
@@ -66,9 +68,14 @@ pub fn normalize_action(raw: &Value, existing: Option<&ProjectAction>, now: f64)
         description: clip(field("description"), MAX_DESCRIPTION_CHARS),
         prompt,
         // ACT-010: only `true` itself.
-        global: (field("global") == Some(&Value::Bool(true))).then_some(true),
+        global,
         // ACT-011
         created_at: existing.map_or(now, |e| e.created_at),
+        // SCHED-001, SCHED-007: a global action has none.
+        schedule: global
+            .is_none()
+            .then(|| field("schedule").and_then(crate::schedule::normalize))
+            .flatten(),
         extra: Map::new(),
     })
 }

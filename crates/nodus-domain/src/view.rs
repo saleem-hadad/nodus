@@ -71,6 +71,11 @@ pub struct ViewCommand {
     /// Minutes between runs while the app is open; it only runs when asked otherwise.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub every: Option<f64>,
+    /// The user turned its schedule off; it keeps `every` for when they turn
+    /// it on again, and runs only when asked meanwhile (SCHED-064). Only
+    /// `true` is written.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub paused: Option<bool>,
     /// The command line the user allowed. A changed command needs allowing again.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub approved: Option<String>,
@@ -101,9 +106,57 @@ pub struct ViewRefresh {
     pub every: f64,
     /// What the brain is asked each time.
     pub prompt: String,
+    /// The user turned it off; it keeps its prompt and interval for when
+    /// they turn it on again (SCHED-064). Only `true` is written.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub paused: Option<bool>,
     /// Fields this version doesn't know, written back as they were read.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
+}
+
+/// One of a view's schedules, as its caption and its picker show it
+/// (SCHED-061): a command that runs every so often, or its brain's refresh.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ViewSchedule {
+    /// `command:<name>`, or `refresh` for the brain's.
+    pub key: String,
+    /// The command's name, or `Claude’s refresh`.
+    pub label: String,
+    /// Minutes between runs.
+    pub every: f64,
+    /// The user turned it off (SCHED-064).
+    pub paused: bool,
+    /// The user allowed the command's command line; a refresh always is.
+    pub allowed: bool,
+    /// When it next runs (ms): `every` after its last run.
+    pub next_at: f64,
+}
+
+impl ViewSchedule {
+    /// The key of a view's refresh.
+    pub const REFRESH: &str = "refresh";
+
+    /// The key of a view's command.
+    pub fn command_key(name: &str) -> String {
+        format!("command:{name}")
+    }
+
+    /// The command a key names, if it names one.
+    pub fn command_of(key: &str) -> Option<&str> {
+        key.strip_prefix("command:")
+    }
+
+    /// Whether it runs by itself now: allowed, and not turned off.
+    pub fn runs(&self) -> bool {
+        self.allowed && !self.paused
+    }
+
+    /// When it last ran, or when its clock started (ms).
+    pub fn last_at(&self) -> f64 {
+        self.next_at - self.every * 60_000.0
+    }
 }
 
 /// How a view's command last went.

@@ -41,6 +41,8 @@ pub struct CardUi {
     pub title: Option<parts::TitleEditor>,
     /// Its first page landing (MOTION-033).
     pub landing: super::reveal::Landing,
+    /// Its schedules, for the caption's clock and its picker (SCHED-065).
+    pub schedules: super::schedule::Schedules,
 }
 
 impl CardUi {
@@ -90,7 +92,7 @@ pub fn ui(id: &str, window: &mut Window, cx: &mut App) -> Entity<CardUi> {
 }
 
 /// A drawn view's UI state.
-fn find(view_id: &str, cx: &App) -> Option<Entity<CardUi>> {
+pub(super) fn find(view_id: &str, cx: &App) -> Option<Entity<CardUi>> {
     cx.try_global::<CardUis>()?.0.get(view_id)?.upgrade()
 }
 
@@ -296,8 +298,8 @@ pub fn render(node: ViewNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut
 
 /// The caption (`.view-head`, [`CAPTION_H`] tall) on the board above the
 /// page: the brain's status (or the view's icon) and the title, brighter
-/// while the view is hovered or selected. The canvas drags the node by it
-/// (VIEW-122).
+/// while the view is hovered or selected, then its schedules' clock
+/// (SCHED-065). The canvas drags the node by it (VIEW-122).
 #[allow(clippy::too_many_arguments)]
 fn caption(
     view: &BoardView,
@@ -396,6 +398,7 @@ fn caption(
         })
         .child(lead)
         .child(title)
+        .children(super::schedule::clock(view, board, ui, window, cx))
         .into_any_element()
 }
 

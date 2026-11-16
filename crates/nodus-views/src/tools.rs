@@ -356,6 +356,10 @@ impl Views {
                 if let Some(every) = c.every {
                     item["every"] = Value::from(every);
                 }
+                // SCHED-064: its schedule turned off by the user, as a refresh says it.
+                if c.paused == Some(true) {
+                    item["paused"] = Value::Bool(true);
+                }
                 item["allowed"] = Value::from(if is_allowed(c) {
                     "yes"
                 } else if is_denied(c) {

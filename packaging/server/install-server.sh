@@ -736,10 +736,11 @@ join_tailscale() {
       "grants": [
         // Members' devices reach the server: SSH, Nodus, and the previews.
         { "src": ["autogroup:member"], "dst": ["tag:nodus"], "ip": ["tcp:22", "tcp:7420", "tcp:8100-8999"] },
-        // Members reach each other. This replaces the default rule that
-        // lets everything reach everything: tag:nodus is in no "src", so
-        // the server, which runs Claude in auto mode, reaches nothing.
-        { "src": ["autogroup:member"], "dst": ["autogroup:member"], "ip": ["*"] }
+        // Each member reaches their own devices, not each other's. This
+        // replaces the default rule that lets everything reach everything:
+        // tag:nodus is in no "src", so the server, which runs Claude in auto
+        // mode, reaches nothing.
+        { "src": ["autogroup:member"], "dst": ["autogroup:self"], "ip": ["*"] }
       ]
 
 EOF

@@ -269,6 +269,7 @@ On the server, two Unix users split the work. `nodus` runs `nodus serve` and kee
 | | Change a view | Right-click › Ask Claude to change it… · Open its session to talk to its brain |
 | | Rename a view · delete it | Double-click its name · click its name, then ⌫ (asks first) |
 | | Fan out a card's agents | Point at the deck under it · click to pin |
+| | Zoom to fit | ⇧1 · the zoom pill's fit button |
 | | Pan · zoom | Two-finger scroll, Space-drag or middle-drag · pinch, or the mouse wheel (⇧ or ⌘ with the wheel pans; Settings › Board turns this off) |
 | Terminal | Newline in Claude's prompt | ⇧Enter |
 | | Clear · copy · select all | ⌘K · ⌘C · ⌘A |

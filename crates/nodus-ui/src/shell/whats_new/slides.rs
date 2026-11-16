@@ -38,6 +38,27 @@ pub const SLIDES: &[Slide] = &[
         dark: shot!("1.0.24-schedules-dark"),
     },
     Slide {
+        version: "1.0.24",
+        title: "Review one session’s edits",
+        text: "Click a card’s file count to review just the files that session changed.",
+        light: shot!("1.0.24-changes-light"),
+        dark: shot!("1.0.24-changes-dark"),
+    },
+    Slide {
+        version: "1.0.24",
+        title: "A worktree per session",
+        text: "Under New Session, tick Own worktree, and each new session works on its own branch.",
+        light: shot!("1.0.24-worktree-light"),
+        dark: shot!("1.0.24-worktree-dark"),
+    },
+    Slide {
+        version: "1.0.24",
+        title: "Answer from your phone",
+        text: "Turn it on in Settings › Notifications, then reply to sessions from the Claude app.",
+        light: shot!("1.0.24-phone-light"),
+        dark: shot!("1.0.24-phone-dark"),
+    },
+    Slide {
         version: "1.0.22",
         title: "Side by side",
         text: "Open a terminal, a new session or any card beside an open one, up to four, with {⌘T} or {⌘N}.",

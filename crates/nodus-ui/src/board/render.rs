@@ -26,7 +26,7 @@ use super::moments::{self, Arrival};
 use super::node_view::{self, NodeView};
 use super::nodes::{
     ArchiveNode, BoardCx, CardNode, NodeRenderers, NodeState, NoteNode, PadNode, ShapeNode, StackPlace, StackStyle,
-    ViewNode, renderers,
+    TileNode, ViewNode, renderers,
 };
 use super::scene::{FlowNode, NodeKind, paint_order};
 use super::section::SectionProps;
@@ -170,6 +170,13 @@ impl BoardCanvas {
                 }
             }
             NodeKind::Pad | NodeKind::View { .. } => Motion::None,
+            NodeKind::Tile { .. } => {
+                if self.moving_section {
+                    Motion::None
+                } else {
+                    Motion::Position(420, 0, motion::ease_out)
+                }
+            }
             // SHAPE-010: as notes, so ⌘Z and a session's moves glide.
             NodeKind::Shape { .. } => {
                 if self.moving_section {
@@ -247,6 +254,7 @@ impl BoardCanvas {
                 | NodeKind::Note { index: Some(_) }
                 | NodeKind::View { .. }
                 | NodeKind::Shape { .. }
+                | NodeKind::Tile { .. }
         );
         NodeMoment {
             arrival: arrives.then(|| self.moments.arrival(&node.id, now)).flatten(),
@@ -423,6 +431,26 @@ impl BoardCanvas {
                             Some(Arrival::Drawing(p)) => Some(p),
                             _ => None,
                         },
+                    },
+                    board,
+                    window,
+                    cx,
+                )
+            }
+            NodeKind::Tile { index } => {
+                let tile = &snapshot.tiles[*index];
+                let action = snapshot.project.actions.iter().flatten().find(|a| a.id == tile.id);
+                let running = snapshot
+                    .cards
+                    .iter()
+                    .find(|c| !c.node.archived && c.node.run_of.as_deref() == Some(tile.id.as_str()))
+                    .map(|c| c.status);
+                renderers.tile(
+                    TileNode {
+                        node: state,
+                        tile,
+                        action,
+                        running,
                     },
                     board,
                     window,
@@ -670,7 +698,8 @@ impl BoardCanvas {
                 });
                 let z = vp.zoom;
                 let mut pulses = Vec::new();
-                if e.kind == EdgeKind::Lineage
+                // SCHED-037: a run's result goes back to its tile too.
+                if matches!(e.kind, EdgeKind::Lineage | EdgeKind::Schedule)
                     && let Some(ms) = self.moments.pulse(&e.target, now)
                 {
                     pulses.push(Pulse { ms, backwards: true });
@@ -678,7 +707,20 @@ impl BoardCanvas {
                 // MOTION-044: messages between its ends run along it; the line
                 // between two that just started talking draws in behind the first.
                 let mut span = (0.0, 1.0);
-                if e.kind != EdgeKind::View {
+                // SCHED-037: the light out to a run that just came out, the
+                // line drawn in behind it.
+                if e.kind == EdgeKind::Schedule
+                    && let Some(ms) = self.moments.start(&e.target, now)
+                {
+                    pulses.push(Pulse { ms, backwards: false });
+                    if ms < moments::PULSE_TRAVEL_MS {
+                        span = (
+                            0.0,
+                            f64::from(motion::ease_in_out((ms / moments::PULSE_TRAVEL_MS) as f32)),
+                        );
+                    }
+                }
+                if !matches!(e.kind, EdgeKind::View | EdgeKind::Schedule) {
                     for (m, ms) in self.moments.messages(now).filter(|(m, _)| e.joins(&m.from, &m.to)) {
                         let backwards = m.from == e.target;
                         pulses.push(Pulse { ms, backwards });
@@ -694,8 +736,10 @@ impl BoardCanvas {
                         (t.status_working, 1.5 * z, Some((5.0 * z, 5.0 * z, 500.0)), false)
                     }
                     EdgeKind::Lineage => (t.border_strong, 1.5 * z, None, false),
-                    // BOARD-184: dotted, holding still.
-                    EdgeKind::Talk => (t.border_strong, 1.5 * z, Some((1.0 * z, 4.5 * z, 0.0)), true),
+                    // BOARD-184: dotted, holding still. SCHED-037: as a tile's.
+                    EdgeKind::Talk | EdgeKind::Schedule => {
+                        (t.border_strong, 1.5 * z, Some((1.0 * z, 4.5 * z, 0.0)), true)
+                    }
                 };
                 Some(EdgePaint {
                     pts,

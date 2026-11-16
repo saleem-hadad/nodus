@@ -28,7 +28,15 @@ pub const DAY_ORDER: [u8; 7] = [1, 2, 3, 4, 5, 6, 0];
 /// Each day's letter for the day chips, by `getDay` number.
 pub const DAY_LETTERS: [&str; 7] = ["S", "M", "T", "W", "T", "F", "S"];
 const DAY_SHORT: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const DAY_PLURAL: [&str; 7] = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"];
+const DAY_PLURAL: [&str; 7] = [
+    "Sundays",
+    "Mondays",
+    "Tuesdays",
+    "Wednesdays",
+    "Thursdays",
+    "Fridays",
+    "Saturdays",
+];
 
 // ---------------------------------------------------------------------------
 // Reading what the user typed
@@ -200,8 +208,12 @@ pub fn parse(words: &str) -> Option<ActionSchedule> {
                     let (count, next) = match toks.get(i + 1) {
                         Some(Token::Number(n)) => (n.parse::<f64>().ok(), i + 2),
                         Some(Token::Word(o)) if o == "other" => (Some(2.0), i + 2),
-                        Some(Token::Word(h)) if h == "half" => (Some(0.5), i + 2 + usize::from(word(i + 2) == Some("an"))),
-                        Some(Token::Word(q)) if q == "quarter" => (Some(0.25), i + 2 + usize::from(word(i + 2) == Some("of"))),
+                        Some(Token::Word(h)) if h == "half" => {
+                            (Some(0.5), i + 2 + usize::from(word(i + 2) == Some("an")))
+                        }
+                        Some(Token::Word(q)) if q == "quarter" => {
+                            (Some(0.25), i + 2 + usize::from(word(i + 2) == Some("of")))
+                        }
                         _ => (None, i + 1),
                     };
                     if let Some(unit) = word(next).and_then(unit_minutes) {
@@ -306,6 +318,8 @@ pub fn parse_interval(words: &str) -> Option<f64> {
                     "hourly" => return Some(60.0),
                     "daily" | "everyday" => return Some(1440.0),
                     "weekly" => return Some(10_080.0),
+                    // Views run every minute at most: seconds aren't a schedule.
+                    "s" | "sec" | "secs" | "second" | "seconds" => return None,
                     "half" => {
                         count = Some(count.unwrap_or(1.0) * 0.5);
                         continue;
@@ -355,7 +369,13 @@ pub fn normalize(raw: &Value) -> Option<ActionSchedule> {
     let mut days: Vec<u8> = o
         .get("days")
         .and_then(Value::as_array)
-        .map(|a| a.iter().filter_map(Value::as_u64).filter(|d| *d <= 6).map(|d| d as u8).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(Value::as_u64)
+                .filter(|d| *d <= 6)
+                .map(|d| d as u8)
+                .collect()
+        })
         .unwrap_or_default();
     days.sort_unstable();
     days.dedup();
@@ -370,8 +390,20 @@ pub fn normalize(raw: &Value) -> Option<ActionSchedule> {
         .map(clamp_every);
     let paused = (o.get("paused") == Some(&Value::Bool(true))).then_some(true);
     match (at, every) {
-        (Some(at), _) => Some(ActionSchedule { words, days, at: Some(at), every: None, paused }),
-        (None, Some(every)) => Some(ActionSchedule { words, days, at: None, every: Some(every), paused }),
+        (Some(at), _) => Some(ActionSchedule {
+            words,
+            days,
+            at: Some(at),
+            every: None,
+            paused,
+        }),
+        (None, Some(every)) => Some(ActionSchedule {
+            words,
+            days,
+            at: None,
+            every: Some(every),
+            paused,
+        }),
         (None, None) => parse(&words).map(|s| ActionSchedule { paused, ..s }),
     }
 }
@@ -405,7 +437,7 @@ pub fn days_label(days: &[u8]) -> String {
 /// is said `every 90 minutes`.
 pub fn every_label(minutes: f64) -> String {
     let m = minutes.max(1.0) as u64;
-    if m % 60 == 0 {
+    if m.is_multiple_of(60) {
         match m / 60 {
             1 => "every hour".to_owned(),
             h => format!("every {h} hours"),
@@ -481,10 +513,7 @@ pub fn next_after<Tz: TimeZone>(s: &ActionSchedule, after: &DateTime<Tz>) -> Opt
         if !runs_on(s, weekday(day)) {
             return None;
         }
-        slots
-            .iter()
-            .filter_map(|m| slot_at(&tz, day, *m))
-            .find(|t| t > after)
+        slots.iter().filter_map(|m| slot_at(&tz, day, *m)).find(|t| t > after)
     })
 }
 
@@ -648,7 +677,10 @@ mod tests {
         assert_eq!(p("Mon-Thu 0930"), (vec![1, 2, 3, 4], at("09:30"), None));
         assert_eq!(p("friday to monday at 12am"), (vec![0, 1, 5, 6], at("00:00"), None));
         assert_eq!(p("weekends in the morning"), (vec![0, 6], at("09:00"), None));
-        assert_eq!(p("every day except sunday at 7 p.m."), (vec![1, 2, 3, 4, 5, 6], at("19:00"), None));
+        assert_eq!(
+            p("every day except sunday at 7 p.m."),
+            (vec![1, 2, 3, 4, 5, 6], at("19:00"), None)
+        );
         assert_eq!(p("on business days at 12pm"), (vec![1, 2, 3, 4, 5], at("12:00"), None));
         assert_eq!(p("at 6"), (vec![], at("06:00"), None));
     }
@@ -688,6 +720,7 @@ mod tests {
             ("every 3 days", Some(4320.0)),
             ("weekly", Some(10_080.0)),
             ("now and then", None),
+            ("every 30 seconds", None),
             ("", None),
         ] {
             assert_eq!(parse_interval(words), minutes, "{words:?}");
@@ -722,11 +755,19 @@ mod tests {
 
     #[test]
     fn normalizes_what_the_window_sends() {
-        let s = normalize(&json!({ "words": " w ", "days": [5, 1, 1, 9, "x", 3], "at": "9:05", "every": 30, "paused": "yes" }))
-            .unwrap();
-        assert_eq!((s.words.as_str(), s.days, s.at, s.every, s.paused), ("w", vec![1, 3, 5], at("09:05"), None, None));
+        let s = normalize(
+            &json!({ "words": " w ", "days": [5, 1, 1, 9, "x", 3], "at": "9:05", "every": 30, "paused": "yes" }),
+        )
+        .unwrap();
+        assert_eq!(
+            (s.words.as_str(), s.days, s.at, s.every, s.paused),
+            ("w", vec![1, 3, 5], at("09:05"), None, None)
+        );
         let s = normalize(&json!({ "every": 3.4, "days": [0, 1, 2, 3, 4, 5, 6], "paused": true })).unwrap();
-        assert_eq!((s.days, s.at, s.every, s.paused), (vec![], None, Some(10.0), Some(true)));
+        assert_eq!(
+            (s.days, s.at, s.every, s.paused),
+            (vec![], None, Some(10.0), Some(true))
+        );
         let s = normalize(&json!({ "words": "every weekday at 9", "at": "25:00" })).unwrap();
         assert_eq!((s.days, s.at), (vec![1, 2, 3, 4, 5], at("09:00")));
         assert_eq!(normalize(&json!({ "words": "now and then" })), None);
@@ -784,7 +825,10 @@ mod tests {
         // Closed all of Tuesday to Thursday morning: Thursday's, late, once.
         assert_eq!(due(&s, ms(&t(16, 9, 0)), &t(19, 11, 0)), Some((ms(&t(19, 9, 0)), true)));
         // Paused: never.
-        let paused = ActionSchedule { paused: Some(true), ..s };
+        let paused = ActionSchedule {
+            paused: Some(true),
+            ..s
+        };
         assert_eq!(due(&paused, set_at, &t(16, 9, 0)), None);
     }
 

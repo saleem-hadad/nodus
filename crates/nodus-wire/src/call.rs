@@ -209,6 +209,17 @@ calls! {
     ViewsAsk = "views:ask" { project_id: String, view_id: String, prompt: String },
     /// `string`: the brain's session id.
     ViewsBrain = "views:brain" { project_id: String, view_id: String },
+    /// `ViewSchedule[]` (SCHED-061).
+    ViewsSchedules = "views:schedules" { project_id: String, view_id: String },
+    /// `null`: one of a view's schedules runs this often, or with `every`
+    /// null is off (SCHED-063, SCHED-064).
+    ViewsSetEvery = "views:set-every" {
+        project_id: String,
+        view_id: String,
+        key: String,
+        #[serde(default)]
+        every: Option<f64>,
+    },
 
     // ---- git (GIT-003…021)
 

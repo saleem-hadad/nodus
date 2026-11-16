@@ -228,7 +228,7 @@ mod tests {
     use nodus_domain::ActionSchedule;
     use serde_json::json;
 
-    fn project(actions: serde_json::Value) -> Project {
+    fn project(actions: &[serde_json::Value]) -> Project {
         serde_json::from_value(json!({
             "id": "p", "name": "p", "repoPath": "/r", "color": "blue", "createdAt": 0, "actions": actions
         }))
@@ -246,18 +246,21 @@ mod tests {
     #[test]
     fn keeps_a_tile_for_each_scheduled_action() {
         let mut board = BoardState::default();
-        let p = project(json!([action("a", true), action("b", false), action("c", true)]));
+        let p = project(&[action("a", true), action("b", false), action("c", true)]);
         assert!(sync(&mut board, &p, 50.0));
         let ids: Vec<&str> = board.tiles.values().map(|t| t.id.as_str()).collect();
         assert_eq!(ids, ["a", "c"]);
         assert!(board.tiles.values().all(|t| t.handled == 50.0 && t.created_at == 50.0));
         // Two tiles don't sit on each other.
-        let (a, c) = (board.tiles.get("a").unwrap().rect(), board.tiles.get("c").unwrap().rect());
+        let (a, c) = (
+            board.tiles.get("a").unwrap().rect(),
+            board.tiles.get("c").unwrap().rect(),
+        );
         assert!(!crate::geometry::intersects(a, c, 0.0));
         // Unchanged: nothing to do.
         assert!(!sync(&mut board, &p, 60.0));
         // A schedule taken off takes its tile.
-        let p = project(json!([action("a", false), action("c", true)]));
+        let p = project(&[action("a", false), action("c", true)]);
         assert!(sync(&mut board, &p, 70.0));
         let ids: Vec<&str> = board.tiles.values().map(|t| t.id.as_str()).collect();
         assert_eq!(ids, ["c"]);
@@ -268,7 +271,7 @@ mod tests {
     #[test]
     fn puts_a_run_beside_its_tile() {
         let mut board = BoardState::default();
-        sync(&mut board, &project(json!([action("a", true)])), 1.0);
+        sync(&mut board, &project(&[action("a", true)]), 1.0);
         let tile = board.tiles.get("a").unwrap().clone();
         let node: BoardNode = serde_json::from_value(json!({
             "sessionId": "s", "x": 0, "y": 0, "createdAt": 0, "archived": false
@@ -283,7 +286,9 @@ mod tests {
             h: size.h,
         };
         assert!(!crate::geometry::intersects(run, tile.rect(), 0.0));
-        let gap = (run.x - (tile.x + BoardTile::W)).abs().min((tile.x - (run.x + run.w)).abs());
+        let gap = (run.x - (tile.x + BoardTile::W))
+            .abs()
+            .min((tile.x - (run.x + run.w)).abs());
         assert!(gap <= 2.0 * GAP + 1.0, "beside it: {run:?} {tile:?}");
     }
 }

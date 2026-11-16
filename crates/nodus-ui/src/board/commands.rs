@@ -47,7 +47,7 @@ impl BoardCanvas {
         self.cards().iter().find(|c| c.node.session_id == id)
     }
 
-    fn nodus(&self, cx: &gpui::App) -> nodus_core::Nodus {
+    pub(crate) fn nodus(&self, cx: &gpui::App) -> nodus_core::Nodus {
         self.state.read(cx).nodus.clone()
     }
 
@@ -1254,7 +1254,9 @@ impl BoardCanvas {
         let joined: Vec<SessionCard> = self
             .cards()
             .iter()
-            .filter(|c| self.run_ids.contains(&c.node.session_id))
+            // A scheduled action's run is on the board while it's still a run
+            // (SCHED-026); it joins only once taken over.
+            .filter(|c| c.node.run_of.is_none() && self.run_ids.contains(&c.node.session_id))
             .cloned()
             .collect();
         self.run_ids = source

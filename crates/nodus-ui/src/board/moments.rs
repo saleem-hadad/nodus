@@ -196,6 +196,8 @@ pub struct Moments {
     lifts: HashMap<String, Instant>,
     rings: HashMap<String, Instant>,
     pulses: HashMap<String, Instant>,
+    /// Scheduled actions' runs that just came out beside their tile (SCHED-037).
+    starts: HashMap<String, Instant>,
     pub drawings: Vec<Drawing>,
     /// Messages between sessions seen so far, and the pairs that talked.
     talks: HashSet<String>,
@@ -230,6 +232,18 @@ impl Moments {
         self.seeded = true;
         if !first && !still {
             self.arrivals(board, &ids, now, now_ms, rect_of);
+            // SCHED-037: a light runs from a tile to its new run.
+            for card in &board.cards {
+                let id = &card.node.session_id;
+                let tiled = card
+                    .node
+                    .run_of
+                    .as_ref()
+                    .is_some_and(|r| board.tiles.iter().any(|t| &t.id == r));
+                if tiled && !self.known.contains(id) {
+                    self.starts.insert(id.clone(), now);
+                }
+            }
         }
         self.known = ids;
         self.statuses(board, now, first || still);
@@ -494,6 +508,7 @@ impl Moments {
         self.lifts.retain(|_, at| within(at, LIFT_MS));
         self.rings.retain(|_, at| within(at, RING_MS));
         self.pulses.retain(|_, at| within(at, PULSE_MS));
+        self.starts.retain(|_, at| within(at, PULSE_MS));
         self.messages.retain(|m| within(&m.at, PULSE_MS));
         self.drawings.retain(|d| d.ms(now) < d.end_ms());
     }
@@ -504,6 +519,7 @@ impl Moments {
             && self.lifts.is_empty()
             && self.rings.is_empty()
             && self.pulses.is_empty()
+            && self.starts.is_empty()
             && self.messages.is_empty()
             && self.drawings.is_empty())
     }
@@ -547,6 +563,14 @@ impl Moments {
     /// ms since it set off.
     pub fn pulse(&self, child: &str, now: Instant) -> Option<f64> {
         let at = self.pulses.get(child)?;
+        let ms = since(*at, now);
+        (ms < PULSE_MS).then_some(ms)
+    }
+
+    /// The light from a tile to the run that just came out beside it, in ms
+    /// since it set off (SCHED-037).
+    pub fn start(&self, run: &str, now: Instant) -> Option<f64> {
+        let at = self.starts.get(run)?;
         let ms = since(*at, now);
         (ms < PULSE_MS).then_some(ms)
     }

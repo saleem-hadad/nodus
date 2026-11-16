@@ -54,7 +54,10 @@ impl Nodus {
                 ..CreateSessionOptions::default()
             };
             let launcher = CoreLauncher(std::sync::Arc::downgrade(&self.inner));
-            let run = match board.create_session(&s.project_id, &opts, None, &launcher as &dyn Launcher).await {
+            let run = match board
+                .create_session(&s.project_id, &opts, None, &launcher as &dyn Launcher)
+                .await
+            {
                 Ok(card) => TileRun {
                     session_id: card.node.session_id,
                     at: now,

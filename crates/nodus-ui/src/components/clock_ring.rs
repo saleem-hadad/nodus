@@ -3,7 +3,10 @@
 
 use std::f32::consts::{FRAC_PI_2, TAU};
 
-use gpui::{App, IntoElement, ParentElement, PathBuilder, Pixels, RenderOnce, Rgba, Styled, Window, canvas, div, point, px};
+use gpui::{
+    AbsoluteLength, App, IntoElement, ParentElement, PathBuilder, RenderOnce, Rgba, Styled, Window, canvas, div, point,
+    px,
+};
 use lyon::tessellation::{LineCap, LineJoin, StrokeOptions};
 
 use crate::theme;
@@ -11,7 +14,7 @@ use crate::theme;
 /// A clock ring.
 #[derive(IntoElement)]
 pub struct ClockRing {
-    size: Pixels,
+    size: AbsoluteLength,
     progress: f32,
     /// The ring's filled part; the accent unless set.
     fill: Option<Rgba>,
@@ -19,10 +22,11 @@ pub struct ClockRing {
     ring: bool,
 }
 
-/// A clock `size` across whose ring is `progress` (0…1) full.
-pub fn clock_ring(size: Pixels, progress: f32) -> ClockRing {
+/// A clock `size` across (px, or board units inside a node) whose ring is
+/// `progress` (0…1) full.
+pub fn clock_ring(size: impl Into<AbsoluteLength>, progress: f32) -> ClockRing {
     ClockRing {
-        size,
+        size: size.into(),
         progress: progress.clamp(0.0, 1.0),
         fill: None,
         ring: true,
@@ -61,9 +65,7 @@ impl RenderOnce for ClockRing {
                 move |bounds, (), window, _| {
                     let side = f32::from(bounds.size.width.min(bounds.size.height));
                     let centre = bounds.center();
-                    let at = |r: f32, angle: f32| {
-                        centre + point(px(r * angle.cos()), px(r * angle.sin()))
-                    };
+                    let at = |r: f32, angle: f32| centre + point(px(r * angle.cos()), px(r * angle.sin()));
                     // The ring just inside the bounds, the clock inside it.
                     let width = (side * 0.075).max(1.25);
                     let r = side / 2.0 - width / 2.0;
@@ -88,16 +90,23 @@ impl RenderOnce for ClockRing {
                             }
                         }
                     }
-                    // The face: a circle and two hands, as lucide's clock.
+                    // The face: a circle and two hands, as lucide's clock. Under
+                    // 18px a face inside the ring fills in, so a ringed clock
+                    // there has only its hands, thinner.
+                    let small = ring && side < 18.0;
                     let face = if ring { r * 0.62 } else { side / 2.0 - width };
-                    let mut path = stroke(width);
-                    path.move_to(at(face, 0.0));
-                    for i in 1..=48 {
-                        path.line_to(at(face, TAU * i as f32 / 48.0));
+                    let hand = if small { (side * 0.09).max(0.9) } else { width };
+                    let reach = if small { r * 0.95 } else { face };
+                    let mut path = stroke(hand);
+                    if !small {
+                        path.move_to(at(face, 0.0));
+                        for i in 1..=48 {
+                            path.line_to(at(face, TAU * i as f32 / 48.0));
+                        }
                     }
-                    path.move_to(at(face * 0.55, -FRAC_PI_2));
+                    path.move_to(at(reach * 0.55, -FRAC_PI_2));
                     path.line_to(centre);
-                    path.line_to(at(face * 0.42, 0.55));
+                    path.line_to(at(reach * 0.42, 0.55));
                     if let Ok(path) = path.build() {
                         window.paint_path(path, hands);
                     }

@@ -56,7 +56,10 @@ impl SessionsApi<'_> {
                 self.nodus.env().await;
                 let launcher = CoreLauncher(std::sync::Arc::downgrade(&self.nodus.inner));
                 let board = &self.nodus.inner.board;
-                let card = board.create_session(project_id, opts, self.by, &launcher).await.on(CHANNEL)?;
+                let card = board
+                    .create_session(project_id, opts, self.by, &launcher)
+                    .await
+                    .on(CHANNEL)?;
                 // SCHED-023: a press of a scheduled action's button shows on its tile too.
                 if let Some(action_id) = card.node.run_of.as_deref() {
                     let run = nodus_domain::TileRun {

@@ -116,7 +116,13 @@ impl ActionDialog {
             scheduled: a.is_some_and(|a| a.schedule.is_some()),
             when: a
                 .and_then(|a| a.schedule.as_ref())
-                .map(|s| if s.words.is_empty() { schedule::describe(s) } else { s.words.clone() })
+                .map(|s| {
+                    if s.words.is_empty() {
+                        schedule::describe(s)
+                    } else {
+                        s.words.clone()
+                    }
+                })
                 .unwrap_or_default(),
             schedule: a.and_then(|a| a.schedule.clone()),
             when_unclear: false,
@@ -301,7 +307,9 @@ impl ActionDialog {
 
     /// SCHED-042: whether a day chip is on; every chip is on for every day.
     pub fn day_on(&self, day: u8) -> bool {
-        self.schedule.as_ref().is_some_and(|s| s.days.is_empty() || s.days.contains(&day))
+        self.schedule
+            .as_ref()
+            .is_some_and(|s| s.days.is_empty() || s.days.contains(&day))
     }
 
     /// SCHED-042: a day chip pressed. The last day on stays on. The When
@@ -598,7 +606,10 @@ mod tests {
         d.global = true;
         // SCHED-040: on, it starts as every weekday at 9 and isn't global.
         d.set_scheduled(true);
-        assert_eq!((d.global, d.when.as_str(), d.time_text().as_str()), (false, DEFAULT_WHEN, "9:00"));
+        assert_eq!(
+            (d.global, d.when.as_str(), d.time_text().as_str()),
+            (false, DEFAULT_WHEN, "9:00")
+        );
         assert!((1..=5).all(|day| d.day_on(day)) && !d.day_on(0) && !d.day_on(6));
         // SCHED-041
         d.set_when("mondays at 5pm");
@@ -623,7 +634,10 @@ mod tests {
         assert_eq!(raw["schedule"], json!({ "words": "Every day at 9:00", "at": "09:00" }));
         assert_eq!(raw.get("global"), None);
         let saved = crate::normalize_action(&raw, None, 1.0).unwrap();
-        assert_eq!(schedule::describe(saved.schedule.as_ref().unwrap()), "Every day at 9:00");
+        assert_eq!(
+            schedule::describe(saved.schedule.as_ref().unwrap()),
+            "Every day at 9:00"
+        );
         // Editing it starts on a schedule; turning global on turns it off.
         let mut e = ActionDialog::new(Some(saved));
         assert!(e.scheduled);

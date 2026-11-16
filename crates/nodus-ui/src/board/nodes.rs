@@ -121,6 +121,15 @@ pub struct ShapeNode<'a> {
     pub drawing: Option<f32>,
 }
 
+/// A scheduled action's tile (spec 19): the tile, its action (gone for a
+/// moment after it's deleted) and the status of its run on the board.
+pub struct TileNode<'a> {
+    pub node: NodeState,
+    pub tile: &'a nodus_domain::BoardTile,
+    pub action: Option<&'a nodus_domain::ProjectAction>,
+    pub running: Option<nodus_domain::SessionStatus>,
+}
+
 /// The archive frame: the folded stack, or the open panel.
 pub struct ArchiveNode {
     pub node: NodeState,
@@ -271,6 +280,12 @@ impl BoardActions {
     pub fn edit_note(&self, note: &BoardNote, text: &str, cx: &mut App) {
         let (note, text) = (note.clone(), text.to_owned());
         self.with(cx, move |c, cx| c.edit_note(note, text, cx));
+    }
+
+    /// SCHED-036: opens a tile's last run.
+    pub fn open_tile(&self, tile_id: &str, cx: &mut App) {
+        let id = tile_id.to_owned();
+        self.with(cx, move |c, cx| c.open_tile(&id, cx));
     }
 
     /// Puts words in a shape (SHAPE-012).
@@ -431,6 +446,12 @@ pub trait NodeRenderers: 'static {
     fn shape(&self, node: ShapeNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut App) -> AnyElement {
         let _ = (board, window);
         placeholder(&node.node, node.shape.text.clone(), cx)
+    }
+
+    /// A scheduled action's tile (spec 19).
+    fn tile(&self, node: TileNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut App) -> AnyElement {
+        let _ = (board, window);
+        placeholder(&node.node, node.action.map_or_else(String::new, |a| a.name.clone()), cx)
     }
 
     /// `ViewNode` (spec 04): the views' own renderer ([`ViewRenderer`])

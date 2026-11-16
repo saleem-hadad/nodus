@@ -517,6 +517,7 @@ fn paint_minimap(
                 (folder_hues(color).front_top, None)
             }
             NodeKind::View { .. } => (folder_hues(nodus_domain::FolderColor::Purple).front_top, None),
+            NodeKind::Tile { .. } => (t.text_tertiary, None),
             NodeKind::Shape { index } => {
                 let color = board
                     .and_then(|b| b.shapes.get(*index))

@@ -463,6 +463,13 @@ fn measure(
 impl Render for ActionRail {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         self.tell_overlay(cx);
+        // SCHED-035: a tile on the board asked to edit its action.
+        if let Some(id) = self.state.read(cx).edit_action.clone() {
+            self.state.update(cx, |s, _| s.edit_action = None);
+            if let Some(action) = self.blocks(cx).into_iter().flatten().find(|a| a.id == id) {
+                self.edit(Some(action), window, cx);
+            }
+        }
         let t = theme::tokens(cx);
         let blocks = self.blocks(cx);
         // ACT-046: only on a board whose project is loaded.

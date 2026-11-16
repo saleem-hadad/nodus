@@ -257,6 +257,9 @@ pub struct BoardCanvas {
     pub(crate) stack_scroll_timer: Option<Task<()>>,
     pub(crate) flights: HashMap<String, scene::Flight>,
     flight_timer: Option<Task<()>>,
+    /// SCHED-032: redraws the board now and then while it has tiles, so their
+    /// rings and `Next in …` keep up with the clock.
+    pub(crate) tile_tick: Option<Task<()>>,
 
     pub(crate) draft_id: String,
     pub(crate) starting_notes: HashSet<String>,
@@ -359,6 +362,7 @@ impl BoardCanvas {
             stack_scroll_timer: None,
             flights: HashMap::new(),
             flight_timer: None,
+            tile_tick: None,
             draft_id: uuid::Uuid::new_v4().to_string(),
             starting_notes: HashSet::new(),
             last_in_modal: Vec::new(),
@@ -422,7 +426,11 @@ impl BoardCanvas {
             let first = self.source.is_none();
             self.source = snapshot.clone();
             self.board = snapshot.map(|mut b| {
-                b.cards.retain(|c| c.node.run_of.is_none() && c.node.view_of.is_none());
+                // ACT-032: runs aren't on the board, but for a scheduled
+                // action's, which comes out beside its tile (SCHED-026).
+                let tiles: Vec<String> = b.tiles.iter().map(|t| t.id.clone()).collect();
+                b.cards
+                    .retain(|c| c.node.view_of.is_none() && c.node.run_of.as_ref().is_none_or(|r| tiles.contains(r)));
                 b
             });
             if first && let Some(board) = &self.board {
@@ -431,6 +439,7 @@ impl BoardCanvas {
             self.rebuild(cx);
             self.settle_frames(cx);
             self.join_taken_over_runs(cx);
+            self.keep_tiles_ticking(cx);
         }
         let (in_modal, focused) = in_modal;
         if in_modal != self.last_in_modal {

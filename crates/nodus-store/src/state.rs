@@ -2,8 +2,8 @@
 
 use indexmap::IndexMap;
 use nodus_domain::{
-    AppSettings, BoardGroup, BoardLink, BoardNode, BoardNote, BoardSection, BoardShape, BoardTile, BoardView, CaptureKind,
-    InkStroke, Project, ProjectAction, ProjectGroup, Rect, ThemePreference, Viewport,
+    AppSettings, BoardGroup, BoardLink, BoardNode, BoardNote, BoardSection, BoardShape, BoardTile, BoardView,
+    CaptureKind, InkStroke, Project, ProjectAction, ProjectGroup, Rect, ThemePreference, Viewport,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};

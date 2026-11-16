@@ -77,6 +77,8 @@ pub struct AppState {
     pub stats: IndexMap<String, ProjectStats>,
     /// Actions in every project's rail. The actions API comes with its track.
     pub global_actions: Vec<ProjectAction>,
+    /// SCHED-035: an action a tile asked to edit; the rail opens its dialog.
+    pub edit_action: Option<String>,
     /// Whether the first projects refresh has come back.
     pub projects_loaded: bool,
     /// The Nodus servers this app connects to, with how each is doing
@@ -170,6 +172,7 @@ impl AppState {
             diff_open: false,
             session_window: Default::default(),
             preview_session_id: None,
+            edit_action: None,
             agent_view: None,
             selection: Vec::new(),
             queues: std::collections::HashMap::new(),

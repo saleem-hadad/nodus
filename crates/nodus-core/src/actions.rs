@@ -47,7 +47,10 @@ impl ActionsApi<'_> {
                     .flatten()
                     .find(|a| a.id == id)
                     .and_then(|a| a.schedule.clone())
-                    .map(|s| ActionSchedule { words: String::new(), ..s });
+                    .map(|s| ActionSchedule {
+                        words: String::new(),
+                        ..s
+                    });
                 if before != after {
                     inner.board.reset_tile(project_id, id);
                 }
@@ -116,6 +119,9 @@ fn schedule_of(inner: &crate::nodus::Inner, project_id: &str, raw: &Value) -> Op
     inner.store.read(|state| {
         let project = state.project(project_id).ok()?;
         let action = project.actions.iter().flatten().find(|a| a.id == id)?;
-        action.schedule.clone().map(|s| ActionSchedule { words: String::new(), ..s })
+        action.schedule.clone().map(|s| ActionSchedule {
+            words: String::new(),
+            ..s
+        })
     })
 }

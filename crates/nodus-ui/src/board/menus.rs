@@ -183,6 +183,7 @@ impl BoardCanvas {
                 }
             }
             NodeKind::Shape { index } => self.shape_menu(&board.shapes[*index], &me),
+            NodeKind::Tile { index } => self.tile_menu(&board.tiles[*index], &me),
             NodeKind::Archive { .. } => return,
         };
         self.open_menu(at, items, cx);

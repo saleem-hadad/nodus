@@ -639,12 +639,18 @@ async fn sched_020_a_scheduled_action_gets_a_tile_and_runs_once_when_due() {
     assert_eq!(ran.handled, due);
     assert!(due <= world.nodus.inner.board.now() && due > first.handled - 86_400_000.0);
     // No session host here, so it says why it couldn't start.
-    assert!(last.message.as_deref().is_some_and(|m| m.starts_with("Couldn’t start")), "{last:?}");
+    assert!(
+        last.message.as_deref().is_some_and(|m| m.starts_with("Couldn’t start")),
+        "{last:?}"
+    );
     world.nodus.run_due_schedules().await;
     assert_eq!(tile(&world.nodus).unwrap(), ran, "not twice");
     // SCHED-020: a schedule changed starts from now; taken off, the tile goes.
     actions
-        .save(&project.id, &json!({ "id": "a1", "name": "PR sweep", "prompt": "p", "schedule": { "every": 60 } }))
+        .save(
+            &project.id,
+            &json!({ "id": "a1", "name": "PR sweep", "prompt": "p", "schedule": { "every": 60 } }),
+        )
         .await
         .unwrap();
     assert!(tile(&world.nodus).unwrap().handled > due);

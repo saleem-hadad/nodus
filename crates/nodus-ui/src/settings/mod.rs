@@ -153,6 +153,7 @@ struct Stops {
     capture: FocusHandle,
     notify: FocusHandle,
     dock: FocusHandle,
+    phone: FocusHandle,
     save: FocusHandle,
     remove: FocusHandle,
     check: FocusHandle,
@@ -212,6 +213,7 @@ impl SettingsDialog {
             capture: cx.focus_handle(),
             notify: cx.focus_handle(),
             dock: cx.focus_handle(),
+            phone: cx.focus_handle(),
             save: cx.focus_handle(),
             remove: cx.focus_handle(),
             check: cx.focus_handle(),
@@ -341,6 +343,7 @@ impl SettingsDialog {
                 if Platform::CURRENT.is_mac() {
                     stops.push(self.stops.dock.clone());
                 }
+                stops.push(self.stops.phone.clone());
             }
             Section::Updates => {
                 let state = update.map(|u| &u.state);
@@ -996,7 +999,7 @@ impl SettingsDialog {
         ]
     }
 
-    /// Notifications (UI-136, UI-137).
+    /// Notifications (UI-136, UI-137, UI-338).
     fn notifications(&self, s: &AppSettings, ctx: &Ctx) -> Vec<AnyElement> {
         let mut rows = vec![
             switch_row(
@@ -1031,7 +1034,23 @@ impl SettingsDialog {
                 .into_any_element(),
             );
         }
-        vec![group(None, rows, true, ctx.t).into_any_element()]
+        // UI-338
+        let phone = switch_row(
+            "remote-control",
+            "Answer sessions from your phone",
+            Some("Sessions start with Claude Code’s Remote Control, so you can reply in the Claude app. On Team and Enterprise plans, an Owner turns Remote Control on first.".into()),
+            s.remote_control,
+            &self.stops.phone,
+            |v| SettingsPatch {
+                remote_control: Some(v),
+                ..SettingsPatch::default()
+            },
+            ctx,
+        );
+        vec![
+            group(None, rows, true, ctx.t).into_any_element(),
+            group(None, vec![phone.into_any_element()], false, ctx.t).into_any_element(),
+        ]
     }
 
     /// Updates (UI-147…UI-151).

@@ -210,6 +210,7 @@ Everything here is UI-free and lands in `nodus-sessions`, `nodus-transcripts` an
 - **SESS-131 · Host first** — Starting a process connects to the session host first, starting one if none runs (the hook endpoint in the command comes from the host) (02). Host errors fail the start (see Edge cases).
 - **SESS-132 · Action run args** — An action run's extra args are `--append-system-prompt <runSystemPrompt(action)>` (verbatim in *Data & formats*), only on the run's first start.
 - **SESS-133 · Brain args** — A view's brain gets `--append-system-prompt <brainPrompt(view)>` every time it starts or resumes, via `session:open`, `session:send` and 04's `startBrain`/`askBrain`; no args when the view is gone.
+- **SESS-216 · Remote Control** — While `settings.remoteControl` is on (01, UI-338), every start of a Claude card's process in the app (create, open, send, a model switch's restart) passes Claude Code's Remote Control right after `--effort` (after `--permission-mode` when there's no model or effort), so the user can answer the session from the Claude app: `--remote-control=<the card's title, trimmed>` as one argument, so a title starting with `-` stays a title, or a bare `--remote-control` for a card with no title (Claude Code then names it) or one not on the board. A view's brain and a terminal never get it, and neither does a session on a server. The switch takes effect as a session next starts: a running one isn't restarted. Where Remote Control isn't available (an API key, Bedrock or Vertex, or a Team or Enterprise organization that hasn't turned it on), Claude Code ignores the flag and the session runs as usual; it says why only in its debug log. Added after 1.0.22.
 - **SESS-134 · Brain launches** — 04 starts a brain with node `{ title: "View: <view title>", createdByApp: true, viewOf, autoMode: true, x/y of the view }`, `resume: false`, permission `auto`, optional first prompt; and resumes one with `resume` = transcript exists, the asked prompt as first prompt, permission `auto`. Neither passes `--name`.
 
 ### On a server (`nodus serve`, spec 18's SRV-120…145)
@@ -455,6 +456,7 @@ New session:
 
 ```
 <claude> --session-id <uuid> [--name <title>] --permission-mode <auto|acceptEdits>
+         [--model <alias>] [--effort <level>] [--remote-control[=<title>]]
          [--mcp-config <BOARD_MCP_CONFIG> --allowedTools <rule1> … <rule16>]
          [<extra args>]
          --settings <hookSettings()>
@@ -922,6 +924,7 @@ Cross-domain dependencies: 01 (store `getBoard`/`getProject`/`save`, env `spawnE
 - [x] SESS-132 Action run args
 - [x] SESS-133 Brain args
 - [x] SESS-134 Brain launches
+- [x] SESS-216 Remote Control for the app's cards (added after 1.0.22)
 - [x] SESS-135 Open a live session
 - [x] SESS-136 Open a stopped session
 - [x] SESS-137 Reopened runs

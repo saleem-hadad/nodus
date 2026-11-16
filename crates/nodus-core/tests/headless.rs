@@ -13,7 +13,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use nodus_core::domain::{
-    CreateSessionOptions, CreateViewOptions, Event, Project, QueuedPrompt, SessionKind, SessionStatus, ViewEvent,
+    CreateSessionOptions, CreateViewOptions, Event, Project, QueuedPrompt, SessionKind, SessionStatus, SettingsPatch,
+    ViewEvent,
 };
 use nodus_core::{AppShell, BoxFuture, EnvSource, HostLauncher, Nodus, NodusConfig, ReplaceChoice};
 use nodus_host_proto::HostPaths;
@@ -999,6 +1000,76 @@ async fn a_model_switch_starts_claude_again_on_it() {
         .unwrap_err();
     assert_eq!(err.message(), "Claude is asking you something. Answer it, then switch.");
     assert_eq!(node().await.model(), None);
+
+    world.stop(nodus).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn remote_control_starts_the_cards_but_not_a_brain() {
+    let world = World::new().await;
+    let nodus = world.start().await;
+    let repo = world.repo("phone").await;
+    let project = nodus
+        .projects()
+        .add(Some(repo.to_string_lossy().into_owned()))
+        .await
+        .unwrap()
+        .unwrap();
+    let mut events = Events::new(&nodus);
+    let remote = |argv: &[String]| {
+        argv.iter()
+            .filter(|a| a.starts_with("--remote-control"))
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    let sessions = nodus.sessions();
+
+    // Off, as it starts: no Remote Control.
+    let before = sessions
+        .create(&project.id, &CreateSessionOptions::default())
+        .await
+        .unwrap();
+    events.printed(&before.node.session_id, "stand-in ready").await;
+    assert!(remote(&world.argvs(&before.node.session_id)[0]).is_empty());
+
+    // SESS-216: on, a card starts with it under its title.
+    nodus
+        .settings()
+        .update(SettingsPatch {
+            remote_control: Some(true),
+            ..SettingsPatch::default()
+        })
+        .await;
+    let card = sessions
+        .create(
+            &project.id,
+            &CreateSessionOptions {
+                name: Some("Fix login".into()),
+                ..CreateSessionOptions::default()
+            },
+        )
+        .await
+        .unwrap();
+    let id = card.node.session_id.clone();
+    events.printed(&id, "stand-in ready").await;
+    assert_eq!(remote(&world.argvs(&id)[0]), ["--remote-control=Fix login"]);
+
+    // A view's brain doesn't.
+    let view = nodus
+        .views()
+        .create(
+            &project.id,
+            &CreateViewOptions {
+                description: "Show the open issues".into(),
+                x: 0.0,
+                y: 400.0,
+            },
+        )
+        .await
+        .unwrap();
+    let brain = view.session_id.clone().expect("a brain");
+    events.printed(&brain, "stand-in ready").await;
+    assert!(remote(&world.argvs(&brain)[0]).is_empty());
 
     world.stop(nodus).await;
 }

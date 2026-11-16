@@ -65,6 +65,10 @@ pub struct SpawnOptions {
     pub effort: Option<String>,
     /// More `claude` options, such as an action run's system prompt.
     pub extra_args: Option<Vec<String>>,
+    /// Claude Code's Remote Control, so the user can answer from the Claude
+    /// app (SESS-216): the title the session gets there, empty for the one
+    /// Claude Code picks. None leaves it off.
+    pub remote_control: Option<String>,
     pub cols: Option<f64>,
     pub rows: Option<f64>,
     /// Its own token, on a server (SRV-143), which the host makes its hook
@@ -170,6 +174,14 @@ pub fn command_for(
     if let Some(effort) = opts.effort.as_deref().and_then(SessionEffort::parse) {
         args.extend(["--effort".to_owned(), effort.as_str().to_owned()]);
     }
+    // SESS-216: one argument, so a title that starts with a dash stays a title.
+    if let Some(title) = &opts.remote_control {
+        args.push(if title.is_empty() {
+            "--remote-control".to_owned()
+        } else {
+            format!("--remote-control={title}")
+        });
+    }
     // SESS-123: the board tools, allowed outright so they never stop to ask.
     // Both lists are followed by another option, so neither swallows the prompt.
     if let Some(tools) = board_tools {
@@ -263,6 +275,7 @@ pub fn for_create(
         model: node.model().map(str::to_owned),
         effort: node.effort().map(str::to_owned),
         extra_args: action.map(|a| a.args),
+        remote_control: None,
         cols: None,
         rows: None,
         session_token: None,
@@ -322,6 +335,18 @@ pub fn for_send(
         extra_args: brain_args.filter(|_| is_brain(node)),
         ..SpawnOptions::default()
     }
+}
+
+/// What a Claude card is started with while Remote Control is on (SESS-216):
+/// its title, trimmed, which is what the Claude app lists it under. A view's
+/// brain works in the background and stays off it. The card may not be on
+/// the board.
+pub fn remote_control(node: Option<&BoardNode>) -> Option<String> {
+    if node.is_some_and(is_brain) {
+        return None;
+    }
+    let title = node.and_then(|n| n.title.as_deref()).unwrap_or_default();
+    Some(nodus_domain::js::trim(title).to_owned())
 }
 
 fn is_brain(node: &BoardNode) -> bool {
@@ -513,6 +538,38 @@ mod tests {
             let at = args.iter().position(|a| a == "--effort").expect("an --effort");
             assert_eq!(args[at + 1], "xhigh");
         }
+    }
+
+    #[test]
+    fn turns_on_remote_control_under_the_cards_title() {
+        // After the model and effort, before the board tools.
+        let card = node(json!({ "title": "Fix login", "model": "opus" }));
+        let mut opts = for_create("p", "/work/repo", &card, None, Some("go"));
+        opts.remote_control = remote_control(Some(&card));
+        let args = argv(&opts, true);
+        let at = args
+            .iter()
+            .position(|a| a == "--remote-control=Fix login")
+            .expect("Remote Control");
+        assert_eq!(args[at - 2..at], s(&["--model", "opus"]));
+        assert_eq!(args[at + 1], "--mcp-config");
+        // No title: Claude Code names it. A dash can't make the title an option.
+        for (title, arg) in [
+            (json!(null), "--remote-control"),
+            (json!("  "), "--remote-control"),
+            (json!("-v"), "--remote-control=-v"),
+        ] {
+            let card = node(json!({ "title": title }));
+            let mut opts = for_open("p", "/r", ID, Some(&card), true, None, (80.0, 24.0));
+            opts.remote_control = remote_control(Some(&card));
+            assert_eq!(argv(&opts, false)[4], arg);
+        }
+        assert_eq!(remote_control(None).as_deref(), Some(""));
+        // A view's brain stays off the phone; off, nothing is added.
+        let brain = node(json!({ "title": "View: Stats", "viewOf": "v1" }));
+        assert_eq!(remote_control(Some(&brain)), None);
+        let off = for_send("p", "/r", &card, true, "hi", None);
+        assert!(!argv(&off, false).iter().any(|a| a.starts_with("--remote-control")));
     }
 
     #[test]

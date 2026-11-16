@@ -821,6 +821,9 @@ pub fn merge_settings(settings: &mut AppSettings, patch: &SettingsPatch) {
     if let Some(v) = patch.wheel_zoom {
         settings.wheel_zoom = v;
     }
+    if let Some(v) = patch.remote_control {
+        settings.remote_control = v;
+    }
     settings.merge_session_choice(patch);
 }
 

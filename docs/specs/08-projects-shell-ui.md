@@ -390,6 +390,7 @@ CSS keyword easings used in this domain: `ease` = `cubic-bezier(0.25, 0.1, 0.25,
 - **UI-135 Try row.** When `settings.capture` is on a row shows the hint `Ready. File › Capture… opens it too.` (the `Ready. ` prefix only when the state is `ready`, else `File › Capture… opens it too.`) and a `Try It` button that opens the capture panel (07).
 - **UI-136 Notify row.** Section `Notifications`: `Notify me when a session needs me or finishes` / `Only while Nodus is in the background. Click one to open its card.` bound to `settings.notify`.
 - **UI-137 Dock badge row.** On a Mac only: `Count sessions that need me on the Dock icon` (no hint) bound to `settings.dockBadge`.
+- **UI-338 Phone row.** Section `Notifications`, a group of its own below the first: `Answer sessions from your phone` / `Sessions start with Claude Code’s Remote Control, so you can reply in the Claude app. On Team and Enterprise plans, an Owner turns Remote Control on first.` bound to `settings.remoteControl` (03, SESS-216). Added after 1.0.22.
 - **UI-138 Whole row toggles.** Clicking anywhere on a switch row (title or hint text) toggles its switch; rows with buttons (Allow…, Try It, Check Now, Restart to Update) and hint-only rows do not toggle anything.
 - **UI-139 Key field loading.** Section `Capture & Voice`, group `Voice prompts`: the password field (masked) is disabled until the key source is known.
 - **UI-140 Key placeholder.** The field's placeholder is `Replace the saved xAI API key` when a key is saved in Settings, else `xAI API key`.
@@ -726,7 +727,7 @@ Copy, in order (verbatim, see also UI-128…UI-151):
 2. `Board` — rows `Zoom with the mouse wheel` (UI-306) and `Focus mode` / `Adds a Focus switch to the title bar that shows only the projects in focus. Right-click a project and choose Add to Focus.`
 3. `Capture & Voice` — group `Floating capture`: row `Double-tap ⇧ in any app to capture` / `A panel floats up over what you’re doing. Type or say what you want, and Claude works out whether it’s a new session, a note, a view or a reply to a session.`; conditional rows `Allow Nodus in Accessibility` / `macOS lets an app hear a key pressed in other apps only with this permission. Click Allow… and turn Nodus on in Privacy & Security › Accessibility. Already on there? It was given to another copy of Nodus: Allow… clears it so macOS asks again.` + `Allow…`; `The double tap couldn’t start on this computer. File › Capture… still opens the panel.`; `Ready. File › Capture… opens it too.` + `Try It`.
    Group `Voice prompts`: field (`xAI API key` / `Replace the saved xAI API key`) + `Save`; hint per source; `Recordings are sent to xAI to be turned into text.`; error line.
-4. `Notifications` — `Notify me when a session needs me or finishes` / `Only while Nodus is in the background. Click one to open its card.`; Mac: `Count sessions that need me on the Dock icon`.
+4. `Notifications` — `Notify me when a session needs me or finishes` / `Only while Nodus is in the background. Click one to open its card.`; Mac: `Count sessions that need me on the Dock icon`; then, in a group of its own, `Answer sessions from your phone` (UI-338).
 5. `Updates` — `Nodus <version>` + status hint + `Check Now` / `Restart to Update`; `Download updates automatically` + platform hint; error: `You can also download the latest version yourself.`
 
 ### Modal
@@ -1283,6 +1284,7 @@ Risks:
 - [x] UI-135 Try row
 - [x] UI-136 Notify row
 - [x] UI-137 Dock badge row
+- [x] UI-338 Phone row (added after 1.0.22)
 - [x] UI-138 Whole row toggles
 - [x] UI-139 Key field loading
 - [x] UI-140 Key placeholder

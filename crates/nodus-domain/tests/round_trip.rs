@@ -448,6 +448,13 @@ fn settings() {
         )
     );
     assert!(json::from_str::<AppSettings>(&written).unwrap().wheel_zoom);
+    // Remote Control is the other way round: written only when on (SESS-216).
+    let phone: AppSettings = round_trip(concat!(
+        r#"{"theme":"system","autoUpdate":true,"notify":true,"dockBadge":true,"pinProjectRail":false,"#,
+        r#""focusFeature":false,"focusMode":false,"capture":true,"remoteControl":true}"#
+    ));
+    assert!(phone.remote_control && !AppSettings::default().remote_control);
+    round_trip::<SettingsPatch>(r#"{"remoteControl":true}"#);
     round_trip::<SettingsPatch>(r#"{"theme":"light","autoUpdate":false}"#);
 }
 

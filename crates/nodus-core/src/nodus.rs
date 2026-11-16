@@ -795,6 +795,19 @@ impl Inner {
         // SRV-101: and an account from the pool, whose token reaches the
         // process only through this spawn.
         extras.extend(self.take_account(&opts.project_id, &opts.session_id, opts.kind)?);
+        // SESS-216: the app's sessions, when the user turned Remote Control on.
+        if self.hosted().is_none() {
+            opts.remote_control = self.store.read(|state| {
+                let node = state
+                    .board(&opts.project_id)
+                    .and_then(|b| b.nodes.get(&opts.session_id));
+                state
+                    .settings
+                    .remote_control
+                    .then(|| launch::remote_control(node))
+                    .flatten()
+            });
+        }
         let env = self.env().await;
         let launch_env = launch::LaunchEnv::from_env(&env);
         let powershell = hooks::uses_powershell(&env);

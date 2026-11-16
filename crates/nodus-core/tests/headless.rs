@@ -1073,3 +1073,179 @@ async fn remote_control_starts_the_cards_but_not_a_brain() {
 
     world.stop(nodus).await;
 }
+
+/// git in `dir`, as nobody's config sees it, failing the test when it fails.
+async fn git(dir: &Path, args: &[&str]) -> String {
+    let out = tokio::process::Command::new("git")
+        .args(args)
+        .current_dir(dir)
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_AUTHOR_NAME", "Test")
+        .env("GIT_AUTHOR_EMAIL", "test@example.com")
+        .env("GIT_COMMITTER_NAME", "Test")
+        .env("GIT_COMMITTER_EMAIL", "test@example.com")
+        .output()
+        .await
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "git {args:?}: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_project_with_worktrees_gives_each_claude_card_its_own() {
+    use nodus_core::domain::ProjectPatch;
+    let world = World::new().await;
+    let nodus = world.start().await;
+    let repo = world.repo("shop").await;
+    std::fs::write(repo.join("README.md"), "shop\n").unwrap();
+    git(&repo, &["add", "-A"]).await;
+    git(&repo, &["commit", "-qm", "First"]).await;
+    let project = nodus
+        .projects()
+        .add(Some(repo.to_string_lossy().into_owned()))
+        .await
+        .unwrap()
+        .unwrap();
+    let mut events = Events::new(&nodus);
+    let sessions = nodus.sessions();
+    let start = async |kind: Option<SessionKind>| {
+        let card = sessions
+            .create(
+                &project.id,
+                &CreateSessionOptions {
+                    kind,
+                    ..CreateSessionOptions::default()
+                },
+            )
+            .await
+            .unwrap();
+        (card.node.session_id.clone(), card.node.worktree())
+    };
+    let trust = |accepted: bool| {
+        let config = json!({ "projects": { repo.to_string_lossy(): { "hasTrustDialogAccepted": accepted } } });
+        std::fs::write(world.home.join(".claude.json"), config.to_string()).unwrap();
+    };
+    trust(true);
+
+    // Off until it's turned on.
+    let (plain, worktree) = start(None).await;
+    events.printed(&plain, "stand-in ready").await;
+    assert_eq!(worktree, None);
+    assert!(!runs(&world, &plain, 1).await[0].contains(&"--worktree".to_owned()));
+
+    // SESS-217, SESS-219: on, a Claude card gets one Claude Code makes.
+    let on = ProjectPatch {
+        worktrees: Some(true),
+        ..ProjectPatch::default()
+    };
+    assert_eq!(
+        nodus.projects().update(&project.id, on).await.unwrap().worktrees,
+        Some(true)
+    );
+    let (id, worktree) = start(None).await;
+    let worktree = worktree.expect("the card's worktree");
+    let name = format!("nodus-{}", &id[..8]);
+    assert_eq!(
+        worktree.path,
+        repo.join(".claude/worktrees").join(&name).to_string_lossy()
+    );
+    assert_eq!(worktree.branch, format!("worktree-{name}"));
+    events.printed(&id, "stand-in ready").await;
+    let first = &runs(&world, &id, 1).await[0];
+    assert!(has_pair(first, "--worktree", &name), "{first:?}");
+
+    // A terminal stays in the project's folder.
+    let (terminal, worktree) = start(Some(SessionKind::Terminal)).await;
+    assert_eq!(worktree, None);
+    nodus.board().remove_node(&project.id, &terminal).await;
+
+    // SESS-218: a folder Claude Code doesn't trust yet starts in place, so
+    // its trust dialog shows.
+    trust(false);
+    let (untrusted, worktree) = start(None).await;
+    events.printed(&untrusted, "stand-in ready").await;
+    assert_eq!(worktree, None);
+    assert!(!runs(&world, &untrusted, 1).await[0].contains(&"--worktree".to_owned()));
+
+    // SESS-220: removing the card removes its worktree, its uncommitted
+    // changes saved first, and keeps its branch while only it has commits.
+    // The stand-in doesn't make worktrees, so this does as Claude Code would.
+    let path = PathBuf::from(&worktree_of(&nodus, &project.id, &id).await.path);
+    git(
+        &repo,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            &format!("worktree-{name}"),
+            &path.to_string_lossy(),
+            "HEAD",
+        ],
+    )
+    .await;
+    git(
+        &repo,
+        &[
+            "worktree",
+            "lock",
+            "--reason",
+            "claude session",
+            &path.to_string_lossy(),
+        ],
+    )
+    .await;
+    std::fs::write(path.join("login.ts"), "export {}\n").unwrap();
+    git(&path, &["add", "-A"]).await;
+    git(&path, &["commit", "-qm", "Login"]).await;
+    std::fs::write(path.join("README.md"), "shop, edited\n").unwrap();
+    std::fs::write(path.join("notes.txt"), "new\n").unwrap();
+    nodus.board().remove_node(&project.id, &id).await;
+    assert!(!path.exists(), "the worktree is gone");
+    assert!(
+        git(&repo, &["branch", "--list", &format!("worktree-{name}")])
+            .await
+            .contains(&name)
+    );
+    let saved: Vec<PathBuf> = std::fs::read_dir(world.user_data.join("saved"))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .collect();
+    assert_eq!(saved.len(), 1);
+    assert!(saved[0].file_name().unwrap().to_string_lossy().starts_with(&id));
+    let patch = std::fs::read_to_string(saved[0].join("changes.patch")).unwrap();
+    assert!(patch.contains("shop, edited") && patch.contains("notes.txt"), "{patch}");
+    assert!(!patch.contains("login.ts"), "commits stay on the branch");
+
+    // One with nothing in it goes with its branch, and nothing is saved.
+    trust(true);
+    let (empty, worktree) = start(None).await;
+    let worktree = worktree.expect("the card's worktree");
+    events.printed(&empty, "stand-in ready").await;
+    git(
+        &repo,
+        &["worktree", "add", "-q", "-b", &worktree.branch, &worktree.path, "HEAD"],
+    )
+    .await;
+    nodus.board().remove_node(&project.id, &empty).await;
+    assert!(!Path::new(&worktree.path).exists());
+    assert_eq!(git(&repo, &["branch", "--list", &worktree.branch]).await, "");
+    assert_eq!(std::fs::read_dir(world.user_data.join("saved")).unwrap().count(), 1);
+
+    world.stop(nodus).await;
+}
+
+/// A card's worktree, as the board has it.
+async fn worktree_of(nodus: &Nodus, project_id: &str, session_id: &str) -> nodus_core::domain::Worktree {
+    let board = nodus.board().load(project_id).await.unwrap();
+    let card = board
+        .cards
+        .into_iter()
+        .find(|c| c.node.session_id == session_id)
+        .unwrap();
+    card.node.worktree().expect("a worktree")
+}

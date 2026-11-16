@@ -51,6 +51,10 @@ pub struct Project {
     /// are this app's own.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub server: Option<String>,
+    /// Each new Claude card runs in a worktree of its own, which Claude Code
+    /// makes (SESS-217). Off when unset.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub worktrees: Option<bool>,
     /// Fields this version doesn't know, written back as they were read.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
@@ -108,6 +112,8 @@ pub struct ProjectPatch {
     pub group_id: Option<Option<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub focused: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub worktrees: Option<bool>,
 }
 
 /// The changes `groups.update` makes to a group.

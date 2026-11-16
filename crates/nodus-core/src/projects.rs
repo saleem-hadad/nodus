@@ -96,6 +96,7 @@ impl ProjectsApi<'_> {
                 focused: focusing.then_some(true),
                 archived: None,
                 server: None,
+                worktrees: None,
                 extra: Map::new(),
             };
             state.projects.push(project.clone());
@@ -135,6 +136,12 @@ impl ProjectsApi<'_> {
             match patch.focused {
                 Some(true) => project.focused = Some(true),
                 Some(false) => project.focused = None,
+                None => {}
+            }
+            // SESS-217
+            match patch.worktrees {
+                Some(true) => project.worktrees = Some(true),
+                Some(false) => project.worktrees = None,
                 None => {}
             }
             // The TypeScript applies the changes above before it finds the
@@ -459,6 +466,7 @@ mod tests {
             focused: None,
             archived: None,
             server: None,
+            worktrees: None,
             extra: Map::new(),
         };
         assert_eq!(pick_folder_color(&[], 0), FolderColor::Blue);

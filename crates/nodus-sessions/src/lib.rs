@@ -17,3 +17,4 @@ pub mod launch;
 pub mod notify;
 pub mod running;
 pub mod usage;
+pub mod worktree;

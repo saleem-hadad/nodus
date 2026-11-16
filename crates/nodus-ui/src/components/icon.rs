@@ -47,6 +47,7 @@ pub enum Icon {
     RefreshCw,
     Sparkles,
     Square,
+    SquareCheck,
     SquareDashed,
     StickyNote,
     Ungroup,
@@ -64,7 +65,7 @@ pub enum Icon {
 }
 
 impl Icon {
-    const ALL: [Self; 51] = [
+    const ALL: [Self; 52] = [
         Self::ChevronLeft,
         Self::ChevronRight,
         Self::ChevronDown,
@@ -102,6 +103,7 @@ impl Icon {
         Self::RefreshCw,
         Self::Sparkles,
         Self::Square,
+        Self::SquareCheck,
         Self::SquareDashed,
         Self::StickyNote,
         Self::Ungroup,
@@ -157,6 +159,7 @@ impl Icon {
             Self::RefreshCw => "refresh-cw",
             Self::Sparkles => "sparkles",
             Self::Square => "square",
+            Self::SquareCheck => "square-check",
             Self::SquareDashed => "square-dashed",
             Self::StickyNote => "sticky-note",
             Self::MessageSquareWarning => "message-square-warning",
@@ -262,6 +265,7 @@ impl Icon {
                 r#"<path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/>"#
             }
             Self::Square => r#"<rect width="18" height="18" x="3" y="3" rx="2"/>"#,
+            Self::SquareCheck => r#"<rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/>"#,
             Self::SquareDashed => {
                 r#"<path d="M5 3a2 2 0 0 0-2 2"/><path d="M19 3a2 2 0 0 1 2 2"/><path d="M21 19a2 2 0 0 1-2 2"/><path d="M5 21a2 2 0 0 1-2-2"/><path d="M9 3h1"/><path d="M9 21h1"/><path d="M14 3h1"/><path d="M14 21h1"/><path d="M3 9v1"/><path d="M21 9v1"/><path d="M3 14v1"/><path d="M21 14v1"/>"#
             }

@@ -507,7 +507,7 @@ Toast strings (verbatim; `<m>` = the error's message, or `String(err)` for non-E
 
 ### Title-bar actions (component chrome: 08)
 
-Split button in the title bar's action slot: main part `New Session` with a `Plus` icon (15px, stroke 2.2), tooltip `New session (⌘N)` (Windows `New session (Ctrl+N)`); its menu, labelled `More ways to start`, has `New terminal` (`SquareTerminal`, hint `⌘T` / `Ctrl+T`) and `New view…` (`LayoutDashboard`, no hint).
+Split button in the title bar's action slot: main part `New Session` with a `Plus` icon (15px, stroke 2.2), tooltip `New session (⌘N)` (Windows `New session (Ctrl+N)`); its menu, labelled `More ways to start`, has `New terminal` (`SquareTerminal`, hint `⌘T` / `Ctrl+T`) and `New view…` (`LayoutDashboard`, no hint). On a board in the app (not a server's), a separator and `Own worktree per session` follow, a checkbox for the project (`Square` when off, `SquareCheck` when on; off by default) that toggles its `worktrees` (03 SESS-217).
 
 ### Selection bar wiring (content and look: 11)
 

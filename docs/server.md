@@ -50,12 +50,14 @@ The server runs Claude in auto mode, so it should reach none of your team's devi
 "grants": [
   // Members' devices reach the server: SSH, Nodus, and the previews.
   { "src": ["autogroup:member"], "dst": ["tag:nodus"], "ip": ["tcp:22", "tcp:7420", "tcp:8100-8999"] },
-  // Members reach each other. tag:nodus is in no "src", so the server reaches nothing.
-  { "src": ["autogroup:member"], "dst": ["autogroup:member"], "ip": ["*"] }
+  // Each member reaches their own devices, not each other's. tag:nodus is
+  // in no "src", so the server reaches nothing.
+  { "src": ["autogroup:member"], "dst": ["autogroup:self"], "ip": ["*"] }
 ]
 ```
 
 - The second grant replaces Tailscale's default rule that lets everything reach everything. Remove that rule (`"src": ["*"]`), or the server can reach every device on your tailnet.
+- `autogroup:self` keeps members' laptops apart: each reaches only their own devices, and everyone reaches the server. To let members reach each other's devices too, make that `dst` `["autogroup:member"]`. Give each person their own Tailscale login; one shared login is one user, so `autogroup:self` can't tell them apart.
 - Tailscale refuses a tag nobody owns yet. If you didn't add the policy first, the script joins untagged and says so. Add it, then run `sudo tailscale up --advertise-tags=tag:nodus` on the server.
 - Settings → Servers warns while the server isn't tagged.
 

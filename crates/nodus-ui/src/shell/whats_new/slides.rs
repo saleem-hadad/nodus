@@ -24,6 +24,13 @@ macro_rules! shot {
 
 pub const SLIDES: &[Slide] = &[
     Slide {
+        version: "1.0.24",
+        title: "What a session made",
+        text: "The PRs a session opened and the servers it started wait in a drawer under its card.",
+        light: shot!("1.0.24-drawer-light"),
+        dark: shot!("1.0.24-drawer-dark"),
+    },
+    Slide {
         version: "1.0.22",
         title: "Side by side",
         text: "Open a terminal, a new session or any card beside an open one, up to four, with {⌘T} or {⌘N}.",

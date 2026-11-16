@@ -25,6 +25,11 @@ pub fn to_card(node: &BoardNode, found: Option<&DiscoveredSession>, sessions: &d
         agent_count: None,
         edited_files: None,
         usage: sessions.usage(id),
+        servers: if node.archived {
+            Vec::new()
+        } else {
+            sessions.servers(id)
+        },
     }
 }
 

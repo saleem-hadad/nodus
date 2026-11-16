@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 
 use nodus_board::{BoardSessions, BoxFuture, Launcher, Resume, StartNew};
-use nodus_domain::{Event, EventSink, SessionCard, SessionMeta, SessionStatus, SessionUsage};
+use nodus_domain::{CardServer, Event, EventSink, SessionCard, SessionMeta, SessionStatus, SessionUsage};
 use nodus_platform::process::SpawnError;
 use nodus_platform::runner::{Program, RunOutput, RunRequest, Runner};
 use nodus_platform::{ClaudeNotFound, Env};
@@ -92,6 +92,13 @@ impl BoardSessions for CoreSessions {
 
     fn usage(&self, session_id: &str) -> Option<SessionUsage> {
         self.0.upgrade()?.status.usage(session_id)
+    }
+
+    fn servers(&self, session_id: &str) -> Vec<CardServer> {
+        self.0
+            .upgrade()
+            .map(|core| core.drawers.servers(session_id))
+            .unwrap_or_default()
     }
 
     fn attach_agents(&self, card: &mut SessionCard, repo_path: &str, last_prompt_at: Option<f64>) {

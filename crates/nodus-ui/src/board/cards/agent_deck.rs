@@ -143,6 +143,15 @@ impl DeckHandles {
     }
 }
 
+/// How far the deck's layers peek out under the card at rest, the
+/// deepest's (DECK-004): where the card's drawer starts (DRAWER-031).
+pub fn rest_peek(agents: &[AgentInfo]) -> f32 {
+    deck_layers(agents)
+        .iter()
+        .map(|(depth, _)| layer_offset(*depth, false).0)
+        .fold(0.0, f32::max)
+}
+
 /// The layers' transform at each depth, at rest and lifted (DECK-004/005).
 fn layer_offset(depth: usize, lifted: bool) -> (f32, f32, f32) {
     match (depth, lifted) {

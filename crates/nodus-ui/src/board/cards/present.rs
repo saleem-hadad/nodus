@@ -10,7 +10,8 @@
 use std::time::{Duration, Instant};
 
 use nodus_domain::{
-    AgentInfo, BoardNote, CreatedBy, FolderColor, Project, SessionCard, SessionKind, SessionStatus, SetupState, js,
+    AgentInfo, BoardNote, CardPr, CreatedBy, FolderColor, PrChecks, PrState, Project, SessionCard, SessionKind,
+    SessionStatus, SetupState, js,
 };
 
 use crate::format::{agent_status_label, by_urgency, card_title, format_duration, tilde_path};
@@ -1020,6 +1021,166 @@ pub fn rounded(rect: (f32, f32, f32, f32)) -> (f64, f64, f64, f64) {
     (r(rect.0), r(rect.1), r(rect.2), r(rect.3))
 }
 
+// ---------------------------------------------------------------- drawer
+
+/// One thing a card's drawer lists (DRAWER-030).
+#[derive(Debug, Clone, PartialEq)]
+pub enum DrawerItem {
+    Pr(CardPr),
+    Server(DrawerServer),
+}
+
+/// A server row: where it opens and whether Stop shows.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DrawerServer {
+    pub port: u16,
+    pub label: String,
+    /// When its process started, ms since the epoch.
+    pub started_at: Option<u64>,
+    /// `http://localhost:<port>`, or the server's host on a server board.
+    pub url: String,
+    /// DRAWER-024: only a process on this machine can be stopped from here.
+    pub stoppable: bool,
+}
+
+impl DrawerItem {
+    /// What tells it apart from the others in the drawer.
+    pub fn key(&self) -> String {
+        match self {
+            Self::Pr(pr) => pr.url.clone(),
+            Self::Server(s) => format!(":{}", s.port),
+        }
+    }
+}
+
+/// DRAWER-030: an active card's pull requests, then its servers; a server
+/// board's card's preview port joins them while something listens on it
+/// (DRAWER-023, in place of CARD-056's glyph).
+pub fn drawer_items(card: &SessionCard, server_host: Option<&str>) -> Vec<DrawerItem> {
+    if card.node.archived {
+        return Vec::new();
+    }
+    let host = server_host.unwrap_or("localhost");
+    let mut items: Vec<DrawerItem> = card.node.prs().into_iter().map(DrawerItem::Pr).collect();
+    for s in &card.servers {
+        items.push(DrawerItem::Server(DrawerServer {
+            port: s.port,
+            label: s.label.clone(),
+            started_at: s.started_at,
+            url: format!("http://{host}:{}", s.port),
+            stoppable: server_host.is_none() && s.pid.is_some(),
+        }));
+    }
+    if let Some(port) = card.node.preview_port().filter(|_| card.node.preview_live())
+        && let Some(host) = server_host
+        && !card.servers.iter().any(|s| s.port == port)
+    {
+        items.push(DrawerItem::Server(DrawerServer {
+            port,
+            label: "preview".into(),
+            started_at: None,
+            url: format!("http://{host}:{port}"),
+            stoppable: false,
+        }));
+    }
+    items
+}
+
+/// The glyph a pull request shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PrGlyph {
+    Open,
+    Draft,
+    Merged,
+    Closed,
+}
+
+/// A colour that says something, picked from the theme where drawn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tone {
+    Quiet,
+    Green,
+    Orange,
+    Red,
+    Purple,
+}
+
+/// DRAWER-033: how a pull request looks: its glyph and its colour (open
+/// green, draft quiet, merged purple, closed red, quiet before GitHub has
+/// been asked), and what its row says on the right with its dot's colour.
+pub fn pr_look(pr: &CardPr) -> (PrGlyph, Tone, &'static str, Option<Tone>) {
+    match pr.state {
+        None => (PrGlyph::Open, Tone::Quiet, "", None),
+        Some(PrState::Draft) => (PrGlyph::Draft, Tone::Quiet, "Draft", None),
+        Some(PrState::Merged) => (PrGlyph::Merged, Tone::Purple, "Merged", None),
+        Some(PrState::Closed) => (PrGlyph::Closed, Tone::Red, "Closed", None),
+        Some(PrState::Open) => match pr.checks {
+            Some(PrChecks::Pending) => (PrGlyph::Open, Tone::Green, "Running", Some(Tone::Orange)),
+            Some(PrChecks::Passed) => (PrGlyph::Open, Tone::Green, "Passed", Some(Tone::Green)),
+            Some(PrChecks::Failed) => (PrGlyph::Open, Tone::Green, "Failed", Some(Tone::Red)),
+            None => (PrGlyph::Open, Tone::Green, "Open", None),
+        },
+    }
+}
+
+/// A pull request's title, or what stands in for it until GitHub says.
+pub fn pr_title(pr: &CardPr) -> String {
+    if pr.title.is_empty() {
+        format!("Pull request #{}", pr.number)
+    } else {
+        pr.title.clone()
+    }
+}
+
+/// A pull request's tooltip: its title, then where it stands.
+pub fn pr_tooltip(pr: &CardPr) -> String {
+    let stands = match (pr.state, pr.checks) {
+        (None, _) => "Not looked up on GitHub yet".to_owned(),
+        (Some(PrState::Open), Some(PrChecks::Pending)) => "Open · checks running".to_owned(),
+        (Some(PrState::Open), Some(PrChecks::Passed)) => "Open · checks passed".to_owned(),
+        (Some(PrState::Open), Some(PrChecks::Failed)) => "Open · checks failed".to_owned(),
+        (Some(state), _) => {
+            let s = state.as_str();
+            s[..1].to_uppercase() + &s[1..]
+        }
+    };
+    format!("#{} {}\n{stands}", pr.number, pr_title(pr))
+}
+
+/// How long a server has run: `12s`, `3m`, `2h`, `4d`.
+pub fn uptime(started_at: u64, now_ms: f64) -> String {
+    let secs = ((now_ms - started_at as f64) / 1000.0).max(0.0) as u64;
+    match secs {
+        0..60 => format!("{}s", secs.max(1)),
+        60..3600 => format!("{}m", secs / 60),
+        3600..86_400 => format!("{}h", secs / 3600),
+        _ => format!("{}d", secs / 86_400),
+    }
+}
+
+/// DRAWER-034: what the open drawer's top line says: `1 pull request ·
+/// 2 servers`.
+pub fn drawer_summary(items: &[DrawerItem]) -> String {
+    let prs = items.iter().filter(|i| matches!(i, DrawerItem::Pr(_))).count();
+    let servers = items.len() - prs;
+    let count = |n: usize, one: &str, many: &str| match n {
+        0 => None,
+        1 => Some(format!("1 {one}")),
+        n => Some(format!("{n} {many}")),
+    };
+    [
+        count(prs, "pull request", "pull requests"),
+        count(servers, "server", "servers"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(" · ")
+}
+
+/// DRAWER-032: how many chips the lip shows before `+N`.
+pub const LIP_CHIPS: usize = 4;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1477,5 +1638,94 @@ mod tests {
             (140.0, 160.0, 360.0, 240.0)
         );
         assert_eq!(rounded((0.5, -0.5, 1.4, 2.6)), (1.0, -0.0, 1.0, 3.0));
+    }
+
+    #[test]
+    fn a_drawer_lists_pull_requests_then_servers() {
+        let c = card(&serde_json::json!({
+            "prs": [{"url": "https://github.com/o/r/pull/3", "number": 3, "title": "Fix", "state": "open", "checks": "passed"}],
+            "servers": [{"port": 5173, "pid": 9, "label": "vite", "startedAt": 1000}]
+        }));
+        let items = drawer_items(&c, None);
+        assert_eq!(
+            items.iter().map(DrawerItem::key).collect::<Vec<_>>(),
+            ["https://github.com/o/r/pull/3", ":5173"]
+        );
+        let DrawerItem::Server(s) = &items[1] else { panic!() };
+        assert_eq!((s.url.as_str(), s.stoppable), ("http://localhost:5173", true));
+        assert_eq!(drawer_summary(&items), "1 pull request · 1 server");
+        // Archived: nothing.
+        let archived = card(&serde_json::json!({"archived": true, "servers": [{"port": 1, "label": "x"}]}));
+        assert!(drawer_items(&archived, None).is_empty());
+    }
+
+    #[test]
+    fn a_server_cards_preview_port_is_one_of_its_servers() {
+        let c = card(&serde_json::json!({"previewPort": 8100, "previewLive": true}));
+        let items = drawer_items(&c, Some("box.tail"));
+        let [DrawerItem::Server(s)] = items.as_slice() else {
+            panic!("{items:?}")
+        };
+        assert_eq!(
+            (s.url.as_str(), s.label.as_str(), s.stoppable),
+            ("http://box.tail:8100", "preview", false)
+        );
+        // Not while nothing listens, and not twice.
+        let quiet = card(&serde_json::json!({"previewPort": 8100}));
+        assert!(drawer_items(&quiet, Some("box.tail")).is_empty());
+        let both = card(&serde_json::json!({
+            "previewPort": 8100, "previewLive": true, "servers": [{"port": 8100, "pid": 3, "label": "vite"}]
+        }));
+        let items = drawer_items(&both, Some("box.tail"));
+        let [DrawerItem::Server(s)] = items.as_slice() else {
+            panic!("{items:?}")
+        };
+        assert_eq!((s.label.as_str(), s.stoppable), ("vite", false));
+        assert_eq!(drawer_summary(&items), "1 server");
+    }
+
+    #[test]
+    fn pull_requests_look_like_where_they_stand() {
+        let pr = |state: Option<PrState>, checks: Option<PrChecks>| CardPr {
+            url: "https://github.com/o/r/pull/7".into(),
+            number: 7,
+            title: String::new(),
+            state,
+            checks,
+        };
+        assert_eq!(pr_look(&pr(None, None)), (PrGlyph::Open, Tone::Quiet, "", None));
+        assert_eq!(
+            pr_look(&pr(Some(PrState::Open), Some(PrChecks::Pending))),
+            (PrGlyph::Open, Tone::Green, "Running", Some(Tone::Orange))
+        );
+        assert_eq!(
+            pr_look(&pr(Some(PrState::Open), Some(PrChecks::Failed))).3,
+            Some(Tone::Red)
+        );
+        assert_eq!(
+            pr_look(&pr(Some(PrState::Merged), Some(PrChecks::Passed))),
+            (PrGlyph::Merged, Tone::Purple, "Merged", None)
+        );
+        assert_eq!(pr_look(&pr(Some(PrState::Closed), None)).0, PrGlyph::Closed);
+        assert_eq!(pr_look(&pr(Some(PrState::Draft), None)).2, "Draft");
+        assert_eq!(pr_title(&pr(None, None)), "Pull request #7");
+        assert_eq!(
+            pr_tooltip(&pr(Some(PrState::Merged), None)),
+            "#7 Pull request #7\nMerged"
+        );
+        assert_eq!(
+            pr_tooltip(&pr(Some(PrState::Open), Some(PrChecks::Pending))),
+            "#7 Pull request #7\nOpen · checks running"
+        );
+    }
+
+    #[test]
+    fn uptimes_are_short() {
+        assert_eq!(uptime(0, 400.0), "1s");
+        assert_eq!(uptime(0, 12_000.0), "12s");
+        assert_eq!(uptime(0, 185_000.0), "3m");
+        assert_eq!(uptime(0, 2.5 * 3_600_000.0), "2h");
+        assert_eq!(uptime(0, 4.0 * 86_400_000.0), "4d");
+        assert_eq!(uptime(10_000, 0.0), "1s");
     }
 }

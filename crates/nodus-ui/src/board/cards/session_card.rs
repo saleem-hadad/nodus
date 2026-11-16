@@ -98,6 +98,13 @@ impl RenderOnce for SessionNode {
             compact(&env, &self, &agents, &handles, window, cx)
         };
         root = root.child(body).children(zones);
+        // DRAWER-031: the drawer, under the card and its deck's layers.
+        if self.stack.is_none() {
+            let below = if has_deck { agent_deck::rest_peek(&agents) } else { 0.0 };
+            if let Some(drawer) = super::drawer::drawer(&env, &self.card, (w, h), below, open, window, cx) {
+                root = root.child(drawer);
+            }
+        }
 
         if !self.card.node.archived {
             let landing = present::sticker_lands(self.card.node.created_at, env.now_ms);
@@ -390,26 +397,7 @@ pub fn heading(
                 .into_any_element(),
         );
     }
-    // CARD-056: Open preview, while something listens on the card's port.
-    if let Some(url) = present::preview_url(card, env.server_host.as_deref()) {
-        let port = card.node.preview_port().unwrap_or_default();
-        out.push(
-            div()
-                .id(anim::key(id, "open-preview"))
-                .aria_label("Open preview")
-                .flex_none()
-                .flex()
-                .mt(top(3.))
-                .tooltip(native_tooltip(format!("Open preview (port {port})").into()))
-                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .on_click(move |_, _, cx| {
-                    cx.stop_propagation();
-                    nodus_platform::shell::open_external(&url);
-                })
-                .child(card_icon(CardIcon::AppWindowMac, z.f(13.), 2.0, t.accent))
-                .into_any_element(),
-        );
-    }
+    // CARD-056's Open preview is a row in the card's drawer now (DRAWER-023).
     out
 }
 

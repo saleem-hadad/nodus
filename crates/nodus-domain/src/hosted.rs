@@ -73,11 +73,11 @@ fn set(extra: &mut Map<String, Value>, key: &str, value: Option<Value>) {
     }
 }
 
-fn read<T: for<'de> Deserialize<'de>>(extra: &Map<String, Value>, key: &str) -> Option<T> {
+pub(crate) fn read<T: for<'de> Deserialize<'de>>(extra: &Map<String, Value>, key: &str) -> Option<T> {
     serde_json::from_value(extra.get(key)?.clone()).ok()
 }
 
-fn write<T: Serialize>(extra: &mut Map<String, Value>, key: &str, value: Option<&T>) {
+pub(crate) fn write<T: Serialize>(extra: &mut Map<String, Value>, key: &str, value: Option<&T>) {
     set(extra, key, value.and_then(|value| serde_json::to_value(value).ok()));
 }
 

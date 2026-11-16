@@ -15,4 +15,6 @@ mod syntax;
 mod view;
 pub mod visual;
 
+/// The theme's purple, for merged pull requests in cards' drawers too (DRAWER-033).
+pub(crate) use look::purple;
 pub use view::{ChatView, ChatViews};

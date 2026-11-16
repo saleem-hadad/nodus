@@ -127,6 +127,14 @@ impl CardActions for CanvasActions {
             state.update(cx, |s, cx| s.open_terminal(session_id, cx));
         }
     }
+    fn stop_server(&self, session_id: &str, port: u16, cx: &mut App) {
+        let Some(core) = cx.try_global::<Core>().map(|c| c.0.clone()) else {
+            return;
+        };
+        if let Err(err) = core.sessions().stop_server(session_id, port) {
+            self.0.toast(err.message(), cx);
+        }
+    }
     fn remove_notes(&self, note_ids: &[String], cx: &mut App) {
         self.0.remove_notes(note_ids.to_vec(), cx);
     }

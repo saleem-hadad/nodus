@@ -70,6 +70,7 @@ mod projects;
 mod prompts;
 mod realpath;
 mod routing;
+mod schedules;
 mod servers;
 mod sessions;
 mod settings;

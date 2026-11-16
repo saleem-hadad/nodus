@@ -313,6 +313,65 @@ impl BoardShape {
     }
 }
 
+/// A scheduled action's tile on its project's board (spec 19): where it sits
+/// and how its schedule has gone. Its id is the action's.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BoardTile {
+    pub id: String,
+    pub x: f64,
+    pub y: f64,
+    /// SCHED-020: the schedule is handled up to here (ms): the last time it
+    /// ran for, or when the schedule was set or resumed.
+    pub handled: f64,
+    /// The last run it started, by its schedule or its button.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last: Option<TileRun>,
+    pub created_at: f64,
+    /// Fields this version doesn't know, written back as they were read.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+impl BoardTile {
+    /// SCHED-030: tiles are all one size.
+    pub const W: f64 = 288.0;
+    pub const H: f64 = 136.0;
+
+    pub fn rect(&self) -> Rect {
+        Rect {
+            x: self.x,
+            y: self.y,
+            w: Self::W,
+            h: Self::H,
+        }
+    }
+}
+
+/// A scheduled action's run, as its tile remembers it (SCHED-023).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TileRun {
+    pub session_id: String,
+    /// When it started (ms).
+    pub at: f64,
+    /// The time it was due for; absent for a press of its button.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub due: Option<f64>,
+    /// Only `true`: it started well after its time, as Nodus was closed then.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub late: Option<bool>,
+    /// When its turn ended (ms).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub done_at: Option<f64>,
+    /// What Claude said last, the one-line summary its prompt asks for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    /// Only `true` once the user has looked at the result.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seen: Option<bool>,
+}
+
 /// One end of a link: held by something on the board (a card's session id,
 /// or a note, view or shape id), or loose at a point.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -410,6 +469,9 @@ pub struct BoardSnapshot {
     /// Messages between the board's sessions, oldest first (BOARD-184).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub talks: Vec<BoardTalk>,
+    /// Scheduled actions' tiles, oldest first (spec 19).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tiles: Vec<BoardTile>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub viewport: Option<Viewport>,
     /// A server board's last snapshot, given while the server can't be

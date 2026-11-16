@@ -649,6 +649,7 @@ mod tests {
             links: vec![],
             groups: vec![],
             talks: vec![],
+            tiles: vec![],
             viewport: None,
             offline: false,
         }

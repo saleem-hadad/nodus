@@ -46,6 +46,7 @@ impl Board {
         };
         let folder = self.session_folder(&project, session_id);
         let meta = self.transcripts.session(&folder, session_id).map(|f| f.meta);
+        let now = self.now();
         let mut effects = Effects::default();
         self.store.update(|state| {
             let Some(node) = state.board(&project_id).and_then(|b| b.nodes.get(session_id)) else {
@@ -68,11 +69,23 @@ impl Board {
                 board.hidden.push(session_id.to_owned());
             }
             effects.stop_and_forget.push(session_id.to_owned());
+            let message = meta.and_then(|m| m.last_assistant_text);
+            // SCHED-023: its tile keeps what it said, until the user looks.
+            if let Some(last) = board
+                .tiles
+                .get_mut(&run_of)
+                .and_then(|t| t.last.as_mut())
+                .filter(|l| l.session_id == session_id)
+            {
+                last.done_at = Some(now);
+                last.message.clone_from(&message);
+                last.seen = None;
+            }
             effects.events.push(Event::RunFinished(ActionRunResult {
                 project_id: project_id.clone(),
                 session_id: session_id.to_owned(),
                 action_name,
-                message: meta.and_then(|m| m.last_assistant_text),
+                message,
             }));
             effects.events.push(Event::BoardChanged {
                 project_id: project_id.clone(),

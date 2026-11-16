@@ -367,6 +367,28 @@ impl BoardApi<'_> {
             .await;
     }
 
+    /// `board:move-tile` (SCHED-033): a scheduled action's tile dragged.
+    pub async fn move_tile(&self, project_id: &str, id: &str, x: f64, y: f64) {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, id) = (project_id.to_owned(), id.to_owned());
+            return route.run(Request::BoardMoveTile { project_id, id, x, y }).await;
+        }
+        self.nodus
+            .on_core(async { self.nodus.inner.board.move_tile(project_id, id, x, y) })
+            .await;
+    }
+
+    /// `board:see-tile` (SCHED-036): the user looked at a tile's result.
+    pub async fn see_tile(&self, project_id: &str, id: &str) {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, id) = (project_id.to_owned(), id.to_owned());
+            return route.run(Request::BoardSeeTile { project_id, id }).await;
+        }
+        self.nodus
+            .on_core(async { self.nodus.inner.board.see_tile(project_id, id) })
+            .await;
+    }
+
     /// `board:remove-shapes`: the shapes go, with their links.
     pub async fn remove_shapes(&self, project_id: &str, ids: &[String]) {
         if let Some(route) = self.nodus.route_project(project_id) {

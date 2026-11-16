@@ -121,6 +121,15 @@ pub(crate) async fn answer(nodus: Nodus, member: Option<String>, request: Reques
             board_changed(&nodus, &project_id);
             DONE
         }
+        Request::BoardMoveTile { project_id, id, x, y } => {
+            nodus.board().move_tile(&project_id, &id, x, y).await;
+            board_changed(&nodus, &project_id);
+            DONE
+        }
+        Request::BoardSeeTile { project_id, id } => {
+            nodus.board().see_tile(&project_id, &id).await;
+            DONE
+        }
         Request::BoardSaveLinks { project_id, links } => {
             by.board().save_links(&project_id, &links).await;
             board_changed(&nodus, &project_id);

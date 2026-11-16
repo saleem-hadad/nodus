@@ -80,7 +80,7 @@ impl Board {
         &self.transcripts
     }
 
-    pub(crate) fn now(&self) -> f64 {
+    pub fn now(&self) -> f64 {
         (self.clock)()
     }
 
@@ -224,6 +224,7 @@ impl Board {
                 links: board.links.values().cloned().collect(),
                 groups: board.groups.values().cloned().collect(),
                 talks: Vec::new(),
+                tiles: board.tiles.values().cloned().collect(),
                 viewport: board.viewport,
                 offline: false,
             };

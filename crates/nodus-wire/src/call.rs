@@ -141,6 +141,10 @@ calls! {
     BoardSaveGroups = "board:save-groups" { project_id: String, groups: Vec<BoardGroup> },
     /// `null` (GROUP-031).
     BoardRemoveGroups = "board:remove-groups" { project_id: String, ids: Vec<String> },
+    /// `null`: a scheduled action's tile dragged to a new spot (SCHED-033).
+    BoardMoveTile = "board:move-tile" { project_id: String, id: String, x: f64, y: f64 },
+    /// `null`: the user looked at a tile's last result (SCHED-036).
+    BoardSeeTile = "board:see-tile" { project_id: String, id: String },
 
     // ---- sessions (SESS-114…175)
 

@@ -605,3 +605,52 @@ async fn srv_026_a_session_belongs_to_the_project_whose_board_has_it() {
     board.remove_node(&project.id, "s1").await;
     assert_eq!(board.session_project("s1"), None);
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn sched_020_a_scheduled_action_gets_a_tile_and_runs_once_when_due() {
+    let world = world();
+    let project = project(&world).await;
+    let actions = world.nodus.actions();
+    let raw = json!({
+        "id": "a1", "name": "PR sweep", "icon": "git-pull-request", "description": "", "prompt": "Sum up the PRs.",
+        "schedule": { "words": "every 2 hours", "every": 120 }
+    });
+    actions.save(&project.id, &raw).await.unwrap();
+    // SCHED-024: its tile is on the board, handled up to now.
+    let tile = |nodus: &Nodus| {
+        nodus
+            .inner
+            .store
+            .read(|state| state.board(&project.id).and_then(|b| b.tiles.get("a1").cloned()))
+    };
+    let first = tile(&world.nodus).expect("a tile");
+    assert!(first.last.is_none());
+    // Nothing is due yet.
+    world.nodus.run_due_schedules().await;
+    assert_eq!(tile(&world.nodus).unwrap(), first);
+    // Handled up to a day ago: the latest time missed runs, late, once.
+    world.nodus.inner.store.update(|state| {
+        state.board_mut(&project.id).tiles.get_mut("a1").unwrap().handled -= 86_400_000.0;
+    });
+    world.nodus.run_due_schedules().await;
+    let ran = tile(&world.nodus).unwrap();
+    let last = ran.last.clone().expect("it ran");
+    let due = last.due.expect("for a time");
+    assert_eq!(ran.handled, due);
+    assert!(due <= world.nodus.inner.board.now() && due > first.handled - 86_400_000.0);
+    // No session host here, so it says why it couldn't start.
+    assert!(last.message.as_deref().is_some_and(|m| m.starts_with("Couldn’t start")), "{last:?}");
+    world.nodus.run_due_schedules().await;
+    assert_eq!(tile(&world.nodus).unwrap(), ran, "not twice");
+    // SCHED-020: a schedule changed starts from now; taken off, the tile goes.
+    actions
+        .save(&project.id, &json!({ "id": "a1", "name": "PR sweep", "prompt": "p", "schedule": { "every": 60 } }))
+        .await
+        .unwrap();
+    assert!(tile(&world.nodus).unwrap().handled > due);
+    actions
+        .save(&project.id, &json!({ "id": "a1", "name": "PR sweep", "prompt": "p" }))
+        .await
+        .unwrap();
+    assert!(tile(&world.nodus).is_none());
+}

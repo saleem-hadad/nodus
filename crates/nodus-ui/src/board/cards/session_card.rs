@@ -535,7 +535,20 @@ fn compact(
     }
 
     let chip = card.node.parents.as_ref().filter(|p| !p.is_empty()).map(|parents| {
-        // CARD-025
+        // CARD-025, CARD-061: a fork says so.
+        let (glyph, words, tip) = if card.node.forked_from().is_some() {
+            (
+                CardIcon::GitFork,
+                "forked".to_owned(),
+                "Started from another session’s conversation, up to one of its messages",
+            )
+        } else {
+            (
+                CardIcon::GitMerge,
+                format!("merged from {}", parents.len()),
+                "Started from the context of earlier sessions",
+            )
+        };
         div()
             .id(anim::key(&id, "chip"))
             .flex()
@@ -552,15 +565,9 @@ fn compact(
             .line_height(z.px(15.4))
             .font_weight(FontWeight::MEDIUM)
             .opacity(content)
-            .tooltip(native_tooltip("Started from the context of earlier sessions".into()))
-            .child(card_icon(CardIcon::GitMerge, z.f(11.), 2.2, t.accent))
-            .child(super::text(
-                z,
-                format!("merged from {}", parents.len()),
-                11.0,
-                FontWeight::MEDIUM,
-                t.accent,
-            ))
+            .tooltip(native_tooltip(tip.into()))
+            .child(card_icon(glyph, z.f(11.), 2.2, t.accent))
+            .child(super::text(z, words, 11.0, FontWeight::MEDIUM, t.accent))
     });
     // CARD-059: where its account sent it (SRV-104).
     let moved = account_pill(z, &t, card, &id, false).map(|pill| pill.self_start().opacity(content));

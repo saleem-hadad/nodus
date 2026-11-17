@@ -100,10 +100,14 @@ impl BoardApi<'_> {
             return;
         };
         for node in cards {
+            let path = node.worktree().map(|w| w.path);
+            // SESS-223: a fork works in its source's worktree, so one another
+            // card still uses stays.
             let gone = inner.store.read(|state| {
-                state
-                    .board(project_id)
-                    .is_none_or(|board| !board.nodes.contains_key(&node.session_id))
+                state.board(project_id).is_none_or(|board| {
+                    !board.nodes.contains_key(&node.session_id)
+                        && !board.nodes.values().any(|n| n.worktree().map(|w| w.path) == path)
+                })
             });
             if !gone {
                 continue;

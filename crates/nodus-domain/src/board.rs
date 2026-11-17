@@ -121,6 +121,23 @@ impl BoardNode {
             }
         }
     }
+
+    /// The session whose conversation it was forked from (SESS-222), in
+    /// `forkedFrom`; it's also its one parent, for the line between them.
+    pub fn forked_from(&self) -> Option<&str> {
+        self.extra.get("forkedFrom").and_then(Value::as_str)
+    }
+
+    pub fn set_forked_from(&mut self, session_id: Option<&str>) {
+        match session_id {
+            Some(id) => {
+                self.extra.insert("forkedFrom".into(), Value::from(id));
+            }
+            None => {
+                self.extra.remove("forkedFrom");
+            }
+        }
+    }
 }
 
 /// A frame on the board (spec 17): a named, tinted box. Whatever lies in it

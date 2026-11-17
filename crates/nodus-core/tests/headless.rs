@@ -1239,6 +1239,101 @@ async fn a_project_with_worktrees_gives_each_claude_card_its_own() {
     world.stop(nodus).await;
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_fork_resumes_its_copy_of_the_conversation_in_its_sources_worktree() {
+    use nodus_core::domain::{ForkFrom, ProjectPatch};
+    let world = World::new().await;
+    let nodus = world.start().await;
+    let repo = world.repo("shop").await;
+    std::fs::write(repo.join("README.md"), "shop\n").unwrap();
+    git(&repo, &["add", "-A"]).await;
+    git(&repo, &["commit", "-qm", "First"]).await;
+    let project = nodus
+        .projects()
+        .add(Some(repo.to_string_lossy().into_owned()))
+        .await
+        .unwrap()
+        .unwrap();
+    let config = json!({ "projects": { repo.to_string_lossy(): { "hasTrustDialogAccepted": true } } });
+    std::fs::write(world.home.join(".claude.json"), config.to_string()).unwrap();
+    let on = ProjectPatch {
+        worktrees: Some(true),
+        ..ProjectPatch::default()
+    };
+    nodus.projects().update(&project.id, on).await.unwrap();
+    let mut events = Events::new(&nodus);
+    let sessions = nodus.sessions();
+
+    let source = sessions
+        .create(&project.id, &CreateSessionOptions::default())
+        .await
+        .unwrap();
+    let source_id = source.node.session_id.clone();
+    let worktree = source.node.worktree().expect("the source's worktree");
+    events.printed(&source_id, "stand-in ready").await;
+    // What Claude Code would have made and written by now.
+    git(
+        &repo,
+        &["worktree", "add", "-q", "-b", &worktree.branch, &worktree.path, "HEAD"],
+    )
+    .await;
+    let dir = nodus_transcripts::transcript_dir(&world.home, &worktree.path);
+    std::fs::create_dir_all(&dir).unwrap();
+    let line = |kind: &str, uuid: &str, parent: Option<&str>| {
+        format!(
+            "{}\n",
+            json!({ "type": kind, "uuid": uuid, "parentUuid": parent, "sessionId": source_id,
+                    "message": { "role": kind, "content": uuid } })
+        )
+    };
+    let said = [
+        line("user", "u1", None),
+        line("assistant", "a1", Some("u1")),
+        line("user", "u2", Some("a1")),
+        line("assistant", "a2", Some("u2")),
+    ];
+    std::fs::write(dir.join(format!("{source_id}.jsonl")), said.concat()).unwrap();
+
+    // SESS-222: the fork resumes its own copy, up to that message, by name,
+    // where its source works, and makes no worktree of its own.
+    let fork = sessions
+        .create(
+            &project.id,
+            &CreateSessionOptions {
+                name: Some("Shop (fork)".into()),
+                fork: Some(ForkFrom {
+                    session_id: source_id.clone(),
+                    message_id: "a1".into(),
+                }),
+                ..CreateSessionOptions::default()
+            },
+        )
+        .await
+        .unwrap();
+    let fork_id = fork.node.session_id.clone();
+    assert_eq!(fork.node.worktree(), Some(worktree.clone()));
+    assert_eq!(fork.node.parents, Some(vec![source_id.clone()]));
+    assert!(fork.live && fork.status == SessionStatus::Done);
+    events.printed(&fork_id, "stand-in ready").await;
+    let argv = &runs(&world, &fork_id, 1).await[0];
+    assert!(has_pair(argv, "--resume", &fork_id), "{argv:?}");
+    assert!(has_pair(argv, "--name", "Shop (fork)"), "{argv:?}");
+    assert!(
+        !argv.iter().any(|a| a == "--worktree" || a == "--session-id"),
+        "{argv:?}"
+    );
+    let copied = std::fs::read_to_string(dir.join(format!("{fork_id}.jsonl"))).unwrap();
+    assert_eq!(copied.lines().count(), 2);
+
+    // SESS-223: the worktree stays while either card still uses it.
+    nodus.board().remove_node(&project.id, &fork_id).await;
+    assert!(Path::new(&worktree.path).exists(), "the source still works there");
+    nodus.board().remove_node(&project.id, &source_id).await;
+    assert!(!Path::new(&worktree.path).exists());
+
+    world.stop(nodus).await;
+}
+
 /// A card's worktree, as the board has it.
 async fn worktree_of(nodus: &Nodus, project_id: &str, session_id: &str) -> nodus_core::domain::Worktree {
     let board = nodus.board().load(project_id).await.unwrap();

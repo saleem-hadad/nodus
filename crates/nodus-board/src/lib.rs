@@ -128,6 +128,9 @@ pub enum BoardError {
     NoAction,
     #[error("That session is no longer on the board")]
     NotOnBoard,
+    /// Its conversation couldn't be copied for a fork (SESS-222).
+    #[error(transparent)]
+    Fork(#[from] nodus_transcripts::ForkError),
     #[error("It’s waiting for your answer. Open it to reply.")]
     Waiting,
     /// Starting the session's process failed (the host's error, 02).

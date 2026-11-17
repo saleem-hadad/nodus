@@ -26,6 +26,8 @@ const COLUMN_W: f32 = 780.;
 const TOOLS_SHOWN: usize = 3;
 /// What an API error's `Continue` sends Claude (CHAT-053).
 const CONTINUE: &str = "Continue.";
+/// A row's hover group, for what shows only while the pointer is over it.
+const ROW_GROUP: &str = "chat-row";
 
 /// The Markdown look in the theme's colours, every size at `s` (CHAT-009).
 pub(crate) fn markdown_style(t: &Tokens, s: f32) -> TextViewStyle {
@@ -104,12 +106,13 @@ impl ChatView {
             Some(ended) => self.summary_card(entry_index(row.kind), body, ended.max(born), &t, window, cx),
             None => body,
         };
+        let fork = (row.fork && self.turn_over(ix).is_some()).then(|| self.fork_button(entry_index(row.kind), &t, cx));
         let mut said = div().w_full().flex().flex_col().gap(self.px(8.));
         if row.header {
             let now = crate::parity::now_ms(cx);
             said = said.child(self.author(at, now, &t));
         }
-        said = said.child(body);
+        said = said.child(body).children(fork);
         let e = motion::ease_out(p);
         let said = match arrival {
             Arrival::Pop => look::rise(said, e, 10. * self.scale)
@@ -129,6 +132,7 @@ impl ChatView {
         let (side, top) = if self.in_card { (12., 10.) } else { (24., 14.) };
         div()
             .w_full()
+            .group(ROW_GROUP)
             .flex()
             .justify_center()
             .px(self.px(side))
@@ -139,6 +143,45 @@ impl ChatView {
             }))
             .when(last, |d| d.pb(self.px(20.)))
             .child(column)
+            .into_any_element()
+    }
+
+    /// CHAT-054: `Fork from here`, under the words that end a turn, while
+    /// the pointer is over them: a new session with the conversation up to
+    /// there, beside this one.
+    fn fork_button(&self, i: usize, t: &Tokens, cx: &mut Context<'_, Self>) -> AnyElement {
+        let Some(message) = self
+            .entries
+            .get(i)
+            .and_then(|e| e.id().split(':').next())
+            .map(str::to_owned)
+        else {
+            return div().into_any_element();
+        };
+        let me = cx.entity().downgrade();
+        div()
+            .id(("chat-fork", i))
+            .flex()
+            .flex_none()
+            .self_start()
+            .items_center()
+            .gap(self.px(5.))
+            .h(self.px(24.))
+            .px(self.px(8.))
+            .ml(self.px(-8.))
+            .rounded(self.px(8.))
+            .cursor_pointer()
+            .text_size(self.px(12.))
+            .text_color(t.text_tertiary)
+            .whitespace_nowrap()
+            .invisible()
+            .group_hover(ROW_GROUP, Styled::visible)
+            .hover(|d| d.bg(t.bg_hover).text_color(t.text_secondary))
+            .child(icon(Icon::GitFork, 12. * self.scale, 2., t.text_tertiary))
+            .child("Fork from here")
+            .on_click(move |_, _, cx| {
+                let _ = me.update(cx, |this, cx| this.fork_at(message.clone(), cx));
+            })
             .into_any_element()
     }
 

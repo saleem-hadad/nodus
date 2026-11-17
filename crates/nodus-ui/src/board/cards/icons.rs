@@ -11,6 +11,7 @@ pub enum CardIcon {
     Bot,
     GitBranch,
     GitMerge,
+    GitFork,
     MessageSquare,
     Maximize2,
     Minimize2,
@@ -38,10 +39,11 @@ pub enum CardIcon {
 }
 
 impl CardIcon {
-    const ALL: [Self; 26] = [
+    const ALL: [Self; 27] = [
         Self::Bot,
         Self::GitBranch,
         Self::GitMerge,
+        Self::GitFork,
         Self::MessageSquare,
         Self::Maximize2,
         Self::Minimize2,
@@ -72,6 +74,7 @@ impl CardIcon {
             Self::Bot => "bot",
             Self::GitBranch => "git-branch",
             Self::GitMerge => "git-merge",
+            Self::GitFork => "git-fork",
             Self::MessageSquare => "message-square",
             Self::Maximize2 => "maximize-2",
             Self::Minimize2 => "minimize-2",
@@ -113,6 +116,9 @@ impl CardIcon {
             }
             Self::GitMerge => {
                 r#"<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>"#
+            }
+            Self::GitFork => {
+                r#"<circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9"/><path d="M12 12v3"/>"#
             }
             Self::MessageSquare => {
                 r#"<path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"/>"#

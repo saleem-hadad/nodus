@@ -9,8 +9,8 @@ use std::time::Duration;
 use gpui::Context;
 use nodus_board::geometry::{CARD_SIZE, NOTE_H, NOTE_W, Point};
 use nodus_domain::{
-    ActionRunResult, BoardNote, BoardSection, CreateSessionOptions, FolderColor, NodePatch, SessionCard, SessionKind,
-    SessionStatus, ViewPatch, js,
+    ActionRunResult, BoardNote, BoardSection, CreateSessionOptions, FolderColor, ForkFrom, NodePatch, SessionCard,
+    SessionKind, SessionStatus, ViewPatch, js,
 };
 
 use super::canvas::{BoardCanvas, NAME_LANDING_MS, TITLE_CLICK_MS};
@@ -23,6 +23,8 @@ use crate::terminal::actions::PreviewFind;
 
 /// A view can start a session at most this often.
 const VIEW_START_GAP_MS: f64 = 3000.0;
+/// What a fork's name ends with (CHAT-054).
+const FORK_SUFFIX: &str = " (fork)";
 /// How far from its view a session the view started goes.
 const VIEW_SESSION_GAP: f64 = 3.0 * nodus_board::geometry::GAP;
 
@@ -264,6 +266,14 @@ impl BoardCanvas {
         if self.board.is_none() {
             return;
         }
+        let spot = self.spot_beside(next_to, cx);
+        self.start_session(spot, kind, true, cx);
+    }
+
+    /// Where a new card goes beside `next_to`'s (SPLIT-005, CHAT-054): clear
+    /// of the cards as they'll be once the session window's panes close, or
+    /// where a new session would go when that card isn't on the board.
+    fn spot_beside(&self, next_to: &str, cx: &Context<'_, Self>) -> Point {
         let dock = self.dock();
         let others = self.notes_in_the_way();
         // The cards on show expand when their panes close (BOARD-103), so
@@ -301,7 +311,7 @@ impl BoardCanvas {
             }
             None => spot_for_new_session(dock, self.cards(), NEW_CARD_SIZE, &others),
         };
-        self.start_session(round(spot), kind, true, cx);
+        round(spot)
     }
 
     /// Starts a session at `pos` (BOARD-101) and opens it: in the window on
@@ -345,6 +355,64 @@ impl BoardCanvas {
                         "a session"
                     };
                     c.show_toast(format!("Couldn't start {what}: {}", message(&err)), cx);
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// CHAT-054: a fork of a session from one of its messages, beside its
+    /// card, named after it. While the session window shows the source, the
+    /// fork opens in a pane beside it (or on its own when the window is
+    /// full); on the board it comes up expanded when the source is, and the
+    /// board pans to it. One fork at a time per session.
+    pub fn fork_session(&mut self, from: &ForkFrom, cx: &mut Context<'_, Self>) {
+        let Some(source) = self.card(&from.session_id).cloned() else {
+            return;
+        };
+        if self.board.is_none() || !self.forking.insert(from.session_id.clone()) {
+            return;
+        }
+        let in_window = self.state.read(cx).session_window.contains(&from.session_id);
+        let pos = self.spot_beside(&from.session_id, cx);
+        let title = card_title(&source);
+        let base = title.strip_suffix(FORK_SUFFIX).unwrap_or(&title);
+        let base = js::trim(&js::slice_utf16(base, 0, 72)).to_owned();
+        let opts = CreateSessionOptions {
+            x: pos.x,
+            y: pos.y,
+            name: Some(format!("{base}{FORK_SUFFIX}")),
+            expanded: (!in_window && is_expanded(&source)).then_some(true),
+            fork: Some(from.clone()),
+            ..CreateSessionOptions::default()
+        };
+        let nodus = self.nodus(cx);
+        let rt = crate::board::core_rt(cx);
+        let project_id = self.project_id.clone();
+        let source_id = from.session_id.clone();
+        cx.spawn(async move |this, cx| {
+            let created =
+                crate::board::on_core(&rt, async move { nodus.sessions().create(&project_id, &opts).await }).await;
+            let _ = this.update(cx, |c, cx| {
+                c.forking.remove(&source_id);
+                match created {
+                    Ok(card) => {
+                        let id = card.node.session_id.clone();
+                        c.state.update(cx, |s, cx| s.upsert_card(card, cx));
+                        if in_window {
+                            c.state.update(cx, |s, cx| {
+                                if s.session_window.has_room() {
+                                    s.open_beside(&id, cx);
+                                } else {
+                                    s.open_terminal(&id, cx);
+                                }
+                            });
+                        } else {
+                            c.select_cards(std::slice::from_ref(&id), cx);
+                            c.ensure_visible(pos, NEW_CARD_SIZE, cx);
+                        }
+                    }
+                    Err(err) => c.show_toast(format!("Couldn’t fork the session: {}", err.message()), cx),
                 }
             });
         })

@@ -181,6 +181,19 @@ pub struct CreateSessionOptions {
     /// for the model when none. Claude sessions only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effort: Option<String>,
+    /// Starts it as a fork of another session's conversation, up to one of
+    /// its messages (SESS-222). Claude sessions only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fork: Option<ForkFrom>,
+}
+
+/// Where a forked session's conversation comes from (SESS-222).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForkFrom {
+    pub session_id: String,
+    /// The transcript `uuid` of the last message it keeps.
+    pub message_id: String,
 }
 
 string_enum! {

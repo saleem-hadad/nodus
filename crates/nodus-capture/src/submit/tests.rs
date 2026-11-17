@@ -198,6 +198,7 @@ async fn makes_a_session_with_the_words_stuck_on() {
                 from_view: None,
                 model: None,
                 effort: None,
+                fork: None,
             }
         )]
     );

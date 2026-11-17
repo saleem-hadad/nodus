@@ -1045,3 +1045,46 @@ async fn a_goal_starts_its_session_reports_back_and_checks_in_when_due() {
     assert!(f.board.goal("p", &goal.id).is_none());
     assert!(f.node(&goal.session_id).is_some());
 }
+
+#[tokio::test]
+async fn a_session_becomes_a_goal_and_gets_its_first_check_in() {
+    use nodus_board::goals::NewGoal;
+    let f = Fixture::new();
+    f.put(node("s1", json!({ "x": 100, "y": 100, "createdByApp": true })));
+    let launcher = FakeLauncher::new(&f.store, None);
+    // GOAL-012: that session's, its tile beside it, the first check-in sent into it.
+    let new = NewGoal {
+        mission: "Move the migration to Postgres".into(),
+        every: None,
+        at: None,
+        session_id: Some("s1".into()),
+    };
+    let goal = f.board.create_goal("p", &new, &launcher).await.unwrap();
+    assert_eq!((goal.session_id.as_str(), goal.every), ("s1", 60.0));
+    assert!(launcher.starts.lock().unwrap().is_empty(), "no new session");
+    let log = launcher.log.lock().unwrap().clone();
+    assert!(log[0].starts_with("resume:s1:Check-in #1"), "{log:?}");
+    assert!(!nodus_board::geometry::intersects(
+        goal.rect(),
+        Rect {
+            x: 100.0,
+            y: 100.0,
+            w: 288.0,
+            h: 216.0
+        },
+        0.0
+    ));
+    // GOAL-010: a goal needs a mission.
+    let blank = NewGoal {
+        mission: "  ".into(),
+        ..NewGoal::default()
+    };
+    assert_eq!(
+        f.board
+            .create_goal("p", &blank, &launcher)
+            .await
+            .unwrap_err()
+            .to_string(),
+        "Say what the goal is"
+    );
+}

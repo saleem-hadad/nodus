@@ -503,6 +503,11 @@ impl Nodus {
         }));
         // VIEW-085: views' schedules tick from now on.
         nodus.inner.views.start_schedules();
+        // SCHED-020: and scheduled actions'.
+        nodus
+            .inner
+            .runtime
+            .spawn(crate::schedules::follow_schedules(Arc::downgrade(&nodus.inner)));
         // PLAT-010 step 7.
         nodus.inner.updater.start();
         Ok(nodus)

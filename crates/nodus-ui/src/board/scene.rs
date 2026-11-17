@@ -57,6 +57,10 @@ pub enum NodeKind {
     Shape {
         index: usize,
     },
+    /// Index into the board's scheduled actions' tiles (SCHED-030).
+    Tile {
+        index: usize,
+    },
 }
 
 /// One node as React Flow held it.
@@ -458,6 +462,30 @@ pub fn build_nodes(input: BuildInput<'_>) -> Vec<FlowNode> {
             clip: None,
         });
     }
+    // SCHED-030: scheduled actions' tiles, with the views.
+    for (index, tile) in board.tiles.iter().enumerate() {
+        let p = prev_by_id.get(tile.id.as_str());
+        let held_here = p.is_some_and(|p| p.dragging || busy.contains(&tile.id));
+        out.push(FlowNode {
+            id: tile.id.clone(),
+            kind: NodeKind::Tile { index },
+            position: match p {
+                Some(p) if held_here => p.position,
+                _ => Point { x: tile.x, y: tile.y },
+            },
+            size: Size {
+                w: nodus_domain::BoardTile::W,
+                h: nodus_domain::BoardTile::H,
+            },
+            hidden: false,
+            z: 0,
+            draggable: true,
+            selectable: true,
+            selected: selected_of(&tile.id),
+            dragging: dragging_of(&tile.id),
+            clip: None,
+        });
+    }
     // SHAPE-001: shapes, oldest first, over the views and under the notes;
     // stickers with the notes, so one stuck on a card shows over it.
     for (index, shape) in board.shapes.iter().enumerate() {
@@ -619,6 +647,7 @@ mod tests {
             links: vec![],
             groups: vec![],
             talks: vec![],
+            tiles: vec![],
             viewport: None,
             offline: false,
         }

@@ -10,7 +10,8 @@ use nodus_board::geometry::{GAP, Point, Size, card_size, dock_rect, find_free_sp
 use nodus_board::notes::{active_cards, obstacles, rightmost_card};
 use nodus_board::{Board, BoardSessions, Clock};
 use nodus_domain::{
-    BoardView, CommandResult, CreateViewOptions, Event, EventSink, Project, ViewEvent, ViewPatch, ViewReport, js,
+    BoardView, CommandResult, CreateViewOptions, Event, EventSink, Project, ViewEvent, ViewPatch, ViewReport,
+    ViewSchedule, js,
 };
 use nodus_platform::Env;
 use nodus_platform::runner::Runner;
@@ -22,8 +23,8 @@ use tokio::task::AbortHandle;
 
 use crate::brains::AskOrigin;
 use crate::check::{
-    MAX_DESCRIPTION_CHARS, MAX_STATE_CHARS, MAX_TITLE_CHARS, check_json, clip, field, is_allowed, is_denied,
-    js_string_or_empty,
+    MAX_DESCRIPTION_CHARS, MAX_STATE_CHARS, MAX_TITLE_CHARS, MIN_COMMAND_EVERY, MIN_REFRESH_EVERY, check_json,
+    clamp_every, clip, field, is_allowed, is_denied, js_string_or_empty,
 };
 use crate::command::execute;
 use crate::page::{EMPTY_PAGE, ViewBoot, build_view_page};
@@ -822,15 +823,11 @@ impl Views {
                 let Some(every) = cmd.every.filter(|e| *e != 0.0 && !e.is_nan()) else {
                     continue;
                 };
-                if !is_allowed(cmd) {
+                // SCHED-064: one the user turned off waits to be asked.
+                if !is_allowed(cmd) || cmd.paused == Some(true) {
                     continue;
                 }
-                let last = self.with_runtime(&view.id, |rt| {
-                    rt.results
-                        .get(&cmd.name)
-                        .and_then(|r| r.get("at"))
-                        .and_then(Value::as_f64)
-                });
+                let last = self.last_run(&view.id, &cmd.name);
                 if now - last.unwrap_or(0.0) < every * 60_000.0 {
                     continue;
                 }
@@ -845,7 +842,8 @@ impl Views {
                     Err(err) => tracing::warn!(%err, "[views] command failed"),
                 }
             }
-            if let Some(refresh) = &view.refresh {
+            // SCHED-064: as does a refresh the user turned off.
+            if let Some(refresh) = view.refresh.as_ref().filter(|r| r.paused != Some(true)) {
                 let since = self
                     .with_runtime(&view.id, |rt| rt.refreshed_at)
                     .unwrap_or(view.created_at);
@@ -865,6 +863,100 @@ impl Views {
                 }
             }
         }
+    }
+
+    /// When a command's last run finished (ms), if it has run.
+    fn last_run(&self, view_id: &str, name: &str) -> Option<f64> {
+        self.with_runtime(view_id, |rt| {
+            rt.results.get(name).and_then(|r| r.get("at")).and_then(Value::as_f64)
+        })
+    }
+
+    /// A view's schedules, for its caption's clock and picker: each command
+    /// that runs every so often, then its brain's refresh, with when each
+    /// runs next (SCHED-061, SCHED-062). A command that hasn't run counts
+    /// from now; a refresh from its last, or from when the view was made.
+    pub fn schedules(&self, project_id: &str, view_id: &str) -> Result<Vec<ViewSchedule>, ViewError> {
+        let view = self.view(project_id, view_id).ok_or_else(no_view)?;
+        let now = self.now();
+        let mut out = Vec::new();
+        for cmd in view.commands.iter().flatten() {
+            let Some(every) = cmd.every.filter(|e| *e != 0.0 && !e.is_nan()) else {
+                continue;
+            };
+            let last = self.last_run(view_id, &cmd.name).unwrap_or(now);
+            out.push(ViewSchedule {
+                key: ViewSchedule::command_key(&cmd.name),
+                label: cmd.name.clone(),
+                every,
+                paused: cmd.paused == Some(true),
+                allowed: is_allowed(cmd),
+                next_at: last + every * 60_000.0,
+            });
+        }
+        if let Some(refresh) = &view.refresh {
+            let since = self
+                .with_runtime(view_id, |rt| rt.refreshed_at)
+                .unwrap_or(view.created_at);
+            out.push(ViewSchedule {
+                key: ViewSchedule::REFRESH.to_owned(),
+                label: "Claude’s refresh".to_owned(),
+                every: refresh.every,
+                paused: refresh.paused == Some(true),
+                allowed: true,
+                next_at: since + refresh.every * 60_000.0,
+            });
+        }
+        Ok(out)
+    }
+
+    /// Changes how often one of a view's schedules runs, in place, from the
+    /// picker on its caption (SCHED-063, SCHED-064). `None` turns it off and
+    /// keeps its interval and prompt; an interval, within the views' limits,
+    /// turns it on again. A command keeps its approval, and whatever else it
+    /// holds, as it is.
+    pub fn set_every(&self, project_id: &str, view_id: &str, key: &str, every: Option<f64>) -> Result<(), ViewError> {
+        let refreshing = key == ViewSchedule::REFRESH;
+        let min = if refreshing {
+            MIN_REFRESH_EVERY
+        } else {
+            MIN_COMMAND_EVERY
+        };
+        let every = every
+            .map(|minutes| {
+                clamp_every(Some(&Value::from(minutes)), min)
+                    .ok_or_else(|| ViewError::new("How often must be a number of minutes"))
+            })
+            .transpose()?;
+        let name = ViewSchedule::command_of(key);
+        if !refreshing && name.is_none() {
+            return Err(ViewError::new(format!("This view has no schedule called “{key}”")));
+        }
+        self.update_view(project_id, view_id, |board, id| {
+            let view = &mut board.views[id];
+            let paused = every.is_none().then_some(true);
+            if refreshing {
+                let Some(refresh) = view.refresh.as_mut() else {
+                    return Err(ViewError::new("This view doesn’t refresh"));
+                };
+                refresh.every = every.unwrap_or(refresh.every);
+                refresh.paused = paused;
+            } else {
+                let cmd = view
+                    .commands
+                    .iter_mut()
+                    .flatten()
+                    .find(|c| Some(c.name.as_str()) == name);
+                let Some(cmd) = cmd else {
+                    return Err(ViewError::new("That command is gone"));
+                };
+                cmd.every = every.or(cmd.every);
+                cmd.paused = paused;
+            }
+            Ok(())
+        })?;
+        self.board_changed(project_id);
+        Ok(())
     }
 
     // -----------------------------------------------------------------------

@@ -30,6 +30,7 @@ pub mod pictures;
 mod runs;
 pub mod shapes;
 pub mod stop;
+pub mod tiles;
 
 use std::future::Future;
 use std::pin::Pin;

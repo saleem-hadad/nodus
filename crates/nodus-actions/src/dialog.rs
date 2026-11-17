@@ -4,7 +4,9 @@
 //! hands it, and their answers handed back.
 
 use nodus_domain::js::trim;
-use nodus_domain::{ActionDraft, ActionIcon, ProjectAction};
+use nodus_domain::{ActionDraft, ActionIcon, ActionSchedule, ProjectAction};
+
+use crate::schedule;
 use serde_json::{Map, Value, json};
 
 /// ACT-070: descriptions to start from, label → text.
@@ -80,8 +82,22 @@ pub struct ActionDialog {
     pub saving: bool,
     /// ACT-080: shown between the body and the footer until the next draft or save.
     pub error: Option<String>,
+    /// SCHED-040: `On a schedule` rather than `When I press it`.
+    pub scheduled: bool,
+    /// SCHED-041: the When field: what the user typed, or the schedule said back.
+    pub when: String,
+    /// SCHED-041: what Nodus understood; the day chips and the time show it.
+    pub schedule: Option<ActionSchedule>,
+    /// SCHED-041: the When field says something that isn't a time.
+    pub when_unclear: bool,
     request: i64,
 }
+
+/// SCHED-040: the schedule a switch to `On a schedule` starts with.
+pub const DEFAULT_WHEN: &str = "every weekday at 9";
+
+/// SCHED-041: shown under the When field when it isn't a time.
+pub const WHEN_UNCLEAR: &str = "Not sure when that is. Try “every weekday at 9” or “every 2 hours”.";
 
 impl ActionDialog {
     /// ACT-067: a new action starts on describe, an existing one on review.
@@ -97,6 +113,19 @@ impl ActionDialog {
             drafting: false,
             saving: false,
             error: None,
+            scheduled: a.is_some_and(|a| a.schedule.is_some()),
+            when: a
+                .and_then(|a| a.schedule.as_ref())
+                .map(|s| {
+                    if s.words.is_empty() {
+                        schedule::describe(s)
+                    } else {
+                        s.words.clone()
+                    }
+                })
+                .unwrap_or_default(),
+            schedule: a.and_then(|a| a.schedule.clone()),
+            when_unclear: false,
             request: 0,
             action,
         }
@@ -181,6 +210,16 @@ impl ActionDialog {
                 self.icon = draft.icon;
                 self.prompt = draft.prompt;
                 self.step = Step::Review;
+                // SCHED-008: a time in the description becomes the schedule.
+                if let (false, Some(found)) = (self.global, schedule::parse(&draft.when)) {
+                    self.scheduled = true;
+                    self.when = draft.when;
+                    self.when_unclear = false;
+                    self.schedule = Some(ActionSchedule {
+                        paused: self.schedule.as_ref().and_then(|s| s.paused),
+                        ..found
+                    });
+                }
             }
             Err(message) => self.error = Some(format!("Claude couldn’t draft it: {message}")),
         }
@@ -218,7 +257,133 @@ impl ActionDialog {
             "createdAt".into(),
             json!(self.action.as_ref().map_or(now, |a| a.created_at)),
         );
+        // SCHED-043
+        if let (true, false, Some(s)) = (self.scheduled, self.global, &self.schedule) {
+            raw.insert("schedule".into(), serde_json::to_value(s).unwrap_or(Value::Null));
+        }
         Some(Value::Object(raw))
+    }
+
+    /// SCHED-007, SCHED-040: the global switch. A global action can't have a
+    /// schedule, so turning it on turns the schedule off.
+    pub fn set_global(&mut self, on: bool) {
+        self.global = on;
+        if on {
+            self.scheduled = false;
+        }
+    }
+
+    /// SCHED-040: `When I press it` or `On a schedule`. A schedule turned on
+    /// with nothing typed yet starts as every weekday at 9; it turns the global
+    /// switch off.
+    pub fn set_scheduled(&mut self, on: bool) {
+        self.scheduled = on;
+        if !on {
+            return;
+        }
+        self.global = false;
+        if self.schedule.is_none() {
+            self.schedule = schedule::parse(DEFAULT_WHEN);
+            self.when = DEFAULT_WHEN.to_owned();
+            self.when_unclear = false;
+        }
+    }
+
+    /// SCHED-041: the When field changed. Words that say when replace the
+    /// schedule (keeping it paused if it was); others leave it and say so.
+    pub fn set_when(&mut self, text: &str) {
+        text.clone_into(&mut self.when);
+        match schedule::parse(text) {
+            Some(found) => {
+                self.schedule = Some(ActionSchedule {
+                    paused: self.schedule.as_ref().and_then(|s| s.paused),
+                    ..found
+                });
+                self.when_unclear = false;
+            }
+            None => self.when_unclear = !trim(text).is_empty(),
+        }
+    }
+
+    /// SCHED-042: whether a day chip is on; every chip is on for every day.
+    pub fn day_on(&self, day: u8) -> bool {
+        self.schedule
+            .as_ref()
+            .is_some_and(|s| s.days.is_empty() || s.days.contains(&day))
+    }
+
+    /// SCHED-042: a day chip pressed. The last day on stays on. The When
+    /// field then says the schedule back, so the two agree; the UI puts
+    /// [`Self::when`] into the field when this returns true.
+    pub fn toggle_day(&mut self, day: u8) -> bool {
+        let Some(s) = self.schedule.as_mut() else {
+            return false;
+        };
+        let mut days: Vec<u8> = (0..7).filter(|d| s.days.is_empty() || s.days.contains(d)).collect();
+        if days.contains(&day) {
+            if days.len() == 1 {
+                return false;
+            }
+            days.retain(|d| *d != day);
+        } else {
+            days.push(day);
+            days.sort_unstable();
+        }
+        s.days = if days.len() == 7 { Vec::new() } else { days };
+        self.said_back();
+        true
+    }
+
+    /// SCHED-042: the time field: `9`, `9:30`, `17:05`. A time makes an
+    /// every-so-often schedule run once a day at it. Returns false for text that
+    /// isn't a time, leaving the schedule as it was.
+    pub fn set_time(&mut self, text: &str) -> bool {
+        let Some(found) = schedule::parse(&format!("at {}", trim(text))).and_then(|s| s.at) else {
+            return false;
+        };
+        let Some(s) = self.schedule.as_mut() else {
+            return false;
+        };
+        s.at = Some(found);
+        s.every = None;
+        self.said_back();
+        true
+    }
+
+    /// The time field's text: `9:00`, or empty for an every-so-often schedule.
+    pub fn time_text(&self) -> String {
+        self.schedule
+            .as_ref()
+            .and_then(|s| s.at.as_deref())
+            .and_then(schedule::at_minutes)
+            .map(schedule::time_label)
+            .unwrap_or_default()
+    }
+
+    fn said_back(&mut self) {
+        if let Some(s) = self.schedule.as_mut() {
+            let words = schedule::describe(s);
+            s.words.clone_from(&words);
+            self.when = words;
+            self.when_unclear = false;
+        }
+    }
+
+    /// SCHED-044: the line under the When row: the schedule said back and when
+    /// it next runs (`Weekdays at 9:00 · next tomorrow at 9:00`), or why it
+    /// can't be read.
+    pub fn when_hint(&self, now_ms: f64) -> String {
+        if self.when_unclear {
+            return WHEN_UNCLEAR.to_owned();
+        }
+        let Some(s) = &self.schedule else {
+            return String::new();
+        };
+        let said = schedule::describe(s);
+        match schedule::next_label_ms(s, now_ms) {
+            Some(next) => format!("{said} · next {next}"),
+            None => said,
+        }
     }
 
     /// ACT-075: a save that failed shows its message (the IPC error text).
@@ -354,6 +519,7 @@ mod tests {
                 name: "Run Tests".into(),
                 icon: "test-tube".into(),
                 prompt: "Run them.".into(),
+                when: String::new(),
             }),
         );
         assert_eq!(
@@ -390,6 +556,7 @@ mod tests {
                 name: "Late".into(),
                 icon: "zap".into(),
                 prompt: "p".into(),
+                when: String::new(),
             }),
         );
         assert_eq!(d.name, "Run Tests");
@@ -429,5 +596,77 @@ mod tests {
             (raw["id"].clone(), raw["createdAt"].clone(), raw["global"].clone()),
             (json!("a1"), json!(5.0), json!(true))
         );
+    }
+
+    #[test]
+    fn sets_a_schedule_in_words_or_with_the_chips() {
+        let mut d = ActionDialog::new(None);
+        d.step = Step::Review;
+        d.prompt = "Sum up the PRs.".into();
+        d.global = true;
+        // SCHED-040: on, it starts as every weekday at 9 and isn't global.
+        d.set_scheduled(true);
+        assert_eq!(
+            (d.global, d.when.as_str(), d.time_text().as_str()),
+            (false, DEFAULT_WHEN, "9:00")
+        );
+        assert!((1..=5).all(|day| d.day_on(day)) && !d.day_on(0) && !d.day_on(6));
+        // SCHED-041
+        d.set_when("mondays at 5pm");
+        assert_eq!(d.time_text(), "17:00");
+        assert!(d.day_on(1) && !d.day_on(2) && !d.when_unclear);
+        d.set_when("whenever");
+        assert!(d.when_unclear);
+        assert_eq!(d.when_hint(0.0), WHEN_UNCLEAR);
+        assert_eq!(d.time_text(), "17:00", "keeps what it understood");
+        // SCHED-042: chips and the time say the schedule back in the field.
+        assert!(d.toggle_day(3));
+        assert_eq!(d.when, "Mon and Wed at 17:00");
+        assert!(!d.when_unclear);
+        assert!(d.toggle_day(1) && !d.toggle_day(3), "the last day stays");
+        assert!(d.set_time("8:30") && !d.set_time("soon"));
+        assert_eq!(d.when, "Wednesdays at 8:30");
+        d.set_when("every 2 hours");
+        assert!(d.set_time("9"));
+        assert_eq!(d.when, "Every day at 9:00");
+        // SCHED-043
+        let raw = d.begin_save("id", 1.0).unwrap();
+        assert_eq!(raw["schedule"], json!({ "words": "Every day at 9:00", "at": "09:00" }));
+        assert_eq!(raw.get("global"), None);
+        let saved = crate::normalize_action(&raw, None, 1.0).unwrap();
+        assert_eq!(
+            schedule::describe(saved.schedule.as_ref().unwrap()),
+            "Every day at 9:00"
+        );
+        // Editing it starts on a schedule; turning global on turns it off.
+        let mut e = ActionDialog::new(Some(saved));
+        assert!(e.scheduled);
+        assert_eq!(e.when, "Every day at 9:00");
+        e.set_global(true);
+        assert!(!e.scheduled);
+        assert_eq!(e.begin_save("x", 1.0).unwrap().get("schedule"), None);
+    }
+
+    #[test]
+    fn takes_the_schedule_from_the_draft() {
+        let mut d = ActionDialog::new(None);
+        d.description = "Every weekday at 9, sum up the PRs".into();
+        let request = d.begin_draft().unwrap();
+        let draft = ActionDraft {
+            name: "PR Sweep".into(),
+            icon: "git-pull-request".into(),
+            prompt: "Sum up the open PRs.".into(),
+            when: "every weekday at 9".into(),
+        };
+        d.draft_done(request.id, Ok(draft.clone()));
+        assert!(d.scheduled);
+        assert_eq!(schedule::describe(d.schedule.as_ref().unwrap()), "Weekdays at 9:00");
+        // Not for a global action.
+        let mut g = ActionDialog::new(None);
+        g.description = "x".into();
+        g.global = true;
+        let request = g.begin_draft().unwrap();
+        g.draft_done(request.id, Ok(draft));
+        assert!(!g.scheduled);
     }
 }

@@ -17,6 +17,8 @@ pub enum EdgeKind {
     View,
     /// Between two sessions that messaged each other (BOARD-184).
     Talk,
+    /// From a scheduled action's tile to its run (SCHED-037).
+    Schedule,
 }
 
 /// One edge, by node ids.
@@ -77,6 +79,21 @@ pub fn edges(board: &BoardSnapshot) -> Vec<Edge> {
                 animated: true,
                 kind: EdgeKind::View,
             });
+        }
+    }
+    // SCHED-037: each tile to its run on the board.
+    for tile in &board.tiles {
+        for card in &board.cards {
+            if card.node.run_of.as_deref() == Some(tile.id.as_str()) && active.contains(&card.node.session_id.as_str())
+            {
+                out.push(Edge {
+                    id: format!("{}->{}", tile.id, card.node.session_id),
+                    source: tile.id.clone(),
+                    target: card.node.session_id.clone(),
+                    animated: false,
+                    kind: EdgeKind::Schedule,
+                });
+            }
         }
     }
     // BOARD-184: one line a pair, from the first to message the other. A

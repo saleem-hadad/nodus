@@ -51,6 +51,9 @@ anyhow = "1.0.104"
 # Base64 for a server's GitHub App: the JWT it signs and the PEM key it reads.
 base64 = "0.22"
 block2 = "0.6"
+# Local wall-clock time for scheduled actions, daylight saving included. GPUI
+# already builds it.
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 cbc = { version = "0.1", features = ["alloc"] }
 dispatch2 = "0.3"
 # Streams and sinks, for the server's WebSocket and its client.

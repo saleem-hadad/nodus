@@ -403,6 +403,10 @@ pub fn view_event(view_id: &str, name: &str, payload: Value, cx: &mut App) {
     if name == "data" {
         deliver_where(&event("board", None), |fr| fr.view_id != view_id, cx);
     }
+    // SCHED-062: a command ran, so its schedule's next run moved on.
+    if name == "result" {
+        super::schedule::ran(view_id, cx);
+    }
 }
 
 /// The board mounted: `board` 300ms later, and `git` with what the window

@@ -8,6 +8,7 @@ use gpui::{
     SharedString, StatefulInteractiveElement, Styled, Window, div, linear_color_stop, linear_gradient, px,
 };
 use nodus_actions::dialog::{EXAMPLES, Step};
+use nodus_actions::schedule;
 use nodus_domain::ActionIcon;
 
 use super::dialog::{ActionDialogView, NAME_MAX};
@@ -303,8 +304,151 @@ impl ActionDialogView {
             name.into_any_element(),
             icon.into_any_element(),
             prompt.into_any_element(),
+            self.when_row(t, window, cx).into_any_element(),
             self.scope(t, cx).into_any_element(),
         ]
+    }
+
+    /// SCHED-040…SCHED-044: when it runs: when its button is pressed, or on a
+    /// schedule too, typed in words, with the days and the time Nodus read.
+    fn when_row(&self, t: &Tokens, window: &mut Window, cx: &mut Context<'_, Self>) -> Div {
+        let scheduled = self.model.scheduled;
+        let segment = |id: &'static str, text: &'static str, value: bool| {
+            let on = scheduled == value;
+            let view = cx.entity();
+            div()
+                .id(id)
+                .px(px(10.))
+                .h(px(22.))
+                .flex()
+                .items_center()
+                .rounded(px(5.))
+                .text_size(TEXT_SM)
+                .when(on, |d| {
+                    d.bg(t.bg_selected)
+                        .text_color(t.text_primary)
+                        .font_weight(FontWeight::MEDIUM)
+                })
+                .when(!on, |d| {
+                    d.text_color(t.text_secondary).hover(|d| d.text_color(t.text_primary))
+                })
+                .on_click(move |_, window, cx| view.update(cx, |v, cx| v.set_scheduled(value, window, cx)))
+                .child(text)
+        };
+        let head = div()
+            .flex()
+            .items_center()
+            .justify_between()
+            .child(label(t, "When"))
+            .child(
+                div()
+                    .flex()
+                    .p(px(2.))
+                    .gap(px(2.))
+                    .rounded(px(7.))
+                    .border(px(0.5))
+                    .border_color(t.border_strong)
+                    .bg(t.bg_window)
+                    .child(segment("act-when-press", "When I press it", false))
+                    .child(segment("act-when-schedule", "On a schedule", true)),
+            );
+        let mut row = div()
+            .flex()
+            .flex_col()
+            .gap(px(8.))
+            .flex_none()
+            .pt(px(12.))
+            .border_t(px(0.5))
+            .border_color(t.separator)
+            .child(head);
+        if !scheduled {
+            return row;
+        }
+        let words_focused = self.when.read(cx).focus_handle(cx).is_focused(window);
+        let words = field_frame(t, words_focused, false)
+            .h(px(32.))
+            .px(px(10.))
+            .flex()
+            .items_center()
+            .child(
+                Input::new(&self.when)
+                    .appearance(false)
+                    .px(px(0.))
+                    .py(px(0.))
+                    .text_size(TEXT_MD)
+                    .line_height(px(31.))
+                    .h(px(31.)),
+            );
+        let chips: Vec<AnyElement> = schedule::DAY_ORDER
+            .iter()
+            .map(|&day| {
+                let on = self.model.day_on(day);
+                let view = cx.entity();
+                div()
+                    .id(SharedString::from(format!("act-day-{day}")))
+                    .size(px(26.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(6.))
+                    .border(px(1.))
+                    .text_size(TEXT_XS)
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .when(on, |d| d.border_color(t.accent).text_color(t.accent))
+                    .when(!on, |d| {
+                        d.border_color(t.border_strong)
+                            .text_color(t.text_tertiary)
+                            .hover(|d| d.text_color(t.text_secondary))
+                    })
+                    .on_click(move |_, window, cx| view.update(cx, |v, cx| v.toggle_day(day, window, cx)))
+                    .child(schedule::DAY_LETTERS[usize::from(day)])
+                    .into_any_element()
+            })
+            .collect();
+        let time_focused = self.time.read(cx).focus_handle(cx).is_focused(window);
+        let time = field_frame(t, time_focused, false)
+            .w(px(64.))
+            .h(px(26.))
+            .px(px(8.))
+            .flex()
+            .items_center()
+            .rounded(px(6.))
+            .child(
+                Input::new(&self.time)
+                    .appearance(false)
+                    .px(px(0.))
+                    .py(px(0.))
+                    .text_size(TEXT_SM)
+                    .line_height(px(25.))
+                    .h(px(25.)),
+            );
+        let days = div()
+            .flex()
+            .items_center()
+            .gap(px(4.))
+            .children(chips)
+            .child(div().flex_1())
+            .child(
+                div()
+                    .text_size(TEXT_SM)
+                    .text_color(t.text_secondary)
+                    .mr(px(6.))
+                    .child("at"),
+            )
+            .child(time);
+        let hint = self.model.when_hint(crate::parity::now_ms(cx));
+        row = row.child(words).child(days).child(
+            div()
+                .text_size(TEXT_SM)
+                .line_height(px(16.8))
+                .text_color(if self.model.when_unclear {
+                    t.text_primary
+                } else {
+                    t.text_secondary
+                })
+                .child(hint),
+        );
+        row
     }
 
     /// ACT-074: one icon to pick; its name is its tooltip.

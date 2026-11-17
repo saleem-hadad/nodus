@@ -8,8 +8,8 @@
 use std::rc::Rc;
 
 use gpui::component::input::{InputEvent, InputState, TextareaState};
-use gpui::{App, AppContext as _, Context, Entity, FocusHandle, Keystroke, Subscription, Window};
-use nodus_actions::dialog::{ActionDialog, DESCRIPTION_PLACEHOLDER, Step, Submit};
+use gpui::{App, AppContext as _, Context, Entity, FocusHandle, Focusable as _, Keystroke, Subscription, Window};
+use nodus_actions::dialog::{ActionDialog, DEFAULT_WHEN, DESCRIPTION_PLACEHOLDER, Step, Submit};
 use nodus_domain::ProjectAction;
 
 use crate::platform::Platform;
@@ -29,6 +29,10 @@ pub struct ActionDialogView {
     pub(super) description: Entity<TextareaState>,
     pub(super) name: Entity<InputState>,
     pub(super) prompt: Entity<TextareaState>,
+    /// SCHED-041: the When field, the schedule in words.
+    pub(super) when: Entity<InputState>,
+    /// SCHED-042: the time of day.
+    pub(super) time: Entity<InputState>,
     /// Spelling in the description, the name and the prompt (Chromium's
     /// default `spellcheck`; the name is a single-line field).
     pub(super) spell: [Entity<crate::components::spellcheck::Spellcheck>; 3],
@@ -72,6 +76,18 @@ impl ActionDialogView {
             s.set_value(model.prompt.clone(), window, cx);
             s
         });
+        let when = cx.new(|cx| {
+            let mut s = InputState::new(window, cx)
+                .context_menu(false)
+                .placeholder(DEFAULT_WHEN);
+            s.set_value(model.when.clone(), window, cx);
+            s
+        });
+        let time = cx.new(|cx| {
+            let mut s = InputState::new(window, cx).context_menu(false).placeholder("9:00");
+            s.set_value(model.time_text(), window, cx);
+            s
+        });
         let subscriptions = vec![
             cx.subscribe(&description, |this, field, e: &InputEvent, cx| {
                 if matches!(e, InputEvent::Change) {
@@ -90,6 +106,32 @@ impl ActionDialogView {
                     this.model.prompt = field.read(cx).value().to_string();
                     cx.notify();
                 }
+            }),
+            // SCHED-041: words that say when set the chips and the time.
+            cx.subscribe_in(&when, window, |this, field, e: &InputEvent, window, cx| {
+                if !matches!(e, InputEvent::Change) {
+                    return;
+                }
+                let text = field.read(cx).value().to_string();
+                if text == this.model.when {
+                    return;
+                }
+                this.model.set_when(&text);
+                this.show_time(window, cx);
+                cx.notify();
+            }),
+            // SCHED-042: a time typed in, once it reads as one.
+            cx.subscribe_in(&time, window, |this, field, e: &InputEvent, window, cx| {
+                if !matches!(e, InputEvent::Change | InputEvent::PressEnter { .. } | InputEvent::Blur) {
+                    return;
+                }
+                let text = field.read(cx).value().to_string();
+                if this.model.set_time(&text) {
+                    this.show_when(window, cx);
+                } else if matches!(e, InputEvent::Blur) {
+                    this.show_time(window, cx);
+                }
+                cx.notify();
             }),
         ];
         // ACT-078, ACT-079: ⌘/Ctrl+Enter and Esc are the dialog's wherever
@@ -123,6 +165,8 @@ impl ActionDialogView {
             description,
             name,
             prompt,
+            when,
+            time,
             spell,
             focus: cx.focus_handle(),
             focused_step: None,
@@ -139,7 +183,9 @@ impl ActionDialogView {
     pub fn close(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         self.model.close();
         let on_close = self.on_close.clone();
-        cx.defer_in(window, move |_, window, cx| on_close(window, cx));
+        // Not `defer_in`: that runs with this view being updated, and its
+        // owner's `closed` updates it again.
+        window.defer(cx, move |window, cx| on_close(window, cx));
     }
 
     /// `autoFocus`: the step's first field takes the keyboard once it's
@@ -180,10 +226,47 @@ impl ActionDialogView {
         cx.notify();
     }
 
-    /// ACT-071: the scope switch (no redraft on review).
+    /// ACT-071: the scope switch (no redraft on review). SCHED-007: on, it
+    /// turns the schedule off.
     pub(super) fn set_global(&mut self, global: bool, cx: &mut Context<'_, Self>) {
-        self.model.global = global;
+        self.model.set_global(global);
         cx.notify();
+    }
+
+    /// SCHED-040: `When I press it` or `On a schedule`.
+    pub(super) fn set_scheduled(&mut self, on: bool, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.model.set_scheduled(on);
+        self.show_when(window, cx);
+        self.show_time(window, cx);
+        if on {
+            self.when.update(cx, |s, cx| s.focus(window, cx));
+        }
+        cx.notify();
+    }
+
+    /// SCHED-042: a day chip.
+    pub(super) fn toggle_day(&mut self, day: u8, window: &mut Window, cx: &mut Context<'_, Self>) {
+        if self.model.toggle_day(day) {
+            self.show_when(window, cx);
+        }
+        cx.notify();
+    }
+
+    /// The When field says what the model has, unless it already does.
+    fn show_when(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let text = self.model.when.clone();
+        if self.when.read(cx).value() != text.as_str() {
+            self.when.update(cx, |s, cx| s.set_value(text, window, cx));
+        }
+    }
+
+    /// The time field shows the schedule's time, unless the user is in it.
+    fn show_time(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let text = self.model.time_text();
+        let field = self.time.read(cx);
+        if field.value() != text.as_str() && !field.focus_handle(cx).is_focused(window) {
+            self.time.update(cx, |s, cx| s.set_value(text, window, cx));
+        }
     }
 
     /// ACT-076: `Back`, `Redraft…` or `Back to the draft`.
@@ -248,6 +331,9 @@ impl ActionDialogView {
             let (name, prompt) = (self.model.name.clone(), self.model.prompt.clone());
             self.name.update(cx, |s, cx| s.set_value(name, window, cx));
             self.prompt.update(cx, |s, cx| s.set_value(prompt, window, cx));
+            // SCHED-008
+            self.show_when(window, cx);
+            self.show_time(window, cx);
         }
         cx.notify();
     }

@@ -121,6 +121,15 @@ pub(crate) async fn answer(nodus: Nodus, member: Option<String>, request: Reques
             board_changed(&nodus, &project_id);
             DONE
         }
+        Request::BoardMoveTile { project_id, id, x, y } => {
+            nodus.board().move_tile(&project_id, &id, x, y).await;
+            board_changed(&nodus, &project_id);
+            DONE
+        }
+        Request::BoardSeeTile { project_id, id } => {
+            nodus.board().see_tile(&project_id, &id).await;
+            DONE
+        }
         Request::BoardSaveLinks { project_id, links } => {
             by.board().save_links(&project_id, &links).await;
             board_changed(&nodus, &project_id);
@@ -254,6 +263,19 @@ pub(crate) async fn answer(nodus: Nodus, member: Option<String>, request: Reques
             prompt,
         } => done(channel, nodus.views().ask(&project_id, &view_id, &prompt).await),
         Request::ViewsBrain { project_id, view_id } => done(channel, nodus.views().brain(&project_id, &view_id).await),
+        Request::ViewsSchedules { project_id, view_id } => {
+            done(channel, nodus.views().schedules(&project_id, &view_id).await)
+        }
+        // The views say the board changed, as an approval does.
+        Request::ViewsSetEvery {
+            project_id,
+            view_id,
+            key,
+            every,
+        } => done(
+            channel,
+            nodus.views().set_every(&project_id, &view_id, &key, every).await,
+        ),
 
         // SRV-128: a card's own worktree when it's named.
         Request::GitStatus { project_id, session_id } => {

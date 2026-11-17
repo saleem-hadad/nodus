@@ -195,6 +195,12 @@ impl TranscriptPreview {
         let now = parity::now_ms(cx);
         let this = cx.entity();
         let state = self.state.clone();
+        let on_board = self
+            .state
+            .read(cx)
+            .board
+            .as_ref()
+            .is_some_and(|b| b.cards.iter().any(|c| c.node.session_id == self.session_id));
         div()
             .flex()
             .items_center()
@@ -249,13 +255,17 @@ impl TranscriptPreview {
                     .items_center()
                     .gap(px(6.))
                     .flex_none()
-                    .child(
-                        button("tp-restore")
-                            .primary()
-                            .icon(Icon::ArchiveRestore, 14., 2.)
-                            .label("Restore & Open")
-                            .on_click(move |_, _, cx| this.update(cx, Self::restore)),
-                    )
+                    // SCHED-036: a scheduled action's last run isn't a card
+                    // on the board any more; it's only read.
+                    .when(on_board, |d| {
+                        d.child(
+                            button("tp-restore")
+                                .primary()
+                                .icon(Icon::ArchiveRestore, 14., 2.)
+                                .label("Restore & Open")
+                                .on_click(move |_, _, cx| this.update(cx, Self::restore)),
+                        )
+                    })
                     .child(
                         button("tp-close")
                             .ghost()

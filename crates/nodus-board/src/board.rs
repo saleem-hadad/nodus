@@ -42,6 +42,10 @@ pub struct Board {
     pub(crate) clock: Clock,
 }
 
+/// How long a run may take to start before a board load counts it as ended
+/// (SESS-156).
+const STARTING_MS: f64 = 30_000.0;
+
 impl Board {
     /// The boards in `store`, with transcripts read through `transcripts`, the
     /// processes reached through `sessions`, and events sent to `events`.
@@ -81,7 +85,7 @@ impl Board {
         &self.transcripts
     }
 
-    pub(crate) fn now(&self) -> f64 {
+    pub fn now(&self) -> f64 {
         (self.clock)()
     }
 
@@ -126,11 +130,19 @@ impl Board {
     /// disk, and its transcript folder watched.
     pub fn load(&self, project_id: &str) -> Result<BoardSnapshot, BoardError> {
         let project = self.project(project_id)?;
+        let now = self.now();
         let stale: Vec<String> = self.read_board(project_id, |_, board| {
             board
                 .nodes
                 .values()
-                .filter(|n| set(n.run_of.as_deref()) && !self.sessions.is_live(&n.session_id))
+                // SESS-156: not one made in the last half minute, whose process
+                // may still be starting (a scheduled run starts on its own,
+                // whenever, SCHED-020).
+                .filter(|n| {
+                    set(n.run_of.as_deref())
+                        && !self.sessions.is_live(&n.session_id)
+                        && now - n.created_at >= STARTING_MS
+                })
                 .map(|n| n.session_id.clone())
                 .collect()
         });
@@ -212,6 +224,8 @@ impl Board {
             // deleted, a card dropped) go too.
             crate::shapes::prune_links(board);
             crate::frames::prune_groups(board);
+            // SCHED-024: and the tiles follow the project's scheduled actions.
+            crate::tiles::sync(board, project, now);
             // SESS-078
             project.opened_at = Some(now);
             let snapshot = BoardSnapshot {
@@ -226,6 +240,7 @@ impl Board {
                 links: board.links.values().cloned().collect(),
                 groups: board.groups.values().cloned().collect(),
                 talks: Vec::new(),
+                tiles: board.tiles.values().cloned().collect(),
                 viewport: board.viewport,
                 offline: false,
             };

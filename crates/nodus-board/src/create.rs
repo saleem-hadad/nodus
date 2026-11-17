@@ -138,6 +138,11 @@ impl Board {
             let board = state.board_mut(project_id);
             let mut new = new_session(board, &project, globals.as_deref(), opts, &session_id, now)?;
             new.node.set_created_by(created_by);
+            // SCHED-026: a run of a scheduled action comes out beside its tile.
+            if let Some(tile) = new.action.as_ref().and_then(|a| board.tiles.get(&a.id)) {
+                let at = crate::tiles::run_spot(board, tile, &new.node);
+                (new.node.x, new.node.y) = (at.x, at.y);
+            }
             // SESS-118
             board.nodes.insert(session_id.clone(), new.node.clone());
             Ok::<_, BoardError>(new)

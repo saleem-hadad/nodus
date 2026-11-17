@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use nodus_domain::{ActionDraft, ActionLists, ProjectAction};
+use nodus_domain::{ActionDraft, ActionLists, ActionSchedule, ProjectAction};
 use nodus_remote::Request;
 use serde_json::Value;
 
@@ -32,7 +32,30 @@ impl ActionsApi<'_> {
             return route.call(Request::ActionsSave { project_id, action }).await;
         }
         self.nodus
-            .on_core(async { self.nodus.inner.actions.save(project_id, raw).on("actions:save") })
+            .on_core(async {
+                let inner = &self.nodus.inner;
+                let before = schedule_of(inner, project_id, raw);
+                let lists = inner.actions.save(project_id, raw).on("actions:save")?;
+                // SCHED-024, SCHED-020: its tile comes or goes with its
+                // schedule, and a schedule changed or resumed starts from now.
+                inner.board.sync_tiles(project_id);
+                let id = raw.get("id").and_then(Value::as_str).unwrap_or_default();
+                let after = lists
+                    .project
+                    .actions
+                    .iter()
+                    .flatten()
+                    .find(|a| a.id == id)
+                    .and_then(|a| a.schedule.clone())
+                    .map(|s| ActionSchedule {
+                        words: String::new(),
+                        ..s
+                    });
+                if before != after {
+                    inner.board.reset_tile(project_id, id);
+                }
+                Ok(lists)
+            })
             .await
     }
 
@@ -45,11 +68,15 @@ impl ActionsApi<'_> {
         }
         self.nodus
             .on_core(async {
-                self.nodus
+                let lists = self
+                    .nodus
                     .inner
                     .actions
                     .remove(project_id, action_id)
-                    .on("actions:remove")
+                    .on("actions:remove")?;
+                // SCHED-024
+                self.nodus.inner.board.sync_tiles(project_id);
+                Ok(lists)
             })
             .await
     }
@@ -83,4 +110,18 @@ impl ActionsApi<'_> {
             })
             .await
     }
+}
+
+/// The schedule of the project's action that `raw` saves, before the save,
+/// leaving out its words (SCHED-020).
+fn schedule_of(inner: &crate::nodus::Inner, project_id: &str, raw: &Value) -> Option<ActionSchedule> {
+    let id = raw.get("id").and_then(Value::as_str)?;
+    inner.store.read(|state| {
+        let project = state.project(project_id).ok()?;
+        let action = project.actions.iter().flatten().find(|a| a.id == id)?;
+        action.schedule.clone().map(|s| ActionSchedule {
+            words: String::new(),
+            ..s
+        })
+    })
 }

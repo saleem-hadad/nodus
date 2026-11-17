@@ -287,8 +287,10 @@ pub fn approvals(
     let t = theme::tokens(cx);
     let mut items = Vec::new();
     for (i, c) in waiting.iter().enumerate() {
+        // SCHED-064: one the user turned off runs only when asked.
         let every = c
             .every
+            .filter(|_| c.paused != Some(true))
             .map(|e| format!(" {}", super::every_label(e)))
             .unwrap_or_default();
         let actions: Vec<AnyElement> = [(false, Btn::Ghost, "Don’t allow"), (true, Btn::Primary, "Allow")]

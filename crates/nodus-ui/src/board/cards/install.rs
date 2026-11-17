@@ -10,10 +10,11 @@ use nodus_domain::{BoardNote, NodePatch, OpenCardRequest, Rect};
 
 use super::present::{Phase, StackLook};
 use super::{
-    BoardEnv, CardActions, Resized, StackView, TerminalHost, Z, archive_zone, note, note_pad, session_card, shape,
+    BoardEnv, CardActions, Resized, StackView, TerminalHost, Z, archive_zone, note, note_pad, session_card, shape, tile,
 };
 use crate::board::nodes::{
     self, ArchiveNode, BoardActions, BoardCx, CardNode, NodeRenderers, NoteNode, PadNode, ShapeNode, StackPlace,
+    TileNode,
 };
 use crate::parity;
 use crate::platform::Platform;
@@ -198,6 +199,9 @@ impl CardActions for CanvasActions {
     }
     fn submit_stack(&self, window: &mut Window, cx: &mut App) {
         self.0.submit_stack(window, cx);
+    }
+    fn open_tile(&self, tile_id: &str, cx: &mut App) {
+        self.0.open_tile(tile_id, cx);
     }
 }
 
@@ -388,6 +392,11 @@ impl NodeRenderers for CardRenderers {
     fn shape(&self, node: ShapeNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut App) -> AnyElement {
         let env = env(board, node.node.zoom, window, cx);
         shape::render(&env, &node, window, cx)
+    }
+
+    fn tile(&self, node: TileNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut App) -> AnyElement {
+        let env = env(board, node.node.zoom, window, cx);
+        tile::render(&env, &node, window, cx)
     }
 
     fn wake(&self, session_id: &str, cx: &mut App) {

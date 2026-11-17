@@ -4,6 +4,7 @@
 
 pub mod ambient;
 pub mod button;
+pub mod clock_ring;
 pub mod color_swatches;
 pub mod context_menu;
 pub mod focus_ring;

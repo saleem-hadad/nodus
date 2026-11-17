@@ -31,6 +31,13 @@ pub const SLIDES: &[Slide] = &[
         dark: shot!("1.0.24-drawer-dark"),
     },
     Slide {
+        version: "1.0.24",
+        title: "Actions on a schedule",
+        text: "Run an action every weekday at 9. Its tile on the board counts down and keeps what it found.",
+        light: shot!("1.0.24-schedules-light"),
+        dark: shot!("1.0.24-schedules-dark"),
+    },
+    Slide {
         version: "1.0.22",
         title: "Side by side",
         text: "Open a terminal, a new session or any card beside an open one, up to four, with {⌘T} or {⌘N}.",

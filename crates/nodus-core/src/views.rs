@@ -2,7 +2,9 @@
 //! their brains (`views:*` in `src/main/ipc.ts`), and the pages their frames
 //! load (`nodus-view://`).
 
-use nodus_domain::{BoardView, CommandResult as CommandRunResult, CreateViewOptions, CreatedBy, ViewPatch, ViewReport};
+use nodus_domain::{
+    BoardView, CommandResult as CommandRunResult, CreateViewOptions, CreatedBy, ViewPatch, ViewReport, ViewSchedule,
+};
 use nodus_remote::Request;
 use nodus_views::PageResponse;
 use serde_json::Value;
@@ -159,6 +161,48 @@ impl ViewsApi<'_> {
                     });
                 }
                 Ok(())
+            })
+            .await
+    }
+
+    /// `views:schedules` (SCHED-061, SCHED-062): the view's commands that
+    /// run every so often and its brain's refresh, with when each runs next.
+    pub async fn schedules(&self, project_id: &str, view_id: &str) -> CommandResult<Vec<ViewSchedule>> {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let (project_id, view_id) = (project_id.to_owned(), view_id.to_owned());
+            return route.call(Request::ViewsSchedules { project_id, view_id }).await;
+        }
+        self.nodus
+            .on_core(async {
+                self.nodus
+                    .inner
+                    .views
+                    .schedules(project_id, view_id)
+                    .on("views:schedules")
+            })
+            .await
+    }
+
+    /// `views:set-every` (SCHED-063, SCHED-064): how often one of the view's
+    /// schedules runs, by its key; `None` turns it off.
+    pub async fn set_every(&self, project_id: &str, view_id: &str, key: &str, every: Option<f64>) -> CommandResult<()> {
+        if let Some(route) = self.nodus.route_project(project_id) {
+            return route
+                .call(Request::ViewsSetEvery {
+                    project_id: project_id.to_owned(),
+                    view_id: view_id.to_owned(),
+                    key: key.to_owned(),
+                    every,
+                })
+                .await;
+        }
+        self.nodus
+            .on_core(async {
+                self.nodus
+                    .inner
+                    .views
+                    .set_every(project_id, view_id, key, every)
+                    .on("views:set-every")
             })
             .await
     }

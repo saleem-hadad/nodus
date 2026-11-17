@@ -497,6 +497,8 @@ impl BoardCanvas {
                     self.set_renaming(Some(id.to_owned()), cx);
                 }
             }
+            // SCHED-036: a double-click opens a tile's last run.
+            NodeKind::Tile { .. } => self.open_tile(id, cx),
             // SHAPE-012: a double-click writes in a shape that holds words.
             NodeKind::Shape { index } => {
                 if self.board.as_ref().is_some_and(|b| b.shapes[*index].kind.has_text()) {
@@ -725,7 +727,11 @@ impl BoardCanvas {
             if let Some(n) = self.node(id)
                 && matches!(
                     n.kind,
-                    NodeKind::Card { .. } | NodeKind::Note { .. } | NodeKind::View { .. } | NodeKind::Shape { .. }
+                    NodeKind::Card { .. }
+                        | NodeKind::Note { .. }
+                        | NodeKind::View { .. }
+                        | NodeKind::Shape { .. }
+                        | NodeKind::Tile { .. }
                 )
             {
                 let pos = n.position;
@@ -886,6 +892,10 @@ impl BoardCanvas {
             .iter()
             .filter(|n| matches!(n.kind, NodeKind::Shape { .. }))
             .collect();
+        let moved_tiles: Vec<&FlowNode> = moved
+            .iter()
+            .filter(|n| matches!(n.kind, NodeKind::Tile { .. }))
+            .collect();
 
         // BOARD-060, BOARD-061: bounces.
         let mut bounced: Vec<(String, Point)> = Vec::new();
@@ -935,6 +945,18 @@ impl BoardCanvas {
             let size = nodus_board::geometry::Size { w: shape.w, h: shape.h };
             if is_in_archive(n.position, zone, size) || is_on_pad(n.position, pad, size) {
                 bounced.push((n.id.clone(), Point { x: shape.x, y: shape.y }));
+            }
+        }
+        // SCHED-033: a tile dropped on the archive or the pad goes back.
+        for n in &moved_tiles {
+            let NodeKind::Tile { index } = n.kind else { continue };
+            let Some(tile) = board.tiles.get(index) else { continue };
+            let size = nodus_board::geometry::Size {
+                w: nodus_domain::BoardTile::W,
+                h: nodus_domain::BoardTile::H,
+            };
+            if is_in_archive(n.position, zone, size) || is_on_pad(n.position, pad, size) {
+                bounced.push((n.id.clone(), Point { x: tile.x, y: tile.y }));
             }
         }
         for (id, back) in &bounced {
@@ -1002,6 +1024,11 @@ impl BoardCanvas {
             .filter(|n| !is_bounced(&n.id))
             .map(|n| (n.id.clone(), n.position))
             .collect();
+        let tiles_moved: Vec<(String, Point)> = moved_tiles
+            .iter()
+            .filter(|n| !is_bounced(&n.id))
+            .map(|n| (n.id.clone(), n.position))
+            .collect();
         let released: Vec<String> = moved.iter().map(|n| n.id.clone()).collect();
 
         // BOARD-065: the cards in one patch, then each moved note and view.
@@ -1016,6 +1043,7 @@ impl BoardCanvas {
                 }
             });
             c.move_shapes(&shapes_moved, cx);
+            c.move_tiles(&tiles_moved, cx);
         };
         // BOARD-064: archiving a running session asks first.
         if !running.is_empty() {

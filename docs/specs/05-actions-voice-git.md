@@ -30,7 +30,7 @@ Three small features that share the board's chrome:
 - **ACT-009** — Normalize · description: `description` = `clip(raw.description, 4000)` (`''` when missing).
 - **ACT-010** — Normalize · global: `global` = `true` only when `raw.global === true` (strict boolean); anything else (e.g. the string `yes`) gives absent.
 - **ACT-011** — Normalize · createdAt: `createdAt` = `existing.createdAt` if found, else now (ms).
-- **ACT-012** — Normalize · key order: the normalized object's keys are written in the order `id, name, icon, description, prompt, global, createdAt` (`global` omitted when absent).
+- **ACT-012** — Normalize · key order: the normalized object's keys are written in the order `id, name, icon, description, prompt, global, createdAt` (`global` omitted when absent). After 1.0.23 a project's action may also have a `schedule`, written last (SCHED-001).
 
 ### Actions · commands
 
@@ -59,7 +59,7 @@ Three small features that share the board's chrome:
 - **ACT-029** — Starting a run (main): `sessions.create(projectId, { x, y, actionId })` looks the action up in the project's own list first, then the global list; if not found it throws `That action no longer exists`. Terminal-kind creates ignore `actionId`.
 - **ACT-030** — Run node: the new board node has `runOf = action.id`, `title = action.name` (overriding any `name` option), `createdByApp: true`, `archived: false`, and x/y from the options. The session is spawned (03) with `name = action.name`, `initialPrompt = action.prompt` (any `initialPrompt` option ignored), `permissionMode = 'auto'`, `extraArgs = runArgs(action)`. If the spawn throws, the node is removed and the error rethrown.
 - **ACT-031** — Starting a run (renderer): pressing an idle action computes the spot a new session card would take (`spotForNewSession`, 09) — kept for the run in case it is taken over — and calls `sessions.create` with `{ x: round(x), y: round(y), actionId }`; on success the card is upserted into the board store; on failure the board toast shows `Couldn't run <name>: <error message>` (straight apostrophe; the message carries Electron's IPC prefix, see ACT-083).
-- **ACT-032** — Runs are hidden from the board: cards with `runOf` are kept in the store's `board.cards` (so the rail sees them) but are not drawn on the canvas, and are left out of search, note placement, capture targets and views' card lists (09/04/07; cross-reference only).
+- **ACT-032** — Runs are hidden from the board: cards with `runOf` are kept in the store's `board.cards` (so the rail sees them) but are not drawn on the canvas, and are left out of search, note placement, capture targets and views' card lists (09/04/07; cross-reference only). After 1.0.23 a scheduled action's runs are drawn, beside its tile (SCHED-026).
 - **ACT-033** — Run tools: a session whose node has `runOf` gets the board's `list_sessions` and `archive_sessions` tools in addition to the common ones; `archive_self` refuses runs with `An action run leaves the board by itself when its turn ends`; `archive_sessions` skips the calling run with reason `it is the session running this action` (owned by 04; listed so the `isRun` predicate = "node has `runOf`" is wired).
 - **ACT-034** — Finish trigger · status: whenever the status machine reports `done` for a session, main (after sending `ev:status` and after the notification hook, 02) runs `finishRun(sessionId)` and then the archive-when-done check.
 - **ACT-035** — Finish trigger · board load: on `board:load`, every node with `runOf` whose PTY is not live is finished first (a run whose process ended while the app was closed).
@@ -292,8 +292,10 @@ Three small features that share the board's chrome:
 `--json-schema` value (exact bytes):
 
 ```json
-{"type":"object","properties":{"name":{"type":"string"},"icon":{"type":"string","enum":["zap","refresh-cw","git-merge","git-pull-request","git-commit-horizontal","upload","download","archive","brush-cleaning","eraser","sparkles","wand-sparkles","test-tube","bug","rocket","package","file-text","book-open","list-checks","search","shield-check","hammer","square-terminal","gauge","lightbulb","message-square"]},"prompt":{"type":"string"}},"required":["name","icon","prompt"],"additionalProperties":false}
+{"type":"object","properties":{"name":{"type":"string"},"icon":{"type":"string","enum":["zap","refresh-cw","git-merge","git-pull-request","git-commit-horizontal","upload","download","archive","brush-cleaning","eraser","sparkles","wand-sparkles","test-tube","bug","rocket","package","file-text","book-open","list-checks","search","shield-check","hammer","square-terminal","gauge","lightbulb","message-square"]},"prompt":{"type":"string"},"when":{"type":"string"}},"required":["name","icon","prompt","when"],"additionalProperties":false}
 ```
+
+Before 1.0.24 it had no `when` (SCHED-008).
 
 `--append-system-prompt` value for drafting (`DRAFT_SYSTEM_PROMPT`; exact text, straight ASCII quotes, paragraphs separated by one blank line, no leading or trailing newline):
 
@@ -309,6 +311,7 @@ From the user's description, write:
 - name: 1 to 3 words in Title Case, for the button.
 - icon: the best fit from the list.
 - prompt: the run's instructions, addressed to the session ("you"). Say what to do, step by step: what to check first, when to stop without changing anything, and how to handle the likely failures. If the run may need the user to decide something, tell it to ask with AskUserQuestion. Don't add requirements the user didn't ask for.
+- when: if the user says the button should also run on its own at certain times (such as "every weekday at 9" or "every 2 hours"), those words, as short as you can make them; otherwise an empty string. Leave the timing out of the name and the prompt.
 
 You can read the repository to fit the prompt to it (for example, to find the real test command), but be quick about it.
 ```

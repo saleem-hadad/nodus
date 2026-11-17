@@ -34,6 +34,7 @@ pub mod scene;
 mod section;
 pub(crate) mod shapes;
 mod store;
+mod tiles;
 pub mod units;
 pub mod viewport;
 

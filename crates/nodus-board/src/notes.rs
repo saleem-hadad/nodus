@@ -115,6 +115,8 @@ pub fn obstacles(board: &BoardState, except: Option<&str>) -> Vec<Rect> {
         )
         // Shapes too (added after 0.9.4).
         .chain(board.shapes.values().map(nodus_domain::BoardShape::rect))
+        // And scheduled actions' tiles (SCHED-025).
+        .chain(board.tiles.values().map(nodus_domain::BoardTile::rect))
         .collect()
 }
 

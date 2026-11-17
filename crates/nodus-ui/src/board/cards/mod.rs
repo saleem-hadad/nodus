@@ -39,6 +39,7 @@ pub mod session_card;
 pub mod shape;
 pub mod status_dot;
 pub mod sticker;
+pub mod tile;
 
 use std::rc::Rc;
 
@@ -436,6 +437,10 @@ pub trait CardActions {
     fn open_stack(&self, cx: &mut App);
     fn close_stack(&self, cx: &mut App);
     fn submit_stack(&self, window: &mut Window, cx: &mut App);
+    /// Opens a scheduled action's last run from its tile (SCHED-036).
+    fn open_tile(&self, tile_id: &str, cx: &mut App) {
+        let _ = (tile_id, cx);
+    }
 }
 
 /// The terminal registry, as an expanded card needs it (spec 12).

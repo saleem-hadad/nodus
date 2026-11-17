@@ -277,8 +277,8 @@ Feedback #9 asked for Claude to understand the board visually and add to it. `lo
 ### Views: schedules
 
 - **VIEW-085** A ticker runs every `30000` ms, started once by `configureViews` at app start, while the app is open (whether or not any board is showing).
-- **VIEW-086** Each tick visits every non-archived project's views; for each command with `every` that is allowed: due when `now − (last result's at, or 0) ≥ every × 60000`; a due command runs (failure logged `[views] command failed`). A never-run allowed scheduled command runs on the next tick.
-- **VIEW-087** A view with `refresh` is due when `now − (runtime.refreshedAt ?? view.createdAt) ≥ refresh.every × 60000`; `refreshedAt = now` and a save are done before asking; the brain is asked with origin `schedule` (failure logged `[views] refresh failed`).
+- **VIEW-086** Each tick visits every non-archived project's views; for each command with `every` that is allowed (and, after 1.0.23, not paused, SCHED-064): due when `now − (last result's at, or 0) ≥ every × 60000`; a due command runs (failure logged `[views] command failed`). A never-run allowed scheduled command runs on the next tick.
+- **VIEW-087** A view with `refresh` (not paused, SCHED-064) is due when `now − (runtime.refreshedAt ?? view.createdAt) ≥ refresh.every × 60000`; `refreshedAt = now` and a save are done before asking; the brain is asked with origin `schedule` (failure logged `[views] refresh failed`).
 
 ### Views: brains
 
@@ -1150,6 +1150,8 @@ Every message carries `nodus: 1`.
 | `report(projectId, viewId, {error?, loaded?})` | `views:report` | send (no reply) | VIEW-119 |
 | `approve(projectId, viewId, name, allow)` | `views:approve` | invoke | VIEW-081 |
 | `refresh(projectId, viewId)` → `CommandResult[]` | `views:refresh` | invoke | VIEW-084 |
+| `schedules(projectId, viewId)` → `ViewSchedule[]` | `views:schedules` | invoke | SCHED-061 (after 1.0.23) |
+| `setEvery(projectId, viewId, key, every)` | `views:set-every` | invoke | SCHED-063 (after 1.0.23) |
 | `ask(projectId, viewId, prompt)` | `views:ask` | invoke | VIEW-093 |
 | `brain(projectId, viewId)` → session id | `views:brain` | invoke | VIEW-092 |
 | event `on.view(cb(projectId, viewId, event, payload))` | `ev:view` | main → renderer | VIEW-054 |

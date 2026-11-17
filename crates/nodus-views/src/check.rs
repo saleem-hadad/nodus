@@ -16,8 +16,8 @@ const MAX_NAME_CHARS: usize = 40;
 const MAX_COMMAND_CHARS: usize = 2000;
 /// Commands run at most every minute; the brain is asked at most every ten,
 /// as each refresh costs tokens.
-const MIN_COMMAND_EVERY: f64 = 1.0;
-const MIN_REFRESH_EVERY: f64 = 10.0;
+pub(crate) const MIN_COMMAND_EVERY: f64 = 1.0;
+pub(crate) const MIN_REFRESH_EVERY: f64 = 10.0;
 /// A week, in minutes.
 const MAX_EVERY: f64 = 7.0 * 24.0 * 60.0;
 
@@ -71,6 +71,8 @@ pub fn normalize_commands(raw: &Value, remembered: Option<&BoardView>) -> Result
         }
         out.push(ViewCommand {
             every: clamp_every(field(Some(item), "every"), MIN_COMMAND_EVERY),
+            // SCHED-064: a schedule Claude sets runs.
+            paused: None,
             approved: allowed.contains(&run).then(|| run.clone()),
             denied: denied.contains(&run).then(|| run.clone()),
             name,
@@ -93,6 +95,8 @@ pub fn normalize_refresh(raw: Option<&Value>) -> Result<Option<ViewRefresh>, Vie
         Some(every) if !prompt.is_empty() => Ok(Some(ViewRefresh {
             every,
             prompt,
+            // SCHED-064: a refresh Claude sets runs.
+            paused: None,
             extra: Map::new(),
         })),
         _ => Err(ViewError::new(

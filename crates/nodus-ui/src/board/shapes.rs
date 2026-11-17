@@ -218,7 +218,7 @@ fn attachable(node: &FlowNode) -> bool {
             NodeKind::Card { stack, .. } => stack.is_none(),
             NodeKind::Note { index } => index.is_some(),
             NodeKind::View { .. } | NodeKind::Shape { .. } => true,
-            NodeKind::Archive { .. } | NodeKind::Pad | NodeKind::Section { .. } => false,
+            NodeKind::Archive { .. } | NodeKind::Pad | NodeKind::Section { .. } | NodeKind::Tile { .. } => false,
         }
 }
 

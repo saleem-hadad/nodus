@@ -2,9 +2,8 @@
 //! to, which looks after the board's other sessions, its members. Nodus
 //! hands it what they do (their turns ending, their pull requests changing)
 //! as short reports, so it never polls. The sessions it starts stay inside
-//! it, off the board, until the user shows one there. Drawn from Ghostex's
-//! coordinators: they never poll, their threads report by ending their turn,
-//! and they ask the user only for the user's decisions.
+//! it, off the board, until the user shows one there. Members report by
+//! ending their turn, and it asks the user only for the user's decisions.
 
 use chrono::{Datelike, Local, TimeZone, Timelike};
 use nodus_domain::js::{slice_utf16, trim};

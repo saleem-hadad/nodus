@@ -2,13 +2,13 @@
 
 Added after 1.0.26, as a beta. A **coordinator** is one Claude session per board that the user talks to and that looks after the board's other sessions, its **members**. It hears from them without polling. When a member ends a turn, waits for the user, or has a pull request change, Nodus hands it a short report. It can start sessions of its own, which stay **inside** it, off the board, until the user shows one there. It's an ordinary chat card with a mark of its own and a dot for each member.
 
-It's drawn from Ghostex's coordinators (`server/src/coordinators/playbook.md` in maddada/Ghostex):
+How it works with them:
 - A coordinator never polls.
-- Its threads report by ending their turn.
-- It briefs each one on its own.
+- Its members report by ending their turn.
+- It briefs each session it starts on its own.
 - It asks the user only for the user's decisions.
 
-On a board, the threads are the cards, and the user's own sessions take part too.
+The members are the board's cards, so the user's own sessions take part too.
 
 Sources:
 - `crates/nodus-domain/src/coordinator.rs`: `BoardCoordinator`, `CoordinatorEvent`, a node's `inside`, `startedBy` and `noCoordinator`, and a report's and a coordinator message's text.

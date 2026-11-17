@@ -63,7 +63,7 @@ In Rust the frame becomes a `wry` webview embedded in the GPUI board (see Rust m
 - **TOOL-016** Every response has `jsonrpc: "2.0"` and `id` echoed from the request (`undefined` id → key omitted).
 - **TOOL-017** `initialize` → result `{protocolVersion, capabilities: {tools: {}}, serverInfo: {name: "nodus", version: <app version, e.g. "0.9.4">}, instructions: INSTRUCTIONS}`; `protocolVersion` echoes `params.protocolVersion` when it is a string, else `"2025-06-18"`.
 - **TOOL-018** `ping` → result `{}`.
-- **TOOL-019** `tools/list` → result `{tools: [...]}`: the 6 common tools, the 4 drawing tools (TOOL-101, added after 0.9.4) then the 4 view tools (order in Data & formats) for every session; action runs (the session's node on its board has a truthy `runOf`) additionally get `list_sessions`, `archive_sessions` at the end. No pagination cursor.
+- **TOOL-019** `tools/list` → result `{tools: [...]}`: the 6 common tools, the 4 drawing tools (TOOL-101, added after 0.9.4) then the 4 view tools (order in Data & formats) for every session; action runs (the session's node on its board has a truthy `runOf`) additionally get `list_sessions`, `archive_sessions` at the end. No pagination cursor. After 1.0.24 a goal's session gets `goal_update` and `goal_finish` at the end instead (GOAL-023).
 - **TOOL-020** Any other method → `error: {code: -32601, message: "Unknown method <method>"}` (e.g. `Unknown method resources/list`).
 - **TOOL-021** `tools/call` answers only once the tool's handler finished (view tools wait for the page check, VIEW-108).
 - **TOOL-022** `tools/call` arguments = `params.arguments` when it is a non-null object (arrays included), else `{}`.

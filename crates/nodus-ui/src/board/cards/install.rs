@@ -13,8 +13,8 @@ use super::{
     BoardEnv, CardActions, Resized, StackView, TerminalHost, Z, archive_zone, note, note_pad, session_card, shape, tile,
 };
 use crate::board::nodes::{
-    self, ArchiveNode, BoardActions, BoardCx, CardNode, NodeRenderers, NoteNode, PadNode, ShapeNode, StackPlace,
-    TileNode,
+    self, ArchiveNode, BoardActions, BoardCx, CardNode, GoalNode, NodeRenderers, NoteNode, PadNode, ShapeNode,
+    StackPlace, TileNode,
 };
 use crate::parity;
 use crate::platform::Platform;
@@ -397,6 +397,11 @@ impl NodeRenderers for CardRenderers {
     fn tile(&self, node: TileNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut App) -> AnyElement {
         let env = env(board, node.node.zoom, window, cx);
         tile::render(&env, &node, window, cx)
+    }
+
+    fn goal(&self, node: GoalNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut App) -> AnyElement {
+        let env = env(board, node.node.zoom, window, cx);
+        super::goal::render(&env, &node, window, cx)
     }
 
     fn wake(&self, session_id: &str, cx: &mut App) {

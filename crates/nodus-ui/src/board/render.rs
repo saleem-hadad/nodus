@@ -25,8 +25,8 @@ use super::layout::{note_pad_rect, pad_sheet_spot};
 use super::moments::{self, Arrival};
 use super::node_view::{self, NodeView};
 use super::nodes::{
-    ArchiveNode, BoardCx, CardNode, NodeRenderers, NodeState, NoteNode, PadNode, ShapeNode, StackPlace, StackStyle,
-    TileNode, ViewNode, renderers,
+    ArchiveNode, BoardCx, CardNode, GoalNode, NodeRenderers, NodeState, NoteNode, PadNode, ShapeNode, StackPlace,
+    StackStyle, TileNode, ViewNode, renderers,
 };
 use super::scene::{FlowNode, NodeKind, paint_order};
 use super::section::SectionProps;
@@ -170,7 +170,7 @@ impl BoardCanvas {
                 }
             }
             NodeKind::Pad | NodeKind::View { .. } => Motion::None,
-            NodeKind::Tile { .. } => {
+            NodeKind::Tile { .. } | NodeKind::Goal { .. } => {
                 if self.moving_section {
                     Motion::None
                 } else {
@@ -255,6 +255,7 @@ impl BoardCanvas {
                 | NodeKind::View { .. }
                 | NodeKind::Shape { .. }
                 | NodeKind::Tile { .. }
+                | NodeKind::Goal { .. }
         );
         NodeMoment {
             arrival: arrives.then(|| self.moments.arrival(&node.id, now)).flatten(),
@@ -450,6 +451,24 @@ impl BoardCanvas {
                         node: state,
                         tile,
                         action,
+                        running,
+                    },
+                    board,
+                    window,
+                    cx,
+                )
+            }
+            NodeKind::Goal { index } => {
+                let goal = &snapshot.goals[*index];
+                let running = snapshot
+                    .cards
+                    .iter()
+                    .find(|c| c.node.session_id == goal.session_id && c.live)
+                    .map(|c| c.status);
+                renderers.goal(
+                    GoalNode {
+                        node: state,
+                        goal,
                         running,
                     },
                     board,
@@ -699,7 +718,7 @@ impl BoardCanvas {
                 let z = vp.zoom;
                 let mut pulses = Vec::new();
                 // SCHED-037: a run's result goes back to its tile too.
-                if matches!(e.kind, EdgeKind::Lineage | EdgeKind::Schedule)
+                if matches!(e.kind, EdgeKind::Lineage | EdgeKind::Schedule | EdgeKind::Goal)
                     && let Some(ms) = self.moments.pulse(&e.target, now)
                 {
                     pulses.push(Pulse { ms, backwards: true });
@@ -709,7 +728,7 @@ impl BoardCanvas {
                 let mut span = (0.0, 1.0);
                 // SCHED-037: the light out to a run that just came out, the
                 // line drawn in behind it.
-                if e.kind == EdgeKind::Schedule
+                if matches!(e.kind, EdgeKind::Schedule | EdgeKind::Goal)
                     && let Some(ms) = self.moments.start(&e.target, now)
                 {
                     pulses.push(Pulse { ms, backwards: false });
@@ -720,7 +739,7 @@ impl BoardCanvas {
                         );
                     }
                 }
-                if !matches!(e.kind, EdgeKind::View | EdgeKind::Schedule) {
+                if !matches!(e.kind, EdgeKind::View | EdgeKind::Schedule | EdgeKind::Goal) {
                     for (m, ms) in self.moments.messages(now).filter(|(m, _)| e.joins(&m.from, &m.to)) {
                         let backwards = m.from == e.target;
                         pulses.push(Pulse { ms, backwards });
@@ -737,7 +756,7 @@ impl BoardCanvas {
                     }
                     EdgeKind::Lineage => (t.border_strong, 1.5 * z, None, false),
                     // BOARD-184: dotted, holding still. SCHED-037: as a tile's.
-                    EdgeKind::Talk | EdgeKind::Schedule => {
+                    EdgeKind::Talk | EdgeKind::Schedule | EdgeKind::Goal => {
                         (t.border_strong, 1.5 * z, Some((1.0 * z, 4.5 * z, 0.0)), true)
                     }
                 };
@@ -1227,7 +1246,9 @@ impl Render for BoardCanvas {
         let read_only_cover = self.render_read_only_cover(cx);
         let reconnecting = self.render_reconnecting(cx);
         // Spec 04: views' webviews kept in step, their large window and the New view dialog.
-        let views_layer = crate::views::board_layer(self, window, cx);
+        let mut views_layer = crate::views::board_layer(self, window, cx);
+        // GOAL-010: and the New goal dialog.
+        views_layer.extend(super::goal_dialog::render(self, window, cx));
 
         div()
             .id("board-canvas")

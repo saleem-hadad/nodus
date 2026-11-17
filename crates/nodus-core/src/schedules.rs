@@ -24,11 +24,30 @@ pub(crate) async fn follow_schedules(core: Weak<Inner>) {
         let Some(inner) = core.upgrade() else {
             return;
         };
-        Nodus { inner }.run_due_schedules().await;
+        let nodus = Nodus { inner };
+        nodus.run_due_schedules().await;
+        // GOAL-020: and goals' check-ins.
+        nodus.run_due_goals().await;
     }
 }
 
 impl Nodus {
+    /// GOAL-020: a check-in for each goal that's due.
+    pub async fn run_due_goals(&self) {
+        let board = &self.inner.board;
+        let due = board.due_goals(board.now());
+        if due.is_empty() {
+            return;
+        }
+        self.env().await;
+        let launcher = CoreLauncher(std::sync::Arc::downgrade(&self.inner));
+        for (project_id, goal) in due {
+            if let Err(err) = board.check_in(&project_id, &goal.id, &launcher).await {
+                tracing::warn!(%err, "[goals] check-in failed");
+            }
+        }
+    }
+
     /// SCHED-020…SCHED-023: starts a run for each scheduled action that is
     /// due. Only the latest time it missed runs, once, marked late when it
     /// starts well after it. A time that comes while a run of it is still

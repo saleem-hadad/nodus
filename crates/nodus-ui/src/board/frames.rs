@@ -41,7 +41,11 @@ pub(crate) fn groupable(n: &FlowNode) -> bool {
             NodeKind::Note { index } => index.is_some(),
             NodeKind::View { .. } | NodeKind::Shape { .. } => true,
             // SCHED-033: a tile stays where it is put.
-            NodeKind::Archive { .. } | NodeKind::Pad | NodeKind::Section { .. } | NodeKind::Tile { .. } => false,
+            NodeKind::Archive { .. }
+            | NodeKind::Pad
+            | NodeKind::Section { .. }
+            | NodeKind::Tile { .. }
+            | NodeKind::Goal { .. } => false,
         }
 }
 
@@ -291,6 +295,7 @@ impl BoardCanvas {
         let mut frames = Vec::new();
         let mut shapes = Vec::new();
         let mut tiles = Vec::new();
+        let mut goals = Vec::new();
         for (id, to) in moved {
             let Some(n) = self.node(id) else { continue };
             let (x, y) = (js::round(to.x), js::round(to.y));
@@ -324,6 +329,7 @@ impl BoardCanvas {
                 }),
                 NodeKind::Shape { .. } => shapes.push((id.clone(), Point { x, y })),
                 NodeKind::Tile { .. } => tiles.push((id.clone(), Point { x, y })),
+                NodeKind::Goal { .. } => goals.push((id.clone(), Point { x, y })),
                 NodeKind::Archive { .. } | NodeKind::Pad | NodeKind::Note { index: None } => {}
             }
         }
@@ -342,6 +348,7 @@ impl BoardCanvas {
             }
         });
         self.move_tiles(&tiles, cx);
+        self.move_goals(&goals, cx);
         if !shapes.is_empty() {
             self.move_shapes(&shapes, cx);
         }

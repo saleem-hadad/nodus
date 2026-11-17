@@ -54,10 +54,13 @@ pub const CHAT_TOOL_NAMES: [&str; 3] = ["show_visual", "ask", "show_page"];
 /// An action run's tools, on top of the others.
 pub const SESSION_TOOL_NAMES: [&str; 2] = ["list_sessions", "archive_sessions"];
 
+/// A goal's session's tools, on top of the others (GOAL-023).
+pub const GOAL_TOOL_NAMES: [&str; 2] = ["goal_update", "goal_finish"];
+
 /// Allow rules that let a session use every board tool it has without asking
 /// (TOOL-003): `--allowedTools`, one argument each, in the order the tools
 /// are listed.
-pub const BOARD_TOOL_RULES: [&str; 20] = [
+pub const BOARD_TOOL_RULES: [&str; 22] = [
     "mcp__nodus__create_note",
     "mcp__nodus__update_note",
     "mcp__nodus__list_notes",
@@ -78,6 +81,8 @@ pub const BOARD_TOOL_RULES: [&str; 20] = [
     "mcp__nodus__show_page",
     "mcp__nodus__list_sessions",
     "mcp__nodus__archive_sessions",
+    "mcp__nodus__goal_update",
+    "mcp__nodus__goal_finish",
 ];
 
 fn color_property(description: &str) -> Value {
@@ -536,6 +541,58 @@ const CREATE_VIEW: &str = "Puts a view on the user’s Nodus board, beside this 
 /// `show_page`'s description.
 const PAGE_GUIDE: &str = "Puts a page on the user's Nodus board beside this session's card, and a card for it in their chat: for what show_visual and ask can't express, such as a UI mockup, layouts compared side by side, or a small interactive tool. You write the page: use the nodus:views skill first, for how a page works, the board's look and examples. It's one self-contained HTML page with no network, styled with the board's --nodus-* CSS variables. A page that asks the user something calls nodus.submit(answers) (any JSON) from its own Send button; the answers arrive as the user's next message, in a <nodus-answers> block. Returns the view's id; change the page with update_view.";
 
+/// GOAL-023: a goal's session's tools, on top of an ordinary session's.
+fn goal_tools() -> Vec<Value> {
+    vec![
+        json!({
+            "name": "goal_update",
+            "description": "Reports how the goal you are pursuing is going, for its tile on the user's Nodus board. Call it before each check-in ends. Give what you have: the number now (value) or the steps (each with done), a journal line on what you learned or did (concrete: numbers, links), a phase in a few words, and when to check in next in words (\"in 7 days\", \"tomorrow at 9\", \"monday\"). At the first check-in, also give a short title and the metric: its name, unit, start and target. The board shows how far along it is from the start to the target. Returns that, and when it checks in next.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "title": { "type": "string", "description": "A few words for the goal, for its tile." },
+                    "metric": {
+                        "type": "object",
+                        "description": "The number the goal moves. Give it at the first check-in, or when it changes.",
+                        "properties": {
+                            "name": { "type": "string", "description": "What's measured, such as Signup conversion." },
+                            "unit": { "type": "string", "description": "Such as %, ms or users." },
+                            "start": { "type": "number", "description": "Where it was when the goal began." },
+                            "target": { "type": "number", "description": "Where the goal wants it." }
+                        }
+                    },
+                    "value": { "type": "number", "description": "Where the number stands now." },
+                    "steps": {
+                        "type": "array",
+                        "description": "For a goal without a number: the steps to it, each done or not. Replaces the list.",
+                        "items": {
+                            "type": "object",
+                            "properties": { "text": { "type": "string" }, "done": { "type": "boolean" } },
+                            "required": ["text"]
+                        }
+                    },
+                    "progress": { "type": "number", "description": "How far along it is, 0 to 100, when neither a number nor steps says." },
+                    "phase": { "type": "string", "description": "What you're doing now, in a few words, such as Judging experiment 2." },
+                    "journal": { "type": "string", "description": "One line on what you learned or did this check-in." },
+                    "next_check_in": { "type": "string", "description": "When to check in next, in words. Leave long enough for a change to show." }
+                }
+            }
+        }),
+        json!({
+            "name": "goal_finish",
+            "description": "Ends the goal you are pursuing: reached, or given up because it can't be reached. It stops checking in. Say why in reason.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "reached": { "type": "boolean", "description": "true when the goal is reached; false to give it up." },
+                    "reason": { "type": "string", "description": "Why, in a line, with the numbers." }
+                },
+                "required": ["reached", "reason"]
+            }
+        }),
+    ]
+}
+
 /// An action run's tools, on top of the common ones (`SESSION_TOOLS`).
 fn session_tools() -> Vec<Value> {
     vec![
@@ -564,11 +621,13 @@ fn session_tools() -> Vec<Value> {
     ]
 }
 
-/// The `tools/list` answers: an ordinary session's tools, and an action run's.
+/// The `tools/list` answers: an ordinary session's tools, an action run's,
+/// and a goal's session's.
 #[derive(Debug, Clone)]
 pub(crate) struct ToolLists {
     pub(crate) session: Value,
     pub(crate) run: Value,
+    pub(crate) goal: Value,
 }
 
 impl ToolLists {
@@ -579,9 +638,12 @@ impl ToolLists {
         session.extend(chat_tools());
         let mut run = session.clone();
         run.extend(session_tools());
+        let mut goal = session.clone();
+        goal.extend(goal_tools());
         Self {
             session: Value::Array(session),
             run: Value::Array(run),
+            goal: Value::Array(goal),
         }
     }
 }

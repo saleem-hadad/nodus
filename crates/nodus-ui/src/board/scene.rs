@@ -61,6 +61,10 @@ pub enum NodeKind {
     Tile {
         index: usize,
     },
+    /// Index into the board's goals (GOAL-030).
+    Goal {
+        index: usize,
+    },
 }
 
 /// One node as React Flow held it.
@@ -486,6 +490,30 @@ pub fn build_nodes(input: BuildInput<'_>) -> Vec<FlowNode> {
             clip: None,
         });
     }
+    // GOAL-030: goals' tiles, with the views.
+    for (index, goal) in board.goals.iter().enumerate() {
+        let p = prev_by_id.get(goal.id.as_str());
+        let held_here = p.is_some_and(|p| p.dragging || busy.contains(&goal.id));
+        out.push(FlowNode {
+            id: goal.id.clone(),
+            kind: NodeKind::Goal { index },
+            position: match p {
+                Some(p) if held_here => p.position,
+                _ => Point { x: goal.x, y: goal.y },
+            },
+            size: Size {
+                w: nodus_domain::BoardGoal::W,
+                h: nodus_domain::BoardGoal::H,
+            },
+            hidden: false,
+            z: 0,
+            draggable: true,
+            selectable: true,
+            selected: selected_of(&goal.id),
+            dragging: dragging_of(&goal.id),
+            clip: None,
+        });
+    }
     // SHAPE-001: shapes, oldest first, over the views and under the notes;
     // stickers with the notes, so one stuck on a card shows over it.
     for (index, shape) in board.shapes.iter().enumerate() {
@@ -648,6 +676,7 @@ mod tests {
             groups: vec![],
             talks: vec![],
             tiles: vec![],
+            goals: vec![],
             viewport: None,
             offline: false,
         }

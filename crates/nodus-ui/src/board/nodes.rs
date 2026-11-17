@@ -130,6 +130,13 @@ pub struct TileNode<'a> {
     pub running: Option<nodus_domain::SessionStatus>,
 }
 
+/// A goal's tile (spec 21): the goal and the status of its session.
+pub struct GoalNode<'a> {
+    pub node: NodeState,
+    pub goal: &'a nodus_domain::BoardGoal,
+    pub running: Option<nodus_domain::SessionStatus>,
+}
+
 /// The archive frame: the folded stack, or the open panel.
 pub struct ArchiveNode {
     pub node: NodeState,
@@ -452,6 +459,12 @@ pub trait NodeRenderers: 'static {
     fn tile(&self, node: TileNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut App) -> AnyElement {
         let _ = (board, window);
         placeholder(&node.node, node.action.map_or_else(String::new, |a| a.name.clone()), cx)
+    }
+
+    /// A goal's tile (spec 21).
+    fn goal(&self, node: GoalNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut App) -> AnyElement {
+        let _ = (board, window);
+        placeholder(&node.node, node.goal.title.clone(), cx)
     }
 
     /// `ViewNode` (spec 04): the views' own renderer ([`ViewRenderer`])

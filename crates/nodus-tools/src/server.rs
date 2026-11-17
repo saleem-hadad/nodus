@@ -57,6 +57,14 @@ pub trait BoardToolHandlers: Send + Sync {
     fn project_for_session(&self, session_id: &str) -> Option<String>;
     /// Whether the session is an action run, which gets the session tools too.
     fn is_run(&self, session_id: &str) -> bool;
+    /// Whether the session pursues a goal, which gets the goal tools (GOAL-023).
+    fn is_goal(&self, _session_id: &str) -> bool {
+        false
+    }
+    /// GOAL-023, GOAL-025: a goal's session reporting back.
+    fn goal_tool(&self, _self_id: &str, _finish: bool, _args: &Value) -> Result<Value, ToolError> {
+        Err("Goals aren’t here".into())
+    }
     /// Every project, saying which one `own` is.
     fn list_projects(&self, own: &str) -> Result<Value, ToolError>;
     /// Adds a folder as a project, making the folder if it isn't there.
@@ -114,6 +122,12 @@ impl<H: BoardToolHandlers + ?Sized> BoardToolHandlers for Arc<H> {
     }
     fn is_run(&self, session_id: &str) -> bool {
         (**self).is_run(session_id)
+    }
+    fn is_goal(&self, session_id: &str) -> bool {
+        (**self).is_goal(session_id)
+    }
+    fn goal_tool(&self, self_id: &str, finish: bool, args: &Value) -> Result<Value, ToolError> {
+        (**self).goal_tool(self_id, finish, args)
     }
     fn list_projects(&self, own: &str) -> Result<Value, ToolError> {
         (**self).list_projects(own)
@@ -241,7 +255,15 @@ impl<H: BoardToolHandlers> McpServer<H> {
             Some("tools/list") => {
                 // TOOL-019: no pagination cursor.
                 let run = self.handlers.as_ref().is_some_and(|h| h.is_run(session_id));
-                let tools = if run { &self.tools.run } else { &self.tools.session };
+                // GOAL-023: a goal's session also reports back.
+                let goal = !run && self.handlers.as_ref().is_some_and(|h| h.is_goal(session_id));
+                let tools = if run {
+                    &self.tools.run
+                } else if goal {
+                    &self.tools.goal
+                } else {
+                    &self.tools.session
+                };
                 reply(id, "result", serde_json::json!({ "tools": tools }))
             }
             Some("tools/call") => {
@@ -358,6 +380,13 @@ impl<H: BoardToolHandlers> McpServer<H> {
             // TOOLCHAT-001…003: what shows in the session's chat.
             "show_visual" => crate::chat::show_visual(args),
             "ask" => crate::chat::ask(args),
+            // GOAL-023, GOAL-025
+            name if crate::schema::GOAL_TOOL_NAMES.contains(&name) => {
+                if !handlers.is_goal(session_id) {
+                    return Err(format!("{tool} is only for a goal’s session").into());
+                }
+                handlers.goal_tool(session_id, tool == "goal_finish", args)
+            }
             "show_page" => {
                 let page = crate::chat::page_args(args);
                 let created = handlers.create_view(&project_id, session_id, &page).await?;

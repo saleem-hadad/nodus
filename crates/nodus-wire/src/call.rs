@@ -261,6 +261,26 @@ calls! {
     /// `ActionDraft`.
     ActionsDraft = "actions:draft" { project_id: String, description: String, global: bool },
 
+    // ---- goals (spec 21)
+
+    /// `BoardGoal`: `{ mission, every?, at?, sessionId? }` (GOAL-010).
+    GoalsCreate = "goals:create" {
+        project_id: String,
+        #[serde(default)]
+        goal: Value,
+    },
+    /// `BoardGoal` (GOAL-032).
+    GoalsChange = "goals:change" {
+        project_id: String,
+        id: String,
+        #[serde(default)]
+        patch: Value,
+    },
+    /// `null` (GOAL-032).
+    GoalsCheckIn = "goals:check-in" { project_id: String, id: String },
+    /// `null` (GOAL-033).
+    GoalsRemove = "goals:remove" { project_id: String, id: String },
+
     // ---- the connection
 
     /// `null`: this connection gets these projects' events from now on,

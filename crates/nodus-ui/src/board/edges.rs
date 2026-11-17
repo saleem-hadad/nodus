@@ -19,6 +19,8 @@ pub enum EdgeKind {
     Talk,
     /// From a scheduled action's tile to its run (SCHED-037).
     Schedule,
+    /// From a goal's tile to its session (GOAL-035).
+    Goal,
 }
 
 /// One edge, by node ids.
@@ -94,6 +96,18 @@ pub fn edges(board: &BoardSnapshot) -> Vec<Edge> {
                     kind: EdgeKind::Schedule,
                 });
             }
+        }
+    }
+    // GOAL-035: each goal to its session on the board.
+    for goal in &board.goals {
+        if active.contains(&goal.session_id.as_str()) {
+            out.push(Edge {
+                id: format!("{}->{}", goal.id, goal.session_id),
+                source: goal.id.clone(),
+                target: goal.session_id.clone(),
+                animated: false,
+                kind: EdgeKind::Goal,
+            });
         }
     }
     // BOARD-184: one line a pair, from the first to message the other. A

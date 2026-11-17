@@ -966,3 +966,125 @@ async fn reads_transcripts_for_the_preview_and_the_agent_viewer() {
         "Unknown project nope"
     );
 }
+
+#[tokio::test]
+async fn a_goal_starts_its_session_reports_back_and_checks_in_when_due() {
+    use nodus_board::goals::NewGoal;
+    use nodus_domain::GoalStatus;
+    let f = Fixture::new();
+    let launcher = FakeLauncher::new(&f.store, None);
+    // GOAL-010, GOAL-011: its own session, in auto mode, on the first check-in.
+    let new = NewGoal {
+        mission: "Get signup conversion from 3.1% to 4%".into(),
+        every: Some(10.0),
+        at: Some((400.4, 100.0)),
+        session_id: None,
+    };
+    let goal = f.board.create_goal("p", &new, &launcher).await.unwrap();
+    assert_eq!(
+        (goal.x, goal.y, goal.every),
+        (400.0, 100.0, 30.0),
+        "the floor is 30 minutes"
+    );
+    assert_eq!((goal.status, goal.check_ins), (GoalStatus::Active, 1));
+    let start = launcher.starts.lock().unwrap()[0].clone();
+    assert_eq!(start.node.session_id, goal.session_id);
+    assert_eq!(start.node.auto_mode, Some(true));
+    assert!(
+        start
+            .initial_prompt
+            .as_deref()
+            .unwrap()
+            .contains("This is the first check-in.")
+    );
+    // GOAL-023: its session reports back.
+    let reply = f
+        .board
+        .goal_tool(
+            &goal.session_id,
+            false,
+            &json!({ "title": "Signup conversion", "metric": { "name": "Signup conversion", "unit": "%", "start": 3.1, "target": 4.0 }, "value": 3.7, "journal": "Two experiments kept." }),
+        )
+        .unwrap();
+    assert_eq!(reply["percent"], json!(67.0));
+    let stored = f.board.goal("p", &goal.id).unwrap();
+    assert_eq!((stored.title.as_str(), stored.journal.len()), ("Signup conversion", 1));
+    assert_eq!(
+        f.node(&goal.session_id).unwrap().title.as_deref(),
+        Some("Signup conversion")
+    );
+    // Another session can't.
+    assert!(f.board.goal_tool("someone-else", false, &json!({})).is_err());
+    // GOAL-020: not due yet; due once its time comes, unless it's busy.
+    assert!(f.board.due_goals(NOW).is_empty());
+    let later = NOW + 2.0 * 86_400_000.0;
+    assert_eq!(f.board.due_goals(later).len(), 1);
+    f.sessions.set_live(&goal.session_id, SessionStatus::Waiting);
+    assert!(f.board.due_goals(later).is_empty(), "it waits for the user");
+    f.sessions.set_live(&goal.session_id, SessionStatus::Done);
+    // GOAL-020: a check-in sends the check-in prompt into its session.
+    f.board.check_in("p", &goal.id, &launcher).await.unwrap();
+    let log = launcher.log.lock().unwrap().clone();
+    assert!(log.last().unwrap().contains("Check-in #2"), "{log:?}");
+    assert_eq!(f.board.goal("p", &goal.id).unwrap().check_ins, 2);
+    // GOAL-032: paused, it isn't due; finished, it stops.
+    f.board
+        .change_goal("p", &goal.id, &json!({ "status": "paused" }))
+        .unwrap();
+    assert!(f.board.due_goals(later * 2.0).is_empty());
+    f.board
+        .goal_tool(
+            &goal.session_id,
+            true,
+            &json!({ "reached": true, "reason": "4.0% two weeks running." }),
+        )
+        .unwrap();
+    assert_eq!(f.board.goal("p", &goal.id).unwrap().status, GoalStatus::Done);
+    // GOAL-033: removed, its session stays.
+    f.board.remove_goal("p", &goal.id);
+    assert!(f.board.goal("p", &goal.id).is_none());
+    assert!(f.node(&goal.session_id).is_some());
+}
+
+#[tokio::test]
+async fn a_session_becomes_a_goal_and_gets_its_first_check_in() {
+    use nodus_board::goals::NewGoal;
+    let f = Fixture::new();
+    f.put(node("s1", json!({ "x": 100, "y": 100, "createdByApp": true })));
+    let launcher = FakeLauncher::new(&f.store, None);
+    // GOAL-012: that session's, its tile beside it, the first check-in sent into it.
+    let new = NewGoal {
+        mission: "Move the migration to Postgres".into(),
+        every: None,
+        at: None,
+        session_id: Some("s1".into()),
+    };
+    let goal = f.board.create_goal("p", &new, &launcher).await.unwrap();
+    assert_eq!((goal.session_id.as_str(), goal.every), ("s1", 60.0));
+    assert!(launcher.starts.lock().unwrap().is_empty(), "no new session");
+    let log = launcher.log.lock().unwrap().clone();
+    assert!(log[0].starts_with("resume:s1:Check-in #1"), "{log:?}");
+    assert!(!nodus_board::geometry::intersects(
+        goal.rect(),
+        Rect {
+            x: 100.0,
+            y: 100.0,
+            w: 288.0,
+            h: 216.0
+        },
+        0.0
+    ));
+    // GOAL-010: a goal needs a mission.
+    let blank = NewGoal {
+        mission: "  ".into(),
+        ..NewGoal::default()
+    };
+    assert_eq!(
+        f.board
+            .create_goal("p", &blank, &launcher)
+            .await
+            .unwrap_err()
+            .to_string(),
+        "Say what the goal is"
+    );
+}

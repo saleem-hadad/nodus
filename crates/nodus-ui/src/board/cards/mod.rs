@@ -27,6 +27,7 @@ pub mod archive_zone;
 pub mod border;
 pub mod drawer;
 pub mod expanded_card;
+pub mod goal;
 pub mod icons;
 pub mod install;
 pub mod note;

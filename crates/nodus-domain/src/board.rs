@@ -348,6 +348,146 @@ impl BoardTile {
     }
 }
 
+string_enum! {
+    /// Where a goal stands (GOAL-001).
+    pub enum GoalStatus {
+        Active = "active",
+        Paused = "paused",
+        Done = "done",
+        Failed = "failed",
+    }
+}
+
+/// A goal on the board (spec 21): one session pursued over days or weeks,
+/// woken for a check-in every so often, that remembers what it tried. Its
+/// tile shows how far along it is.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BoardGoal {
+    pub id: String,
+    /// A few words for it; Claude names it at the first check-in.
+    pub title: String,
+    /// What the user wants, as they said it.
+    pub mission: String,
+    /// The one session that pursues it.
+    pub session_id: String,
+    pub x: f64,
+    pub y: f64,
+    pub status: GoalStatus,
+    /// The number it moves, when there is one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metric: Option<GoalMetric>,
+    /// How far along Claude says it is, 0…100, for a goal without a number.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress: Option<f64>,
+    /// The steps to it, for a goal without a number.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub steps: Vec<GoalStep>,
+    /// What it's doing now, in a few words.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub phase: String,
+    /// When it checks in next (ms).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_at: Option<f64>,
+    /// The fewest minutes between check-ins.
+    pub every: f64,
+    #[serde(default)]
+    pub check_ins: u32,
+    /// It pauses after this many check-ins, so it can't run on forever.
+    pub max_check_ins: u32,
+    /// When it last checked in (ms).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_at: Option<f64>,
+    /// The number at each check-in it was measured.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub history: Vec<GoalPoint>,
+    /// What it learned and did, a line a time, oldest first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub journal: Vec<GoalEntry>,
+    /// Why it was paused, reached or given up.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    pub created_at: f64,
+    /// Fields this version doesn't know, written back as they were read.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+/// The number a goal moves: signup conversion from 3.1% to 4%.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GoalMetric {
+    pub name: String,
+    /// `%`, `ms`, `users`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub unit: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<f64>,
+    /// Where it stands now.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GoalStep {
+    pub text: String,
+    #[serde(default)]
+    pub done: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GoalPoint {
+    pub at: f64,
+    pub value: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GoalEntry {
+    pub at: f64,
+    pub text: String,
+}
+
+impl BoardGoal {
+    /// GOAL-030: goal tiles are all one size.
+    pub const W: f64 = 320.0;
+    pub const H: f64 = 212.0;
+
+    pub fn rect(&self) -> Rect {
+        Rect {
+            x: self.x,
+            y: self.y,
+            w: Self::W,
+            h: Self::H,
+        }
+    }
+
+    /// GOAL-002: how far along it is, 0…100: from the number's start to its
+    /// target, else what Claude says, else the share of steps done.
+    pub fn percent(&self) -> Option<f64> {
+        let clamp = |p: f64| p.clamp(0.0, 100.0);
+        if let Some(GoalMetric {
+            start: Some(start),
+            target: Some(target),
+            value: Some(value),
+            ..
+        }) = &self.metric
+            && (target - start).abs() > f64::EPSILON
+        {
+            return Some(clamp((value - start) / (target - start) * 100.0));
+        }
+        if let Some(p) = self.progress.filter(|p| p.is_finite()) {
+            return Some(clamp(p));
+        }
+        if !self.steps.is_empty() {
+            let done = self.steps.iter().filter(|s| s.done).count() as f64;
+            return Some(clamp(done / self.steps.len() as f64 * 100.0));
+        }
+        None
+    }
+}
+
 /// A scheduled action's run, as its tile remembers it (SCHED-023).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -472,6 +612,9 @@ pub struct BoardSnapshot {
     /// Scheduled actions' tiles, oldest first (spec 20).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tiles: Vec<BoardTile>,
+    /// Goals, oldest first (spec 21).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub goals: Vec<BoardGoal>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub viewport: Option<Viewport>,
     /// A server board's last snapshot, given while the server can't be

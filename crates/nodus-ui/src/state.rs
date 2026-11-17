@@ -50,6 +50,15 @@ pub const TOAST_FOR: Duration = Duration::from_millis(3500);
 /// The trailing debounce on stats refreshes after status events (UI-033).
 pub const STATS_DEBOUNCE: Duration = Duration::from_millis(250);
 
+/// What the actions rail is asked to open (SCHED-035, SCHED-045).
+#[derive(Debug, Clone, PartialEq)]
+pub enum ActionRequest {
+    /// A tile's `Edit automation…`.
+    EditAutomation(String),
+    /// `New Automation`, or `New automation here` with where on the board.
+    NewAutomation(Option<(f64, f64)>),
+}
+
 /// Something the window should do that the state can't do itself.
 #[derive(Debug, Clone, PartialEq)]
 pub enum StateEvent {
@@ -77,8 +86,8 @@ pub struct AppState {
     pub stats: IndexMap<String, ProjectStats>,
     /// Actions in every project's rail. The actions API comes with its track.
     pub global_actions: Vec<ProjectAction>,
-    /// SCHED-035: an action a tile asked to edit; the rail opens its dialog.
-    pub edit_action: Option<String>,
+    /// SCHED-035, SCHED-045: what the actions rail is asked to open.
+    pub action_request: Option<ActionRequest>,
     /// Whether the first projects refresh has come back.
     pub projects_loaded: bool,
     /// The Nodus servers this app connects to, with how each is doing
@@ -176,7 +185,7 @@ impl AppState {
             diff_session: None,
             session_window: Default::default(),
             preview_session_id: None,
-            edit_action: None,
+            action_request: None,
             agent_view: None,
             selection: Vec::new(),
             queues: std::collections::HashMap::new(),

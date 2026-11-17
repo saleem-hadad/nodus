@@ -67,7 +67,7 @@ pub fn render(env: &Rc<BoardEnv>, node: &TileNode<'_>, window: &mut Window, cx: 
     let z = node.node.zoom;
     let tile = node.tile;
     let now = env.now_ms;
-    let name = node.action.map_or("Scheduled action", |a| a.name.as_str()).to_owned();
+    let name = node.action.map_or("Automation", |a| a.name.as_str()).to_owned();
     let schedule = node.action.and_then(|a| a.schedule.as_ref());
     let said = schedule.map(schedule::describe).unwrap_or_default();
     let paused = schedule.is_some_and(|s| s.paused == Some(true));

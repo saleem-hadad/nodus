@@ -33,6 +33,33 @@ pub const EXAMPLES: [(&str, &str); 5] = [
     ),
 ];
 
+/// SCHED-046: an automation's examples: label, what it does, when it runs.
+pub const AUTOMATION_EXAMPLES: [(&str, &str, &str); 4] = [
+    (
+        "Morning PR sweep",
+        "Look at the open pull requests and sum up what waits on me: reviews I owe, my PRs with new comments, and anything failing CI. Don’t change anything.",
+        "every weekday at 9",
+    ),
+    (
+        "Dependency check",
+        "Check the project’s dependencies for updates and security advisories, and write a short note on the board with what’s worth upgrading.",
+        "mondays at 10",
+    ),
+    (
+        "Nightly tests",
+        "Run the full test suite on the main branch and tell me what failed and why. Don’t fix anything.",
+        "every day at 2am",
+    ),
+    (
+        "Tidy the board",
+        "Archive the sessions that are done and haven’t been active since the morning. Leave anything working or waiting for me alone.",
+        "every day at 6pm",
+    ),
+];
+
+/// SCHED-046.
+pub const AUTOMATION_PLACEHOLDER: &str = "For example: look at the open pull requests and sum up what waits on me.";
+
 /// ACT-069.
 pub const DESCRIPTION_PLACEHOLDER: &str =
     "For example: archive the sessions that are done, so the board only shows what’s still going on.";
@@ -90,6 +117,9 @@ pub struct ActionDialog {
     pub schedule: Option<ActionSchedule>,
     /// SCHED-041: the When field says something that isn't a time.
     pub when_unclear: bool,
+    /// SCHED-045: opened as an automation (`New Automation`, or a tile's
+    /// `Edit automation…`): always on a schedule, never global.
+    pub automation: bool,
     request: i64,
 }
 
@@ -126,27 +156,76 @@ impl ActionDialog {
                 .unwrap_or_default(),
             schedule: a.and_then(|a| a.schedule.clone()),
             when_unclear: false,
+            automation: false,
             request: 0,
             action,
         }
     }
 
+    /// SCHED-045: the dialog as an automation, new or one being edited. A
+    /// new one starts every weekday at 9, with the When field empty.
+    pub fn automation(action: Option<ProjectAction>) -> Self {
+        let mut d = Self::new(action);
+        d.automation = true;
+        d.scheduled = true;
+        d.global = false;
+        if d.schedule.is_none() {
+            d.schedule = schedule::parse(DEFAULT_WHEN);
+        }
+        d
+    }
+
     /// ACT-068.
     pub fn title(&self) -> &'static str {
-        if self.action.is_some() {
-            "Edit action"
-        } else {
-            "New action"
+        match (self.automation, self.action.is_some()) {
+            (true, true) => "Edit automation",
+            (true, false) => "New automation",
+            (false, true) => "Edit action",
+            (false, false) => "New action",
         }
     }
 
     /// ACT-068.
     pub fn subtitle(&self) -> &'static str {
-        match self.step {
-            Step::Describe => "Say what the button should do. Claude writes the prompt each press runs.",
-            Step::Review => {
+        match (self.automation, self.step) {
+            // SCHED-045
+            (true, Step::Describe) => "Say what it should do and when. Claude writes the prompt each run follows.",
+            (true, Step::Review) => {
+                "Each time, a session runs this prompt in auto mode, beside its tile on the board. It goes when it’s done."
+            }
+            (false, Step::Describe) => "Say what the button should do. Claude writes the prompt each press runs.",
+            (false, Step::Review) => {
                 "Each press runs a session on this prompt in auto mode, beside its button. It goes when it’s done."
             }
+        }
+    }
+
+    /// SCHED-045: an automation has no `Use in every project`.
+    pub fn shows_scope(&self) -> bool {
+        !self.automation
+    }
+
+    /// SCHED-045: nor the `When I press it` | `On a schedule` switch: it's
+    /// always on a schedule.
+    pub fn shows_when_switch(&self) -> bool {
+        !self.automation
+    }
+
+    /// The example chips' labels.
+    pub fn chip_labels(&self) -> Vec<&'static str> {
+        if self.automation {
+            AUTOMATION_EXAMPLES.iter().map(|e| e.0).collect()
+        } else {
+            EXAMPLES.iter().map(|e| e.0).collect()
+        }
+    }
+
+    /// The description field's placeholder.
+    pub fn description_placeholder(&self) -> &'static str {
+        if self.automation {
+            AUTOMATION_PLACEHOLDER
+        } else {
+            DESCRIPTION_PLACEHOLDER
         }
     }
 
@@ -166,12 +245,28 @@ impl ActionDialog {
 
     /// ACT-070: a chip is highlighted while the description is its text.
     pub fn chip_selected(&self, index: usize) -> bool {
+        if self.automation {
+            return AUTOMATION_EXAMPLES
+                .get(index)
+                .is_some_and(|(_, text, when)| self.description == *text && self.when == *when);
+        }
         EXAMPLES.get(index).is_some_and(|(_, text)| self.description == *text)
     }
 
     /// ACT-070: a chip replaces the description; chips do nothing while drafting.
     pub fn pick_chip(&mut self, index: usize) {
-        if let (false, Some((_, text))) = (self.drafting, EXAMPLES.get(index)) {
+        if self.drafting {
+            return;
+        }
+        // SCHED-046: an automation's chip sets when it runs too.
+        if self.automation {
+            if let Some((_, text, when)) = AUTOMATION_EXAMPLES.get(index) {
+                (*text).clone_into(&mut self.description);
+                self.set_when(when);
+            }
+            return;
+        }
+        if let Some((_, text)) = EXAMPLES.get(index) {
             (*text).clone_into(&mut self.description);
         }
     }
@@ -185,15 +280,20 @@ impl ActionDialog {
     /// draft is in flight.
     pub fn begin_draft(&mut self) -> Option<DraftRequest> {
         let what = trim(&self.description);
-        if what.is_empty() || self.drafting {
+        if what.is_empty() || self.drafting || (self.automation && self.when_unclear) {
             return None;
         }
         self.request += 1;
         self.drafting = true;
         self.error = None;
+        // SCHED-047: an automation's drafter is told when it runs.
+        let description = match (&self.schedule, self.automation) {
+            (Some(s), true) => format!("{what}\n\nIt runs on its own: {}.", schedule::describe(s)),
+            _ => what.to_owned(),
+        };
         Some(DraftRequest {
             id: self.request,
-            description: what.to_owned(),
+            description,
             global: self.global,
         })
     }
@@ -210,8 +310,9 @@ impl ActionDialog {
                 self.icon = draft.icon;
                 self.prompt = draft.prompt;
                 self.step = Step::Review;
-                // SCHED-008: a time in the description becomes the schedule.
-                if let (false, Some(found)) = (self.global, schedule::parse(&draft.when)) {
+                // SCHED-008: a time in the description becomes the schedule;
+                // an automation keeps the one the user set (SCHED-047).
+                if let (false, false, Some(found)) = (self.global, self.automation, schedule::parse(&draft.when)) {
                     self.scheduled = true;
                     self.when = draft.when;
                     self.when_unclear = false;
@@ -424,10 +525,16 @@ impl ActionDialog {
                 } else {
                     "Draft with Claude"
                 },
-                enabled: !trim(&self.description).is_empty() && !self.drafting,
+                enabled: !trim(&self.description).is_empty()
+                    && !self.drafting
+                    && !(self.automation && self.when_unclear),
             },
             Step::Review => Button {
-                label: if self.action.is_some() { "Save" } else { "Add action" },
+                label: match (self.action.is_some(), self.automation) {
+                    (true, _) => "Save",
+                    (false, true) => "Add automation",
+                    (false, false) => "Add action",
+                },
                 enabled: !trim(&self.prompt).is_empty() && !self.saving,
             },
         }
@@ -668,5 +775,57 @@ mod tests {
         let request = g.begin_draft().unwrap();
         g.draft_done(request.id, Ok(draft));
         assert!(!g.scheduled);
+    }
+
+    #[test]
+    fn opens_as_an_automation() {
+        // SCHED-045
+        let mut d = ActionDialog::automation(None);
+        assert_eq!(
+            (d.title(), d.shows_scope(), d.shows_when_switch()),
+            ("New automation", false, false)
+        );
+        assert!(d.subtitle().starts_with("Say what it should do and when."));
+        assert_eq!(d.description_placeholder(), AUTOMATION_PLACEHOLDER);
+        assert!(d.scheduled && !d.global);
+        assert_eq!(schedule::describe(d.schedule.as_ref().unwrap()), "Weekdays at 9:00");
+        assert_eq!(d.when, "", "the field shows its placeholder");
+        // SCHED-046: a chip says what and when.
+        d.pick_chip(2);
+        assert!(d.chip_selected(2) && !d.chip_selected(0));
+        assert_eq!(d.when, "every day at 2am");
+        assert_eq!(d.time_text(), "2:00");
+        assert_eq!(d.chip_labels()[0], "Morning PR sweep");
+        // An unclear When holds the draft back.
+        d.set_when("whenever");
+        assert!(!d.primary_button().enabled && d.begin_draft().is_none());
+        d.set_when("every weekday at 9");
+        // SCHED-047: the drafter hears when it runs; the draft's own `when` doesn't win.
+        let request = d.begin_draft().unwrap();
+        assert!(
+            request
+                .description
+                .ends_with("\n\nIt runs on its own: Weekdays at 9:00.")
+        );
+        d.draft_done(
+            request.id,
+            Ok(ActionDraft {
+                name: "Nightly Tests".into(),
+                icon: "test-tube".into(),
+                prompt: "Run them.".into(),
+                when: "every day at 2am".into(),
+            }),
+        );
+        assert_eq!(schedule::describe(d.schedule.as_ref().unwrap()), "Weekdays at 9:00");
+        assert_eq!(d.primary_button().label, "Add automation");
+        let raw = d.begin_save("id", 1.0).unwrap();
+        assert_eq!(raw["schedule"]["days"], json!([1, 2, 3, 4, 5]));
+        // Editing one from its tile.
+        let saved = crate::normalize_action(&raw, None, 1.0).unwrap();
+        let e = ActionDialog::automation(Some(saved));
+        assert_eq!(
+            (e.title(), e.step, e.when.as_str()),
+            ("Edit automation", Step::Review, "every weekday at 9")
+        );
     }
 }

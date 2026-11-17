@@ -164,6 +164,22 @@ pub fn title_bar_button(
     .render(menus, window, cx)
 }
 
+/// SCHED-045: `New Automation`, beside the split button: the action dialog
+/// as a new automation.
+pub fn automation_button(board: &Entity<canvas::BoardCanvas>) -> AnyElement {
+    let board = board.downgrade();
+    crate::components::button::button("new-automation")
+        .icon(Icon::Clock, 15., 2.)
+        .label("New Automation")
+        .tooltip("Run something on a schedule")
+        .on_click(move |_, _, cx| {
+            if let Some(b) = board.upgrade() {
+                b.update(cx, |b, cx| b.new_automation(None, cx));
+            }
+        })
+        .into_any_element()
+}
+
 /// SESS-217: `Own worktree per session`, a checkbox for the board's project,
 /// off until it's ticked. None on a server's board, whose cards have theirs
 /// anyway (SRV-122).

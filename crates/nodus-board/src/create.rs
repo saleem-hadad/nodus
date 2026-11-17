@@ -152,6 +152,20 @@ impl Board {
         created_by: Option<&str>,
         launcher: &dyn Launcher,
     ) -> Result<SessionCard, BoardError> {
+        self.create_session_with(project_id, opts, created_by, launcher, &|_, _| {})
+            .await
+    }
+
+    /// The same, with `prepare` changing the new node, and the board it
+    /// joins, before its process starts: what the launch reads (spec 22).
+    pub(crate) async fn create_session_with(
+        &self,
+        project_id: &str,
+        opts: &CreateSessionOptions,
+        created_by: Option<&str>,
+        launcher: &dyn Launcher,
+        prepare: &(dyn Fn(&mut BoardState, &mut BoardNode) + Sync),
+    ) -> Result<SessionCard, BoardError> {
         let project = self.project(project_id)?;
         // SESS-114: a lowercase v4 UUID.
         let session_id = uuid::Uuid::new_v4().to_string();
@@ -175,6 +189,7 @@ impl Board {
                 let at = crate::tiles::run_spot(board, tile, &new.node);
                 (new.node.x, new.node.y) = (at.x, at.y);
             }
+            prepare(board, &mut new.node);
             // SESS-118
             board.nodes.insert(session_id.clone(), new.node.clone());
             Ok::<_, BoardError>(new)

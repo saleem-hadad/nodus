@@ -278,6 +278,8 @@ pub(crate) struct Inner {
     /// Running sessions switched to another model or effort mid-turn, by
     /// id, with their projects: started again when the turn ends (MODEL-011).
     pub(crate) model_restarts: Mutex<HashMap<String, String>>,
+    /// COORD-020: members waiting for the user, for their coordinator.
+    pub(crate) coordinator_waits: crate::coordinator::Waits,
     /// The servers sessions started, for their cards' drawers (DRAWER-021).
     pub(crate) drawers: crate::drawer::Drawers,
 }
@@ -349,6 +351,7 @@ impl Nodus {
                 events: Arc::clone(&sink),
                 projects: Arc::new(CoreProjects(core.clone())),
                 views: Arc::new(CoreViewTools(views.clone())),
+                coordinators: Some(Arc::new(crate::coordinator::CoreCoordinatorTools(core.clone()))),
                 clock: nodus_board::real_clock(),
                 home: Some(config.home.clone()),
                 on_server: config.hosting.is_some(),
@@ -473,6 +476,7 @@ impl Nodus {
                     .clone()
                     .map(|hosting| crate::hosting::Hosted::new(hosting, &config.home)),
                 model_restarts: Mutex::new(HashMap::new()),
+                coordinator_waits: crate::coordinator::Waits::default(),
                 drawers: crate::drawer::Drawers::default(),
             }
         });
@@ -508,6 +512,11 @@ impl Nodus {
             .inner
             .runtime
             .spawn(crate::schedules::follow_schedules(Arc::downgrade(&nodus.inner)));
+        // COORD-021: and coordinators' reports.
+        nodus
+            .inner
+            .runtime
+            .spawn(crate::coordinator::follow_coordinators(Arc::downgrade(&nodus.inner)));
         // PLAT-010 step 7.
         nodus.inner.updater.start();
         Ok(nodus)
@@ -830,6 +839,15 @@ impl Inner {
                     .flatten()
             });
         }
+        // COORD-030, COORD-031, COORD-040: the board's coordinator starts
+        // with its playbook and ask rules, and its members with a note.
+        let coordination = self.coordination(&opts.project_id, &opts.session_id);
+        if let Some(note) = coordination.note {
+            opts.extra_args
+                .get_or_insert_with(Vec::new)
+                .extend(["--append-system-prompt".to_owned(), note]);
+        }
+        let ask_rules = coordination.ask_rules;
         let env = self.env().await;
         let launch_env = launch::LaunchEnv::from_env(&env);
         let powershell = hooks::uses_powershell(&env);
@@ -840,6 +858,11 @@ impl Inner {
             .host
             .spawn_session(&opts, move |opts, host| {
                 let settings = endpoint.settings(powershell);
+                let settings: Arc<str> = if ask_rules {
+                    nodus_board::coordinator::with_ask_rules(&settings).into()
+                } else {
+                    settings
+                };
                 let hook_env = endpoint.env(&opts.session_id);
                 let tools = host.relays_mcp.then_some(launch::BoardTools {
                     mcp_config: nodus_tools::BOARD_MCP_CONFIG,
@@ -938,6 +961,8 @@ async fn follow_status(core: Weak<Inner>, mut changes: mpsc::UnboundedReceiver<S
         } = change;
         // Before a finished run leaves the board, while it can still be named.
         core.notify.status_changed(&session_id, status, live);
+        // COORD-020: what a member does, for its coordinator.
+        core.coordinator_status(&session_id, status);
         if status == SessionStatus::Done {
             core.board.on_done(&session_id);
             // MODEL-011: a switch made mid-turn, now the turn is over.

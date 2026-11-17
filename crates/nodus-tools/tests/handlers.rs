@@ -165,6 +165,7 @@ impl Fixture {
             sessions: Arc::clone(&sessions) as Arc<dyn BoardSessions>,
             events: Arc::clone(&events) as Arc<dyn EventSink>,
             projects: Arc::new(Adder(Arc::clone(&store))),
+            coordinators: None,
             views: Arc::new(NoViews),
             clock: Arc::new(|| NOW),
             home: Some(home.path().to_owned()),

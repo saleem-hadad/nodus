@@ -17,6 +17,7 @@ pub mod archive;
 mod board;
 pub mod cards;
 pub mod compose;
+pub mod coordinator;
 mod create;
 pub mod drawing;
 pub mod frames;

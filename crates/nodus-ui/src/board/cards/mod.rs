@@ -25,6 +25,7 @@ pub mod agent_deck;
 pub mod anim;
 pub mod archive_zone;
 pub mod border;
+pub mod coordinator;
 pub mod drawer;
 pub mod expanded_card;
 pub mod goal;
@@ -442,6 +443,41 @@ pub trait CardActions {
     fn open_tile(&self, tile_id: &str, cx: &mut App) {
         let _ = (tile_id, cx);
     }
+    /// COORD-051: the coordinator's members menu, at a spot in the window.
+    fn open_members(&self, at: gpui::Point<Pixels>, cx: &mut App) {
+        let _ = (at, cx);
+    }
+    /// COORD-053: moves the board to the coordinator's card.
+    fn show_coordinator(&self, cx: &mut App) {
+        let _ = cx;
+    }
+}
+
+/// The board's coordinator as cards show it (spec 22): its card wears its
+/// mark and a dot for each member, and each member says whom it reports to.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Coordination {
+    pub id: String,
+    pub title: String,
+    pub members: Vec<Member>,
+}
+
+/// One of the coordinator's members.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Member {
+    pub id: String,
+    pub title: String,
+    pub status: nodus_domain::SessionStatus,
+    /// Inside the coordinator, not on the board.
+    pub inside: bool,
+    /// The coordinator started it.
+    pub started: bool,
+}
+
+impl Coordination {
+    pub fn member(&self, id: &str) -> Option<&Member> {
+        self.members.iter().find(|m| m.id == id)
+    }
 }
 
 /// The terminal registry, as an expanded card needs it (spec 12).
@@ -497,6 +533,8 @@ pub struct BoardEnv {
     pub platform: Platform,
     pub actions: Rc<dyn CardActions>,
     pub terminals: Option<Rc<dyn TerminalHost>>,
+    /// The board's coordinator, when it has one (spec 22).
+    pub coordinator: Option<Rc<Coordination>>,
 }
 
 impl BoardEnv {

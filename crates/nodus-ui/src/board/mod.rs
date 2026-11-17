@@ -14,6 +14,8 @@ pub mod canvas;
 pub mod cards;
 mod clipboard;
 mod commands;
+mod coordinator;
+pub(crate) mod coordinator_dialog;
 pub mod edges;
 mod frames;
 pub mod fuzzy;
@@ -135,7 +137,10 @@ pub fn new_button(
     cx: &mut App,
 ) -> AnyElement {
     let (session, terminal, view) = (board.downgrade(), board.downgrade(), board.downgrade());
-    let (automation, goal) = (board.downgrade(), board.downgrade());
+    let (automation, goal, coordinator) = (board.downgrade(), board.downgrade(), board.downgrade());
+    // COORD-010: one coordinator a board; once it has one, this opens it.
+    let has_coordinator = board.read(cx).coordinator_id().is_some();
+    let on_server = board.read(cx).read_only() || board.read(cx).on_server(cx);
     let mut items = vec![
         MenuItem::item("New session", Icon::Plus, move |_, cx| {
             if let Some(b) = session.upgrade() {
@@ -167,6 +172,22 @@ pub fn new_button(
             }
         }),
     ];
+    if has_coordinator {
+        items.push(MenuItem::item("Open coordinator", Icon::Network, move |_, cx| {
+            if let Some(b) = coordinator.upgrade() {
+                b.update(cx, canvas::BoardCanvas::show_coordinator);
+            }
+        }));
+    } else if !on_server {
+        items.push(
+            MenuItem::item("New coordinator…", Icon::Network, move |_, cx| {
+                if let Some(b) = coordinator.upgrade() {
+                    b.update(cx, canvas::BoardCanvas::open_coordinator_dialog);
+                }
+            })
+            .hint("Beta"),
+        );
+    }
     items.extend(worktree_switch(board, cx).into_iter().flatten());
     MenuButton {
         id: "new".into(),

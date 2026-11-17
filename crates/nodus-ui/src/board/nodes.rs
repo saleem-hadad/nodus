@@ -295,6 +295,16 @@ impl BoardActions {
         self.with(cx, move |c, cx| c.open_tile(&id, cx));
     }
 
+    /// COORD-051: the coordinator's members menu, at a spot in the window.
+    pub fn open_members(&self, at: Point<gpui::Pixels>, cx: &mut App) {
+        self.with(cx, move |c, cx| c.open_members(at, cx));
+    }
+
+    /// COORD-053: moves the board to the coordinator's card.
+    pub fn show_coordinator(&self, cx: &mut App) {
+        self.with(cx, BoardCanvas::show_coordinator);
+    }
+
     /// Puts words in a shape (SHAPE-012).
     pub fn edit_shape(&self, shape_id: &str, text: &str, cx: &mut App) {
         let (id, text) = (shape_id.to_owned(), text.to_owned());

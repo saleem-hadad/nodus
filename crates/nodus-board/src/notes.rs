@@ -71,12 +71,13 @@ pub fn fit_note(text: &str) -> Size {
     }
 }
 
-/// Cards that are drawn on the board: not archived, not a run, not a view's brain.
+/// Cards that are drawn on the board: not archived, not a run, not a view's
+/// brain, not inside the coordinator (COORD-004).
 pub fn active_cards(board: &BoardState) -> impl Iterator<Item = &BoardNode> {
     board
         .nodes
         .values()
-        .filter(|n| !n.archived && !set(n.run_of.as_deref()) && !set(n.view_of.as_deref()))
+        .filter(|n| !n.archived && !set(n.run_of.as_deref()) && !set(n.view_of.as_deref()) && !n.inside())
 }
 
 /// The rightmost active card; on a tie, the earlier one (NOTE-006 (4)).

@@ -203,6 +203,36 @@ impl CardActions for CanvasActions {
     fn open_tile(&self, tile_id: &str, cx: &mut App) {
         self.0.open_tile(tile_id, cx);
     }
+    fn open_members(&self, at: gpui::Point<gpui::Pixels>, cx: &mut App) {
+        self.0.open_members(at, cx);
+    }
+    fn show_coordinator(&self, cx: &mut App) {
+        self.0.show_coordinator(cx);
+    }
+}
+
+/// The board's coordinator and its members, from the whole board (inside
+/// sessions aren't on the canvas) (spec 22).
+fn coordination(board: &nodus_domain::BoardSnapshot) -> Option<Rc<super::Coordination>> {
+    let c = board.coordinator.as_ref()?;
+    let card = board.cards.iter().find(|x| x.node.session_id == c.session_id)?;
+    let members = board
+        .cards
+        .iter()
+        .filter(|x| nodus_board::coordinator::is_member(&x.node, &c.session_id))
+        .map(|x| super::Member {
+            id: x.node.session_id.clone(),
+            title: super::present::title(x),
+            status: x.status,
+            inside: x.node.inside(),
+            started: x.node.started_by().as_deref() == Some(c.session_id.as_str()),
+        })
+        .collect();
+    Some(Rc::new(super::Coordination {
+        id: c.session_id.clone(),
+        title: super::present::title(card),
+        members,
+    }))
 }
 
 /// The board's context as the cards read it.
@@ -224,6 +254,10 @@ pub fn env(board: &BoardCx, zoom: f32, window: &Window, cx: &mut App) -> Rc<Boar
         let url = &s.servers.iter().find(|server| server.id == server_id)?.url;
         Some(server_host(url))
     });
+    let coordinator = state
+        .and_then(|s| s.board.as_ref())
+        .filter(|b| b.project.id == board.project_id.as_ref())
+        .and_then(coordination);
     let viewport = window.viewport_size();
     Rc::new(BoardEnv {
         scale: Z(zoom),
@@ -248,6 +282,7 @@ pub fn env(board: &BoardCx, zoom: f32, window: &Window, cx: &mut App) -> Rc<Boar
         terminal_modal: state.map(|s| s.session_window.ids().to_vec()).unwrap_or_default(),
         platform: Platform::CURRENT,
         actions: Rc::new(CanvasActions(board.actions.clone())),
+        coordinator,
         terminals: Some(Rc::new(CardHost {
             terminals: card_terminals(&board.project_id, zoom, cx),
             project_id: board.project_id.to_string(),

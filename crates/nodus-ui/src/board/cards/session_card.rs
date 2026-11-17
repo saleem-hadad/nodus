@@ -349,6 +349,16 @@ pub fn heading(
                 .into_any_element(),
         );
     }
+    // COORD-050: the coordinator's mark before its title.
+    if env.coordinator.as_ref().is_some_and(|c| c.id == *id) && !card.node.archived {
+        let size = if expanded { 13.0 } else { 14.0 };
+        out.push(super::coordinator::mark(
+            z,
+            size,
+            if expanded { 0.0 } else { 3.0 },
+            t.text_secondary,
+        ));
+    }
     let renaming = env.renaming.as_deref() == Some(id.as_str());
     if renaming {
         out.push(title_editor(env, card, window, cx));
@@ -935,6 +945,14 @@ fn footer(
     if is_terminal(card) {
         // CARD-040
         foot = foot.child(item().child(words(status_label(card).into(), t.text_tertiary)));
+    }
+    // COORD-050, COORD-053: the coordinator's members, or whom it reports to.
+    if let Some(c) = env.coordinator.as_ref().filter(|_| !card.node.archived) {
+        if c.id == id {
+            foot = foot.child(super::coordinator::members_button(env, c, window, cx));
+        } else if let Some(m) = c.member(&id) {
+            foot = foot.child(super::coordinator::member_mark(env, c, m, cx));
+        }
     }
     // CARD-041, CARD-042
     foot = foot.child(

@@ -371,6 +371,7 @@ fn env(zoom: f32, stack: StackView, renaming: Option<&str>, archive_hot: bool) -
         platform: Platform::CURRENT,
         actions: Rc::new(NoActions),
         terminals: None,
+        coordinator: None,
     })
 }
 

@@ -632,6 +632,9 @@ pub struct BoardSnapshot {
     /// Goals, oldest first (spec 21).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub goals: Vec<BoardGoal>,
+    /// The board's coordinator (spec 22).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coordinator: Option<crate::coordinator::BoardCoordinator>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub viewport: Option<Viewport>,
     /// A server board's last snapshot, given while the server can't be

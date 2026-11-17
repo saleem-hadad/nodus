@@ -475,7 +475,10 @@ impl Board {
         let targets: Vec<SearchTarget> = nodes
             .iter()
             .filter(|n| {
-                n.kind != Some(SessionKind::Terminal) && !set(n.run_of.as_deref()) && !set(n.view_of.as_deref())
+                n.kind != Some(SessionKind::Terminal)
+                    && !set(n.run_of.as_deref())
+                    && !set(n.view_of.as_deref())
+                    && !n.inside()
             })
             .map(|n| {
                 // SRV-125: a server card's transcripts are in its worktree.

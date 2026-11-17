@@ -1344,3 +1344,178 @@ async fn worktree_of(nodus: &Nodus, project_id: &str, session_id: &str) -> nodus
         .unwrap();
     card.node.worktree().expect("a worktree")
 }
+
+/// The argument after `flag`, if it's there.
+fn arg_after<'a>(args: &'a [String], flag: &str) -> Option<&'a str> {
+    let at = args.iter().position(|a| a == flag)?;
+    args.get(at + 1).map(String::as_str)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_coordinator_starts_with_its_playbook_and_hears_from_its_members() {
+    let world = World::new().await;
+    let nodus = world.start().await;
+    let repo = world.repo("crew").await;
+    let project = nodus
+        .projects()
+        .add(Some(repo.to_string_lossy().into_owned()))
+        .await
+        .unwrap()
+        .unwrap();
+    let mut events = Events::new(&nodus);
+    // A session from before there was a coordinator starts with no note.
+    let before = nodus
+        .sessions()
+        .create(&project.id, &CreateSessionOptions::default())
+        .await
+        .unwrap()
+        .node
+        .session_id;
+    events.printed(&before, "stand-in ready").await;
+    assert!(arg_after(&world.argvs(&before)[0], "--append-system-prompt").is_none());
+
+    // COORD-012, COORD-030, COORD-031: the coordinator, in auto mode, with
+    // its playbook and the ask rules.
+    let card = nodus
+        .coordinator()
+        .create(
+            &project.id,
+            &CreateSessionOptions {
+                x: 900.0,
+                initial_prompt: Some("Release in batches.".into()),
+                ..CreateSessionOptions::default()
+            },
+        )
+        .await
+        .unwrap();
+    let c = card.node.session_id.clone();
+    events.printed(&c, "stand-in ready").await;
+    let argv = &world.argvs(&c)[0];
+    assert!(has_pair(argv, "--permission-mode", "auto"), "{argv:?}");
+    let playbook = arg_after(argv, "--append-system-prompt").unwrap();
+    assert!(playbook.contains("[Nodus] Board report"), "{playbook}");
+    let settings: Value = serde_json::from_str(arg_after(argv, "--settings").unwrap()).unwrap();
+    assert!(
+        settings["permissions"]["ask"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("Bash(gh pr merge:*)"))
+    );
+    assert!(settings["hooks"].is_object(), "the hooks are still there");
+    assert_eq!(argv[argv.len() - 1], "Release in batches.");
+
+    // COORD-040: a session started now is told about it.
+    let member = nodus
+        .sessions()
+        .create(&project.id, &CreateSessionOptions::default())
+        .await
+        .unwrap()
+        .node
+        .session_id;
+    events.printed(&member, "stand-in ready").await;
+    let note = arg_after(&world.argvs(&member)[0], "--append-system-prompt")
+        .unwrap()
+        .to_owned();
+    assert!(note.contains("has a coordinator"), "{note}");
+    assert!(!note.contains("started you"));
+
+    // COORD-020: a member's turn ending waits for the next report.
+    let (port, token) = hook_target(&world.env_of(&member));
+    hook(port, &token, &member, "UserPromptSubmit", &json!({ "prompt": "go" })).await;
+    events.status(&member, SessionStatus::Working, true).await;
+    hook(port, &token, &member, "Stop", &json!({})).await;
+    events.status(&member, SessionStatus::Done, true).await;
+    let pending = tokio::time::timeout(WAIT, async {
+        loop {
+            let board = nodus.board().load(&project.id).await.unwrap();
+            let pending = board.coordinator.map(|c| c.pending).unwrap_or_default();
+            if !pending.is_empty() {
+                return pending;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("no event for the member's turn");
+    assert_eq!(pending[0].session_id, member);
+    assert!(pending[0].text.starts_with("ended its turn"), "{pending:?}");
+
+    // COORD-032: the coordinator's tools, which others don't have.
+    let (port, token) = hook_target(&world.env_of(&c));
+    let names = |listed: &Value| -> Vec<String> {
+        listed["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["name"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    let list = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" });
+    let theirs = names(&mcp(port, &token, &c, &list).await);
+    assert!(
+        theirs.ends_with(&["start_session".to_owned(), "message_session".to_owned()]),
+        "{theirs:?}"
+    );
+    let (member_port, member_token) = hook_target(&world.env_of(&member));
+    let members = names(&mcp(member_port, &member_token, &member, &list).await);
+    assert!(!members.contains(&"start_session".to_owned()));
+    let refused = mcp(
+        member_port,
+        &member_token,
+        &member,
+        &json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                 "params": { "name": "start_session", "arguments": { "title": "x", "prompt": "y" } } }),
+    )
+    .await;
+    assert_eq!(refused["result"]["isError"], json!(true));
+
+    // COORD-033: a session inside it, told who started it.
+    let started = mcp(
+        port,
+        &token,
+        &c,
+        &json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/call",
+                 "params": { "name": "start_session", "arguments": { "title": "Release notes", "prompt": "Draft the notes." } } }),
+    )
+    .await;
+    assert!(started["result"]["isError"].is_null(), "{started}");
+    let text = started["result"]["content"][0]["text"].as_str().unwrap();
+    let inside = serde_json::from_str::<Value>(text).unwrap()["session_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    events.printed(&inside, "stand-in ready").await;
+    let argv = &world.argvs(&inside)[0];
+    assert!(has_pair(argv, "--permission-mode", "auto"), "{argv:?}");
+    assert!(
+        arg_after(argv, "--append-system-prompt")
+            .unwrap()
+            .contains("started you")
+    );
+    let board = nodus.board().load(&project.id).await.unwrap();
+    let node = &board.cards.iter().find(|x| x.node.session_id == inside).unwrap().node;
+    assert!(node.inside());
+
+    // COORD-034: a message to an idle member is typed in, marked as the coordinator's.
+    let sent = mcp(
+        port,
+        &token,
+        &c,
+        &json!({ "jsonrpc": "2.0", "id": 4, "method": "tools/call",
+                 "params": { "name": "message_session", "arguments": { "session_id": member, "text": "Merge #64." } } }),
+    )
+    .await;
+    assert!(sent["result"]["isError"].is_null(), "{sent}");
+    events.printed(&member, "Merge #64.").await;
+    let stranger = mcp(
+        port,
+        &token,
+        &c,
+        &json!({ "jsonrpc": "2.0", "id": 5, "method": "tools/call",
+                 "params": { "name": "message_session", "arguments": { "session_id": "nobody", "text": "Hi." } } }),
+    )
+    .await;
+    assert_eq!(stranger["result"]["isError"], json!(true));
+
+    world.stop(nodus).await;
+}

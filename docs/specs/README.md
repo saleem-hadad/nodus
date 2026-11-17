@@ -27,6 +27,7 @@ When you change a behavior, change its entry in the same commit, and say what 0.
 | `19-card-drawer.md` | a card's drawer: the pull requests its session opened (kept, looked up on GitHub through `gh`) and the servers it started (found by their environment), a lip that slides open, Stop |
 | `20-scheduled-actions.md` | actions that run on a schedule, their tiles on the board, and views' schedules on show |
 | `21-goals.md` | goals: one session pursued over days or weeks, its check-ins, how far along it is, and its tile |
+| `22-coordinators.md` | coordinators (beta): one session per board that the others report to without polling, the sessions it starts inside it, its playbook and ask rules, its mark and members' dots |
 
 ## Compatibility with 0.9.4
 

@@ -24,6 +24,13 @@ macro_rules! shot {
 
 pub const SLIDES: &[Slide] = &[
     Slide {
+        version: "1.0.25",
+        title: "Goals that check in",
+        text: "Give Claude a goal, like 4% signup conversion. It works on it for days and shows how far along.",
+        light: shot!("1.0.25-goals-light"),
+        dark: shot!("1.0.25-goals-dark"),
+    },
+    Slide {
         version: "1.0.24",
         title: "What a session made",
         text: "The PRs a session opened and the servers it started wait in a drawer under its card.",

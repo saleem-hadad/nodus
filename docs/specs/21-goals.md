@@ -9,7 +9,7 @@ Sources:
 - `crates/nodus-tools/src/schema.rs`, `server.rs`, `handlers.rs` (`goal_update`, `goal_finish`)
 - `crates/nodus-core/src/goals.rs` (`window.api.goals`), `schedules.rs` (the ticker)
 - `crates/nodus-wire/src/call.rs` (`goals:*`), `crates/nodus-server/src/dispatch.rs`
-- `crates/nodus-ui/src/board/cards/goal.rs` (the tile), `goals.rs` (its menu, opening, moving), `goal_dialog.rs`, `mod.rs` (`New Automation`'s menu), `menus.rs`, `scene.rs`, `render.rs`, `edges.rs`, `moments.rs`, `input.rs`
+- `crates/nodus-ui/src/board/cards/goal.rs` (the tile), `goals.rs` (its menu, opening, moving), `goal_dialog.rs`, `mod.rs` (the title bar's `New` menu), `menus.rs`, `scene.rs`, `render.rs`, `edges.rs`, `moments.rs`, `input.rs`
 
 ## Data
 
@@ -28,7 +28,7 @@ Sources:
 - **GOAL-011** Starting it (`goals:create { mission, every?, at?, sessionId? }`) puts its tile up and starts its session: a new Claude session in auto mode, named the goal's title, beside the tile, on the first check-in's prompt. The tile goes at `at` (its top left; the dialog sends the tile's middle at the clicked spot), or the nearest free spot to it clear of the board's things and the dock, else beside the rightmost card, else right of the dock. The first check-in counts as check-in 1; the next is a day off until Claude says otherwise. The board selects the tile and pans to it once it's there (SCHED-048).
 - **GOAL-012** A Claude card's menu has `Make this a goal…` (not on an archived card, a run, a card already pursuing a goal, or a read-only board): the dialog with the card's title as the mission, and the goal is that session's; its first check-in is sent into it (SESS-141…145) and its tile goes beside it.
 - **GOAL-013** The board's menu has `New goal here…` (after `New automation here…`; off over the dock or on a read-only board).
-- **GOAL-014** `New Automation` (SCHED-045) is a split button: its menu, `More ways to automate`, has `New goal…`. The examples: `Signup conversion`, `Faster home page`, `Fewer errors`, `Test coverage`.
+- **GOAL-014** The board's title-bar `New` menu (09 BOARD-147) has `New goal…`, after `New automation…` (SCHED-045). Changed after 1.0.25: it was in `New Automation`'s own menu, `More ways to automate`. The examples: `Signup conversion`, `Faster home page`, `Fewer errors`, `Test coverage`.
 
 ## Check-ins
 

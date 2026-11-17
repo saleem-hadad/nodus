@@ -55,7 +55,7 @@ pub const STATS_DEBOUNCE: Duration = Duration::from_millis(250);
 pub enum ActionRequest {
     /// A tile's `Edit automation…`.
     EditAutomation(String),
-    /// `New Automation`, or `New automation here` with where on the board.
+    /// `New` › `New automation…`, or `New automation here` with where on the board.
     NewAutomation(Option<(f64, f64)>),
 }
 

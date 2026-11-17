@@ -44,7 +44,6 @@ pub mod viewport;
 #[cfg(target_os = "macos")]
 pub(crate) use input::saw_scroll;
 
-use std::rc::Rc;
 use std::time::Duration;
 
 use gpui::{
@@ -55,7 +54,7 @@ use nodus_domain::{ProjectPatch, SessionKind};
 
 use crate::components::context_menu::{MenuItem, MenuLayer};
 use crate::components::icon::{Icon, icon};
-use crate::components::split_button::SplitButton;
+use crate::components::menu_button::MenuButton;
 use crate::platform::keys;
 use crate::theme;
 
@@ -125,17 +124,25 @@ pub fn loading(spinning: bool, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-/// BOARD-147: the title bar's split button: `New Session`, and its menu
-/// `More ways to start` (spec 09 § Title-bar actions), with the project's
-/// worktree switch on a board in the app (SESS-217).
-pub fn title_bar_button(
+/// BOARD-147: the title bar's `New` menu (spec 09 § Title-bar actions): a
+/// session, terminal or view, then an automation (SCHED-045) or a goal
+/// (GOAL-014), with the project's worktree switch on a board in the app
+/// (SESS-217).
+pub fn new_button(
     board: &Entity<canvas::BoardCanvas>,
     menus: &Entity<MenuLayer>,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
-    let (main, terminal, view) = (board.downgrade(), board.downgrade(), board.downgrade());
+    let (session, terminal, view) = (board.downgrade(), board.downgrade(), board.downgrade());
+    let (automation, goal) = (board.downgrade(), board.downgrade());
     let mut items = vec![
+        MenuItem::item("New session", Icon::Plus, move |_, cx| {
+            if let Some(b) = session.upgrade() {
+                b.update(cx, |b, cx| b.create_session(None, SessionKind::Claude, cx));
+            }
+        })
+        .hint(keys("⌘N")),
         MenuItem::item("New terminal", Icon::SquareTerminal, move |_, cx| {
             if let Some(b) = terminal.upgrade() {
                 b.update(cx, |b, cx| b.create_session(None, SessionKind::Terminal, cx));
@@ -148,49 +155,24 @@ pub fn title_bar_button(
                 b.update(cx, |b, cx| b.open_view_dialog(None, cx));
             }
         }),
-    ];
-    items.extend(worktree_switch(board, cx).into_iter().flatten());
-    SplitButton {
-        id: "new-session".into(),
-        label: "New Session".into(),
-        icon: Some((Icon::Plus, 15., 2.2)),
-        title: Some(format!("New session ({})", keys("⌘N")).into()),
-        on_click: Rc::new(move |_, cx| {
-            if let Some(b) = main.upgrade() {
-                b.update(cx, |b, cx| b.create_session(None, SessionKind::Claude, cx));
-            }
-        }),
-        items,
-        menu_label: "More ways to start".into(),
-    }
-    .render(menus, window, cx)
-}
-
-/// SCHED-045: `New Automation`, beside New Session: the action dialog as a
-/// new automation. GOAL-014: its menu starts a goal.
-pub fn automation_button(
-    board: &Entity<canvas::BoardCanvas>,
-    menus: &Entity<MenuLayer>,
-    window: &mut Window,
-    cx: &mut App,
-) -> AnyElement {
-    let (main, goal) = (board.downgrade(), board.downgrade());
-    SplitButton {
-        id: "new-automation".into(),
-        label: "New Automation".into(),
-        icon: Some((Icon::Clock, 15., 2.)),
-        title: Some("Run something on a schedule".into()),
-        on_click: Rc::new(move |_, cx| {
-            if let Some(b) = main.upgrade() {
+        MenuItem::Separator,
+        MenuItem::item("New automation…", Icon::Clock, move |_, cx| {
+            if let Some(b) = automation.upgrade() {
                 b.update(cx, |b, cx| b.new_automation(None, cx));
             }
         }),
-        items: vec![MenuItem::item("New goal…", Icon::Target, move |_, cx| {
+        MenuItem::item("New goal…", Icon::Target, move |_, cx| {
             if let Some(b) = goal.upgrade() {
                 b.update(cx, |b, cx| b.open_goal_dialog(None, None, cx));
             }
-        })],
-        menu_label: "More ways to automate".into(),
+        }),
+    ];
+    items.extend(worktree_switch(board, cx).into_iter().flatten());
+    MenuButton {
+        id: "new".into(),
+        label: "New".into(),
+        icon: Some((Icon::Plus, 15., 2.2)),
+        items,
     }
     .render(menus, window, cx)
 }

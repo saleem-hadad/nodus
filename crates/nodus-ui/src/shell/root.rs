@@ -254,19 +254,13 @@ impl Render for Shell {
         let pinned = self.state.read(cx).pin_rail();
         let actions = match route {
             Route::Projects => vec![new_project_button(&self.state, &self.menus, window, cx)],
-            // BOARD-147: the board's split button; none on a read-only
-            // board (SRV-028).
+            // BOARD-147: the board's `New` menu; none on a read-only board
+            // (SRV-028).
             Route::Board(_) => self
                 .board
                 .clone()
                 .filter(|board| !board.read(cx).read_only())
-                // SCHED-045: and `New Automation` before it.
-                .map(|board| {
-                    vec![
-                        crate::board::automation_button(&board, &self.menus, window, cx),
-                        crate::board::title_bar_button(&board, &self.menus, window, cx),
-                    ]
-                })
+                .map(|board| vec![crate::board::new_button(&board, &self.menus, window, cx)])
                 .unwrap_or_default(),
         };
         let bar = title_bar(&self.state, actions, window, cx);

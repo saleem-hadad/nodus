@@ -1,8 +1,6 @@
 //! A button for the default action with a chevron beside it that drops a
-//! menu of the others (`SplitButton.tsx`; UI-172…UI-176). The board uses it
-//! in the title bar.
-
-use std::rc::Rc;
+//! menu of the others (`SplitButton.tsx`; UI-172…UI-176). The projects
+//! grid's `New Project` in the title bar is one.
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -11,8 +9,9 @@ use gpui::{
 };
 
 use crate::components::button::button;
-use crate::components::context_menu::{Menu, MenuItem, MenuLayer, below_right};
+use crate::components::context_menu::{MenuItem, MenuLayer};
 use crate::components::icon::Icon;
+use crate::components::menu_button::toggle_menu;
 use crate::theme::tokens::*;
 use crate::theme::{self};
 
@@ -82,26 +81,8 @@ impl SplitButton {
                     .tooltip(self.menu_label.clone())
                     // UI-173: toggles on press, not click.
                     .on_press(move |window, cx| {
-                        if menus.read(cx).is_open() && *chevron_open.read(cx) {
-                            menus.update(cx, |m, cx| m.close(window, cx));
-                            return;
-                        }
-                        let b = *group_bounds.read(cx);
-                        let state = chevron_open.clone();
-                        let mut menu = Menu::at(below_right(b), items.clone());
-                        menu.align_right = true;
-                        menu.anchor = Some(b);
-                        menu.on_close = Some(Rc::new(move |_, cx| {
-                            state.update(cx, |s, cx| {
-                                *s = false;
-                                cx.notify();
-                            });
-                        }));
-                        chevron_open.update(cx, |s, cx| {
-                            *s = true;
-                            cx.notify();
-                        });
-                        menus.update(cx, |m, cx| m.open(menu, cx));
+                        let at = *group_bounds.read(cx);
+                        toggle_menu(&menus, &chevron_open, at, items.clone(), window, cx);
                     }),
             )
             .child(

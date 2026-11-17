@@ -11,6 +11,7 @@ pub mod focus_ring;
 pub mod folder_icon;
 pub mod frosted;
 pub mod icon;
+pub mod menu_button;
 pub mod modal;
 pub mod presence;
 pub mod scroll;

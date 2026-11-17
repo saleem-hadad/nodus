@@ -117,7 +117,7 @@ pub struct ActionDialog {
     pub schedule: Option<ActionSchedule>,
     /// SCHED-041: the When field says something that isn't a time.
     pub when_unclear: bool,
-    /// SCHED-045: opened as an automation (`New Automation`, or a tile's
+    /// SCHED-045: opened as an automation (`New automation…`, or a tile's
     /// `Edit automation…`): always on a schedule, never global.
     pub automation: bool,
     request: i64,

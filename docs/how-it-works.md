@@ -87,7 +87,7 @@ A session can put notes on another project's board too: ask it to leave a note f
 
 ## Views
 
-A view is a small live page on the board, such as a table of your last deployments, a count from your database or your open tickets, that Claude builds from what you describe and keeps up to date. Choose **New view…** from the arrow beside **New Session** in the title bar (or right-click the board › **New view here…**, or type `/view` in the prompt bar), say what it should show and where the data comes from, and press **Create view**. The view appears straight away and says it's being built. Behind it is its *brain*: a Claude session of its own, in auto mode, that isn't drawn on the board. A small dot beside the view's name shows what the brain is doing: 🟠 while it works, 🔴 when it needs you. Right-click the view and choose **Open its session** (or press **Watch it work** while it's building) to open the brain's session and talk to it directly.
+A view is a small live page on the board, such as a table of your last deployments, a count from your database or your open tickets, that Claude builds from what you describe and keeps up to date. Choose **New view…** from **New** in the title bar (or right-click the board › **New view here…**, or type `/view` in the prompt bar), say what it should show and where the data comes from, and press **Create view**. The view appears straight away and says it's being built. Behind it is its *brain*: a Claude session of its own, in auto mode, that isn't drawn on the board. A small dot beside the view's name shows what the brain is doing: 🟠 while it works, 🔴 when it needs you. Right-click the view and choose **Open its session** (or press **Watch it work** while it's building) to open the brain's session and talk to it directly.
 
 A view's actions are in its menu: right-click anywhere on it, its page included (⌃-click works too). To change a view, choose **Ask Claude to change it…** and say what to change: it goes to the same brain, which still knows how it built the view. Drag a view by its name above the page, and drag a selected view's corners to resize it. **Open large** opens it large. Double-click its name to rename it. Delete it from its menu (or click its name and press ⌫), which asks first: its page and data go, and its brain stops. The brain's transcript stays on disk.
 
@@ -242,7 +242,7 @@ On the server, two Unix users split the work. `nodus` runs `nodus serve` and kee
 | Projects | Open the selected project | Double-click · ⌘O · ⌘↓ |
 | | Rename · remove | Enter · ⌘⌫ |
 | | Color, Reveal in Finder, Add to Focus (once focus is on in Settings) | Right-click |
-| Board | New session | N · ⌘N · double-click empty canvas |
+| Board | New session | N · ⌘N · **New** › **New session** · double-click empty canvas |
 | | Ask Claude right here: type · speak | B, then click and Return · M, then click, speak, click |
 | | New terminal in the project folder | T · ⌘T |
 | | Open a card | Click · Enter |
@@ -264,7 +264,7 @@ On the server, two Unix users split the work. `nodus` runs `nodus serve` and kee
 | | Speak a prompt · stop | V · the mic beside the bar |
 | | Speak into an open session, typed in but not sent | The mic in its title bar |
 | | Delete the selected notes (asks first if they have writing) | ⌫ |
-| | New view | **New view…** beside New Session in the title bar · right-click › New view here… · /view in the bar |
+| | New view | **New** › **New view…** in the title bar · right-click › New view here… · /view in the bar |
 | | Use a view's page | Click in it · right-click › Open large |
 | | Change a view | Right-click › Ask Claude to change it… · Open its session to talk to its brain |
 | | Rename a view · delete it | Double-click its name · click its name, then ⌫ (asks first) |

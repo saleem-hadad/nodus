@@ -442,6 +442,7 @@ CSS keyword easings used in this domain: `ease` = `cubic-bezier(0.25, 0.1, 0.25,
 - **UI-174 Chevron from the keyboard.** Activating the focused chevron with the keyboard (Enter/Space) toggles the menu too.
 - **UI-175 Open state.** While its menu is open the chevron part shows `--bg-pressed` and `--text-primary`.
 - **UI-176 Split button look.** The two parts read as one button: one shared `--shadow-sm`, the main part's right border is the divider, the chevron part is 22px wide in `--text-secondary` (hover `--text-primary`).
+- **UI-339 Menu button.** A button with no default action, only a menu: its icon and label, then a `ChevronDown` (13px, stroke 2.2) in `--text-secondary` (`--text-primary` while open). Pressing anywhere on it toggles its menu as UI-173 does, and while the menu is open the whole button shows `--bg-pressed` (UI-175). The board's `New` (09 BOARD-147) is one. Added after 1.0.25.
 
 ### Folder icon
 
@@ -1324,6 +1325,7 @@ Risks:
 - [x] UI-174 Chevron from the keyboard
 - [x] UI-175 Open state
 - [x] UI-176 Split button look
+- [x] UI-339 Menu button (added after 1.0.25)
 - [x] UI-177 Folder drawing
 - [x] UI-178 Colour fallback
 - [x] UI-179 Small folders

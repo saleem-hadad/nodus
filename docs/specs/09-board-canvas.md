@@ -326,10 +326,10 @@ Connections (`nodesConnectable={false}`), edge selection/focus, React Flow's del
 - **BOARD-141** The confirm dialog focuses its confirm button when it opens, so Enter (or Space) confirms; Escape, a pointer-down on the backdrop or `Cancel` resolve false.
 - **BOARD-142** "Overlay open" (which blocks board shortcuts and menu commands) = a context menu, confirm, merge dialog, actions-rail dialog/menu, New view dialog, or ⌘K search is up.
 - **BOARD-143** The selection bar shows while at least one card is selected and the merge dialog is closed; counts/disabled rules and actions per § UI details › Selection bar wiring.
-- **BOARD-144** The New view dialog (04) opens from the pane menu with a point (the view is centred there) or from the title-bar split button with none (centred in view); it closes via its own close.
+- **BOARD-144** The New view dialog (04) opens from the pane menu with a point (the view is centred there) or from the title bar's `New` menu with none (centred in view); it closes via its own close.
 - **BOARD-145** ⌘K search (11) receives the non-terminal cards (active and archived) and a query that persists between openings; `onStart(ids)` closes search and starts a merge with the query as focus.
 - **BOARD-146** The empty-board hint shows while the board has no active cards (terminals count as active).
-- **BOARD-147** The title bar shows the board's split button (see UI details); its main part creates a session at the default spot.
+- **BOARD-147** The title bar shows the board's `New` menu (see UI details); its `New session` creates a session at the default spot. Changed after 1.0.25: it was two split buttons, `New Automation` and `New Session`.
 
 ### Board actions exposed to nodes (10/04 call these)
 
@@ -508,7 +508,7 @@ Toast strings (verbatim; `<m>` = the error's message, or `String(err)` for non-E
 
 ### Title-bar actions (component chrome: 08)
 
-Split button in the title bar's action slot: main part `New Session` with a `Plus` icon (15px, stroke 2.2), tooltip `New session (⌘N)` (Windows `New session (Ctrl+N)`); its menu, labelled `More ways to start`, has `New terminal` (`SquareTerminal`, hint `⌘T` / `Ctrl+T`) and `New view…` (`LayoutDashboard`, no hint). On a board in the app (not a server's), a separator and `Own worktree per session` follow, a checkbox for the project (`Square` when off, `SquareCheck` when on; off by default) that toggles its `worktrees` (03 SESS-217).
+One menu button (08 UI-339) in the title bar's action slot, so the board has a single primary action: `New` with a `Plus` icon (15px, stroke 2.2). Its menu has `New session` (`Plus`, hint `⌘N` / `Ctrl+N`), `New terminal` (`SquareTerminal`, hint `⌘T` / `Ctrl+T`) and `New view…` (`LayoutDashboard`, no hint), then a separator, `New automation…` (`Clock`, 20 SCHED-045) and `New goal…` (`Target`, 21 GOAL-014). On a board in the app (not a server's), a separator and `Own worktree per session` follow, a checkbox for the project (`Square` when off, `SquareCheck` when on; off by default) that toggles its `worktrees` (03 SESS-217).
 
 ### Selection bar wiring (content and look: 11)
 
@@ -931,7 +931,7 @@ New Rust tests to add in `nodus-board` (pure functions, ported from layout.ts/se
 - [x] BOARD-144 The New view dialog (04) opens from the pane menu with a point (the view is centred there) or from the title-bar…
 - [x] BOARD-145 ⌘K search (11) receives the non-terminal cards (active and archived) and a query that persists between openings…
 - [x] BOARD-146 The empty-board hint shows while the board has no active cards (terminals count as active).
-- [x] BOARD-147 The title bar shows the board's split button (see UI details); its main part creates a session at the default spot.
+- [x] BOARD-147 The title bar shows the board's `New` menu (see UI details); its `New session` creates a session at the default spot.
 - [x] BOARD-148 Only one thing is renamed or written in at a time: a single "renaming" id is shared by cards, sections, notes and…
 - [x] BOARD-149 `rename(sessionId, title)` saves the card's custom title (empty clears the override) via `patchCards`.
 - [x] BOARD-150 `expand(ids, expanded)` affects only active cards among the ids whose expanded state differs (none → nothing)…

@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use common::{Fixture, HTML, P};
-use nodus_domain::{Event, ViewEvent, ViewSchedule};
+use nodus_domain::{Event, ViewSchedule};
 use serde_json::{Value, json};
 
 const NOW: f64 = 1_800_000_000_000.0;
@@ -47,11 +47,14 @@ async fn until(mut done: impl FnMut() -> bool) {
     panic!("it didn't happen");
 }
 
+/// The command results the window was sent (the tests that run commands are
+/// Unix only).
+#[cfg(unix)]
 fn results(f: &Fixture) -> usize {
     f.window
         .view_events()
         .iter()
-        .filter(|(_, e, _)| *e == ViewEvent::Result)
+        .filter(|(_, e, _)| *e == nodus_domain::ViewEvent::Result)
         .count()
 }
 

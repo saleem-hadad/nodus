@@ -1,4 +1,4 @@
-//! A view's schedules on its caption (spec 19, SCHED-065…SCHED-070): a small
+//! A view's schedules on its caption (spec 20, SCHED-065…SCHED-070): a small
 //! clock whose ring fills toward the soonest next run and when that is, and
 //! the picker it opens to change how often each runs without asking Claude.
 //! The picker is a menu in the window's menu layer, so it draws over the

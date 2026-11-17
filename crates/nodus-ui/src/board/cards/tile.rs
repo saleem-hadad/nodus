@@ -1,4 +1,4 @@
-//! A scheduled action's tile on the board (spec 19, SCHED-030…SCHED-036):
+//! A scheduled action's tile on the board (spec 20, SCHED-030…SCHED-036):
 //! the clock with the ring that fills toward the next run, the action's name
 //! and schedule, when it runs next, and below a hairline what its last run
 //! said, with a dot until the user has looked.

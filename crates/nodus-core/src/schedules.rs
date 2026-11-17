@@ -1,4 +1,4 @@
-//! Scheduled actions' ticker (spec 19): every 30 s while the app is open, each
+//! Scheduled actions' ticker (spec 20): every 30 s while the app is open, each
 //! scheduled action that is due starts a run, as a press of its button does,
 //! beside its tile on the board.
 

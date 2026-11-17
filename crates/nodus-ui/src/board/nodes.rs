@@ -121,7 +121,7 @@ pub struct ShapeNode<'a> {
     pub drawing: Option<f32>,
 }
 
-/// A scheduled action's tile (spec 19): the tile, its action (gone for a
+/// A scheduled action's tile (spec 20): the tile, its action (gone for a
 /// moment after it's deleted) and the status of its run on the board.
 pub struct TileNode<'a> {
     pub node: NodeState,
@@ -448,7 +448,7 @@ pub trait NodeRenderers: 'static {
         placeholder(&node.node, node.shape.text.clone(), cx)
     }
 
-    /// A scheduled action's tile (spec 19).
+    /// A scheduled action's tile (spec 20).
     fn tile(&self, node: TileNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut App) -> AnyElement {
         let _ = (board, window);
         placeholder(&node.node, node.action.map_or_else(String::new, |a| a.name.clone()), cx)

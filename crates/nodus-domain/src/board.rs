@@ -313,7 +313,7 @@ impl BoardShape {
     }
 }
 
-/// A scheduled action's tile on its project's board (spec 19): where it sits
+/// A scheduled action's tile on its project's board (spec 20): where it sits
 /// and how its schedule has gone. Its id is the action's.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -469,7 +469,7 @@ pub struct BoardSnapshot {
     /// Messages between the board's sessions, oldest first (BOARD-184).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub talks: Vec<BoardTalk>,
-    /// Scheduled actions' tiles, oldest first (spec 19).
+    /// Scheduled actions' tiles, oldest first (spec 20).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tiles: Vec<BoardTile>,
     #[serde(skip_serializing_if = "Option::is_none")]

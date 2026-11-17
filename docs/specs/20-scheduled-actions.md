@@ -1,4 +1,4 @@
-# 19 · Scheduled actions
+# 20 · Scheduled actions
 
 Added after 1.0.23. Until then an action (05) ran only when its button was pressed, and views (04) ran on their own every so many minutes with nothing on the board to show it. Now an action can also run on a **schedule**, such as every weekday at 9, and a scheduled action gets a **tile** on its project's board: a small panel with a clock whose ring fills toward the next run, what it last said, and its runs coming out beside it along a dotted line. Views' schedules get the same clock in their caption, and a picker to change them without asking Claude.
 

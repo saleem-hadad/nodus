@@ -1,4 +1,4 @@
-//! Scheduled actions' tiles (spec 19): one on the board for each of the
+//! Scheduled actions' tiles (spec 20): one on the board for each of the
 //! project's own actions that has a schedule. Its runs come out beside it,
 //! and the last one's result stays on it.
 

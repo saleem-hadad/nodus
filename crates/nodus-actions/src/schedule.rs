@@ -1,4 +1,4 @@
-//! Schedules for actions (spec 19): reading what the user typed (`every
+//! Schedules for actions (spec 20): reading what the user typed (`every
 //! weekday at 9`), saying it back (`Weekdays at 9:00`), and finding when it
 //! runs, in local time with daylight saving.
 //!

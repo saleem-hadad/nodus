@@ -1,4 +1,4 @@
-//! Scheduled actions' tiles on the canvas (spec 19): their menu, opening the
+//! Scheduled actions' tiles on the canvas (spec 20): their menu, opening the
 //! last run, pausing and taking off a schedule, and moving them.
 
 use gpui::{Context, WeakEntity};

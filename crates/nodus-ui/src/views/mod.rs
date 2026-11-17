@@ -13,7 +13,7 @@
 //!   above each page, as 0.9.4's ink layer drew over its iframes.
 //! - [`relay`]: what pages ask for, and what the board tells them.
 //! - [`large`], [`dialog`]: the large window and the New view dialog.
-//! - [`schedule`]: the clock on the caption and the picker it opens (spec 19).
+//! - [`schedule`]: the clock on the caption and the picker it opens (spec 20).
 
 mod building;
 pub mod card;

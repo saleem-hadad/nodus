@@ -129,7 +129,7 @@ pub struct BoardState {
     /// Things glued together, oldest first (spec 17). Added after 1.0.14.
     #[serde(default, skip_serializing_if = "Records::is_empty")]
     pub groups: Records<BoardGroup>,
-    /// Scheduled actions' tiles, oldest first (spec 19). Added after 1.0.23.
+    /// Scheduled actions' tiles, oldest first (spec 20). Added after 1.0.23.
     #[serde(default, skip_serializing_if = "Records::is_empty")]
     pub tiles: Records<BoardTile>,
     /// Fields this version doesn't know, written back as they were read.

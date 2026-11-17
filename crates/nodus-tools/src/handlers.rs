@@ -289,6 +289,14 @@ impl BoardToolHandlers for StoreHandlers {
         })
     }
 
+    fn is_goal(&self, session_id: &str) -> bool {
+        self.board.goal_of_session(session_id).is_some()
+    }
+
+    fn goal_tool(&self, self_id: &str, finish: bool, args: &Value) -> Result<Value, ToolError> {
+        self.board.goal_tool(self_id, finish, args).map_err(ToolError::from)
+    }
+
     /// TOOL-033. Server projects aren't this app's to write on: their
     /// boards are on their servers (SRV-160).
     fn list_projects(&self, own: &str) -> Result<Value, ToolError> {

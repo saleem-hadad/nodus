@@ -21,6 +21,7 @@ mod create;
 pub mod drawing;
 pub mod frames;
 pub mod geometry;
+pub mod goals;
 mod handlers;
 pub mod ink;
 pub mod ink_draw;
@@ -132,4 +133,7 @@ pub enum BoardError {
     /// Starting the session's process failed (the host's error, 02).
     #[error("{0}")]
     Start(String),
+    /// What the user asked for can't be done; the text says why (spec 21).
+    #[error("{0}")]
+    Invalid(String),
 }

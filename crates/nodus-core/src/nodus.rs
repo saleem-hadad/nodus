@@ -664,6 +664,11 @@ impl Nodus {
         ActionsApi { nodus: self }
     }
 
+    /// `window.api.goals` (spec 21).
+    pub fn goals(&self) -> crate::GoalsApi<'_> {
+        crate::GoalsApi { nodus: self }
+    }
+
     /// Report a Problem (13).
     pub fn feedback(&self) -> crate::FeedbackApi<'_> {
         crate::FeedbackApi { nodus: self }

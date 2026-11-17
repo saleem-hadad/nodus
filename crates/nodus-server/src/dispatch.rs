@@ -303,6 +303,15 @@ pub(crate) async fn answer(nodus: Nodus, member: Option<String>, request: Reques
         Request::ActionsRemove { project_id, action_id } => {
             done(channel, nodus.actions().remove(&project_id, &action_id).await)
         }
+        Request::GoalsCreate { project_id, goal } => done(channel, nodus.goals().create(&project_id, &goal).await),
+        Request::GoalsChange { project_id, id, patch } => {
+            done(channel, nodus.goals().change(&project_id, &id, &patch).await)
+        }
+        Request::GoalsCheckIn { project_id, id } => done(channel, nodus.goals().check_in(&project_id, &id).await),
+        Request::GoalsRemove { project_id, id } => {
+            nodus.goals().remove(&project_id, &id).await;
+            DONE
+        }
         Request::ActionsDraft {
             project_id,
             description,

@@ -4161,6 +4161,7 @@ dependencies = [
 name = "nodus-board"
 version = "1.0.24"
 dependencies = [
+ "chrono",
  "indexmap",
  "nodus-domain",
  "nodus-platform",

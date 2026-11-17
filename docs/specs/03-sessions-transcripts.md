@@ -222,6 +222,8 @@ Off until the user ticks **Own worktree per session** for a project (09 BOARD-14
 - **SESS-219 · Launch** — A Claude card whose `worktree.path` is in a `.claude/worktrees` folder starts with `--worktree <its folder's name>` (after `--session-id` and `--name`, SESS-121) whenever it starts afresh: created, or opened or sent to before it has a transcript, where Claude Code enters the worktree it already made. A resume (`--resume`) passes nothing, since Claude Code goes back into the worktree its transcript records. The process's cwd stays the project folder. A server's worktrees, terminals and views' brains never get `--worktree`. Its transcript and agents are read from the worktree's folder (SESS-211), and ⌘K searches it there (SESS-215).
 - **SESS-220 · Removing a card** — `board:remove-node`, or a card dropped rather than archived (SESS-091), removes its worktree once its process has stopped. First, when it has uncommitted changes (new files too), they're saved to `<userData>/saved/<cardId>-<yyyymmdd-HHMMSS>/changes.patch` (`git add -A`, then `git diff --binary --cached HEAD`). Then `git worktree remove --force --force` (Claude Code locks the worktrees it makes) and `git worktree prune`. The branch is deleted (`git branch -D`) only when it has no commits that no other branch or remote has; otherwise it stays, for the user to merge. Saved changes older than 30 days go then too. When saving fails the worktree is kept. Archived cards keep their worktrees.
 - **SESS-221 · Git panels** — On a local board too, the branch chip, its log and the Changes window follow the one selected card when it has a worktree, and the main checkout otherwise (05 GIT-056).
+- **SESS-222 · A fork** (added after 1.0.25) — `session:create` with `fork: { sessionId, messageId }` (a Claude card only; 16 CHAT-054) first copies that card's transcript, in the folder it runs in (its worktree when it has one), to `<new id>.jsonl` beside it: the lines up to the one whose `uuid` is `messageId`. Of the lines with a `uuid` it keeps only the messages that one follows from (`parentUuid`, or `logicalParentUuid` across a compaction), so a rewound reply or a subagent's line isn't carried over; the lines without one (the mode, the title, costs) come as they are, and a line still being written is left out. Every `sessionId` and `session_id` of the source's becomes the new id, and each message gets `forkedFrom: { sessionId: <source>, messageUuid: <its uuid> }`, as Claude Code's own `/branch` writes. The copy is written as `<new id>.jsonl.part` and then moved into place; the source's file is never written to. It fails, leaving nothing, with `That session is no longer on the board` (no such card, or a terminal), `That session has no conversation to fork yet`, `That message isn’t in the session’s conversation any more`, or `Couldn’t write the fork: <why>`; a fork whose process can't start takes its copy away with its card. The card has `parents: [<source>]` and `forkedFrom: <source>` (10 CARD-061), the source's model, effort and auto mode unless the options give them, and the source's worktree. Its process resumes the copy: `--resume <new id>` with `--name` (no `--session-id`, no `--worktree`) and no first prompt, so it's `done` until the user writes. It never gets a worktree of its own (SESS-217), nor a server's (SRV-122).
+- **SESS-223 · A shared worktree** — Removing a card (SESS-220, SRV-124) takes its worktree only when no other card on the board still has it, as a fork has its source's (SESS-222).
 
 ### On a server (`nodus serve`, spec 18's SRV-120…145)
 
@@ -473,7 +475,7 @@ New session:
          [-- <first prompt>]
 ```
 
-Resumed session: same with `--resume <uuid>` instead of `--session-id <uuid>`, and never `--name` or `--worktree` (SESS-219).
+Resumed session: same with `--resume <uuid>` instead of `--session-id <uuid>`, and never `--name` or `--worktree` (SESS-219), except a fork's first start, which keeps `--name` (SESS-222).
 
 `BOARD_MCP_CONFIG` (one argument, exactly this string; `${…}` are expanded by Claude Code from the env, not by Nodus):
 
@@ -989,6 +991,8 @@ Cross-domain dependencies: 01 (store `getBoard`/`getProject`/`save`, env `spawnE
 - [x] SESS-219 `--worktree <name>` on a fresh start, nothing on a resume
 - [x] SESS-220 Removing a card saves its changes, then removes its worktree
 - [x] SESS-221 Local git panels follow a selected worktree card
+- [x] SESS-222 A fork: the conversation up to a message, copied and resumed (added after 1.0.25)
+- [x] SESS-223 A worktree another card still has stays
 - [x] SESS-183 Yield
 - [x] SESS-184 Searchable documents
 - [x] SESS-185 Tool documents

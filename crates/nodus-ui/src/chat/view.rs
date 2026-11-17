@@ -63,6 +63,8 @@ pub(crate) struct Row {
     /// Claude's last words in a turn it used tools in, which sum it up
     /// (CHAT-051).
     pub summary: bool,
+    /// Claude's last words in a turn, which a fork can start after (CHAT-054).
+    pub fork: bool,
 }
 
 impl Row {
@@ -87,6 +89,7 @@ pub(crate) fn rows_of(entries: &[ChatEntry]) -> Vec<Row> {
                 kind: RowKind::User(i),
                 header: false,
                 summary: false,
+                fork: false,
             });
             claude_spoke = false;
             i += 1;
@@ -97,6 +100,7 @@ pub(crate) fn rows_of(entries: &[ChatEntry]) -> Vec<Row> {
                 kind: RowKind::Entry(i),
                 header: false,
                 summary: false,
+                fork: false,
             });
             i += 1;
             continue;
@@ -112,6 +116,7 @@ pub(crate) fn rows_of(entries: &[ChatEntry]) -> Vec<Row> {
                 kind: RowKind::Tools(start, i),
                 header,
                 summary: false,
+                fork: false,
             });
             continue;
         }
@@ -119,11 +124,31 @@ pub(crate) fn rows_of(entries: &[ChatEntry]) -> Vec<Row> {
             kind: RowKind::Entry(i),
             header,
             summary: false,
+            fork: false,
         });
         i += 1;
     }
     mark_summaries(&mut rows, entries);
+    mark_forks(&mut rows, entries);
     rows
+}
+
+/// CHAT-054: a fork can start after Claude's words that end a turn: those
+/// with nothing after them before the user's next message (or the chat's
+/// end) but notices. Whether the turn is over yet is the view's to say.
+fn mark_forks(rows: &mut [Row], entries: &[ChatEntry]) {
+    for r in 0..rows.len() {
+        let RowKind::Entry(i) = rows[r].kind else {
+            continue;
+        };
+        if !matches!(entries[i], ChatEntry::Text { .. }) {
+            continue;
+        }
+        rows[r].fork = rows[r + 1..]
+            .iter()
+            .take_while(|next| !matches!(next.kind, RowKind::User(j) if entries[j].starts_turn()))
+            .all(|next| matches!(next.kind, RowKind::Entry(j) if matches!(entries[j], ChatEntry::Notice { .. })));
+    }
 }
 
 /// CHAT-051: a turn's summary is Claude's words after it used a tool, with
@@ -754,6 +779,16 @@ impl ChatView {
         cx.notify();
     }
 
+    /// CHAT-054: a new session with this one's conversation up to the
+    /// transcript message `message_id`, which the board starts beside it.
+    pub(crate) fn fork_at(&mut self, message_id: String, cx: &mut Context<'_, Self>) {
+        let from = nodus_domain::ForkFrom {
+            session_id: self.session_id.clone(),
+            message_id,
+        };
+        self.state.update(cx, |s, cx| s.fork_session(from, cx));
+    }
+
     /// Claude is running and in a turn (or waiting on the user in one).
     pub(crate) fn busy(&self, cx: &App) -> bool {
         self.card(cx)
@@ -1330,6 +1365,57 @@ mod tests {
             })
             .collect();
         assert_eq!(summed, ["c", "f"]);
+    }
+
+    #[test]
+    fn chat_054_a_fork_starts_after_the_words_that_end_a_turn() {
+        let notice = |id: &str| ChatEntry::Notice {
+            id: id.into(),
+            at: 0.,
+            text: "Interrupted".into(),
+        };
+        let entries = vec![
+            // A reply with no tools ends its turn too.
+            user("u1"),
+            text("a"),
+            // Words before more tools don't; the last do, notices after them or not.
+            user("u2"),
+            text("b"),
+            tool("t1"),
+            text("c"),
+            notice("n1"),
+            // Nor words cut off by an API error or followed by a form.
+            user("u3"),
+            text("d"),
+            ChatEntry::Error {
+                id: "e1".into(),
+                at: 0.,
+                text: "API Error: Connection lost mid-response.".into(),
+                passing: true,
+            },
+            user("u4"),
+            text("e"),
+            ChatEntry::Questions {
+                id: "q".into(),
+                at: 0.,
+                spec: json!({}),
+                answered: None,
+            },
+            // What the user sent mid-turn doesn't end it.
+            user("u5"),
+            text("f"),
+            said_by_user("m1", "and the README", false),
+            text("g"),
+        ];
+        let forks: Vec<_> = rows_of(&entries)
+            .iter()
+            .filter(|r| r.fork)
+            .map(|r| match r.kind {
+                RowKind::Entry(i) => entries[i].id().to_owned(),
+                other => panic!("{other:?} marked"),
+            })
+            .collect();
+        assert_eq!(forks, ["a", "c", "g"]);
     }
 
     #[test]

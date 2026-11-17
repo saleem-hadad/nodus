@@ -3,10 +3,12 @@
 //! process itself is started by a [`Launcher`] (nodus-core, with
 //! `nodus_sessions::launch` and the session host).
 
+use std::path::PathBuf;
+
 use nodus_domain::js;
 use nodus_domain::{
-    BoardNode, CreateSessionOptions, CreatedBy, Project, ProjectAction, SessionCard, SessionEffort, SessionKind,
-    SessionModel, SessionStatus,
+    BoardNode, CreateSessionOptions, CreatedBy, ForkFrom, Project, ProjectAction, SessionCard, SessionEffort,
+    SessionKind, SessionModel, SessionStatus,
 };
 use nodus_store::BoardState;
 
@@ -33,6 +35,9 @@ pub struct StartNew {
     pub action: Option<ProjectAction>,
     /// `opts.initialPrompt` as the window sent it.
     pub initial_prompt: Option<String>,
+    /// A fork, whose conversation was written for it: it resumes that
+    /// rather than starting afresh, in the folder it was copied in (SESS-222).
+    pub resume: bool,
 }
 
 /// A stopped session to resume with a prompt (SESS-145).
@@ -117,6 +122,24 @@ pub fn new_session(
     Ok(NewSession { node, action })
 }
 
+/// SESS-222: a fork hangs off its source, and runs as it does: on its model
+/// and effort unless asked otherwise, in its mode, and in its worktree, where
+/// its conversation was copied.
+fn forked_node(node: &mut BoardNode, source: &BoardNode, opts: &CreateSessionOptions) {
+    node.parents = Some(vec![source.session_id.clone()]);
+    node.set_forked_from(Some(&source.session_id));
+    if opts.model.is_none() {
+        node.set_model(source.model().and_then(SessionModel::parse));
+    }
+    if opts.effort.is_none() {
+        node.set_effort(source.effort().and_then(SessionEffort::parse));
+    }
+    if opts.auto_mode.is_none() {
+        node.auto_mode = source.auto_mode;
+    }
+    node.set_worktree(source.worktree().as_ref());
+}
+
 impl Board {
     /// `session:create`, once the login-shell environment is ready: a new card
     /// on the board, its process started. The card is on the board before the
@@ -133,11 +156,20 @@ impl Board {
         // SESS-114: a lowercase v4 UUID.
         let session_id = uuid::Uuid::new_v4().to_string();
         let now = self.now();
-        let NewSession { node, action } = self.store.update(|state| {
+        // SESS-222: its conversation first, so there's nothing to take back
+        // when it can't be copied.
+        let fork = match opts.fork.as_ref().filter(|_| opts.kind != Some(SessionKind::Terminal)) {
+            Some(from) => Some(self.fork_conversation(&project, from, &session_id)?),
+            None => None,
+        };
+        let created = self.store.update(|state| {
             let globals = state.actions.clone();
             let board = state.board_mut(project_id);
             let mut new = new_session(board, &project, globals.as_deref(), opts, &session_id, now)?;
             new.node.set_created_by(created_by);
+            if let Some((source, _)) = &fork {
+                forked_node(&mut new.node, source, opts);
+            }
             // SCHED-026: a run of a scheduled action comes out beside its tile.
             if let Some(tile) = new.action.as_ref().and_then(|a| board.tiles.get(&a.id)) {
                 let at = crate::tiles::run_spot(board, tile, &new.node);
@@ -146,16 +178,24 @@ impl Board {
             // SESS-118
             board.nodes.insert(session_id.clone(), new.node.clone());
             Ok::<_, BoardError>(new)
-        })?;
+        });
+        let forget_fork = || {
+            if let Some((_, file)) = &fork {
+                let _ = std::fs::remove_file(file);
+            }
+        };
+        let NewSession { node, action } = created.inspect_err(|_| forget_fork())?;
         let start = StartNew {
             project,
             node: node.clone(),
             action,
             initial_prompt: opts.initial_prompt.clone(),
+            resume: fork.is_some(),
         };
         if let Err(err) = launcher.start_new(start).await {
             self.store
                 .update(|state| state.board_mut(project_id).nodes.shift_remove(&session_id));
+            forget_fork();
             return Err(BoardError::Start(err));
         }
         // SESS-120
@@ -165,6 +205,31 @@ impl Board {
             .read_board(project_id, |_, board| board.nodes.get(&session_id).cloned())
             .unwrap_or(node);
         Ok(self.card(&node))
+    }
+
+    /// SESS-222: `from`'s conversation up to its message, copied as
+    /// `session_id`'s in the folder `from` runs in. The source card, and the
+    /// new transcript.
+    fn fork_conversation(
+        &self,
+        project: &Project,
+        from: &ForkFrom,
+        session_id: &str,
+    ) -> Result<(BoardNode, PathBuf), BoardError> {
+        let source = self
+            .read_board(&project.id, |_, board| board.nodes.get(&from.session_id).cloned())
+            .filter(|n| n.kind != Some(SessionKind::Terminal))
+            .ok_or(BoardError::NotOnBoard)?;
+        let folder = self.session_folder(project, &from.session_id);
+        let file = self.transcripts.transcript_path(&folder, session_id);
+        nodus_transcripts::fork_transcript(
+            &self.transcripts.transcript_path(&folder, &from.session_id),
+            &from.session_id,
+            &from.message_id,
+            &file,
+            session_id,
+        )?;
+        Ok((source, file))
     }
 
     /// `session:send`: a prompt sent into a session as if typed at its prompt,

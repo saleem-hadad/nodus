@@ -75,6 +75,8 @@ pub enum StateEvent {
     /// Select a node and pan the board to it: a page the chat points at
     /// (CHAT-028).
     ShowNode(String),
+    /// A session forked from one of its messages, from its chat (CHAT-054).
+    Fork(nodus_domain::ForkFrom),
 }
 
 /// `useApp` and `useProjectsUi`.
@@ -738,6 +740,11 @@ impl AppState {
         self.session_window.clear();
         cx.emit(StateEvent::ShowNode(id));
         cx.notify();
+    }
+
+    /// CHAT-054: the board starts the fork beside its source.
+    pub fn fork_session(&mut self, from: nodus_domain::ForkFrom, cx: &mut Context<'_, Self>) {
+        cx.emit(StateEvent::Fork(from));
     }
 
     /// SRV-163: there's no folder here to reveal for a server project.

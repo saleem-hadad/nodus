@@ -848,6 +848,136 @@ async fn takes_the_card_off_again_when_its_process_cant_start() {
     assert_eq!(err.to_string(), "Unknown project nope");
 }
 
+/// A two-turn conversation with uuids: `u1` `a1`, then `u2` `a2`.
+fn two_turns(session_id: &str) -> Vec<serde_json::Value> {
+    let line = |kind: &str, uuid: &str, parent: Option<&str>, s: u32| {
+        json!({
+            "type": kind, "uuid": uuid, "parentUuid": parent, "sessionId": session_id, "timestamp": ts(s),
+            "message": { "role": kind, "content": uuid }
+        })
+    };
+    vec![
+        line("user", "u1", None, 1),
+        line("assistant", "a1", Some("u1"), 2),
+        line("user", "u2", Some("a1"), 3),
+        line("assistant", "a2", Some("u2"), 4),
+    ]
+}
+
+fn uuids_in(file: &std::path::Path) -> Vec<String> {
+    std::fs::read_to_string(file)
+        .unwrap()
+        .lines()
+        .filter_map(|l| {
+            serde_json::from_str::<serde_json::Value>(l).unwrap()["uuid"]
+                .as_str()
+                .map(str::to_owned)
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn forks_a_session_from_one_of_its_messages() {
+    let f = Fixture::new();
+    f.write(A, &two_turns(A));
+    f.put(node(
+        A,
+        json!({ "title": "Fix it", "autoMode": true, "model": "opus", "effort": "high" }),
+    ));
+    let launcher = FakeLauncher::new(&f.store, None);
+    let card = f
+        .board
+        .create_session(
+            "p",
+            &opts(json!({ "x": 10, "y": 20, "name": "Fix it (fork)", "fork": { "sessionId": A, "messageId": "a1" } })),
+            None,
+            &launcher,
+        )
+        .await
+        .unwrap();
+    let id = card.node.session_id.clone();
+    // SESS-222: the conversation up to that message, under the new id.
+    let file = f.dir().join(format!("{id}.jsonl"));
+    assert_eq!(uuids_in(&file), ["u1", "a1"]);
+    assert_eq!(uuids_in(&f.dir().join(format!("{A}.jsonl"))).len(), 4);
+    // It hangs off its source and runs as it does, resuming what was copied.
+    let node = f.node(&id).unwrap();
+    assert_eq!(node.parents, Some(vec![A.to_owned()]));
+    assert_eq!(node.forked_from(), Some(A));
+    assert_eq!(
+        (node.title.as_deref(), node.auto_mode, node.model(), node.effort()),
+        (Some("Fix it (fork)"), Some(true), Some("opus"), Some("high"))
+    );
+    let starts = launcher.starts.lock().unwrap();
+    assert!(starts[0].resume);
+    assert_eq!(starts[0].initial_prompt, None);
+}
+
+#[tokio::test]
+async fn a_fork_works_in_its_sources_worktree() {
+    let f = Fixture::new();
+    let worktree = format!("{}/.claude/worktrees/nodus-0000000a", f.repo);
+    let dir = f.transcripts.transcript_dir(&worktree);
+    std::fs::create_dir_all(&dir).unwrap();
+    let text: String = two_turns(A).iter().map(|l| format!("{l}\n")).collect();
+    std::fs::write(dir.join(format!("{A}.jsonl")), text).unwrap();
+    f.put(node(
+        A,
+        json!({ "worktree": { "path": worktree, "branch": "worktree-nodus-0000000a" } }),
+    ));
+    let launcher = FakeLauncher::new(&f.store, None);
+    let card = f
+        .board
+        .create_session(
+            "p",
+            &opts(json!({ "x": 0, "y": 0, "fork": { "sessionId": A, "messageId": "a2" } })),
+            None,
+            &launcher,
+        )
+        .await
+        .unwrap();
+    let id = card.node.session_id;
+    assert_eq!(uuids_in(&dir.join(format!("{id}.jsonl"))).len(), 4);
+    assert_eq!(f.node(&id).unwrap().worktree().unwrap().path, worktree);
+    let project = f.store.read(|s| s.project("p").cloned()).unwrap();
+    assert!(f.board.has_transcript(&project, &id));
+}
+
+#[tokio::test]
+async fn a_fork_that_cant_be_made_leaves_nothing_behind() {
+    let f = Fixture::new();
+    f.write(A, &two_turns(A));
+    f.put(node(A, json!({})));
+    f.put(node("term", json!({ "kind": "terminal" })));
+    let fork = |session: &str, message: &str| {
+        opts(json!({ "x": 0, "y": 0, "fork": { "sessionId": session, "messageId": message } }))
+    };
+    let launcher = FakeLauncher::new(&f.store, None);
+    for (o, error) in [
+        (
+            fork(A, "nope"),
+            "That message isn’t in the session’s conversation any more",
+        ),
+        (fork(B, "a1"), "That session is no longer on the board"),
+        (fork("term", "a1"), "That session is no longer on the board"),
+    ] {
+        let err = f.board.create_session("p", &o, None, &launcher).await.unwrap_err();
+        assert_eq!(err.to_string(), error);
+    }
+    // A process that can't start takes its conversation away with its card.
+    let failing = FakeLauncher::new(&f.store, Some("The session host stopped"));
+    let err = f
+        .board
+        .create_session("p", &fork(A, "a1"), None, &failing)
+        .await
+        .unwrap_err();
+    assert_eq!(err.to_string(), "The session host stopped");
+    assert!(launcher.starts.lock().unwrap().is_empty());
+    assert_eq!(f.board_json()["nodes"].as_object().unwrap().len(), 2);
+    let files: Vec<_> = std::fs::read_dir(f.dir()).unwrap().collect();
+    assert_eq!(files.len(), 1, "only the source's transcript");
+}
+
 #[tokio::test]
 async fn sends_a_prompt_into_a_session() {
     let f = Fixture::new();

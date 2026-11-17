@@ -63,10 +63,11 @@ pub enum Icon {
     Server,
     Columns2,
     Clock,
+    GitFork,
 }
 
 impl Icon {
-    const ALL: [Self; 53] = [
+    const ALL: [Self; 54] = [
         Self::ChevronLeft,
         Self::ChevronRight,
         Self::ChevronDown,
@@ -120,6 +121,7 @@ impl Icon {
         Self::Server,
         Self::Columns2,
         Self::Clock,
+        Self::GitFork,
     ];
 
     pub fn name(self) -> &'static str {
@@ -177,6 +179,7 @@ impl Icon {
             Self::Ungroup => "ungroup",
             Self::Columns2 => "columns-2",
             Self::Clock => "clock",
+            Self::GitFork => "git-fork",
         }
     }
 
@@ -305,6 +308,9 @@ impl Icon {
             }
             Self::Columns2 => r#"<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M12 3v18"/>"#,
             Self::Clock => r#"<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>"#,
+            Self::GitFork => {
+                r#"<circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9"/><path d="M12 12v3"/>"#
+            }
             Self::Server => {
                 r#"<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>"#
             }

@@ -163,6 +163,12 @@ impl Launcher for CoreLauncher {
                 action,
                 start.initial_prompt.as_deref(),
             );
+            // SESS-222: a fork resumes the conversation copied for it, in
+            // the folder (and worktree) its source runs in.
+            if start.resume {
+                opts.resume = true;
+                return core.spawn_session(opts).await;
+            }
             // SRV-122, SRV-123: on a server project from GitHub, the card's
             // own worktree first. Its process waits for the worktree's setup
             // on a task of its own, so the card is on the board meanwhile.

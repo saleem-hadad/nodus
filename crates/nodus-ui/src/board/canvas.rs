@@ -267,6 +267,8 @@ pub struct BoardCanvas {
     pub(crate) tile_tick: Option<Task<()>>,
     /// SCHED-048: a node to show once it's on the board, and when that was asked.
     show_when_there: Option<(String, Instant)>,
+    /// CHAT-054: the sessions a fork is being started from.
+    pub(crate) forking: HashSet<String>,
 
     pub(crate) draft_id: String,
     pub(crate) starting_notes: HashSet<String>,
@@ -304,6 +306,7 @@ impl BoardCanvas {
                 StateEvent::Toast(message) => this.show_toast(message.clone(), cx),
                 StateEvent::SettingsChanged => {}
                 StateEvent::ShowNode(id) => this.show_node(id, cx),
+                StateEvent::Fork(from) => this.fork_session(from, cx),
             }),
         ];
         let mut canvas = Self {
@@ -372,6 +375,7 @@ impl BoardCanvas {
             flight_timer: None,
             tile_tick: None,
             show_when_there: None,
+            forking: HashSet::new(),
             draft_id: uuid::Uuid::new_v4().to_string(),
             starting_notes: HashSet::new(),
             last_in_modal: Vec::new(),

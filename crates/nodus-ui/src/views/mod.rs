@@ -21,7 +21,7 @@ pub mod dialog;
 pub mod frames;
 pub mod icons;
 pub mod ink;
-mod inputs;
+pub(crate) mod inputs;
 pub mod large;
 #[cfg(target_os = "macos")]
 mod mac;

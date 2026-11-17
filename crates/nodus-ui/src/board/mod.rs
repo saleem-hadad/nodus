@@ -17,6 +17,8 @@ mod commands;
 pub mod edges;
 mod frames;
 pub mod fuzzy;
+pub(crate) mod goal_dialog;
+mod goals;
 mod hud;
 mod images;
 mod input;
@@ -164,20 +166,33 @@ pub fn title_bar_button(
     .render(menus, window, cx)
 }
 
-/// SCHED-045: `New Automation`, beside the split button: the action dialog
-/// as a new automation.
-pub fn automation_button(board: &Entity<canvas::BoardCanvas>) -> AnyElement {
-    let board = board.downgrade();
-    crate::components::button::button("new-automation")
-        .icon(Icon::Clock, 15., 2.)
-        .label("New Automation")
-        .tooltip("Run something on a schedule")
-        .on_click(move |_, _, cx| {
-            if let Some(b) = board.upgrade() {
+/// SCHED-045: `New Automation`, beside New Session: the action dialog as a
+/// new automation. GOAL-014: its menu starts a goal.
+pub fn automation_button(
+    board: &Entity<canvas::BoardCanvas>,
+    menus: &Entity<MenuLayer>,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
+    let (main, goal) = (board.downgrade(), board.downgrade());
+    SplitButton {
+        id: "new-automation".into(),
+        label: "New Automation".into(),
+        icon: Some((Icon::Clock, 15., 2.)),
+        title: Some("Run something on a schedule".into()),
+        on_click: Rc::new(move |_, cx| {
+            if let Some(b) = main.upgrade() {
                 b.update(cx, |b, cx| b.new_automation(None, cx));
             }
-        })
-        .into_any_element()
+        }),
+        items: vec![MenuItem::item("New goal…", Icon::Target, move |_, cx| {
+            if let Some(b) = goal.upgrade() {
+                b.update(cx, |b, cx| b.open_goal_dialog(None, None, cx));
+            }
+        })],
+        menu_label: "More ways to automate".into(),
+    }
+    .render(menus, window, cx)
 }
 
 /// SESS-217: `Own worktree per session`, a checkbox for the board's project,

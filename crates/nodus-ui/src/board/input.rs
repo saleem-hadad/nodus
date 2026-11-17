@@ -499,6 +499,8 @@ impl BoardCanvas {
             }
             // SCHED-036: a double-click opens a tile's last run.
             NodeKind::Tile { .. } => self.open_tile(id, cx),
+            // GOAL-034: a double-click opens a goal's session.
+            NodeKind::Goal { .. } => self.open_goal(id, cx),
             // SHAPE-012: a double-click writes in a shape that holds words.
             NodeKind::Shape { index } => {
                 if self.board.as_ref().is_some_and(|b| b.shapes[*index].kind.has_text()) {
@@ -732,6 +734,7 @@ impl BoardCanvas {
                         | NodeKind::View { .. }
                         | NodeKind::Shape { .. }
                         | NodeKind::Tile { .. }
+                        | NodeKind::Goal { .. }
                 )
             {
                 let pos = n.position;
@@ -896,6 +899,10 @@ impl BoardCanvas {
             .iter()
             .filter(|n| matches!(n.kind, NodeKind::Tile { .. }))
             .collect();
+        let moved_goals: Vec<&FlowNode> = moved
+            .iter()
+            .filter(|n| matches!(n.kind, NodeKind::Goal { .. }))
+            .collect();
 
         // BOARD-060, BOARD-061: bounces.
         let mut bounced: Vec<(String, Point)> = Vec::new();
@@ -957,6 +964,18 @@ impl BoardCanvas {
             };
             if is_in_archive(n.position, zone, size) || is_on_pad(n.position, pad, size) {
                 bounced.push((n.id.clone(), Point { x: tile.x, y: tile.y }));
+            }
+        }
+        // GOAL-033: so does a goal.
+        for n in &moved_goals {
+            let NodeKind::Goal { index } = n.kind else { continue };
+            let Some(goal) = board.goals.get(index) else { continue };
+            let size = nodus_board::geometry::Size {
+                w: nodus_domain::BoardGoal::W,
+                h: nodus_domain::BoardGoal::H,
+            };
+            if is_in_archive(n.position, zone, size) || is_on_pad(n.position, pad, size) {
+                bounced.push((n.id.clone(), Point { x: goal.x, y: goal.y }));
             }
         }
         for (id, back) in &bounced {
@@ -1029,6 +1048,11 @@ impl BoardCanvas {
             .filter(|n| !is_bounced(&n.id))
             .map(|n| (n.id.clone(), n.position))
             .collect();
+        let goals_moved: Vec<(String, Point)> = moved_goals
+            .iter()
+            .filter(|n| !is_bounced(&n.id))
+            .map(|n| (n.id.clone(), n.position))
+            .collect();
         let released: Vec<String> = moved.iter().map(|n| n.id.clone()).collect();
 
         // BOARD-065: the cards in one patch, then each moved note and view.
@@ -1044,6 +1068,7 @@ impl BoardCanvas {
             });
             c.move_shapes(&shapes_moved, cx);
             c.move_tiles(&tiles_moved, cx);
+            c.move_goals(&goals_moved, cx);
         };
         // BOARD-064: archiving a running session asks first.
         if !running.is_empty() {

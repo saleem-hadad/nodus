@@ -196,8 +196,11 @@ pub struct Moments {
     lifts: HashMap<String, Instant>,
     rings: HashMap<String, Instant>,
     pulses: HashMap<String, Instant>,
-    /// Scheduled actions' runs that just came out beside their tile (SCHED-037).
+    /// Scheduled actions' runs that just came out beside their tile
+    /// (SCHED-037), and goals' sessions that were just checked in on (GOAL-035).
     starts: HashMap<String, Instant>,
+    /// How many check-ins each goal has had, to see a new one.
+    check_ins: HashMap<String, u32>,
     pub drawings: Vec<Drawing>,
     /// Messages between sessions seen so far, and the pairs that talked.
     talks: HashSet<String>,
@@ -232,6 +235,12 @@ impl Moments {
         self.seeded = true;
         if !first && !still {
             self.arrivals(board, &ids, now, now_ms, rect_of);
+            // GOAL-035: a light runs from a goal to its session at a check-in.
+            for goal in &board.goals {
+                if self.check_ins.get(&goal.id).is_some_and(|n| *n < goal.check_ins) {
+                    self.starts.insert(goal.session_id.clone(), now);
+                }
+            }
             // SCHED-037: a light runs from a tile to its new run.
             for card in &board.cards {
                 let id = &card.node.session_id;
@@ -246,6 +255,7 @@ impl Moments {
             }
         }
         self.known = ids;
+        self.check_ins = board.goals.iter().map(|g| (g.id.clone(), g.check_ins)).collect();
         self.statuses(board, now, first || still);
         self.talks(board, now, now_ms, first || still);
     }

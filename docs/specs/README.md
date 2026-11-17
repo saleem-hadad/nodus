@@ -26,6 +26,7 @@ When you change a behavior, change its entry in the same commit, and say what 0.
 | `18-hosted.md` | hosted Nodus: the Linux server, its install, the wire, members and sign-in, GitHub, Claude accounts, worktrees, working together, updates, the security model |
 | `19-card-drawer.md` | a card's drawer: the pull requests its session opened (kept, looked up on GitHub through `gh`) and the servers it started (found by their environment), a lip that slides open, Stop |
 | `20-scheduled-actions.md` | actions that run on a schedule, their tiles on the board, and views' schedules on show |
+| `21-goals.md` | goals: one session pursued over days or weeks, its check-ins, how far along it is, and its tile |
 
 ## Compatibility with 0.9.4
 

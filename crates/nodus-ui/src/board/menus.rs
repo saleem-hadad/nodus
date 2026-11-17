@@ -139,6 +139,13 @@ impl BoardCanvas {
                 }),
                 in_archive || self.read_only(),
             ),
+            disabled(
+                // GOAL-013: a new goal, its tile at p.
+                item(&me, "New goal here…", Icon::Target, move |c, cx| {
+                    c.open_goal_dialog(Some(p), None, cx);
+                }),
+                in_archive || self.read_only(),
+            ),
             MenuItem::Separator,
             item(
                 &me,
@@ -191,6 +198,7 @@ impl BoardCanvas {
             }
             NodeKind::Shape { index } => self.shape_menu(&board.shapes[*index], &me),
             NodeKind::Tile { index } => self.tile_menu(&board.tiles[*index], &me),
+            NodeKind::Goal { index } => self.goal_menu(&board.goals[*index], &me),
             NodeKind::Archive { .. } => return,
         };
         self.open_menu(at, items, cx);
@@ -420,6 +428,14 @@ impl BoardCanvas {
         items.push(item(me, "Rename", Icon::PencilLine, move |c, cx| {
             c.set_renaming(Some(rename.clone()), cx);
         }));
+        // GOAL-012: a Claude session that isn't a goal's or a run can become one.
+        let pursued = board.goals.iter().any(|g| g.session_id == id);
+        if !card.node.archived && !pursued && card.node.run_of.is_none() && !self.read_only() {
+            let (session, title) = (id.clone(), crate::board::cards::present::title(card));
+            items.push(item(me, "Make this a goal…", Icon::Target, move |c, cx| {
+                c.open_goal_dialog(None, Some((session.clone(), title.clone())), cx);
+            }));
+        }
         if card.node.archived {
             let restore = id.clone();
             items.push(item(me, "Restore to board", Icon::ArchiveRestore, move |c, cx| {

@@ -263,7 +263,7 @@ impl Render for Shell {
                 // SCHED-045: and `New Automation` before it.
                 .map(|board| {
                     vec![
-                        crate::board::automation_button(&board),
+                        crate::board::automation_button(&board, &self.menus, window, cx),
                         crate::board::title_bar_button(&board, &self.menus, window, cx),
                     ]
                 })

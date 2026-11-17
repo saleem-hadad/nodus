@@ -237,6 +237,8 @@ pub struct BoardCanvas {
     /// The New view dialog is up, for a view centred on this point or in
     /// view (spec 04).
     pub view_dialog: Option<Option<Point>>,
+    /// GOAL-010: the New goal dialog, while it's up.
+    pub goal_dialog: Option<super::goals::GoalAsk>,
 
     /// The card a search jump flashes, since when (BOARD-036).
     pub(crate) flash: Option<(String, Instant)>,
@@ -349,6 +351,7 @@ impl BoardCanvas {
             search_open: false,
             search_query: String::new(),
             view_dialog: None,
+            goal_dialog: None,
             flash: None,
             flash_timer: None,
             toast: None,
@@ -1064,6 +1067,7 @@ impl BoardCanvas {
             || self.confirm.is_some()
             || self.merge.is_some()
             || self.view_dialog.is_some()
+            || self.goal_dialog.is_some()
             || self.search_open
             // ACT-053: the actions rail's dialog, menu or delete confirmation.
             || crate::actions::overlay_open(cx)

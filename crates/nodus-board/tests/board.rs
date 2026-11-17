@@ -1009,6 +1009,10 @@ async fn a_goal_starts_its_session_reports_back_and_checks_in_when_due() {
     assert_eq!(reply["percent"], json!(67.0));
     let stored = f.board.goal("p", &goal.id).unwrap();
     assert_eq!((stored.title.as_str(), stored.journal.len()), ("Signup conversion", 1));
+    assert_eq!(
+        f.node(&goal.session_id).unwrap().title.as_deref(),
+        Some("Signup conversion")
+    );
     // Another session can't.
     assert!(f.board.goal_tool("someone-else", false, &json!({})).is_err());
     // GOAL-020: not due yet; due once its time comes, unless it's busy.

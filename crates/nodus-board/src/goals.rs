@@ -528,11 +528,20 @@ impl Board {
             return Err("This session isn’t pursuing a goal".into());
         };
         let now = self.now();
+        let named = goal.title.clone();
         let reply = if finish {
             apply_finish(&mut goal, args, now)
         } else {
             apply_update(&mut goal, args, now)?
         };
+        // GOAL-023: the name Claude gives the goal names its session too.
+        if goal.title != named {
+            self.store.update(|state| {
+                if let Some(node) = state.board_mut(&project_id).nodes.get_mut(session_id) {
+                    node.title = Some(goal.title.clone());
+                }
+            });
+        }
         self.save_goal(&project_id, &goal);
         Ok(reply)
     }

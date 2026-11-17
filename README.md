@@ -1,12 +1,12 @@
 <p align="center">
-<a href="https://saleem-hadad.github.io/nodus/"><img src=".github/assets/screenshot.webp" alt="The Nodus board for a storefront repo, with focus mode on in the title bar and the projects rail on the left. Session cards sit in a Checkout group beside the archive stack, one card is expanded to show its Claude Code terminal, a Tests view lists a failing test that someone circled in red ink with the note Fix before release, and a red ring marks a session that needs you. A sticker on the window reads Free, open source."></a>
+<a href="https://saleem-hadad.github.io/nodus/"><img src=".github/assets/screenshot.webp" alt="The Nodus board for a storefront repo. Two session cards sit in a Checkout frame beside the archive pile, and a session started from both is open as a chat on the board. A Tests view lists a failing test circled in red ink, a goal tile shows checkout conversion two thirds of the way to its target, and a red ring marks a session that needs you."></a>
 </p>
 
 <h1 align="center">Agentic coding, on one board</h1>
 
 <p align="center">
-Every Claude Code session in a repo, as a live card. <br>
-See which ones need you, and start new sessions from the context of old ones.
+Every Claude Code session in a repo, as a live card you can chat with. <br>
+See which ones need you, give Claude goals, and start new sessions from what the others already did.
 </p>
 
 <p align="center">
@@ -37,14 +37,19 @@ You need [Claude Code](https://code.claude.com/docs/en/overview) installed, with
 ## ✨ Features
 
 - 🟠 working · 🔴 needs you · 🔵 done, on every session's card
-- The real `claude` terminal, in a window or right on the board
+- Chat with any session right on the board, typed or spoken, with the real `claude` terminal one click away
+- Up to four sessions side by side, and **Fork from here** on any reply to try another way
 - Start a session from what other sessions already did
+- Goals: one session works toward an outcome over days, with how far along it is on a tile
+- Action buttons, and automations that run on a schedule
+- A coordinator (beta) that every session on the board reports to
+- A worktree per session, with the pull requests and servers it started under its card
+- A whiteboard Claude can see and draw on: ink, shapes, sticky notes, frames and links
+- Views: ask Claude for a live table of your deploys or tickets
 - ⌘K (Ctrl+K on Windows) searches everything every session said and did
 - An archive of finished sessions. Drag one out to pick it back up
-- Sessions keep running when you quit the app
+- Sessions keep running when you quit the app, and you can answer them from your phone
 - Focus mode hides every project but this week's
-- Views: ask Claude for a live table of your deploys or tickets
-- Sticky notes, action buttons and spoken prompts
 - Double-tap ⇧ in any app to start a session, jot a note or reply to one
 
 ## 🖥️ Run a server
@@ -59,7 +64,7 @@ Then choose **Connect to Server…** in the app. [Running a server](docs/server.
 
 ## 🔒 Private by design
 
-Everything stays on your machine. With a server, its projects and sessions live on that server, which you run. Nodus reads transcripts where Claude Code keeps them and saves only the board layout. Spoken prompts use xAI's speech to text with your own key. Floating capture asks Claude where each capture goes when you send it, so what you send there reaches Anthropic.
+Everything stays on your machine. With a server, its projects and sessions live on that server, which you run. Nodus reads transcripts where Claude Code keeps them and saves only the board layout. Spoken prompts use xAI's speech to text with your own key. Floating capture asks Claude where each capture goes when you send it, so what you send there reaches Anthropic. Answering from your phone uses Claude Code's own Remote Control, which stays off until you turn it on.
 
 ## 📖 Learn more
 

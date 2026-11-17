@@ -303,11 +303,8 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
 }
 .window-bar .changes { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; font-size: 12px; white-space: nowrap; }
 .window-bar .changes b { min-width: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 600; line-height: 16px; text-align: center; }
-/* New Session, with New terminal and New view under its chevron. */
-.window-bar .split { display: inline-flex; border-radius: 6px; box-shadow: var(--shadow-sm); }
-.window-bar .split .tool.is-outlined { border-radius: 6px 0 0 6px; box-shadow: none; }
-@media (max-width: 640px) { .window-bar .split .tool.is-outlined { border-radius: 6px; } }
-.window-bar .split .more { display: grid; place-items: center; width: 22px; height: 28px; border: 0.5px solid var(--border-strong); border-left: 0; border-radius: 0 6px 6px 0; background: var(--elevated); color: var(--text-2); }
+/* The app's one New menu: a session, a terminal, a view, an automation, a goal or a coordinator. */
+.window-bar .tool .chevron { margin: 0 -3px 0 -1px; color: var(--text-2); }
 @media (max-width: 900px) { .hide-md { display: none !important; } }
 
 /* The board is laid out at 1320×820 and scaled to fit (by script, or the breakpoints below without it). */
@@ -922,6 +919,88 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
 .c-bars i { height: 12px; border-radius: 3px; background: var(--c); }
 .c-bars b { font-weight: 500; font-variant-numeric: tabular-nums; }
 
+/* Side by side: a session window split in two, the right pane a fork of the left one's last reply. */
+.panes-visual { container-type: inline-size; }
+.pw { overflow: hidden; border-radius: 14px; background: var(--elevated); box-shadow: var(--shadow-lg); }
+.pw-bar { display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 10px 0 14px; border-bottom: 0.5px solid var(--separator); background: var(--toolbar); }
+.pw-bar .lights { margin-right: auto; }
+.pw-bar .xtool { cursor: default; }
+.pw-bar .xtool.is-on { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+.pw-panes { display: grid; grid-template-columns: 1fr 1fr; }
+.pane { display: flex; flex-direction: column; min-width: 0; }
+.pane + .pane { border-left: 0.5px solid var(--border-strong); }
+.pane .xhead { height: 38px; padding-right: 12px; }
+.pane .chip { flex: none; align-self: center; margin-left: auto; }
+.pane .chat { gap: 9px; padding: 14px 14px 16px; font-size: 12.5px; user-select: auto; -webkit-user-select: auto; }
+.pane .c-you { max-width: 92%; }
+.pane .c-call { height: 26px; font-size: 12px; }
+.c-copied { opacity: 0.5; }
+.c-fork { display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; height: 24px; padding: 0 9px; border-radius: 7px; background: color-mix(in srgb, var(--text) 5%, transparent); box-shadow: inset 0 0 0 0.5px var(--border); color: var(--text-2); font-size: 11.5px; font-weight: 500; }
+.panes-visual.anim .pane.is-fork { opacity: 0; transform: translateX(14px); }
+.panes-visual.anim.is-in .pane.is-fork { animation: fork-in 480ms var(--ease-out) 900ms forwards; }
+.panes-visual.anim.is-in .c-fork { animation: fork-press 900ms ease both; }
+@keyframes fork-in { to { opacity: 1; transform: none; } }
+@keyframes fork-press { 40%, 70% { background: color-mix(in srgb, var(--accent) 14%, transparent); box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--accent) 40%, transparent); color: var(--accent); } }
+@container (max-width: 520px) {
+  .pw-panes { grid-template-columns: minmax(0, 1fr); }
+  .pane + .pane { border-left: 0; border-top: 0.5px solid var(--border-strong); }
+}
+
+/* The coordinator: its card's chat, with the members' reports as quiet rows and a dot for each member. */
+.coord-visual { container-type: inline-size; }
+.coord-visual .xhead > .icon { color: var(--text-2); }
+.members { display: inline-flex; flex: none; align-items: center; gap: 3px; margin-left: auto; padding-left: 8px; color: var(--text-3); font-size: 11.5px; white-space: nowrap; }
+.members i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+.members i:last-of-type { margin-right: 4px; }
+.coord-visual .xtools { margin-left: 4px; }
+.c-report { padding: 7px 11px 8px; border-radius: 9px; background: color-mix(in srgb, var(--text) 4%, transparent); color: var(--text-2); font-size: 12px; line-height: 1.45; }
+.c-report b { display: flex; align-items: center; gap: 6px; color: var(--text); font-weight: 600; }
+.c-report b i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+@container (max-width: 460px) { .members span, .coord-visual .xtools { display: none; } }
+
+/* Goals and automations: their tiles on the board, a ring for how far along, a clock to the next run. */
+.goals-visual { position: relative; aspect-ratio: 7 / 5.2; container-type: inline-size; }
+.gtile { position: absolute; display: flex; flex-direction: column; gap: 1.6cqw; padding: 3cqw 3.2cqw 2.8cqw; border-radius: 14px; background: var(--elevated); box-shadow: var(--shadow-md); font-size: max(11px, 2cqw); line-height: 1.4; }
+.gtile.is-goal { left: 0; top: 0; width: 60%; z-index: 1; }
+.gtile.is-auto { right: 0; bottom: 0; width: 52%; z-index: 2; box-shadow: var(--shadow-lg); }
+.g-head { display: flex; align-items: center; gap: 2.2cqw; }
+.g-head h4 { margin: 0; font-family: var(--font-display); font-size: max(13px, 2.7cqw); font-weight: 600; letter-spacing: -0.01em; }
+.g-head p { margin: 0.3cqw 0 0; color: var(--text-2); }
+.g-ring { position: relative; display: grid; flex: none; place-items: center; width: max(40px, 9cqw); aspect-ratio: 1; }
+.g-ring > svg:first-child { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.g-ring circle { fill: none; stroke-width: 3; }
+.g-ring .track { stroke: color-mix(in srgb, var(--text) 10%, transparent); }
+.g-ring .fill { stroke: var(--accent); stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: var(--off); }
+.g-ring b { font-size: max(10px, 2.1cqw); font-weight: 600; font-variant-numeric: tabular-nums; }
+.g-ring .icon { width: 50%; height: 50%; color: var(--accent); }
+.g-chart { display: block; width: 100%; height: auto; margin: 0.6cqw 0; overflow: visible; }
+.g-chart .target { stroke: var(--text-3); stroke-width: 1; stroke-dasharray: 3 3; }
+.g-chart .line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.g-chart .now { fill: var(--accent); }
+.g-chart text { fill: var(--text-3); font-family: var(--font-ui); font-size: 10px; }
+.g-next { margin: 0; color: var(--text); }
+.g-log { margin: 0; padding-top: 1.6cqw; border-top: 0.5px solid var(--separator); color: var(--text-3); }
+.g-run { display: flex; gap: 1.4cqw; margin: 0; padding-top: 1.6cqw; border-top: 0.5px solid var(--separator); color: var(--text); }
+.g-run i { flex: none; width: 7px; height: 7px; margin-top: 0.55em; border-radius: 50%; background: var(--done); }
+.g-run small { display: block; color: var(--text-3); font-size: 0.92em; }
+.goals-visual.anim .g-ring .fill { stroke-dashoffset: 100; }
+.goals-visual.anim .g-chart .line { stroke-dasharray: 1; stroke-dashoffset: 1; }
+.goals-visual.anim .g-chart .now { opacity: 0; }
+.goals-visual.anim.is-in .g-ring .fill { transition: stroke-dashoffset 1.4s var(--ease-out) 300ms; stroke-dashoffset: var(--off); }
+.goals-visual.anim.is-in .g-chart .line { animation: draw 1.2s var(--ease-out) 300ms forwards; }
+.goals-visual.anim.is-in .g-chart .now { animation: fade 300ms ease 1.4s forwards; }
+/* Too narrow to overlap them: one under the other, still a little offset. */
+@media (max-width: 600px) {
+  .goals-visual { display: flex; flex-direction: column; gap: 14px; aspect-ratio: auto; }
+  .gtile { position: relative; gap: 8px; padding: 14px 16px 13px; }
+  .gtile.is-goal, .gtile.is-auto { inset: auto; width: auto; }
+  .gtile.is-goal { margin-right: 8%; }
+  .gtile.is-auto { margin-left: 8%; }
+  .g-head { gap: 12px; }
+  .g-run { gap: 8px; padding-top: 8px; }
+  .g-log { padding-top: 8px; }
+}
+
 /* The whiteboard, with what Claude drew drawn in as the row comes into view. */
 .wb-visual { position: relative; overflow: hidden; border-radius: 18px; box-shadow: var(--shadow-lg); }
 .wb-visual svg { display: block; width: 100%; height: auto; }
@@ -1259,6 +1338,15 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
     <symbol id="i-layout" viewBox="0 0 24 24"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></symbol>
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
     <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+    <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
+    <symbol id="i-network" viewBox="0 0 24 24"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></symbol>
+    <symbol id="i-columns" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M12 3v18"/></symbol>
+    <symbol id="i-fork" viewBox="0 0 24 24"><circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9"/><path d="M12 12v3"/></symbol>
+    <symbol id="i-pr" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M6 9v12"/></symbol>
+    <symbol id="i-worktree" viewBox="0 0 24 24"><path d="M9 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v5"/><circle cx="13" cy="12" r="2"/><path d="M18 19c-2.8 0-5-2.2-5-5v8"/><circle cx="20" cy="19" r="2"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></symbol>
     <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
     <symbol id="i-server" viewBox="0 0 24 24"><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 6h.01"/><path d="M6 18h.01"/></symbol>
     <symbol id="i-zap" viewBox="0 0 24 24"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></symbol>
@@ -1333,10 +1421,7 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
             <span class="changes hide-md"><svg class="icon" width="14" height="14"><use href="#i-changes"/></svg>Changes<b>3</b></span>
           </div>
           <div>
-            <span class="split">
-              <button class="tool is-outlined" type="button" data-new-session><svg class="icon" width="14" height="14" aria-hidden="true"><use href="#i-plus"/></svg>New Session</button>
-              <span class="more hide-sm" aria-hidden="true"><svg class="icon" width="13" height="13"><use href="#i-down"/></svg></span>
-            </span>
+            <button class="tool is-outlined" type="button" data-new-session title="New session"><svg class="icon" width="14" height="14" aria-hidden="true"><use href="#i-plus"/></svg>New<svg class="icon chevron" width="13" height="13" aria-hidden="true"><use href="#i-down"/></svg></button>
           </div>
         </div>
 
@@ -1592,6 +1677,51 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
 
       <section class="feature-row">
         <div class="feature-copy">
+          <p class="feature-label"><i style="background: #64d2ff" aria-hidden="true"></i>Side by side</p>
+          <h2 class="display">Try another way, right beside this one.</h2>
+          <p class="body">Press Fork from here on any reply, and a new session starts with the conversation up to that point while the first one carries on. Open up to four sessions in one window: a chat beside its terminal, two related sessions, a dev server under them.</p>
+          <ul class="feature-keys">
+            <li><kbd class="kbd">⌘N</kbd>a session beside it</li>
+            <li><kbd class="kbd">⌘T</kbd>a terminal beside it</li>
+            <li><kbd class="kbd">⌘W</kbd>close a pane</li>
+          </ul>
+        </div>
+        <div class="panes-visual" data-animate aria-hidden="true">
+          <div class="pw">
+            <div class="pw-bar">
+              <span class="lights"><i></i><i></i><i></i></span>
+              <span class="xtool is-on"><svg class="icon" width="14" height="14"><use href="#i-columns"/></svg></span>
+              <span class="xtool"><svg class="icon" width="14" height="14"><use href="#i-x"/></svg></span>
+            </div>
+            <div class="pw-panes">
+              <div class="pane">
+                <div class="xhead"><i class="dot"></i><span class="xtitle">Add a coupon field to checkout</span></div>
+                <div class="chat">
+                  <div class="c-you">Add a coupon field to the checkout form.</div>
+                  <div class="c-head"><span class="c-mark"><svg class="icon" width="12" height="12"><use href="#i-sparkles"/></svg></span>Claude <time>2:41 PM</time></div>
+                  <p class="c-text">Added a coupon field under the order summary. It checks the code against <code>/api/coupons</code> as you type.</p>
+                  <span class="c-fork"><svg class="icon" width="12" height="12"><use href="#i-fork"/></svg>Fork from here</span>
+                </div>
+              </div>
+              <div class="pane is-fork">
+                <div class="xhead"><i class="dot is-working"></i><span class="xtitle">Add a coupon field to checkout</span><span class="chip"><svg class="icon" width="11" height="11"><use href="#i-fork"/></svg>forked</span></div>
+                <div class="chat">
+                  <p class="c-text c-copied">Added a coupon field under the order summary. It checks the code against <code>/api/coupons</code> as you type.</p>
+                  <div class="c-you">Try it behind a “Have a coupon?” link instead.</div>
+                  <div class="c-head"><span class="c-mark"><svg class="icon" width="12" height="12"><use href="#i-sparkles"/></svg></span>Claude <time>2:44 PM</time></div>
+                  <div class="c-tools">
+                    <div class="c-call"><span class="glyph tone-edit"><svg class="icon" width="13" height="13"><use href="#i-pencil"/></svg></span><b>Edit</b><code>CheckoutForm.jsx</code><span class="c-delta"><span class="add">+14</span> <span class="del">−3</span></span><span class="c-ok"><svg class="icon" width="13" height="13"><use href="#i-check"/></svg></span></div>
+                  </div>
+                  <div class="c-working"><span class="loader"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span>Running npm test -- checkout</span><span class="el">12s</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="feature-row is-flipped">
+        <div class="feature-copy">
           <p class="feature-label"><i style="background: #af52de" aria-hidden="true"></i>New session from context</p>
           <h2 class="display">Never re-explain what you just did.</h2>
           <p class="body">Select a few cards and start a session from their context. You get a handoff of what each one did, edit it if you like, say what's next, and the new session picks up from there.</p>
@@ -1606,7 +1736,7 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
         </picture>
       </section>
 
-      <section class="feature-row is-flipped">
+      <section class="feature-row">
         <div class="feature-copy">
           <p class="feature-label"><i style="background: var(--working)" aria-hidden="true"></i>Agents and messages</p>
           <h2 class="display">See how your sessions work together.</h2>
@@ -1629,7 +1759,81 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
         </div>
       </section>
 
+      <section class="feature-row is-flipped">
+        <div class="feature-copy">
+          <p class="feature-label"><i style="background: #ff2d55" aria-hidden="true"></i>Coordinator · beta</p>
+          <h2 class="display">One session that keeps the rest on track.</h2>
+          <p class="body">Give a board a coordinator and tell it what to look after. Every session there reports to it when it ends a turn, waits on you, or its pull request's checks finish. It follows up, starts sessions of its own, and asks you before it merges, pushes or releases.</p>
+          <ul class="feature-keys">
+            <li><kbd class="kbd">New</kbd>New coordinator…</li>
+            <li><kbd class="kbd">●</kbd>click a dot to go to that session</li>
+          </ul>
+        </div>
+        <div class="chat-visual coord-visual" aria-hidden="true">
+          <div class="xcard">
+            <div class="xhead">
+              <i class="dot is-waiting"></i>
+              <svg class="icon" width="14" height="14"><use href="#i-network"/></svg>
+              <span class="xtitle">Release coordinator</span>
+              <span class="members"><i style="--c: var(--done)"></i><i style="--c: var(--done)"></i><i style="--c: var(--done)"></i><span>3 sessions</span></span>
+              <span class="xtools"><span class="xtool"><svg class="icon" width="14" height="14"><use href="#i-archive"/></svg></span><span class="xtool"><svg class="icon" width="14" height="14"><use href="#i-window"/></svg></span><span class="xtool"><svg class="icon" width="14" height="14"><use href="#i-min"/></svg></span></span>
+            </div>
+            <div class="chat-scroll">
+              <div class="chat">
+                <div class="c-you">Ship 1.4.0 once dark mode and the search fix are in.</div>
+                <div class="c-report"><b><i style="--c: var(--done)"></i>Dark mode tokens</b>#12 Dark mode tokens · checks passed</div>
+                <div class="c-report"><b><i style="--c: var(--done)"></i>Search typos</b>ended its turn: A typo in search now suggests the closest product.</div>
+                <div class="c-report"><b><i style="--c: var(--done)"></i>Release notes</b>ended its turn: Drafted the notes for 1.4.0 in CHANGELOG.md.</div>
+                <div class="c-head"><span class="c-mark"><svg class="icon" width="12" height="12"><use href="#i-sparkles"/></svg></span>Claude <time>4:05 PM</time></div>
+                <p class="c-text">Both are on <code>main</code>, its checks are green and the notes are ready.</p>
+                <div class="c-ask">
+                  <p>Publish 1.4.0?</p>
+                  <span class="c-opt is-picked"><i></i>Yes, publish it</span>
+                  <span class="c-opt"><i></i>Not yet</span>
+                  <div class="c-ask-foot"><span class="c-ask-send">Send</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="feature-row">
+        <div class="feature-copy">
+          <p class="feature-label"><i style="background: #30b0c7" aria-hidden="true"></i>Goals and automations</p>
+          <h2 class="display">Give Claude an outcome, not just a task.</h2>
+          <p class="body">Say where you want to get to, like signup conversion from 3.1% to 4% this month. One session works toward it over days, picks when to check in next, remembers what it tried, and asks you only when it isn't sure. Chores run on a schedule too, with each run beside its tile.</p>
+          <ul class="feature-keys">
+            <li><kbd class="kbd">New</kbd>a goal or an automation</li>
+            <li><kbd class="kbd">Right-click</kbd>Make this a goal…</li>
+          </ul>
+        </div>
+        <div class="goals-visual" data-animate aria-hidden="true">
+          <div class="gtile is-goal">
+            <div class="g-head">
+              <span class="g-ring" style="--off: 33"><svg viewBox="0 0 36 36"><circle class="track" cx="18" cy="18" r="16" pathLength="100"/><circle class="fill" cx="18" cy="18" r="16" pathLength="100"/></svg><b>67%</b></span>
+              <div><h4>Signup conversion</h4><p>3.7% now · target 4% · from 3.1%</p></div>
+            </div>
+            <svg class="g-chart" viewBox="0 0 300 64">
+              <line class="target" x1="0" y1="8" x2="300" y2="8"/>
+              <line class="target" x1="0" y1="56" x2="300" y2="56"/>
+              <path class="line" pathLength="1" d="M2 56 L60 52 L110 47 L160 44 L210 41 L250 30 L296 24"/>
+              <circle class="now" cx="296" cy="24" r="3.5"/>
+            </svg>
+            <p class="g-next">Next check-in Mon 9:00</p>
+            <p class="g-log">Shorter form copy: +0.3 points. Kept it. Next: a clearer error on taken emails.</p>
+          </div>
+          <div class="gtile is-auto">
+            <div class="g-head">
+              <span class="g-ring" style="--off: 62"><svg viewBox="0 0 36 36"><circle class="track" cx="18" cy="18" r="16" pathLength="100"/><circle class="fill" cx="18" cy="18" r="16" pathLength="100"/></svg><svg class="icon" width="18" height="18"><use href="#i-clock"/></svg></span>
+              <div><h4>Release notes</h4><p>Weekdays at 9:00 · next tomorrow</p></div>
+            </div>
+            <p class="g-run"><i></i><span>Drafted the notes for 1.4.0 in CHANGELOG.md.<small>Today 9:02</small></span></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="feature-row is-flipped">
         <div class="feature-copy">
           <p class="feature-label"><i style="background: var(--ink-red)" aria-hidden="true"></i>Whiteboard</p>
           <h2 class="display">Sketch it out, with Claude beside you.</h2>
@@ -1688,7 +1892,7 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
         </div>
       </section>
 
-      <section class="feature-row is-flipped">
+      <section class="feature-row">
         <div class="feature-copy">
           <p class="feature-label"><i style="background: var(--accent)" aria-hidden="true"></i>Frames and groups</p>
           <h2 class="display">Keep related work together.</h2>
@@ -1729,7 +1933,7 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
         </div>
       </section>
 
-      <section class="feature-row">
+      <section class="feature-row is-flipped">
         <div class="feature-copy">
           <p class="feature-label"><i style="background: #34c759" aria-hidden="true"></i>Views</p>
           <h2 class="display">Any view you need, just by asking.</h2>
@@ -1746,7 +1950,7 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
         </picture>
       </section>
 
-      <section class="feature-row is-flipped">
+      <section class="feature-row">
         <div class="feature-copy">
           <p class="feature-label"><i style="background: #8e8e93" aria-hidden="true"></i>Archive</p>
           <h2 class="display">Nothing gets lost.</h2>
@@ -1758,7 +1962,7 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
         </picture>
       </section>
 
-      <section class="feature-row">
+      <section class="feature-row is-flipped">
         <div class="feature-copy">
           <p class="feature-label"><i style="background: #ffcc00" aria-hidden="true"></i>Search</p>
           <h2 class="display">Which session touched that?</h2>
@@ -1775,7 +1979,7 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
         </picture>
       </section>
 
-      <section class="feature-row is-flipped">
+      <section class="feature-row">
         <div class="feature-copy">
           <p class="feature-label"><i style="background: #5856d6" aria-hidden="true"></i>Focus</p>
           <h2 class="display">See only this week's projects.</h2>
@@ -1840,7 +2044,7 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
         </div>
       </section>
 
-      <section class="feature-row">
+      <section class="feature-row is-flipped">
         <div class="feature-copy">
           <p class="feature-label"><i style="background: var(--accent)" aria-hidden="true"></i>Floating capture</p>
           <h2 class="display">Start a session from any app.</h2>
@@ -1857,7 +2061,7 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
         </picture>
       </section>
 
-      <section class="feature-row is-flipped">
+      <section class="feature-row">
         <div class="feature-copy">
           <p class="feature-label"><i style="background: #8e8e93" aria-hidden="true"></i>Server</p>
           <h2 class="display">Share a board with your team.</h2>
@@ -1907,6 +2111,36 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
     <section class="extras">
       <h2 class="display">Also on the board</h2>
       <div class="extras-grid">
+        <div>
+          <span class="extra-icon" aria-hidden="true"><svg class="icon" width="20" height="20"><use href="#i-worktree"/></svg></span>
+          <h3>A worktree per session</h3>
+          <p>Tick Own worktree per session under New, and each Claude session works on a branch of its own. Removing its card saves what it hadn't committed first.</p>
+        </div>
+        <div>
+          <span class="extra-icon" aria-hidden="true"><svg class="icon" width="20" height="20"><use href="#i-pr"/></svg></span>
+          <h3>Its PRs and servers, under the card</h3>
+          <p>The pull requests a session opened, with their checks, and the servers it started wait in a drawer under its card. Click one to open it.</p>
+        </div>
+        <div>
+          <span class="extra-icon" aria-hidden="true"><svg class="icon" width="20" height="20"><use href="#i-changes"/></svg></span>
+          <h3>Review one session's edits</h3>
+          <p>A card's file count opens Changes with just the files that session changed, so you can review its work on its own.</p>
+        </div>
+        <div>
+          <span class="extra-icon" aria-hidden="true"><svg class="icon" width="20" height="20"><use href="#i-sliders"/></svg></span>
+          <h3>Pick the model and effort</h3>
+          <p>A chip in each chat names what the session runs on, like Opus · High. Switch it and the conversation carries on. Your Claude Code settings stay as they are.</p>
+        </div>
+        <div>
+          <span class="extra-icon" aria-hidden="true"><svg class="icon" width="20" height="20"><use href="#i-send"/></svg></span>
+          <h3>Send it now</h3>
+          <p>A message you queued while Claude works can go right away. Claude reads it at its next step, without stopping what it's doing.</p>
+        </div>
+        <div>
+          <span class="extra-icon" aria-hidden="true"><svg class="icon" width="20" height="20"><use href="#i-phone"/></svg></span>
+          <h3>Answer from your phone</h3>
+          <p>Turn it on in Settings, and new sessions start with Claude Code's Remote Control, so you can reply from the Claude app.</p>
+        </div>
         <div>
           <span class="extra-icon" aria-hidden="true"><svg class="icon" width="20" height="20"><use href="#i-bubble"/></svg></span>
           <h3>Ask Claude on the spot</h3>

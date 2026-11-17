@@ -30,10 +30,15 @@ pub enum CardIcon {
     Search,
     X,
     FileDiff,
+    GitPullRequest,
+    GitPullRequestDraft,
+    GitPullRequestClosed,
+    ArrowUpRight,
+    ChevronDown,
 }
 
 impl CardIcon {
-    const ALL: [Self; 21] = [
+    const ALL: [Self; 26] = [
         Self::Bot,
         Self::GitBranch,
         Self::GitMerge,
@@ -55,6 +60,11 @@ impl CardIcon {
         Self::Search,
         Self::X,
         Self::FileDiff,
+        Self::GitPullRequest,
+        Self::GitPullRequestDraft,
+        Self::GitPullRequestClosed,
+        Self::ArrowUpRight,
+        Self::ChevronDown,
     ];
 
     pub fn name(self) -> &'static str {
@@ -80,6 +90,11 @@ impl CardIcon {
             Self::Search => "search",
             Self::X => "x",
             Self::FileDiff => "file-diff",
+            Self::GitPullRequest => "git-pull-request",
+            Self::GitPullRequestDraft => "git-pull-request-draft",
+            Self::GitPullRequestClosed => "git-pull-request-closed",
+            Self::ArrowUpRight => "arrow-up-right",
+            Self::ChevronDown => "chevron-down",
         }
     }
 
@@ -135,6 +150,17 @@ impl CardIcon {
             Self::FileDiff => {
                 r#"<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M9 10h6"/><path d="M12 13V7"/><path d="M9 17h6"/>"#
             }
+            Self::GitPullRequest => {
+                r#"<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M6 9v12"/>"#
+            }
+            Self::GitPullRequestDraft => {
+                r#"<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M18 6V5"/><path d="M18 11v-1"/><path d="M6 9v12"/>"#
+            }
+            Self::GitPullRequestClosed => {
+                r#"<circle cx="6" cy="6" r="3"/><path d="M6 9v12"/><path d="m21 3-6 6"/><path d="m21 9-6-6"/><path d="M18 11.5V15"/><circle cx="18" cy="18" r="3"/>"#
+            }
+            Self::ArrowUpRight => r#"<path d="M7 7h10v10"/><path d="M7 17 17 7"/>"#,
+            Self::ChevronDown => r#"<path d="m6 9 6 6 6-6"/>"#,
         }
     }
 

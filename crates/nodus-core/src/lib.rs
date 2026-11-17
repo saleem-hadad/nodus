@@ -56,6 +56,7 @@ mod board;
 mod capture;
 #[cfg(test)]
 mod core_tests;
+mod drawer;
 mod error;
 mod feedback;
 mod git;

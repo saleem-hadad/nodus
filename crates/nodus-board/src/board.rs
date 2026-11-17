@@ -219,6 +219,7 @@ impl Board {
                 .ok_or_else(|| nodus_store::NotFound::Project(project_id.into()))?;
             let board = boards.entry(project_id.to_owned()).or_default();
             merge(board, &disk, folder_exists, self.sessions.as_ref());
+            keep_opened_prs(board, &disk);
             // Links whose ends went while the board wasn't looking (a view
             // deleted, a card dropped) go too.
             crate::shapes::prune_links(board);
@@ -320,6 +321,22 @@ impl Board {
     /// A card for a node, as `toCard` without what's on disk (a new card).
     pub fn card(&self, node: &BoardNode) -> SessionCard {
         to_card(node, None, self.sessions.as_ref())
+    }
+}
+
+/// DRAWER-011: the pull requests an active card's transcript says its
+/// session opened join the ones the card keeps.
+fn keep_opened_prs(board: &mut BoardState, disk: &IndexMap<String, DiscoveredSession>) {
+    for node in board.nodes.values_mut().filter(|n| !n.archived) {
+        let Some(found) = disk.get(&node.session_id).filter(|f| !f.opened_prs.is_empty()) else {
+            continue;
+        };
+        let kept = node.prs();
+        let before = kept.len();
+        let prs = nodus_domain::merge_prs(kept, &found.opened_prs);
+        if prs.len() != before {
+            node.set_prs(&prs);
+        }
     }
 }
 

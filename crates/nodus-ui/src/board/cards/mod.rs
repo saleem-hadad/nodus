@@ -25,6 +25,7 @@ pub mod agent_deck;
 pub mod anim;
 pub mod archive_zone;
 pub mod border;
+pub mod drawer;
 pub mod expanded_card;
 pub mod icons;
 pub mod install;
@@ -429,6 +430,8 @@ pub trait CardActions {
     fn press_title(&self);
     /// Raises a card while its agent fan is out (z 1400, DECK-014).
     fn raise(&self, session_id: &str, raised: bool, cx: &mut App);
+    /// Asks a server a card's session started to stop (DRAWER-024).
+    fn stop_server(&self, _session_id: &str, _port: u16, _cx: &mut App) {}
     // The archive stack (ArchiveStackContext).
     fn set_stack_query(&self, query: &str, cx: &mut App);
     fn open_stack(&self, cx: &mut App);

@@ -24,6 +24,7 @@ When you change a behavior, change its entry in the same commit, and say what 0.
 | `16-rich-sessions.md` | Claude cards as a chat: the transcript drawn as messages, charts, forms and pages from Claude, and the prompt queue the Stop hook hands over |
 | `17-frames-groups.md` | frames (what sections became) that hold whatever lies in them and keep their size, Claude naming them, and groups that glue things together |
 | `18-hosted.md` | hosted Nodus: the Linux server, its install, the wire, members and sign-in, GitHub, Claude accounts, worktrees, working together, updates, the security model |
+| `19-card-drawer.md` | a card's drawer: the pull requests its session opened (kept, looked up on GitHub through `gh`) and the servers it started (found by their environment), a lip that slides open, Stop |
 | `20-scheduled-actions.md` | actions that run on a schedule, their tiles on the board, and views' schedules on show |
 
 ## Compatibility with 0.9.4

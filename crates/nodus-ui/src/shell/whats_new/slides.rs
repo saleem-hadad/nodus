@@ -25,6 +25,13 @@ macro_rules! shot {
 pub const SLIDES: &[Slide] = &[
     Slide {
         version: "1.0.24",
+        title: "What a session made",
+        text: "The PRs a session opened and the servers it started wait in a drawer under its card.",
+        light: shot!("1.0.24-drawer-light"),
+        dark: shot!("1.0.24-drawer-dark"),
+    },
+    Slide {
+        version: "1.0.24",
         title: "Actions on a schedule",
         text: "Run an action every weekday at 9. Its tile on the board counts down and keeps what it found.",
         light: shot!("1.0.24-schedules-light"),

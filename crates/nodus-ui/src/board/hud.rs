@@ -28,13 +28,14 @@ const MINIMAP_H: f32 = 118.0;
 /// One of the zoom pill's buttons (`.board-control`).
 fn control(
     id: &'static str,
-    tooltip: &'static str,
+    tooltip: impl Into<gpui::SharedString>,
     content: AnyElement,
     min_w: f32,
     on_click: impl Fn(&mut Window, &mut App) + 'static,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
+    let tooltip = tooltip.into();
     let t = theme::tokens(cx);
     let hovered = window.use_keyed_state(crate::components::child_id(id, "hover"), cx, |_, _| false);
     let on = *hovered.read(cx);
@@ -57,7 +58,7 @@ fn control(
             });
         })
         .on_click(move |_, window, cx| on_click(window, cx))
-        .tooltip(native_tooltip(tooltip.into()))
+        .tooltip(native_tooltip(tooltip))
         .child(content)
         .into_any_element()
 }
@@ -114,9 +115,10 @@ impl BoardCanvas {
             cx,
         );
         // BOARD-033: the click event is no duration, so this fit is instant.
+        // BOARD-185: the tooltip names its key.
         let fit = control(
             "zoom-fit",
-            "Zoom to fit",
+            format!("Zoom to fit ({})", crate::platform::keys("⇧1")),
             icon(Icon::Maximize, 13., 2.2, color(false)).into_any_element(),
             28.,
             move |_, cx| {

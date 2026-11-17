@@ -140,7 +140,7 @@ impl BoardCanvas {
                 BoardCanvas::select_all_active,
             )
             .hint(keys("⌘A")),
-            item(&me, "Zoom to fit", Icon::Maximize, |c, cx| c.fit_active(320.0, cx)),
+            item(&me, "Zoom to fit", Icon::Maximize, |c, cx| c.fit_active(320.0, cx)).hint(keys("⇧1")),
             // BOARD-177: every drawn node, padding 0.12, up to zoom 2.
             item(&me, "Show everything", Icon::Maximize, |c, cx| {
                 c.fit_nodes(None, 0.12, 2.0, 320.0, cx);

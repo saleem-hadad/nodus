@@ -292,6 +292,22 @@ impl SessionsApi<'_> {
         }
     }
 
+    /// DRAWER-024: asks a server the session started to stop, by its port.
+    /// Only a server its drawer shows, and only one on this machine.
+    pub fn stop_server(&self, session_id: &str, port: u16) -> CommandResult<()> {
+        const CHANNEL: &str = "drawer:stop-server";
+        let pid = self
+            .nodus
+            .inner
+            .drawers
+            .servers(session_id)
+            .into_iter()
+            .find(|s| s.port == port)
+            .and_then(|s| s.pid)
+            .ok_or_else(|| CommandError::new(CHANNEL, "That server has stopped already"))?;
+        nodus_platform::listeners::stop(pid).map_err(|err| CommandError::new(CHANNEL, err.to_string()))
+    }
+
     /// Whether a session runs on a server, so files dropped on its terminal
     /// go there first (SRV-163).
     pub fn on_server(&self, session_id: &str) -> bool {

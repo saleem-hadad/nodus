@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::board::BoardNode;
+use crate::drawer::CardServer;
 
 string_enum! {
     /// Live state of a Claude session, driven by Claude Code hooks.
@@ -109,6 +110,9 @@ pub struct SessionCard {
     /// What Claude last reported about the session's model, context and cost. Claude cards only.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<SessionUsage>,
+    /// What the session started that listens on a port, for its drawer (DRAWER-020).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub servers: Vec<CardServer>,
 }
 
 /// What Claude Code reports to its status line, which sessions started from

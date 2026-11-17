@@ -36,6 +36,9 @@ pub const TITLE_CLICK_MS: u64 = 240;
 /// `HOME_FREE_SPACE` and `HOME_ARCHIVE_ROWS_H` (BOARD-032).
 const HOME_FREE_SPACE: f64 = 760.0;
 const HOME_ARCHIVE_ROWS_H: f64 = 64.0 + 3.0 * 240.0;
+/// The prompt bar's band at the canvas's foot (its row, 48 tall, 20 above
+/// the edge, and some air), which an empty board's fit keeps clear of.
+const HOME_BAR_BAND: f64 = 80.0;
 
 /// A question the board is waiting on (`ConfirmRequest`).
 pub struct Confirm {
@@ -857,7 +860,15 @@ impl BoardCanvas {
             w: a.w + HOME_FREE_SPACE,
             h: a.h.min(HOME_ARCHIVE_ROWS_H),
         };
-        self.fit_bounds(bounds, 0.06, viewport::MAX_ZOOM, duration_ms, cx);
+        // In the room above the prompt bar, so the pad's foot isn't left
+        // under the bar.
+        let (w, h) = self.canvas_size();
+        if w <= 0.0 || h <= 0.0 {
+            return;
+        }
+        let room = (h - HOME_BAR_BAND).max(h / 2.0);
+        let to = viewport::for_bounds(bounds, w, room, viewport::MIN_ZOOM, viewport::MAX_ZOOM, 0.06);
+        self.fly_to(to, duration_ms, cx);
     }
 
     /// `ensureVisible` (BOARD-034): pans (zoom kept) so a rect at `p` of

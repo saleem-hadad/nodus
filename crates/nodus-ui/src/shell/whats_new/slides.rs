@@ -24,6 +24,13 @@ macro_rules! shot {
 
 pub const SLIDES: &[Slide] = &[
     Slide {
+        version: "1.0.27",
+        title: "A coordinator (beta)",
+        text: "One session looks after the others. They report to it when they finish, and it can start its own.",
+        light: shot!("1.0.27-coordinator-light"),
+        dark: shot!("1.0.27-coordinator-dark"),
+    },
+    Slide {
         version: "1.0.26",
         title: "Fork from here",
         text: "Hover over a reply to start a new session with the chat up to there. This one carries on.",

@@ -50,6 +50,7 @@ pub fn session_info(
         || node.kind == Some(SessionKind::Terminal)
         || set(node.run_of.as_deref())
         || set(node.view_of.as_deref())
+        || node.inside()
     {
         return None;
     }

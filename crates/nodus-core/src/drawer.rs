@@ -227,22 +227,28 @@ impl Inner {
         if answers.is_empty() {
             return (ok, links);
         }
-        let changed = self.store.update(|state| {
+        let moved = self.store.update(|state| {
             let board = state.board_mut(&project.id);
-            let mut changed = false;
+            let mut moved = Vec::new();
             for card in &cards {
                 let Some(node) = board.nodes.get_mut(&card.session_id).filter(|n| !n.archived) else {
                     continue;
                 };
                 let origin = origins.get(&card.folder).cloned().flatten();
-                let prs = updated(node.prs(), card.branch.as_deref(), origin.as_ref(), &answers);
-                if prs != node.prs() {
+                let was = node.prs();
+                let prs = updated(was.clone(), card.branch.as_deref(), origin.as_ref(), &answers);
+                if prs != was {
                     node.set_prs(&prs);
-                    changed = true;
+                    moved.push((card.session_id.clone(), was, prs));
                 }
             }
-            changed
+            moved
         });
+        let changed = !moved.is_empty();
+        // COORD-020: and the board's coordinator hears of it.
+        for (session_id, was, now) in &moved {
+            self.coordinator_prs(session_id, was, now);
+        }
         if changed {
             let _ = self.events.send(Event::BoardChanged {
                 project_id: project.id.clone(),

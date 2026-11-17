@@ -312,7 +312,7 @@ impl ChatView {
 
     /// CHAT-005, CHAT-006, CHAT-007, CHAT-037, CHAT-050: what the user
     /// said, in a bubble on the right.
-    fn render_user(&mut self, i: usize, t: &Tokens, _cx: &mut Context<'_, Self>) -> AnyElement {
+    fn render_user(&mut self, i: usize, t: &Tokens, cx: &mut Context<'_, Self>) -> AnyElement {
         let Some(ChatEntry::User {
             text,
             queued,
@@ -323,6 +323,18 @@ impl ChatView {
         else {
             return div().into_any_element();
         };
+        // COORD-052: what the board tells its coordinator, and what the
+        // coordinator tells a member, as quiet rows rather than your bubble.
+        if answers.is_none() {
+            if let Some(lines) = nodus_domain::parse_report(text) {
+                let rows: Vec<(String, String, String)> =
+                    lines.into_iter().map(|l| (l.session_id, l.title, l.text)).collect();
+                return self.board_rows(i, rows, t, cx);
+            }
+            if let Some((title, words)) = nodus_domain::parse_coordinator_message(text) {
+                return self.board_rows(i, vec![(String::new(), format!("From {title}"), words)], t, cx);
+            }
+        }
         let how = if *queued {
             Some("Queued while Claude worked")
         } else if *mid_turn {
@@ -364,6 +376,76 @@ impl ChatView {
                     .child(inner),
             )
             .into_any_element()
+    }
+
+    /// COORD-052: a board report's events, or a coordinator's message, as
+    /// quiet rows: the member's status dot, its title, and what it said. A
+    /// click on a member's row opens it beside this chat.
+    fn board_rows(
+        &self,
+        i: usize,
+        rows: Vec<(String, String, String)>,
+        t: &Tokens,
+        cx: &mut Context<'_, Self>,
+    ) -> AnyElement {
+        let status_of = |id: &str| {
+            self.state
+                .read(cx)
+                .board
+                .as_ref()
+                .and_then(|b| b.cards.iter().find(|c| c.node.session_id == id))
+                .map(|c| c.status)
+        };
+        let mut list = div().w_full().flex().flex_col().gap(self.px(4.));
+        for (n, (id, title, words)) in rows.into_iter().enumerate() {
+            let status = (!id.is_empty()).then(|| status_of(&id)).flatten();
+            let head = div()
+                .flex()
+                .items_center()
+                .gap(self.px(6.))
+                .text_size(self.px(12.))
+                .line_height(self.px(17.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(t.text_primary)
+                .when_some(status, |d, status| {
+                    d.child(div().flex_none().size(self.px(7.)).rounded_full().bg(t.status(status)))
+                })
+                .child(div().flex_1().min_w_0().truncate().child(SharedString::from(title)));
+            let mut row = div()
+                .id(("board-row", i * 1000 + n))
+                .w_full()
+                .flex()
+                .flex_col()
+                .gap(self.px(1.))
+                .px(self.px(10.))
+                .py(self.px(6.))
+                .rounded(self.px(8.))
+                .bg(t.bg_sunken)
+                .child(head)
+                .child(
+                    div()
+                        .text_size(self.px(12.))
+                        .line_height(self.px(17.))
+                        .text_color(t.text_secondary)
+                        .line_clamp(2)
+                        .child(SharedString::from(words)),
+                );
+            if status.is_some() {
+                let state = self.state.clone();
+                row = row.hover(|d| d.bg(t.bg_hover)).on_click(move |_, _, cx| {
+                    let id = id.clone();
+                    state.update(cx, |s, cx| {
+                        if s.session_window.ids().is_empty() {
+                            s.open_terminal(&id, cx);
+                        } else {
+                            s.open_beside(&id, cx);
+                        }
+                    });
+                });
+            }
+            list = list.child(row);
+        }
+        list.into_any_element()
     }
 
     /// CHAT-007: the answers to a form, on the user's bubble.

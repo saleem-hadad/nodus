@@ -54,6 +54,7 @@ mod actions;
 mod app;
 mod board;
 mod capture;
+mod coordinator;
 #[cfg(test)]
 mod core_tests;
 mod drawer;
@@ -89,6 +90,7 @@ pub use app::AppApi;
 pub use board::BoardApi;
 pub use board::images_dir as board_images_dir;
 pub use capture::{CaptureApi, CaptureSystem, WindowSize};
+pub use coordinator::CoordinatorApi;
 pub use error::{CommandError, CommandResult};
 pub use feedback::{AreaShot, FeedbackApi};
 pub use git::GitApi;

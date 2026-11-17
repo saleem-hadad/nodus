@@ -508,7 +508,7 @@ Toast strings (verbatim; `<m>` = the error's message, or `String(err)` for non-E
 
 ### Title-bar actions (component chrome: 08)
 
-One menu button (08 UI-339) in the title bar's action slot, so the board has a single primary action: `New` with a `Plus` icon (15px, stroke 2.2). Its menu has `New session` (`Plus`, hint `⌘N` / `Ctrl+N`), `New terminal` (`SquareTerminal`, hint `⌘T` / `Ctrl+T`) and `New view…` (`LayoutDashboard`, no hint), then a separator, `New automation…` (`Clock`, 20 SCHED-045) and `New goal…` (`Target`, 21 GOAL-014). On a board in the app (not a server's), a separator and `Own worktree per session` follow, a checkbox for the project (`Square` when off, `SquareCheck` when on; off by default) that toggles its `worktrees` (03 SESS-217).
+One menu button (08 UI-339) in the title bar's action slot, so the board has a single primary action: `New` with a `Plus` icon (15px, stroke 2.2). Its menu has `New session` (`Plus`, hint `⌘N` / `Ctrl+N`), `New terminal` (`SquareTerminal`, hint `⌘T` / `Ctrl+T`) and `New view…` (`LayoutDashboard`, no hint), then a separator, `New automation…` (`Clock`, 20 SCHED-045), `New goal…` (`Target`, 21 GOAL-014) and `New coordinator…` (`Network`, hint `Beta`; `Open coordinator` on a board that has one, 22 COORD-010; neither on a server's or read-only board). On a board in the app (not a server's), a separator and `Own worktree per session` follow, a checkbox for the project (`Square` when off, `SquareCheck` when on; off by default) that toggles its `worktrees` (03 SESS-217).
 
 ### Selection bar wiring (content and look: 11)
 

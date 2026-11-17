@@ -36,10 +36,12 @@ pub enum CardIcon {
     GitPullRequestClosed,
     ArrowUpRight,
     ChevronDown,
+    /// Lucide `network`: the board's coordinator (spec 22).
+    Network,
 }
 
 impl CardIcon {
-    const ALL: [Self; 27] = [
+    const ALL: [Self; 28] = [
         Self::Bot,
         Self::GitBranch,
         Self::GitMerge,
@@ -67,6 +69,7 @@ impl CardIcon {
         Self::GitPullRequestClosed,
         Self::ArrowUpRight,
         Self::ChevronDown,
+        Self::Network,
     ];
 
     pub fn name(self) -> &'static str {
@@ -98,6 +101,7 @@ impl CardIcon {
             Self::GitPullRequestClosed => "git-pull-request-closed",
             Self::ArrowUpRight => "arrow-up-right",
             Self::ChevronDown => "chevron-down",
+            Self::Network => "network",
         }
     }
 
@@ -167,6 +171,9 @@ impl CardIcon {
             }
             Self::ArrowUpRight => r#"<path d="M7 7h10v10"/><path d="M7 17 17 7"/>"#,
             Self::ChevronDown => r#"<path d="m6 9 6 6 6-6"/>"#,
+            Self::Network => {
+                r#"<rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/>"#
+            }
         }
     }
 

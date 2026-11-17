@@ -686,6 +686,7 @@ mod tests {
             talks: vec![],
             tiles: vec![],
             goals: vec![],
+            coordinator: None,
             viewport: None,
             offline: false,
         }

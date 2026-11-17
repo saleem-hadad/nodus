@@ -57,10 +57,13 @@ pub const SESSION_TOOL_NAMES: [&str; 2] = ["list_sessions", "archive_sessions"];
 /// A goal's session's tools, on top of the others (GOAL-023).
 pub const GOAL_TOOL_NAMES: [&str; 2] = ["goal_update", "goal_finish"];
 
+/// The board coordinator's own tools, on top of the action run's (COORD-032).
+pub const COORDINATOR_TOOL_NAMES: [&str; 2] = ["start_session", "message_session"];
+
 /// Allow rules that let a session use every board tool it has without asking
 /// (TOOL-003): `--allowedTools`, one argument each, in the order the tools
 /// are listed.
-pub const BOARD_TOOL_RULES: [&str; 22] = [
+pub const BOARD_TOOL_RULES: [&str; 24] = [
     "mcp__nodus__create_note",
     "mcp__nodus__update_note",
     "mcp__nodus__list_notes",
@@ -83,6 +86,8 @@ pub const BOARD_TOOL_RULES: [&str; 22] = [
     "mcp__nodus__archive_sessions",
     "mcp__nodus__goal_update",
     "mcp__nodus__goal_finish",
+    "mcp__nodus__start_session",
+    "mcp__nodus__message_session",
 ];
 
 fn color_property(description: &str) -> Value {
@@ -621,13 +626,44 @@ fn session_tools() -> Vec<Value> {
     ]
 }
 
+/// The board coordinator's own tools (COORD-032), after the action run's.
+fn coordinator_tools() -> Vec<Value> {
+    vec![
+        json!({
+            "name": "start_session",
+            "description": "Starts a Claude Code session for one piece of work. It runs inside you, off the board (the user can show it there), in auto mode, and reports to you when its turn ends. It has none of your context, so the prompt is its whole brief: what to achieve, which files or areas matter, what not to touch, and how to check its work. Returns its session id.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "title": { "type": "string", "description": "A few words for it, shown as its title." },
+                    "prompt": { "type": "string", "description": "Its brief, sent as its first message." }
+                },
+                "required": ["title", "prompt"]
+            }
+        }),
+        json!({
+            "name": "message_session",
+            "description": "Sends one of your members a message, marked as coming from you: typed in at once if it’s idle, or queued until its turn ends if it’s working or waiting for the user. Use it to steer it, answer it, or tell it to go ahead. Returns whether it was queued.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "session_id": { "type": "string", "description": "A member’s id, from list_sessions or a board report." },
+                    "text": { "type": "string", "description": "The message." }
+                },
+                "required": ["session_id", "text"]
+            }
+        }),
+    ]
+}
+
 /// The `tools/list` answers: an ordinary session's tools, an action run's,
-/// and a goal's session's.
+/// a goal's session's and the board coordinator's.
 #[derive(Debug, Clone)]
 pub(crate) struct ToolLists {
     pub(crate) session: Value,
     pub(crate) run: Value,
     pub(crate) goal: Value,
+    pub(crate) coordinator: Value,
 }
 
 impl ToolLists {
@@ -640,10 +676,13 @@ impl ToolLists {
         run.extend(session_tools());
         let mut goal = session.clone();
         goal.extend(goal_tools());
+        let mut coordinator = run.clone();
+        coordinator.extend(coordinator_tools());
         Self {
             session: Value::Array(session),
             run: Value::Array(run),
             goal: Value::Array(goal),
+            coordinator: Value::Array(coordinator),
         }
     }
 }

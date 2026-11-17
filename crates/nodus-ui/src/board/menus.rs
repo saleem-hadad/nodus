@@ -436,6 +436,8 @@ impl BoardCanvas {
                 c.open_goal_dialog(None, Some((session.clone(), title.clone())), cx);
             }));
         }
+        // COORD-013, COORD-054
+        items.extend(self.coordinator_card_items(card, me));
         if card.node.archived {
             let restore = id.clone();
             items.push(item(me, "Restore to board", Icon::ArchiveRestore, move |c, cx| {

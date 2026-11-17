@@ -1249,6 +1249,7 @@ impl Render for BoardCanvas {
         let mut views_layer = crate::views::board_layer(self, window, cx);
         // GOAL-010: and the New goal dialog.
         views_layer.extend(super::goal_dialog::render(self, window, cx));
+        views_layer.extend(super::coordinator_dialog::render(self, window, cx));
 
         div()
             .id("board-canvas")

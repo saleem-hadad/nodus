@@ -239,6 +239,8 @@ pub struct BoardCanvas {
     pub view_dialog: Option<Option<Point>>,
     /// GOAL-010: the New goal dialog, while it's up.
     pub goal_dialog: Option<super::goals::GoalAsk>,
+    /// The New coordinator dialog is up (spec 22).
+    pub coordinator_dialog: bool,
 
     /// The card a search jump flashes, since when (BOARD-036).
     pub(crate) flash: Option<(String, Instant)>,
@@ -355,6 +357,7 @@ impl BoardCanvas {
             search_query: String::new(),
             view_dialog: None,
             goal_dialog: None,
+            coordinator_dialog: false,
             flash: None,
             flash_timer: None,
             toast: None,
@@ -440,10 +443,14 @@ impl BoardCanvas {
             self.source = snapshot.clone();
             self.board = snapshot.map(|mut b| {
                 // ACT-032: runs aren't on the board, but for a scheduled
-                // action's, which comes out beside its tile (SCHED-026).
+                // action's, which comes out beside its tile (SCHED-026); nor
+                // are the sessions inside the coordinator (COORD-004).
                 let tiles: Vec<String> = b.tiles.iter().map(|t| t.id.clone()).collect();
-                b.cards
-                    .retain(|c| c.node.view_of.is_none() && c.node.run_of.as_ref().is_none_or(|r| tiles.contains(r)));
+                b.cards.retain(|c| {
+                    c.node.view_of.is_none()
+                        && c.node.run_of.as_ref().is_none_or(|r| tiles.contains(r))
+                        && !c.node.inside()
+                });
                 b
             });
             if first && let Some(board) = &self.board {
@@ -1072,6 +1079,7 @@ impl BoardCanvas {
             || self.merge.is_some()
             || self.view_dialog.is_some()
             || self.goal_dialog.is_some()
+            || self.coordinator_dialog
             || self.search_open
             // ACT-053: the actions rail's dialog, menu or delete confirmation.
             || crate::actions::overlay_open(cx)

@@ -33,12 +33,12 @@ mod schema;
 mod server;
 
 pub use handlers::{
-    ProjectAdder, SERVER_PROJECTS, StoreHandlers, StoreHandlersConfig, ViewTools, expand_home, find_project,
-    is_absolute,
+    CoordinatorTools, ProjectAdder, SERVER_PROJECTS, StoreHandlers, StoreHandlersConfig, ViewTools, expand_home,
+    find_project, is_absolute,
 };
 pub use look::Look;
 pub use schema::{
-    BOARD_MCP_CONFIG, BOARD_SERVER, BOARD_TOOL_RULES, CHAT_TOOL_NAMES, COMMON_TOOL_NAMES, INSTRUCTIONS,
-    PROTOCOL_VERSION, SESSION_TOOL_NAMES, VIEW_TOOL_NAMES,
+    BOARD_MCP_CONFIG, BOARD_SERVER, BOARD_TOOL_RULES, CHAT_TOOL_NAMES, COMMON_TOOL_NAMES, COORDINATOR_TOOL_NAMES,
+    INSTRUCTIONS, PROTOCOL_VERSION, SESSION_TOOL_NAMES, VIEW_TOOL_NAMES,
 };
 pub use server::{BoardToolHandlers, BoxFuture, McpRelay, McpServer, ToolError};

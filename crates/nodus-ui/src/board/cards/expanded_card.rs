@@ -169,6 +169,10 @@ pub fn body(
         .pl(z.px(14.))
         .pr(z.px(6.))
         .children(heading(env, node, true, window, cx));
+    // COORD-050: the coordinator's members beside its title.
+    if let Some(c) = env.coordinator.as_ref().filter(|c| c.id == id && !card.node.archived) {
+        head = head.child(super::coordinator::members_button(env, c, window, cx));
+    }
     if !shell && head_w > 440.0 {
         // XCARD-005, XCARD-006: the container query on the bar's content box.
         head = head.child(usage(

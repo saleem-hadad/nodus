@@ -1218,3 +1218,107 @@ async fn a_session_becomes_a_goal_and_gets_its_first_check_in() {
         "Say what the goal is"
     );
 }
+
+#[tokio::test]
+async fn a_coordinator_hears_from_its_members_and_starts_sessions_inside() {
+    use nodus_domain::{CoordinatorEventKind, CreateSessionOptions, parse_report};
+    let f = Fixture::new();
+    let launcher = FakeLauncher::new(&f.store, None);
+    let at = |x: f64| CreateSessionOptions {
+        x,
+        y: 0.0,
+        ..Default::default()
+    };
+    let member = f
+        .board
+        .create_session("p", &at(0.0), None, &launcher)
+        .await
+        .unwrap()
+        .node
+        .session_id;
+    // COORD-012: its own session, in auto mode, on what it should look after.
+    let opts = CreateSessionOptions {
+        initial_prompt: Some("Release in batches.".into()),
+        ..at(900.0)
+    };
+    let card = f.board.create_coordinator("p", &opts, &launcher).await.unwrap();
+    let c = card.node.session_id.clone();
+    assert_eq!(card.node.auto_mode, Some(true));
+    assert_eq!(f.board.coordinator("p").unwrap().session_id, c);
+    assert!(
+        launcher.log.lock().unwrap().last().unwrap().ends_with("on-board=true"),
+        "it's on the board, a coordinator, before its process starts"
+    );
+    let err = f.board.create_coordinator("p", &opts, &launcher).await.unwrap_err();
+    assert_eq!(err.to_string(), "This board already has a coordinator");
+    // COORD-003
+    assert!(f.board.reports_to_coordinator(&member));
+    assert!(!f.board.reports_to_coordinator(&c));
+    // COORD-033: a session inside it, off the board.
+    let inside = f
+        .board
+        .start_inside(&c, "Release notes", "Draft the notes for 1.0.27.", &launcher)
+        .await
+        .unwrap()
+        .node
+        .session_id;
+    let node = f.node(&inside).unwrap();
+    assert!(node.inside());
+    assert_eq!(node.started_by().as_deref(), Some(c.as_str()));
+    assert_eq!(
+        (node.auto_mode, node.title.as_deref()),
+        (Some(true), Some("Release notes"))
+    );
+    assert!(f.board.reports_to_coordinator(&inside));
+    let only = f.board.start_inside(&member, "Notes", "Draft them.", &launcher).await;
+    assert!(only.is_err(), "only the coordinator starts sessions inside");
+    // COORD-004: it isn't among the cards drawn on the board.
+    let drawn: Vec<String> = f.store.read(|s| {
+        nodus_board::notes::active_cards(s.board("p").unwrap())
+            .map(|n| n.session_id.clone())
+            .collect()
+    });
+    assert!(drawn.contains(&member) && !drawn.contains(&inside));
+    // COORD-020…COORD-022: members' events go together once they settle.
+    f.board
+        .coordinator_heard(&member, CoordinatorEventKind::Turn, "ended its turn: #64 is green");
+    f.board
+        .coordinator_heard(&inside, CoordinatorEventKind::Pr, "#65 Notes · opened");
+    f.board
+        .coordinator_heard(&c, CoordinatorEventKind::Turn, "its own turn says nothing");
+    assert!(f.board.due_reports(NOW).is_empty(), "they settle first");
+    let due = f.board.due_reports(NOW + 20_000.0);
+    assert_eq!(due.len(), 1);
+    let (project, to, text) = &due[0];
+    assert_eq!((project.as_str(), to.as_str()), ("p", c.as_str()));
+    let lines = parse_report(text).unwrap();
+    assert_eq!(lines.len(), 2);
+    assert_eq!(
+        (lines[0].session_id.as_str(), lines[0].text.as_str()),
+        (member.as_str(), "ended its turn: #64 is green")
+    );
+    assert_eq!(
+        (lines[1].title.as_str(), lines[1].text.as_str()),
+        ("Release notes", "#65 Notes · opened")
+    );
+    assert!(f.board.due_reports(NOW + 40_000.0).is_empty(), "each goes once");
+    // COORD-054: tucked in and shown again, beside the coordinator.
+    f.board.set_inside("p", &member, true).unwrap();
+    assert!(f.node(&member).unwrap().inside());
+    f.board.set_inside("p", &member, false).unwrap();
+    let shown = f.node(&member).unwrap();
+    assert!(!shown.inside() && shown.x > 900.0, "beside the coordinator: {shown:?}");
+    // Taken out, it says nothing; put back, it reports again.
+    f.board.set_member("p", &member, false).unwrap();
+    assert!(!f.board.reports_to_coordinator(&member));
+    f.board
+        .coordinator_heard(&member, CoordinatorEventKind::Turn, "ended its turn");
+    assert!(f.board.due_reports(NOW + 60_000.0).is_empty());
+    f.board.set_member("p", &member, true).unwrap();
+    assert!(f.board.reports_to_coordinator(&member));
+    // COORD-013: stopped, the sessions inside come out.
+    f.board.stop_coordinating("p");
+    assert!(f.board.coordinator("p").is_none());
+    assert!(!f.node(&inside).unwrap().inside());
+    assert!(!f.board.reports_to_coordinator(&member));
+}

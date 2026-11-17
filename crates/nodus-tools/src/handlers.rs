@@ -55,6 +55,23 @@ pub trait ViewTools: Send + Sync {
 }
 
 /// The board tools' handlers on the app's store and boards.
+/// What the board coordinator's tools ask of nodus-core (COORD-033,
+/// COORD-034): starting a session inside it, and messaging a member.
+pub trait CoordinatorTools: Send + Sync {
+    fn start_session<'a>(
+        &'a self,
+        coordinator: &'a str,
+        title: &'a str,
+        prompt: &'a str,
+    ) -> BoxFuture<'a, Result<Value, String>>;
+    fn message_session<'a>(
+        &'a self,
+        coordinator: &'a str,
+        session_id: &'a str,
+        text: &'a str,
+    ) -> BoxFuture<'a, Result<Value, String>>;
+}
+
 pub struct StoreHandlers {
     store: Arc<Store>,
     board: Arc<Board>,
@@ -62,6 +79,7 @@ pub struct StoreHandlers {
     events: Arc<dyn EventSink>,
     projects: Arc<dyn ProjectAdder>,
     views: Arc<dyn ViewTools>,
+    coordinators: Option<Arc<dyn CoordinatorTools>>,
     clock: Clock,
     home: Option<PathBuf>,
     on_server: bool,
@@ -76,6 +94,9 @@ pub struct StoreHandlersConfig {
     pub events: Arc<dyn EventSink>,
     pub projects: Arc<dyn ProjectAdder>,
     pub views: Arc<dyn ViewTools>,
+    /// The coordinator's tools' work (spec 22); none where there are no
+    /// coordinators.
+    pub coordinators: Option<Arc<dyn CoordinatorTools>>,
     /// `Date.now()`, for when a session is archived.
     pub clock: Clock,
     /// `os.homedir()`, for a project path that starts with `~`.
@@ -99,6 +120,7 @@ impl StoreHandlers {
             events: config.events,
             projects: config.projects,
             views: config.views,
+            coordinators: config.coordinators,
             clock: config.clock,
             home: config.home,
             on_server: config.on_server,
@@ -297,6 +319,38 @@ impl BoardToolHandlers for StoreHandlers {
         self.board.goal_tool(self_id, finish, args).map_err(ToolError::from)
     }
 
+    fn is_coordinator(&self, session_id: &str) -> bool {
+        self.board.coordinator_of_session(session_id).is_some()
+    }
+
+    /// COORD-033
+    fn start_session<'a>(&'a self, self_id: &'a str, args: &'a Value) -> BoxFuture<'a, Result<Value, ToolError>> {
+        Box::pin(async move {
+            let Some(coordinators) = &self.coordinators else {
+                return Err("Coordinators aren’t here".into());
+            };
+            let text = |key: &str| args.get(key).and_then(Value::as_str).unwrap_or_default();
+            coordinators
+                .start_session(self_id, text("title"), text("prompt"))
+                .await
+                .map_err(ToolError::from)
+        })
+    }
+
+    /// COORD-034
+    fn message_session<'a>(&'a self, self_id: &'a str, args: &'a Value) -> BoxFuture<'a, Result<Value, ToolError>> {
+        Box::pin(async move {
+            let Some(coordinators) = &self.coordinators else {
+                return Err("Coordinators aren’t here".into());
+            };
+            let text = |key: &str| args.get(key).and_then(Value::as_str).unwrap_or_default();
+            coordinators
+                .message_session(self_id, text("session_id"), text("text"))
+                .await
+                .map_err(ToolError::from)
+        })
+    }
+
     /// TOOL-033. Server projects aren't this app's to write on: their
     /// boards are on their servers (SRV-160).
     fn list_projects(&self, own: &str) -> Result<Value, ToolError> {
@@ -361,13 +415,33 @@ impl BoardToolHandlers for StoreHandlers {
         })
     }
 
-    /// TOOL-035
+    /// TOOL-035; COORD-032 for the board's coordinator.
     fn list_sessions(&self, project_id: &str, self_id: &str, include_archived: bool) -> Result<Value, ToolError> {
         let items = self
             .board
             .session_list(project_id, Some(self_id), include_archived)
             .map_err(ToolError::of)?;
-        serde_json::to_value(items).map_err(ToolError::of)
+        let mut value = serde_json::to_value(items).map_err(ToolError::of)?;
+        if self.board.coordinator_of_session(self_id).is_some() {
+            let nodes = self
+                .store
+                .read(|state| state.board(project_id).map(|b| b.nodes.clone()))
+                .unwrap_or_default();
+            for item in value.as_array_mut().into_iter().flatten() {
+                let Some(node) = item.get("id").and_then(Value::as_str).and_then(|id| nodes.get(id)) else {
+                    continue;
+                };
+                item["member"] = json!(nodus_board::coordinator::is_member(node, self_id));
+                if node.inside() {
+                    item["inside"] = json!(true);
+                }
+                let prs = node.prs();
+                if !prs.is_empty() {
+                    item["pullRequests"] = json!(prs);
+                }
+            }
+        }
+        Ok(value)
     }
 
     /// TOOL-036

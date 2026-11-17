@@ -19,6 +19,8 @@ pub enum Icon {
     SquareTerminal,
     RotateCw,
     Target,
+    /// Lucide `network`: the board's coordinator (spec 22).
+    Network,
     FolderOpen,
     Pencil,
     FolderInput,
@@ -67,7 +69,7 @@ pub enum Icon {
 }
 
 impl Icon {
-    const ALL: [Self; 54] = [
+    const ALL: [Self; 55] = [
         Self::ChevronLeft,
         Self::ChevronRight,
         Self::ChevronDown,
@@ -77,6 +79,7 @@ impl Icon {
         Self::SquareTerminal,
         Self::RotateCw,
         Self::Target,
+        Self::Network,
         Self::FolderOpen,
         Self::Pencil,
         Self::FolderInput,
@@ -135,6 +138,7 @@ impl Icon {
             Self::SquareTerminal => "square-terminal",
             Self::RotateCw => "rotate-cw",
             Self::Target => "target",
+            Self::Network => "network",
             Self::FolderOpen => "folder-open",
             Self::Pencil => "pencil",
             Self::FolderInput => "folder-input",
@@ -198,6 +202,9 @@ impl Icon {
             Self::RotateCw => r#"<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>"#,
             Self::Target => {
                 r#"<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>"#
+            }
+            Self::Network => {
+                r#"<rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/>"#
             }
             Self::FolderOpen => {
                 r#"<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>"#

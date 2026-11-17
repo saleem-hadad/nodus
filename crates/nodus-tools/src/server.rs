@@ -65,6 +65,19 @@ pub trait BoardToolHandlers: Send + Sync {
     fn goal_tool(&self, _self_id: &str, _finish: bool, _args: &Value) -> Result<Value, ToolError> {
         Err("Goals aren’t here".into())
     }
+    /// Whether the session is its board's coordinator, which gets the action
+    /// run's tools and its own (COORD-032).
+    fn is_coordinator(&self, _session_id: &str) -> bool {
+        false
+    }
+    /// COORD-033: `start_session`.
+    fn start_session<'a>(&'a self, _self_id: &'a str, _args: &'a Value) -> BoxFuture<'a, Result<Value, ToolError>> {
+        Box::pin(async { Err("Coordinators aren’t here".into()) })
+    }
+    /// COORD-034: `message_session`.
+    fn message_session<'a>(&'a self, _self_id: &'a str, _args: &'a Value) -> BoxFuture<'a, Result<Value, ToolError>> {
+        Box::pin(async { Err("Coordinators aren’t here".into()) })
+    }
     /// Every project, saying which one `own` is.
     fn list_projects(&self, own: &str) -> Result<Value, ToolError>;
     /// Adds a folder as a project, making the folder if it isn't there.
@@ -128,6 +141,15 @@ impl<H: BoardToolHandlers + ?Sized> BoardToolHandlers for Arc<H> {
     }
     fn goal_tool(&self, self_id: &str, finish: bool, args: &Value) -> Result<Value, ToolError> {
         (**self).goal_tool(self_id, finish, args)
+    }
+    fn is_coordinator(&self, session_id: &str) -> bool {
+        (**self).is_coordinator(session_id)
+    }
+    fn start_session<'a>(&'a self, self_id: &'a str, args: &'a Value) -> BoxFuture<'a, Result<Value, ToolError>> {
+        (**self).start_session(self_id, args)
+    }
+    fn message_session<'a>(&'a self, self_id: &'a str, args: &'a Value) -> BoxFuture<'a, Result<Value, ToolError>> {
+        (**self).message_session(self_id, args)
     }
     fn list_projects(&self, own: &str) -> Result<Value, ToolError> {
         (**self).list_projects(own)
@@ -257,10 +279,14 @@ impl<H: BoardToolHandlers> McpServer<H> {
                 let run = self.handlers.as_ref().is_some_and(|h| h.is_run(session_id));
                 // GOAL-023: a goal's session also reports back.
                 let goal = !run && self.handlers.as_ref().is_some_and(|h| h.is_goal(session_id));
+                // COORD-032: the board's coordinator looks after the others.
+                let coordinator = !run && !goal && self.handlers.as_ref().is_some_and(|h| h.is_coordinator(session_id));
                 let tools = if run {
                     &self.tools.run
                 } else if goal {
                     &self.tools.goal
+                } else if coordinator {
+                    &self.tools.coordinator
                 } else {
                     &self.tools.session
                 };
@@ -321,7 +347,10 @@ impl<H: BoardToolHandlers> McpServer<H> {
             .project_for_session(session_id)
             .ok_or_else(|| ToolError::from("This session is no longer on a Nodus board"))?;
         // A run the user took over is an ordinary session now.
-        if SESSION_TOOL_NAMES.contains(&name.as_str()) && !handlers.is_run(session_id) {
+        if SESSION_TOOL_NAMES.contains(&name.as_str())
+            && !handlers.is_run(session_id)
+            && !handlers.is_coordinator(session_id)
+        {
             return Err(format!("{name} is only for action runs").into());
         }
         // TOOL-027: the note tools work on this session's board, or another project's.
@@ -386,6 +415,17 @@ impl<H: BoardToolHandlers> McpServer<H> {
                     return Err(format!("{tool} is only for a goal’s session").into());
                 }
                 handlers.goal_tool(session_id, tool == "goal_finish", args)
+            }
+            // COORD-033, COORD-034
+            name if crate::schema::COORDINATOR_TOOL_NAMES.contains(&name) => {
+                if !handlers.is_coordinator(session_id) {
+                    return Err(format!("{tool} is only for the board’s coordinator").into());
+                }
+                if tool == "start_session" {
+                    handlers.start_session(session_id, args).await
+                } else {
+                    handlers.message_session(session_id, args).await
+                }
             }
             "show_page" => {
                 let page = crate::chat::page_args(args);

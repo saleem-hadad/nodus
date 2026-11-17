@@ -242,6 +242,7 @@ impl Board {
                 talks: Vec::new(),
                 tiles: board.tiles.values().cloned().collect(),
                 goals: board.goals.values().cloned().collect(),
+                coordinator: board.coordinators.values().next().cloned(),
                 viewport: board.viewport,
                 offline: false,
             };

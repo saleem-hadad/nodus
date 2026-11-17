@@ -304,6 +304,8 @@ fn protocol_allows_every_tool_by_name_and_keeps_the_token_out_of_the_config() {
             "mcp__nodus__archive_sessions",
             "mcp__nodus__goal_update",
             "mcp__nodus__goal_finish",
+            "mcp__nodus__start_session",
+            "mcp__nodus__message_session",
         ]
     );
     let config: Value = serde_json::from_str(BOARD_MCP_CONFIG).unwrap();

@@ -182,7 +182,7 @@ pub fn spot_on_board(board: &BoardState, size: Size, window: (f64, f64)) -> Poin
             let cards = board
                 .nodes
                 .values()
-                .filter(|n| !n.archived && !set(n.run_of.as_deref()) && !set(n.view_of.as_deref()));
+                .filter(|n| !n.archived && !set(n.run_of.as_deref()) && !set(n.view_of.as_deref()) && !n.inside());
             // The right-most; on a tie, the earlier one.
             let right = cards.fold(None, |best: Option<&nodus_domain::BoardNode>, n| match best {
                 Some(b) if b.x >= n.x => Some(b),

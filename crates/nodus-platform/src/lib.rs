@@ -14,10 +14,12 @@
 //! - [`permissions`]: the microphone, Accessibility and Screen Recording.
 //! - [`app`]: the app's id, packaged or not, the machine, the bundle.
 //! - [`spell`]: the system spell checker, for text fields' underlines.
+//! - [`listeners`]: servers sessions started, and stopping one.
 
 pub mod app;
 pub mod env;
 pub mod instance;
+pub mod listeners;
 pub mod notify;
 pub mod permissions;
 #[cfg(windows)]

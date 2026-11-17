@@ -268,6 +268,7 @@ mod tests {
             agent_count: None,
             edited_files: None,
             usage: None,
+            servers: Vec::new(),
         };
         assert_eq!(card_title(Some(&card)), "New session");
         card.node.kind = Some(SessionKind::Terminal);

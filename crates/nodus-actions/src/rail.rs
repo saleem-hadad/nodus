@@ -318,6 +318,7 @@ mod tests {
             agent_count: None,
             edited_files: None,
             usage: None,
+            servers: Vec::new(),
         }
     }
 

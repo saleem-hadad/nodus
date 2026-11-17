@@ -278,6 +278,8 @@ pub(crate) struct Inner {
     /// Running sessions switched to another model or effort mid-turn, by
     /// id, with their projects: started again when the turn ends (MODEL-011).
     pub(crate) model_restarts: Mutex<HashMap<String, String>>,
+    /// The servers sessions started, for their cards' drawers (DRAWER-021).
+    pub(crate) drawers: crate::drawer::Drawers,
 }
 
 impl Nodus {
@@ -471,6 +473,7 @@ impl Nodus {
                     .clone()
                     .map(|hosting| crate::hosting::Hosted::new(hosting, &config.home)),
                 model_restarts: Mutex::new(HashMap::new()),
+                drawers: crate::drawer::Drawers::default(),
             }
         });
         config
@@ -479,6 +482,15 @@ impl Nodus {
         // SRV-127: on a server, whether cards' previews are up.
         if inner.hosted.is_some() {
             config.runtime.spawn(Inner::watch_previews(Arc::downgrade(&inner)));
+        }
+        // DRAWER-014, DRAWER-021: what cards' drawers show. Servers are only
+        // looked for where processes can be read (macOS); a server's cards'
+        // pull requests aren't asked about yet.
+        if cfg!(target_os = "macos") {
+            config.runtime.spawn(Inner::watch_servers(Arc::downgrade(&inner)));
+        }
+        if inner.hosted.is_none() {
+            config.runtime.spawn(Inner::watch_prs(Arc::downgrade(&inner)));
         }
         let nodus = Self { inner };
         // PLAT-066 step 2: the Dock badge is recounted whenever settings are

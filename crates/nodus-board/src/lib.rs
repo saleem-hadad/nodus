@@ -34,7 +34,7 @@ pub mod stop;
 use std::future::Future;
 use std::pin::Pin;
 
-use nodus_domain::{Event, SessionCard, SessionStatus, SessionUsage};
+use nodus_domain::{CardServer, Event, SessionCard, SessionStatus, SessionUsage};
 
 pub use archive::{archive_node, drop_node, is_empty_session, unstick_notes};
 pub use board::{Board, Clock, real_clock};
@@ -81,6 +81,10 @@ pub trait BoardSessions: Send + Sync {
     fn kill(&self, session_id: &str) -> BoxFuture<'_, ()>;
     /// `hooks.forgetStatus`.
     fn forget_status(&self, session_id: &str);
+    /// What the session started that listens on a port (DRAWER-020).
+    fn servers(&self, _session_id: &str) -> Vec<CardServer> {
+        Vec::new()
+    }
 }
 
 /// What a change to a board asks of the session processes and the window,

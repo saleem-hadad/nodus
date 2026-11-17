@@ -206,6 +206,7 @@ mod tests {
             has_content: true,
             last_prompt_at: None,
             peers: Default::default(),
+            opened_prs: Vec::new(),
         }
     }
 

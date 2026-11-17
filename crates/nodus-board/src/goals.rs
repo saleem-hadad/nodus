@@ -412,10 +412,16 @@ impl Board {
             .round();
         let (tile, session_at) = self.read_board(project_id, |_, board| {
             let tile = match (new.at, new.session_id.as_deref().and_then(|s| board.nodes.get(s))) {
-                (Some((x, y)), _) => Point {
-                    x: round(x),
-                    y: round(y),
-                },
+                // GOAL-011: where it was asked for, else the nearest free spot to it.
+                (Some((x, y)), _) => find_free_spot(
+                    Point {
+                        x: round(x),
+                        y: round(y),
+                    },
+                    &obstacles(board, None),
+                    Some(dock_rect(board.archive)),
+                    TILE,
+                ),
                 (None, Some(node)) => {
                     let size = card_size(Some(node));
                     let anchor = Rect {

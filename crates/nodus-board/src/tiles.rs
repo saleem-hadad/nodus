@@ -62,11 +62,17 @@ pub fn sync(board: &mut BoardState, project: &Project, now: f64, at: Option<(&st
         if board.tiles.contains_key(id) {
             continue;
         }
+        // SCHED-048: where it was asked for, else the nearest free spot to it.
         let spot = match at {
-            Some((wanted, x, y)) if wanted == id && x.is_finite() && y.is_finite() => Point {
-                x: nodus_domain::js::round(x),
-                y: nodus_domain::js::round(y),
-            },
+            Some((wanted, x, y)) if wanted == id && x.is_finite() && y.is_finite() => find_free_spot(
+                Point {
+                    x: nodus_domain::js::round(x),
+                    y: nodus_domain::js::round(y),
+                },
+                &obstacles(board, None),
+                Some(dock_rect(board.archive)),
+                TILE_SIZE,
+            ),
             _ => place_tile(board),
         };
         board.tiles.insert(
@@ -281,16 +287,26 @@ mod tests {
         // SCHED-048
         let mut board = BoardState::default();
         let p = project(&[action("a", true), action("b", true)]);
-        assert!(sync(&mut board, &p, 1.0, Some(("b", 400.4, -120.6))));
+        assert!(sync(&mut board, &p, 1.0, Some(("b", 2000.4, -120.6))));
         let b = board.tiles.get("b").unwrap();
-        assert_eq!((b.x, b.y), (400.0, -121.0));
+        assert_eq!((b.x, b.y), (2000.0, -121.0));
         // Only a new one: an existing tile stays put.
         let p = project(&[action("a", true), action("b", true), action("c", true)]);
         sync(&mut board, &p, 2.0, Some(("b", 0.0, 0.0)));
         assert_eq!(
             (board.tiles.get("b").unwrap().x, board.tiles.get("b").unwrap().y),
-            (400.0, -121.0)
+            (2000.0, -121.0)
         );
+        // A spot that's taken (on the dock here): the nearest free one.
+        let p = project(&[
+            action("a", true),
+            action("b", true),
+            action("c", true),
+            action("d", true),
+        ]);
+        sync(&mut board, &p, 3.0, Some(("d", 0.0, 0.0)));
+        let d = board.tiles.get("d").unwrap().rect();
+        assert!(!crate::geometry::intersects(d, dock_rect(board.archive), 0.0), "{d:?}");
     }
 
     #[test]

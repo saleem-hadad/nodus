@@ -225,7 +225,7 @@ impl Board {
             crate::shapes::prune_links(board);
             crate::frames::prune_groups(board);
             // SCHED-024: and the tiles follow the project's scheduled actions.
-            crate::tiles::sync(board, project, now);
+            crate::tiles::sync(board, project, now, None);
             // SESS-078
             project.opened_at = Some(now);
             let snapshot = BoardSnapshot {

@@ -260,7 +260,13 @@ impl Render for Shell {
                 .board
                 .clone()
                 .filter(|board| !board.read(cx).read_only())
-                .map(|board| vec![crate::board::title_bar_button(&board, &self.menus, window, cx)])
+                // SCHED-045: and `New Automation` before it.
+                .map(|board| {
+                    vec![
+                        crate::board::automation_button(&board),
+                        crate::board::title_bar_button(&board, &self.menus, window, cx),
+                    ]
+                })
                 .unwrap_or_default(),
         };
         let bar = title_bar(&self.state, actions, window, cx);

@@ -36,10 +36,14 @@ impl ActionsApi<'_> {
                 let inner = &self.nodus.inner;
                 let before = schedule_of(inner, project_id, raw);
                 let lists = inner.actions.save(project_id, raw).on("actions:save")?;
+                let id = raw.get("id").and_then(Value::as_str).unwrap_or_default();
+                // SCHED-048: where the window asked a new tile to go.
+                let at = raw
+                    .get("tileAt")
+                    .and_then(|at| Some((id, at.get("x")?.as_f64()?, at.get("y")?.as_f64()?)));
                 // SCHED-024, SCHED-020: its tile comes or goes with its
                 // schedule, and a schedule changed or resumed starts from now.
-                inner.board.sync_tiles(project_id);
-                let id = raw.get("id").and_then(Value::as_str).unwrap_or_default();
+                inner.board.sync_tiles(project_id, at);
                 let after = lists
                     .project
                     .actions
@@ -75,7 +79,7 @@ impl ActionsApi<'_> {
                     .remove(project_id, action_id)
                     .on("actions:remove")?;
                 // SCHED-024
-                self.nodus.inner.board.sync_tiles(project_id);
+                self.nodus.inner.board.sync_tiles(project_id, None);
                 Ok(lists)
             })
             .await

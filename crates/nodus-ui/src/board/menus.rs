@@ -132,6 +132,13 @@ impl BoardCanvas {
                 }),
                 in_archive,
             ),
+            disabled(
+                // SCHED-048: a new automation, its tile at p.
+                item(&me, "New automation here…", Icon::Clock, move |c, cx| {
+                    c.new_automation(Some(p), cx);
+                }),
+                in_archive || self.read_only(),
+            ),
             MenuItem::Separator,
             item(
                 &me,

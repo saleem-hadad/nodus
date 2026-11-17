@@ -69,7 +69,7 @@ impl BoardCanvas {
         {
             let id = id.clone();
             items.push(item(
-                "Edit action…",
+                "Edit automation…",
                 Icon::PencilLine,
                 Box::new(move |c, cx| c.edit_tile_action(&id, cx)),
             ));
@@ -145,7 +145,7 @@ impl BoardCanvas {
     /// SCHED-035: `Edit action…` opens the action dialog, which the rail owns.
     fn edit_tile_action(&mut self, id: &str, cx: &mut Context<'_, Self>) {
         self.state.update(cx, |s, cx| {
-            s.edit_action = Some(id.to_owned());
+            s.action_request = Some(crate::state::ActionRequest::EditAutomation(id.to_owned()));
             cx.notify();
         });
     }
@@ -203,6 +203,21 @@ impl BoardCanvas {
                 }
             }
         }));
+    }
+
+    /// SCHED-045, SCHED-048: the action dialog as a new automation, its tile
+    /// at `at` (its top left, a tile's middle at the point) when given.
+    pub(crate) fn new_automation(&mut self, at: Option<Point>, cx: &mut Context<'_, Self>) {
+        let at = at.map(|p| {
+            (
+                nodus_domain::js::round(p.x - BoardTile::W / 2.0),
+                nodus_domain::js::round(p.y - BoardTile::H / 2.0),
+            )
+        });
+        self.state.update(cx, |s, cx| {
+            s.action_request = Some(crate::state::ActionRequest::NewAutomation(at));
+            cx.notify();
+        });
     }
 
     /// SCHED-033: tiles dragged to new spots, there at once, then saved.

@@ -9,7 +9,7 @@ use std::rc::Rc;
 
 use gpui::component::input::{InputEvent, InputState, TextareaState};
 use gpui::{App, AppContext as _, Context, Entity, FocusHandle, Focusable as _, Keystroke, Subscription, Window};
-use nodus_actions::dialog::{ActionDialog, DEFAULT_WHEN, DESCRIPTION_PLACEHOLDER, Step, Submit};
+use nodus_actions::dialog::{ActionDialog, DEFAULT_WHEN, Step, Submit};
 use nodus_domain::ProjectAction;
 
 use crate::platform::Platform;
@@ -38,6 +38,8 @@ pub struct ActionDialogView {
     pub(super) spell: [Entity<crate::components::spellcheck::Spellcheck>; 3],
     /// The dialog's own focus, for its keys when no field has them.
     pub(super) focus: FocusHandle,
+    /// SCHED-048: where on the board a new automation's tile goes.
+    tile_at: Option<(f64, f64)>,
     /// The step whose field was last given the keyboard (`autoFocus`).
     focused_step: Option<Step>,
     _subscriptions: Vec<Subscription>,
@@ -45,21 +47,30 @@ pub struct ActionDialogView {
 
 impl ActionDialogView {
     /// ACT-067: a new action starts on describe with nothing filled in; an
-    /// existing one on review with its own.
+    /// existing one on review with its own. SCHED-045: as an automation, a
+    /// new one's tile goes at `tile_at` when that's given.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         state: Entity<AppState>,
         project_id: String,
         action: Option<ProjectAction>,
+        automation: bool,
+        tile_at: Option<(f64, f64)>,
         on_close: OnClose,
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) -> Self {
-        let model = ActionDialog::new(action);
+        let model = if automation {
+            ActionDialog::automation(action)
+        } else {
+            ActionDialog::new(action)
+        };
+        let placeholder = model.description_placeholder();
         let description = cx.new(|cx| {
             let mut s = TextareaState::new(window, cx)
                 .rows(5)
                 .soft_wrap(true)
-                .placeholder(DESCRIPTION_PLACEHOLDER)
+                .placeholder(placeholder)
                 .context_menu(false);
             s.set_value(model.description.clone(), window, cx);
             s
@@ -169,6 +180,7 @@ impl ActionDialogView {
             time,
             spell,
             focus: cx.focus_handle(),
+            tile_at,
             focused_step: None,
             _subscriptions: subscriptions,
         }
@@ -217,6 +229,9 @@ impl ActionDialogView {
         self.model.pick_chip(index);
         let text = self.model.description.clone();
         self.description.update(cx, |s, cx| s.set_value(text, window, cx));
+        // SCHED-046: an automation's chip says when, too.
+        self.show_when(window, cx);
+        self.show_time(window, cx);
         cx.notify();
     }
 
@@ -293,15 +308,27 @@ impl ActionDialogView {
                 })
                 .detach();
             }
-            Submit::Save(raw) => {
+            Submit::Save(mut raw) => {
                 let nodus = self.state.read(cx).nodus.clone();
                 let project = self.project_id.clone();
+                // SCHED-048: a new automation's tile where it was asked for.
+                if let (Some((x, y)), None, Some(o)) = (self.tile_at, &self.model.action, raw.as_object_mut()) {
+                    o.insert("tileAt".into(), serde_json::json!({ "x": x, "y": y }));
+                }
+                let shown = raw.get("id").and_then(serde_json::Value::as_str).map(str::to_owned);
+                let reveal = self.model.automation;
                 cx.spawn_in(window, async move |this, cx| {
                     let saved = nodus.actions().save(&project, &raw).await;
                     let _ = this.update_in(cx, |v, window, cx| match saved {
                         // ACT-017: the store takes the lists; the dialog goes.
                         Ok(lists) => {
-                            v.state.update(cx, |s, cx| super::set_actions(s, lists, cx));
+                            v.state.update(cx, |s, cx| {
+                                super::set_actions(s, lists, cx);
+                                // SCHED-048: the board shows the automation's tile.
+                                if let (true, Some(id)) = (reveal, shown) {
+                                    s.show_node(id, cx);
+                                }
+                            });
                             v.close(window, cx);
                         }
                         Err(e) => {

@@ -263,6 +263,8 @@ pub struct BoardCanvas {
     /// SCHED-032: redraws the board now and then while it has tiles, so their
     /// rings and `Next in …` keep up with the clock.
     pub(crate) tile_tick: Option<Task<()>>,
+    /// SCHED-048: a node to show once it's on the board, and when that was asked.
+    show_when_there: Option<(String, Instant)>,
 
     pub(crate) draft_id: String,
     pub(crate) starting_notes: HashSet<String>,
@@ -366,6 +368,7 @@ impl BoardCanvas {
             flights: HashMap::new(),
             flight_timer: None,
             tile_tick: None,
+            show_when_there: None,
             draft_id: uuid::Uuid::new_v4().to_string(),
             starting_notes: HashSet::new(),
             last_in_modal: Vec::new(),
@@ -443,6 +446,11 @@ impl BoardCanvas {
             self.settle_frames(cx);
             self.join_taken_over_runs(cx);
             self.keep_tiles_ticking(cx);
+            if let Some((id, asked)) = self.show_when_there.take()
+                && asked.elapsed() < Duration::from_secs(10)
+            {
+                self.show_node(&id, cx);
+            }
         }
         let (in_modal, focused) = in_modal;
         if in_modal != self.last_in_modal {
@@ -613,11 +621,15 @@ impl BoardCanvas {
         }
     }
 
-    /// CHAT-028: only this node selected, panned into view.
+    /// CHAT-028: only this node selected, panned into view. SCHED-048: one
+    /// that isn't on the board yet (a new automation's tile, on its way from
+    /// the core) is shown when it comes, within a few seconds.
     pub(crate) fn show_node(&mut self, id: &str, cx: &mut Context<'_, Self>) {
         let Some((position, size)) = self.node(id).map(|n| (n.position, n.size)) else {
+            self.show_when_there = Some((id.to_owned(), Instant::now()));
             return;
         };
+        self.show_when_there = None;
         for node in &mut self.nodes {
             node.selected = node.id == id;
         }

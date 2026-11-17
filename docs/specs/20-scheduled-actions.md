@@ -49,7 +49,7 @@ Sources:
 - **SCHED-032** The ring fills from the last time it was due to the next, in the accent; full while it runs; a paused tile's clock has no ring. The board is drawn again every 20 seconds while it has tiles.
 - **SCHED-033** A tile is dragged like a note and saved where it lands (`board:move-tile`, rounded). Dropped on the archive or the note pad, it goes back. It isn't put in frames or groups, and links don't hold it.
 - **SCHED-034** The last run: Claude's last words (one line, cut with `…`; `Finished` when there are none), and under them when it ran: `9:00`, `yesterday 9:00` or `Tue 9:00`, with ` · ran late, Nodus was closed` or ` · run by hand`. An unread result has an accent dot before it and primary text; a read one, secondary text and no dot. With no runs yet it says `No runs yet.`; while the first runs, `Its run is beside it.`
-- **SCHED-035** A tile's menu: `Run now` (or `Show run` while one is on the board), `Open last run` when there's one, then `Edit action…` (the action dialog, as the rail's `Edit…`), `Pause schedule` / `Resume schedule`, then `Remove schedule` (red), which takes the schedule off and the tile with it; the action stays in the rail.
+- **SCHED-035** A tile's menu: `Run now` (or `Show run` while one is on the board), `Open last run` when there's one, then `Edit automation…` (the action dialog as an automation, SCHED-045), `Pause schedule` / `Resume schedule`, then `Remove schedule` (red), which takes the schedule off and the tile with it; the action stays in the rail.
 - **SCHED-036** Clicking the last run, a double-click on the tile, or `Open last run` opens it: the run's card while it's on the board, else its transcript in the read-only preview (12). Its result is then read (`board:see-tile`).
 - **SCHED-037** A dotted line (as BOARD-184's) runs from a tile to its run while the run is on the board. When the run comes out, a light runs along it from the tile and the line draws in behind it; when the run's turn ends, a light runs back (MOTION-044's light).
 
@@ -60,6 +60,15 @@ Sources:
 - **SCHED-042** Under the field, seven day chips, Monday first (`M T W T F S S`; on: accent outline and letter), then `at` and a time field. A chip turns its day on or off (the last day stays on); a time typed in (`9`, `9:30`, `17:05`) makes it run once a day at that time. Either way the words field then says the schedule back (SCHED-006), so the two agree. The time field shows the schedule's time once the user leaves it.
 - **SCHED-043** Saved, the action has the schedule as Nodus read it, with the words. Off, it has none.
 - **SCHED-044** The line under the row says the schedule back and when it next runs: `Weekdays at 9:00 · next tomorrow at 9:00`.
+
+## Starting an automation
+
+A scheduled action is called an **automation** wherever the app offers one: it has its own button, and its tile's menu edits it as one.
+
+- **SCHED-045** The board's title bar has `New Automation` (the clock icon; tooltip `Run something on a schedule`) before `New Session`, except on a read-only board. It opens the action dialog as an automation: titled `New automation` (`Edit automation` for one being edited), with `Say what it should do and when. Claude writes the prompt each run follows.` on the describe step and `Each time, a session runs this prompt in auto mode, beside its tile on the board. It goes when it’s done.` on review. It's always on a schedule: the When row has no `When I press it` | `On a schedule` switch, and there's no `Use in every project`. A new one starts every weekday at 9, its When field empty with `every weekday at 9` as its placeholder. The review step's button is `Add automation`. A tile's `Edit automation…` (SCHED-035, which said `Edit action…` before) opens it this way too; the rail's own `+` and `Edit…` open the action dialog as before.
+- **SCHED-046** The describe step has the description (placeholder `For example: look at the open pull requests and sum up what waits on me.`), then the When row, then `Start from an example` with the automation's examples, each setting what it does and when: `Morning PR sweep` (every weekday at 9), `Dependency check` (Mondays at 10), `Nightly tests` (every day at 2am), `Tidy the board` (every day at 6pm).
+- **SCHED-047** `Draft with Claude` waits until the When field reads as a time. The drafter is told when the automation runs (the description, a blank line, `It runs on its own: <schedule said back>.`), and its own `when` doesn't replace the one the user set.
+- **SCHED-048** The board's menu has `New automation here…` (after `New view here…`; off over the dock): the same dialog, and the new automation's tile goes with its middle at the spot (`tileAt` on the save; only a new tile goes there, rounded). Saved from either, the board selects the new tile and pans to show it, once it's there (within 10 seconds).
 
 ## Views
 

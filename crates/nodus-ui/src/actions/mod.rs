@@ -254,7 +254,15 @@ impl ActionRail {
     }
 
     /// ACT-061: `Edit…` and `+` close the rail and open the dialog.
-    fn edit(&mut self, action: Option<ProjectAction>, window: &mut Window, cx: &mut Context<'_, Self>) {
+    /// SCHED-045: as an automation (a new one's tile at `tile_at`).
+    fn edit(
+        &mut self,
+        action: Option<ProjectAction>,
+        automation: bool,
+        tile_at: Option<(f64, f64)>,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
         self.close(cx);
         let state = self.state.clone();
         let project = self.project_id.clone();
@@ -264,6 +272,8 @@ impl ActionRail {
                 state,
                 project,
                 action,
+                automation,
+                tile_at,
                 Rc::new(move |_, cx| rail.update(cx, ActionRail::close_dialog)),
                 window,
                 cx,
@@ -301,7 +311,7 @@ impl ActionRail {
             let rail = rail.clone();
             let action = action.clone();
             MenuItem::item("Edit…", crate::components::Icon::Pencil, move |window, cx| {
-                rail.update(cx, |r, cx| r.edit(Some(action.clone()), window, cx));
+                rail.update(cx, |r, cx| r.edit(Some(action.clone()), false, None, window, cx));
             })
         };
         let delete = {
@@ -463,11 +473,17 @@ fn measure(
 impl Render for ActionRail {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         self.tell_overlay(cx);
-        // SCHED-035: a tile on the board asked to edit its action.
-        if let Some(id) = self.state.read(cx).edit_action.clone() {
-            self.state.update(cx, |s, _| s.edit_action = None);
-            if let Some(action) = self.blocks(cx).into_iter().flatten().find(|a| a.id == id) {
-                self.edit(Some(action), window, cx);
+        // SCHED-035, SCHED-045: a tile asked to edit its automation, or the
+        // title bar or the board's menu for a new one.
+        if let Some(request) = self.state.read(cx).action_request.clone() {
+            self.state.update(cx, |s, _| s.action_request = None);
+            match request {
+                crate::state::ActionRequest::EditAutomation(id) => {
+                    if let Some(action) = self.blocks(cx).into_iter().flatten().find(|a| a.id == id) {
+                        self.edit(Some(action), true, None, window, cx);
+                    }
+                }
+                crate::state::ActionRequest::NewAutomation(at) => self.edit(None, true, at, window, cx),
             }
         }
         let t = theme::tokens(cx);
@@ -772,7 +788,7 @@ impl ActionRail {
                             cx.notify();
                         });
                     })
-                    .on_click(move |_, window, cx| click.update(cx, |r, cx| r.edit(None, window, cx)))
+                    .on_click(move |_, window, cx| click.update(cx, |r, cx| r.edit(None, false, None, window, cx)))
             })
             .child(glyph(
                 Glyph::Plus,

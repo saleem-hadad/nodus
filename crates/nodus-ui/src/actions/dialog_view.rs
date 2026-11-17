@@ -7,7 +7,7 @@ use gpui::{
     AnyElement, Context, Div, Focusable as _, FontWeight, InteractiveElement, IntoElement, ParentElement, Render,
     SharedString, StatefulInteractiveElement, Styled, Window, div, linear_color_stop, linear_gradient, px,
 };
-use nodus_actions::dialog::{EXAMPLES, Step};
+use nodus_actions::dialog::{AUTOMATION_EXAMPLES, EXAMPLES, Step};
 use nodus_actions::schedule;
 use nodus_domain::ActionIcon;
 
@@ -129,8 +129,17 @@ impl ActionDialogView {
                 2.4,
                 t.text_secondary,
             )));
-        let chips: Vec<AnyElement> = EXAMPLES
-            .iter()
+        // SCHED-046: an automation starts from its own examples.
+        let examples: Vec<(&'static str, &'static str)> = if self.model.automation {
+            AUTOMATION_EXAMPLES
+                .iter()
+                .map(|(name, text, _)| (*name, *text))
+                .collect()
+        } else {
+            EXAMPLES.to_vec()
+        };
+        let chips: Vec<AnyElement> = examples
+            .into_iter()
             .enumerate()
             .map(|(i, (name, text))| self.chip(i, name, text, t, window, cx))
             .collect();
@@ -140,11 +149,16 @@ impl ActionDialogView {
             .gap(px(8.))
             .child(label(t, "Start from an example"))
             .child(div().flex().flex_wrap().gap(px(6.)).children(chips));
-        vec![
-            field.into_any_element(),
-            examples.into_any_element(),
-            self.scope(t, cx).into_any_element(),
-        ]
+        let mut body = vec![field.into_any_element()];
+        // SCHED-045: an automation says when it runs before it's drafted.
+        if self.model.automation {
+            body.push(self.when_row(t, window, cx).into_any_element());
+        }
+        body.push(examples.into_any_element());
+        if self.model.shows_scope() {
+            body.push(self.scope(t, cx).into_any_element());
+        }
+        body
     }
 
     /// ACT-070: an example chip, highlighted while the description is its text.
@@ -300,13 +314,16 @@ impl ActionDialogView {
                     )
                     .child(spellcheck::underlines(&self.spell[2], &self.prompt, TEXT_SM, 1.)),
             );
-        vec![
+        let mut body = vec![
             name.into_any_element(),
             icon.into_any_element(),
             prompt.into_any_element(),
             self.when_row(t, window, cx).into_any_element(),
-            self.scope(t, cx).into_any_element(),
-        ]
+        ];
+        if self.model.shows_scope() {
+            body.push(self.scope(t, cx).into_any_element());
+        }
+        body
     }
 
     /// SCHED-040…SCHED-044: when it runs: when its button is pressed, or on a
@@ -335,23 +352,25 @@ impl ActionDialogView {
                 .on_click(move |_, window, cx| view.update(cx, |v, cx| v.set_scheduled(value, window, cx)))
                 .child(text)
         };
+        let switch = self.model.shows_when_switch().then(|| {
+            div()
+                .flex()
+                .p(px(2.))
+                .gap(px(2.))
+                .rounded(px(7.))
+                .border(px(0.5))
+                .border_color(t.border_strong)
+                .bg(t.bg_window)
+                .child(segment("act-when-press", "When I press it", false))
+                .child(segment("act-when-schedule", "On a schedule", true))
+        });
         let head = div()
             .flex()
             .items_center()
             .justify_between()
+            .min_h(px(28.))
             .child(label(t, "When"))
-            .child(
-                div()
-                    .flex()
-                    .p(px(2.))
-                    .gap(px(2.))
-                    .rounded(px(7.))
-                    .border(px(0.5))
-                    .border_color(t.border_strong)
-                    .bg(t.bg_window)
-                    .child(segment("act-when-press", "When I press it", false))
-                    .child(segment("act-when-schedule", "On a schedule", true)),
-            );
+            .children(switch);
         let mut row = div()
             .flex()
             .flex_col()

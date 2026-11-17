@@ -50,9 +50,10 @@ pub fn place_tile(board: &BoardState) -> Point {
 }
 
 /// SCHED-024: a tile for each scheduled action and none for others. A new
-/// tile's schedule is handled up to now, so nothing due before it runs.
-/// Whether anything changed.
-pub fn sync(board: &mut BoardState, project: &Project, now: f64) -> bool {
+/// tile's schedule is handled up to now, so nothing due before it runs. A
+/// new tile for `at`'s action goes there (SCHED-048). Whether anything
+/// changed.
+pub fn sync(board: &mut BoardState, project: &Project, now: f64, at: Option<(&str, f64, f64)>) -> bool {
     let wanted: Vec<&str> = scheduled(project).map(|a| a.id.as_str()).collect();
     let before = board.tiles.values().count();
     board.tiles.retain(|t| wanted.contains(&t.id.as_str()));
@@ -61,13 +62,19 @@ pub fn sync(board: &mut BoardState, project: &Project, now: f64) -> bool {
         if board.tiles.contains_key(id) {
             continue;
         }
-        let at = place_tile(board);
+        let spot = match at {
+            Some((wanted, x, y)) if wanted == id && x.is_finite() && y.is_finite() => Point {
+                x: nodus_domain::js::round(x),
+                y: nodus_domain::js::round(y),
+            },
+            _ => place_tile(board),
+        };
         board.tiles.insert(
             id.to_owned(),
             BoardTile {
                 id: id.to_owned(),
-                x: at.x,
-                y: at.y,
+                x: spot.x,
+                y: spot.y,
                 handled: now,
                 last: None,
                 created_at: now,
@@ -105,14 +112,15 @@ pub struct Scheduled {
 impl Board {
     /// SCHED-024: brings the project's tiles in line with its actions, after
     /// one is saved or removed, and tells the window when that changed them.
-    pub fn sync_tiles(&self, project_id: &str) {
+    /// A new tile for `at`'s action goes there (SCHED-048).
+    pub fn sync_tiles(&self, project_id: &str, at: Option<(&str, f64, f64)>) {
         let Ok(project) = self.project(project_id) else {
             return;
         };
         let now = self.now();
         let changed = self
             .store
-            .update(|state| sync(state.board_mut(project_id), &project, now));
+            .update(|state| sync(state.board_mut(project_id), &project, now, at));
         if changed {
             self.events.emit(Event::BoardChanged {
                 project_id: project_id.to_owned(),
@@ -247,7 +255,7 @@ mod tests {
     fn keeps_a_tile_for_each_scheduled_action() {
         let mut board = BoardState::default();
         let p = project(&[action("a", true), action("b", false), action("c", true)]);
-        assert!(sync(&mut board, &p, 50.0));
+        assert!(sync(&mut board, &p, 50.0, None));
         let ids: Vec<&str> = board.tiles.values().map(|t| t.id.as_str()).collect();
         assert_eq!(ids, ["a", "c"]);
         assert!(board.tiles.values().all(|t| t.handled == 50.0 && t.created_at == 50.0));
@@ -258,10 +266,10 @@ mod tests {
         );
         assert!(!crate::geometry::intersects(a, c, 0.0));
         // Unchanged: nothing to do.
-        assert!(!sync(&mut board, &p, 60.0));
+        assert!(!sync(&mut board, &p, 60.0, None));
         // A schedule taken off takes its tile.
         let p = project(&[action("a", false), action("c", true)]);
-        assert!(sync(&mut board, &p, 70.0));
+        assert!(sync(&mut board, &p, 70.0, None));
         let ids: Vec<&str> = board.tiles.values().map(|t| t.id.as_str()).collect();
         assert_eq!(ids, ["c"]);
         let schedule: ActionSchedule = serde_json::from_value(json!({ "at": "09:00" })).unwrap();
@@ -269,9 +277,26 @@ mod tests {
     }
 
     #[test]
+    fn puts_a_new_tile_where_it_was_asked_for() {
+        // SCHED-048
+        let mut board = BoardState::default();
+        let p = project(&[action("a", true), action("b", true)]);
+        assert!(sync(&mut board, &p, 1.0, Some(("b", 400.4, -120.6))));
+        let b = board.tiles.get("b").unwrap();
+        assert_eq!((b.x, b.y), (400.0, -121.0));
+        // Only a new one: an existing tile stays put.
+        let p = project(&[action("a", true), action("b", true), action("c", true)]);
+        sync(&mut board, &p, 2.0, Some(("b", 0.0, 0.0)));
+        assert_eq!(
+            (board.tiles.get("b").unwrap().x, board.tiles.get("b").unwrap().y),
+            (400.0, -121.0)
+        );
+    }
+
+    #[test]
     fn puts_a_run_beside_its_tile() {
         let mut board = BoardState::default();
-        sync(&mut board, &project(&[action("a", true)]), 1.0);
+        sync(&mut board, &project(&[action("a", true)]), 1.0, None);
         let tile = board.tiles.get("a").unwrap().clone();
         let node: BoardNode = serde_json::from_value(json!({
             "sessionId": "s", "x": 0, "y": 0, "createdAt": 0, "archived": false

@@ -62,10 +62,11 @@ pub enum Icon {
     Download,
     Server,
     Columns2,
+    Clock,
 }
 
 impl Icon {
-    const ALL: [Self; 52] = [
+    const ALL: [Self; 53] = [
         Self::ChevronLeft,
         Self::ChevronRight,
         Self::ChevronDown,
@@ -118,6 +119,7 @@ impl Icon {
         Self::Download,
         Self::Server,
         Self::Columns2,
+        Self::Clock,
     ];
 
     pub fn name(self) -> &'static str {
@@ -174,6 +176,7 @@ impl Icon {
             Self::Server => "server",
             Self::Ungroup => "ungroup",
             Self::Columns2 => "columns-2",
+            Self::Clock => "clock",
         }
     }
 
@@ -301,6 +304,7 @@ impl Icon {
                 r#"<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>"#
             }
             Self::Columns2 => r#"<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M12 3v18"/>"#,
+            Self::Clock => r#"<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>"#,
             Self::Server => {
                 r#"<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>"#
             }

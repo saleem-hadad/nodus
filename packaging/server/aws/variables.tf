@@ -1,7 +1,7 @@
 variable "region" {
   description = "The AWS region. Pick the one closest to everyone who'll use the server: typing goes there and back."
   type        = string
-  default     = "me-central-1"
+  default     = "eu-north-1"
 }
 
 variable "name" {

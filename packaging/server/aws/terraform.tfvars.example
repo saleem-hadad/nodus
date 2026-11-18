@@ -9,7 +9,7 @@ tailscale_auth_key = "tskey-auth-..."
 # Optional. Without it, SSH only works over the tailnet.
 # ssh_cidr = "203.0.113.7/32"
 
-# region        = "me-central-1"
+# region        = "eu-north-1"
 # name          = "nodus"
 # instance_type = "m7g.xlarge"
 # disk_gb       = 100

@@ -35,6 +35,9 @@
 
 main() {
 	set -Eeuo pipefail
+	# The terminal's stderr, kept for the messages that stop the install:
+	# while run() has a command's output going to the log, so does fd 2.
+	exec 3>&2
 	umask 022
 	export LC_ALL=C
 	export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a
@@ -136,7 +139,7 @@ warn() { printf '\n!!  %s\n\n' "$*" >&2; }
 # Stops with a plain message.
 fail() {
 	trap - ERR
-	printf '\ninstall-server.sh: %s\n' "$*" >&2
+	printf '\ninstall-server.sh: %s\n' "$*" >&3
 	exit 1
 }
 
@@ -148,10 +151,10 @@ on_error() {
 	if [ "$BASH_SUBSHELL" -gt 0 ]; then
 		exit "$code"
 	fi
-	printf '\ninstall-server.sh: stopped. %s failed (exit %s, line %s).\n' "$STEP" "$code" "$line" >&2
+	printf '\ninstall-server.sh: stopped. %s failed (exit %s, line %s).\n' "$STEP" "$code" "$line" >&3
 	if [ -s "$LOG" ]; then
-		printf 'The last lines of %s:\n' "$LOG" >&2
-		tail -n 15 "$LOG" | sed 's/^/  /' >&2
+		printf 'The last lines of %s:\n' "$LOG" >&3
+		tail -n 15 "$LOG" | sed 's/^/  /' >&3
 	fi
 	exit "$code"
 }
@@ -374,6 +377,11 @@ install_docker() {
 	fi
 
 	allow_rootlesskit_userns
+
+	# dockerd-rootless-setuptool.sh stops unless nf_tables is loaded, and on
+	# a fresh machine nothing has loaded it yet: the firewall is step 7.
+	run modprobe nf_tables
+	write_file /etc/modules-load.d/nodus.conf 0644 "nf_tables" || true
 
 	# nodus-run's own systemd, running without a login, which rootless
 	# Docker lives in.
@@ -748,8 +756,12 @@ EOF
 		note "This machine is on the tailnet already."
 	else
 		local up=(tailscale up --advertise-tags=tag:nodus)
-		if [ -n "${TS_AUTHKEY:-}" ]; then up+=(--auth-key="$TS_AUTHKEY"); fi
-		note "Joining as tag:nodus. Open the login link Tailscale prints:"
+		if [ -n "${TS_AUTHKEY:-}" ]; then
+			up+=(--auth-key="$TS_AUTHKEY")
+			note "Joining as tag:nodus with the auth key."
+		else
+			note "Joining as tag:nodus. Open the login link Tailscale prints:"
+		fi
 		if ! "${up[@]}" 2>&1 | tee -a "$LOG"; then
 			warn "Tailscale refused tag:nodus (nobody owns the tag yet?). Joining untagged: add the policy above, then run: sudo tailscale up --advertise-tags=tag:nodus"
 			up=(tailscale up)

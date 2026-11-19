@@ -189,7 +189,7 @@ pub fn body(
 
     // The body (XCARD-018…XCARD-024). CHAT-029: a Claude card's body is its
     // chat, there whatever the terminal is doing; the terminal docks in it.
-    let chat = !shell && env.server_host.is_none();
+    let chat = !shell && env.chat;
     let term = if enabled || chat {
         host.as_ref().and_then(|h| h.element(&id, window, cx))
     } else {
@@ -543,7 +543,7 @@ fn tools(
         group = group.child(agent_deck::trigger(b, handles));
     }
     // CHAT-029: a chat card's mic is in its composer (CHAT-030).
-    let chat = !shell && env.server_host.is_none();
+    let chat = !shell && env.chat;
     if !shell && !chat {
         // XCARD-010: the mic is voice's (05); without a host, its idle look.
         let mic = env

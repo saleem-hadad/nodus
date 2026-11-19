@@ -10,7 +10,10 @@ use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
 use nodus_domain::focus::is_focusing;
-use nodus_domain::{BoardSnapshot, CreatedBy, Event, Project, ProjectStats, ServerInfo, ServerState, SessionKind};
+use nodus_domain::{
+    BoardSnapshot, CreatedBy, Event, Project, ProjectStats, QueuedPrompt, ServerInfo, ServerState, SessionKind,
+    SessionStatus,
+};
 use nodus_platform::secrets::{decode_base64, encode_base64};
 use nodus_remote::{GithubRepo, Remote, RemoteEvent, RemoteEvents, Request};
 use nodus_sessions::notify::About;
@@ -22,8 +25,10 @@ use crate::nodus::{Inner, lock};
 use crate::projects::now_ms;
 use crate::{CommandError, CommandResult, Nodus};
 
+mod chat;
 mod people;
 
+pub(crate) use chat::fetch_queue;
 pub use people::{SETUP_EXPIRED, SetupSession, SignIn, install_url};
 
 /// How long the grid waits on a server for its projects' names, colours
@@ -364,6 +369,15 @@ pub(crate) struct Remotes {
     /// Setup sessions claimed this run, by the server's address, so the
     /// wizard picks up where it was when it's opened again (SRV-061).
     setups: Mutex<HashMap<String, SetupSession>>,
+    /// Each server session's status and whether it runs, as its card last
+    /// had them (QUEUE-013).
+    statuses: Mutex<HashMap<String, (SessionStatus, bool)>>,
+    /// Each server session's queued prompts, from `session:queue` and queue
+    /// events; `None` while they're first asked for (SRV-167).
+    queues: Mutex<HashMap<String, Option<Vec<QueuedPrompt>>>>,
+    /// Servers that don't read transcripts out, with the version they ran
+    /// when they said so (SRV-166).
+    no_chat: Mutex<HashMap<String, Option<String>>>,
 }
 
 impl Remotes {
@@ -378,6 +392,9 @@ impl Remotes {
             fetching: Mutex::default(),
             pages: Mutex::default(),
             setups: Mutex::default(),
+            statuses: Mutex::default(),
+            queues: Mutex::default(),
+            no_chat: Mutex::default(),
         }
     }
 
@@ -791,6 +808,7 @@ async fn pass_on(core: Weak<Inner>, server_id: String, mut events: RemoteEvents)
                     } => Some((session_id.clone(), *status, *live)),
                     _ => None,
                 };
+                core.remotes.heard(&event);
                 let _ = core.events.send(event);
                 if let Some((session_id, status, live)) = status {
                     let about = starters_card(&core, &server_id, &session_id);
@@ -817,6 +835,7 @@ async fn pass_on(core: Weak<Inner>, server_id: String, mut events: RemoteEvents)
                 });
                 if status.state == ServerState::Connected {
                     learn_login(&core, &server_id);
+                    chat::requeue(&core, &server_id);
                 }
                 if status.state == ServerState::Connected || was_up {
                     let linked: Vec<String> = core.store.read(|state| {
@@ -1030,6 +1049,55 @@ mod tests {
                 .store
                 .read(|state| state.server_boards["p1"].expanded.is_empty())
         );
+    }
+
+    /// SRV-166, SRV-167: a server card's chat and queue are its server's,
+    /// and a server older than `session:chat` keeps its cards' terminals.
+    #[tokio::test]
+    async fn a_server_cards_chat_and_queue_go_to_its_server() {
+        let (dir, nodus) = crate::tests::nodus();
+        linked(&dir, &nodus);
+        nodus.board().load("p1").await.unwrap();
+        let sessions = nodus.sessions();
+        assert_eq!(sessions.chat_source("p1", "c1"), Some(crate::ChatSource::Server));
+        assert!(sessions.has_chat("p1"));
+        // Away, it says so, and the chat is still offered.
+        let err = sessions.chat("p1", "c1", "", 0).await.unwrap_err();
+        assert_eq!((err.channel, err.message.as_str()), ("session:chat", OFFLINE));
+        assert!(sessions.has_chat("p1"));
+        assert!(sessions.queue("c1").is_empty());
+        let err = sessions.enqueue("c1", "run the tests").await.unwrap_err();
+        assert_eq!((err.channel, err.message.as_str()), ("session:enqueue", OFFLINE));
+        let err = sessions.set_queue("c1", Vec::new()).await.unwrap_err();
+        assert_eq!((err.channel, err.message.as_str()), ("session:set-queue", OFFLINE));
+        let err = sessions.enqueue("c1", "  ").await.unwrap_err();
+        assert_eq!(err.message, "There’s nothing to queue");
+
+        // QUEUE-013: what's sent while it works, as its card last had it, is queued.
+        assert!(!nodus.inner.remotes.busy("c1"));
+        nodus.inner.remotes.heard(&Event::Status {
+            session_id: "c1".into(),
+            status: SessionStatus::Working,
+            live: true,
+        });
+        assert!(nodus.inner.remotes.busy("c1"));
+        let err = sessions.deliver("p1", "c1", "and push").await.unwrap_err();
+        assert_eq!(err.channel, "session:enqueue");
+        let queued = QueuedPrompt {
+            id: "q1".into(),
+            text: "and push".into(),
+            at: 1.0,
+        };
+        nodus.inner.remotes.heard(&Event::Queue {
+            session_id: "c1".into(),
+            items: vec![queued.clone()],
+        });
+        assert_eq!(sessions.queue("c1"), vec![queued]);
+
+        // A server older than the call keeps the terminal, until it runs another version.
+        nodus.inner.remotes.chat_unavailable("srv");
+        assert!(!sessions.has_chat("p1"));
+        assert_eq!(sessions.chat_source("p1", "c1"), Some(crate::ChatSource::Server));
     }
 
     #[tokio::test]

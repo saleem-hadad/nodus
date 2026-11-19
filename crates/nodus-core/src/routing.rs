@@ -13,13 +13,15 @@
 
 use std::sync::Arc;
 
-use nodus_domain::{BoardSnapshot, CreateSessionOptions, NodePatch, Project, ProjectPatch, SessionCard, Viewport};
+use nodus_domain::{
+    BoardSnapshot, CreateSessionOptions, NodePatch, Project, ProjectPatch, QueuedPrompt, SessionCard, Viewport,
+};
 use nodus_remote::{DISCONNECTED, OFFLINE, Remote, Request, TIMED_OUT, Upload};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use crate::projects::now_ms;
-use crate::servers::{SessionHome, share};
+use crate::servers::{SessionHome, fetch_queue, share};
 use crate::{CommandError, CommandResult, Nodus};
 
 /// Where a server project's calls go.
@@ -128,6 +130,19 @@ impl Route {
         self.nodus.inner.remotes.remember(session_id, &self.home);
     }
 
+    /// A server session's queued prompts as they're kept here (SRV-167):
+    /// the first look asks the server, whose answer comes as `Event::Queue`,
+    /// as every change after it does. Empty until then.
+    pub(crate) fn queue(&self, session_id: &str) -> Vec<QueuedPrompt> {
+        if let Some(kept) = self.nodus.inner.remotes.kept_queue(session_id) {
+            return kept;
+        }
+        if let Some(remote) = &self.remote {
+            fetch_queue(&self.nodus.inner, Arc::clone(remote), session_id);
+        }
+        Vec::new()
+    }
+
     /// `board:load` for a server board: the server's snapshot with this
     /// person's own viewport and expanded cards (SRV-164). While the server
     /// can't be reached, the last snapshot, marked `offline` (SRV-028).
@@ -142,6 +157,7 @@ impl Route {
         {
             Ok(snapshot) => {
                 remotes.keep_board(&project_id, &snapshot, &self.nodus.inner.runtime);
+                remotes.keep_statuses(&snapshot.cards);
                 (snapshot, false)
             }
             Err(err) if unreachable(&err) => match remotes.last_board(&project_id) {
@@ -261,6 +277,7 @@ impl Route {
             .await?;
         let id = card.node.session_id.clone();
         self.remember(&id);
+        self.nodus.inner.remotes.keep_statuses(std::slice::from_ref(&card));
         if expanded {
             self.nodus.inner.store.update(|state| {
                 let person = state.server_boards.entry(self.project_id()).or_default();

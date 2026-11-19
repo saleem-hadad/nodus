@@ -139,7 +139,7 @@ The server reuses what the app already has: `nodus-core`'s headless config (`Nod
   - Event, from the server: `{ "ev": "pty-data", "p": {…} }`, named after the core's `ev:*` channels, plus the server's own: `server-notice` (SRV-042, SRV-103), `accounts-changed`, `presence` (SRV-180), `pty-size` (SRV-144) and `server-update` (SRV-200).
   - Presence, from the app: `{ "presence": {…} }` (SRV-180).
   Calls start in the order they came, each up to its first wait at once, so keys typed reach a session in order.
-- **SRV-024** Call names are the core's channel names, the ones `CommandError` carries (`board:load`, `session:create`, `views:call`, `git:status`, …). Arguments are an object named as the app's API names them (`{ "projectId", "sessionId" }`), and answers are the serde forms the domain types already have. `Event` serializes to the wire's form. Besides the core's calls, a connection makes `watch` and `session:close` (SRV-026), and the server answers its own:
+- **SRV-024** Call names are the core's channel names, the ones `CommandError` carries (`board:load`, `session:create`, `views:call`, `git:status`, …). Arguments are an object named as the app's API names them (`{ "projectId", "sessionId" }`), and answers are the serde forms the domain types already have. `Event` serializes to the wire's form. Besides the core's calls, a connection makes `watch` and `session:close` (SRV-026), an app reads a card's chat and queue with `session:chat`, `session:queue`, `session:set-queue` and `session:enqueue` (SRV-166, SRV-167), and the server answers its own:
   - setup: `setup:status`, `setup:name`, `setup:done`;
   - people: `members:list`, `members:invite`, `members:remove`, `devices:list`, `devices:revoke`, `audit:list`;
   - the server: `server:info`, `server:update`;
@@ -147,7 +147,7 @@ The server reuses what the app already has: `nodus-core`'s headless config (`Nod
   - Claude accounts: `accounts:list`, `accounts:add`, `accounts:rename`, `accounts:remove`.
   A setup token may make only `setup:status`, `setup:name` and `github:installations`; every other call needs a device token. Every member may make every call (SRV-040).
 - **SRV-025** **What the server answers:** everything about its projects, which is projects, groups, board, sessions, views, git and actions. What stays on the app: settings, zoom, local storage, capture, voice, the app's own updates, menus, Report a Problem and revealing a folder. A call the server doesn't answer fails with `Not available on a server`.
-- **SRV-026** **Who gets which events.** A connection gets a project's events only after `watch { projects: [ids] }`, and each `watch` replaces the last. It gets a session's `pty-data` only between `session:open` and `session:close`, or until it disconnects. Status, agents, usage and `board-changed` go to every connection watching the project; `projects-changed`, `accounts-changed` and `server-update` go to every connection. `watch`, `session:open` and `session:close` take effect at exactly their place in the stream of events.
+- **SRV-026** **Who gets which events.** A connection gets a project's events only after `watch { projects: [ids] }`, and each `watch` replaces the last. It gets a session's `pty-data` only between `session:open` and `session:close`, or until it disconnects. Status, agents, usage, `queue` and `board-changed` go to every connection watching the project; `projects-changed`, `accounts-changed` and `server-update` go to every connection. `watch`, `session:open` and `session:close` take effect at exactly their place in the stream of events.
 - **SRV-027** `protocol` is an integer, `PROTOCOL` in `nodus-wire`: 2 (1 until presence, `pty-size` and ink by the stroke came; SRV-144). It isn't the session host's protocol (02). The app reads the hello first and doesn't talk to a server of another protocol. Its status then says `This server runs Nodus <v>. Update it in Settings → Servers.`, or `This server runs a newer Nodus. Update the app.` for a newer one (UI-309, UI-315). `server:update` is the one call it makes across protocols (UPD-095).
 - **SRV-028** **Dropped connection.** The app keeps showing the last board, read-only, under a `Reconnecting…` pill (UI-313, UI-314), from the snapshot it keeps in `server-boards/<projectId>.json` (01). Calls fail at once meanwhile with `Not connected to the server`. It tries again after 1, 2, 4… seconds, at most every 30. Once back it sends `watch` before anything else, reloads the boards it shows, and opens the terminals that were open again, which replay from the host's buffer (TERM-111).
 - **SRV-029** **Tailscale access rules.** A tailnet isn't always just the team, and the server runs Claude in auto mode. With `--tailscale`, the installer prints this policy before it joins, and `docs/server.md` gives it too:
@@ -327,6 +327,13 @@ Sessions on a server run on Claude accounts its members add, from `claude setup-
   - Update server, while the server is older than the app (SRV-200);
   - Disconnect, which forgets the server and its projects on this device and changes nothing on the server.
   A notice from the server asks every list again (UI-323).
+- **SRV-166** **A server card's chat** (CHAT-029). Claude cards on a server board show their chat, read from the transcript on the server: `session:chat { projectId, sessionId, file, offset }` answers `ChatChunk { file, restart?, text, offset, more? }`, what the transcript gained since `offset`.
+  - `serve` reads it as `session:transcript` does, under the card's folder in the sessions' home (SRV-125). An unknown project, or a session id that isn't safe in a path, is refused.
+  - `text` is raw JSONL, whole lines only, at most 512 KiB of the file, so even escaped it stays under a frame (SRV-023). A line longer than that comes in pieces, cut between characters, and the app joins them. `more` says to ask again at once. The app parses the lines (CHAT-004…CHAT-017), as it does a local transcript.
+  - `file` names the file read (`<dev>:<inode>`; `""` at first). A first read of a long transcript starts at its last 16 MiB, at its first whole line (CHAT-002). Another file under the name, or one that shrank, is read again from 0, and the answer says `restart` (CHAT-003).
+  - The chat asks every 250 ms while the session runs, every 2 s while it doesn't (CHAT-018), and again later while the server can't be reached, keeping what it has.
+  - A server older than the call answers `Not available on a server` (SRV-025). Its cards keep their terminals, from the next frame, until it runs another version.
+- **SRV-167** **A server card's queue** (QUEUE-013) is the server's host's, which hands it over at `Stop` (QUEUE-005). `session:queue { sessionId }` gives it, `session:set-queue { sessionId, items }` replaces it and `session:enqueue { sessionId, text }` adds to it; each change comes back as a `queue` event (SRV-026). The app keeps each server session's queue from those events, asking for it the first time it's looked at and again after a reconnect. It queues what's sent while the card, as its status events last had it, works or waits on the user. The member who queues a prompt is its writer (SRV-142).
 
 ## 11 · Working together on a board
 
@@ -407,7 +414,7 @@ So rebuilding `nodus-run`'s side and replacing every Claude token recovers the s
 - CI's `linux` job lints and tests every crate but the app's UI and binary on Ubuntu, `nodus-server` and `crates/nodus-core/tests/headless.rs` included.
 - `crates/nodus-server/tests/` runs the real binary on loopback with a scratch data folder and a stand-in `claude`:
   - `serve.rs`: a project from a local repo, its board, a session started, streamed, written to, killed and reconnected; archiving keeping cards whose transcripts say something or can't be read, and removing one with none; on Linux, the host on its own socket letting its group read the transcripts;
-  - `remote.rs`: an app core adding the server, linking a project and using it through its ordinary API, across a restart of `serve`;
+  - `remote.rs`: an app core adding the server, linking a project and using it through its ordinary API, across a restart of `serve`; a card's chat read through `session:chat` as its transcript grows and is replaced, and its queue;
   - `auth.rs`, against a fake GitHub: claim, wizard, sign-in and a non-member refused; a renamed login with another id refused; a callback with a wrong, used or missing `state` refused; a revoked device's socket closed; setup tokens that stop working; the dev token only on loopback;
   - `github.rs`, with the host on its own socket as `nodus-host.service` runs it, so every git command runs there: two members' cards on their own branches, pushes through the fake GitHub with the right author, a removed dirty card leaving a patch and a bundle, the credential helper refusing another project's repository, requests without the session's own token refused, search in a worktree;
   - `files.rs`: uploads and files, ids the server didn't issue refused;
@@ -428,7 +435,7 @@ What the design has that isn't built:
 - Removing a whole server project leaves its worktrees and saved work on disk.
 - The new tile showing a clone's progress: Add from GitHub shows `Cloning…` in its dialog.
 - The exact steps for revoking a `setup-token` on Claude's side.
-- Capture to a server project (CAP-149), the chat view and prompt queue on server cards (CHAT-029, QUEUE-013), and local sessions' board tools reaching server boards (TOOL-033).
+- Capture to a server project (CAP-149), and local sessions' board tools reaching server boards (TOOL-033).
 - Until the release signing key is made (`docs/server.md`, for maintainers), no release carries the server: the install script refuses to download, and servers refuse to update.
 
 ## Not in this spec

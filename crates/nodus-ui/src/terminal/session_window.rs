@@ -131,10 +131,9 @@ impl SessionWindow {
             cx.subscribe(&host, |_, _, _: &HostEvent, cx| cx.notify()),
             cx.observe(&state, |_, _, cx| cx.notify()),
         ];
-        // CHAT-029: a session on a server board keeps its terminal: its
-        // transcript isn't on this computer.
-        let on_server = state.read(cx).nodus.sessions().on_server(&session_id);
-        let chat = (kind == SessionKind::Claude && !on_server).then(|| {
+        // CHAT-029: a Claude card shows its chat, and a shell card its terminal.
+        let shows_chat = crate::chat::shows_chat(&state.read(cx).nodus, &project_id, kind);
+        let chat = shows_chat.then(|| {
             let (state, session_id, project_id, host) =
                 (state.clone(), session_id.clone(), project_id.clone(), host.clone());
             cx.new(|cx| {
@@ -741,6 +740,12 @@ fn recency(card: &SessionCard) -> f64 {
 
 impl Render for SessionWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
+        // CHAT-029: a server too old to read the chat out (SRV-166) turns
+        // out so once its chat asks; the terminal is the body then.
+        if self.chat.is_some() && !crate::chat::shows_chat(&self.state.read(cx).nodus, &self.project_id, self.kind) {
+            self.chat = None;
+            self.host.update(cx, |h, cx| h.set_enabled(true, cx));
+        }
         let card = card(self.state.read(cx), &self.session_id);
         let header = self.header(card.as_ref(), window, cx);
         let body = self.body(window, cx);

@@ -831,8 +831,8 @@ async fn queued_prompts_go_to_claude_when_its_turn_ends() {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_millis() as f64;
-    let first = sessions.enqueue(&id, "  run the tests\n").unwrap();
-    let second = sessions.enqueue(&id, "then commit").unwrap();
+    let first = sessions.enqueue(&id, "  run the tests\n").await.unwrap();
+    let second = sessions.enqueue(&id, "then commit").await.unwrap();
     assert_eq!(
         (first.text.as_str(), second.text.as_str()),
         ("run the tests", "then commit")
@@ -863,24 +863,24 @@ async fn queued_prompts_go_to_claude_when_its_turn_ends() {
     assert_eq!(sessions.queue(&id), vec![second.clone()]);
 
     // Edited away, then one more, for a hook that doesn't ask: it's typed in.
-    sessions.set_queue(&id, vec![]).unwrap();
+    sessions.set_queue(&id, vec![]).await.unwrap();
     events.until(|e| *e == queue_event(&[])).await;
-    let third = sessions.enqueue(&id, "and push").unwrap();
+    let third = sessions.enqueue(&id, "and push").await.unwrap();
     events.until(|e| *e == queue_event(std::slice::from_ref(&third))).await;
     hook(port, &token, &id, "Stop", &json!({})).await;
     events.until(|e| *e == queue_event(&[])).await;
     events.printed(&id, "and push\x1b[201~").await;
     assert!(sessions.queue(&id).is_empty());
 
-    let err = sessions.enqueue(&id, " \n ").unwrap_err();
+    let err = sessions.enqueue(&id, " \n ").await.unwrap_err();
     assert_eq!(err.message(), "There’s nothing to queue");
     // Not for a session that isn't running.
-    let err = sessions.enqueue("nobody", "hello").unwrap_err();
+    let err = sessions.enqueue("nobody", "hello").await.unwrap_err();
     assert_eq!(
         err.ipc_message(),
         "Error invoking remote method 'session:enqueue': Error: That session isn’t running"
     );
-    let err = sessions.set_queue("nobody", vec![]).unwrap_err();
+    let err = sessions.set_queue("nobody", vec![]).await.unwrap_err();
     assert_eq!(err.channel, "session:set-queue");
     assert!(sessions.queue("nobody").is_empty());
 

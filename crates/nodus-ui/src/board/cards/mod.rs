@@ -516,6 +516,9 @@ pub struct BoardEnv {
     /// A server project's server, by host name or address, where its cards'
     /// previews open (CARD-056); none for a local project.
     pub server_host: Option<String>,
+    /// The board's Claude cards show their chat (CHAT-029,
+    /// `crate::chat::shows_chat`).
+    pub chat: bool,
     /// `RenamingContext`: the card, section or note being renamed or written in.
     pub renaming: Option<String>,
     /// `ArchiveHotContext`.

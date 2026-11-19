@@ -29,7 +29,7 @@ Around it: the session window (status, title, branch/cwd, copyable session id, u
 In Rust this becomes `nodus-terminal`: an `alacritty_terminal::Term` per session plus our own key encoder, mouse/selection/link handling and a GPUI element that draws the grid, and `nodus-ui` views for the three windows.
 
 
-> **Since 1.0.14 (spec 16):** a Claude card on a local board shows its session as a chat in the session window and the expanded card (CHAT-029); its terminal docks under the chat when Claude shows a dialog or needs the user (CHAT-024, CHAT-033). What follows still holds for that docked terminal, for shell cards, and for cards on a server board.
+> **Since 1.0.14 (spec 16):** a Claude card shows its session as a chat in the session window and the expanded card (CHAT-029), on a server board too since 1.0.28 (18 SRV-166); its terminal docks under the chat when Claude shows a dialog or needs the user (CHAT-024, CHAT-033). What follows still holds for that docked terminal, for shell cards, and for cards on a server older than 1.0.28.
 
 ## Terminal emulation
 

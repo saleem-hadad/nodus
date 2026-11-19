@@ -14,6 +14,7 @@ use gpui::{
     IntoElement, ListAlignment, ListState, ParentElement, Render, StatefulInteractiveElement as _, Styled,
     Subscription, Task, WeakEntity, Window, div, list, px, relative,
 };
+use nodus_core::ChatSource;
 use nodus_domain::{Answers, ChatEntry, QueuedPrompt, SessionCard, SessionStatus};
 use nodus_transcripts::ChatLog;
 use serde_json::Value;
@@ -26,6 +27,10 @@ use crate::theme::{self, fonts};
 
 /// How often the transcript is looked at while the chat is up (CHAT-018).
 const POLL: Duration = Duration::from_millis(250);
+
+/// How often a server session's transcript is asked for while the session
+/// isn't running, when nothing is writing to it (SRV-166).
+const POLL_IDLE: Duration = Duration::from_secs(2);
 
 /// The chat views on screen, by session, so the card's mic and wake reach
 /// the composer rather than the terminal (CHAT-030).
@@ -251,6 +256,8 @@ pub struct ChatView {
     pub(crate) project_id: String,
     pub(crate) terminal: Entity<TerminalHost>,
     log: Option<Arc<Mutex<ChatLog>>>,
+    /// The transcript is its server's, asked for with `session:chat` (SRV-166).
+    remote: bool,
     pub(crate) entries: Arc<[ChatEntry]>,
     pub(crate) loaded: bool,
     pub(crate) rows: Vec<Row>,
@@ -330,10 +337,14 @@ impl ChatView {
                 .placeholder("Message Claude…")
         });
         let nodus = state.read(cx).nodus.clone();
-        let log = nodus
-            .sessions()
-            .transcript_file(&project_id, &session_id)
-            .map(|file| Arc::new(Mutex::new(ChatLog::new(file))));
+        let source = nodus.sessions().chat_source(&project_id, &session_id);
+        let remote = source == Some(ChatSource::Server);
+        let log = source.map(|source| {
+            Arc::new(Mutex::new(match source {
+                ChatSource::File(file) => ChatLog::new(file),
+                ChatSource::Server => ChatLog::fed(),
+            }))
+        });
         let list = ListState::new(0, ListAlignment::Bottom, px(1200.));
         list.set_follow_mode(FollowMode::Tail);
         let terminals = Terminals::global(cx);
@@ -374,6 +385,7 @@ impl ChatView {
             project_id,
             terminal,
             log,
+            remote,
             entries: Arc::from(Vec::new()),
             loaded: false,
             rows: Vec::new(),
@@ -419,6 +431,10 @@ impl ChatView {
             self.loaded = true;
             return;
         };
+        if self.remote {
+            self.poll_server(log, cx);
+            return;
+        }
         self._poll = Some(cx.spawn(async move |this, cx| {
             let mut first = true;
             loop {
@@ -446,6 +462,69 @@ impl ChatView {
                 first = false;
                 cx.background_executor().timer(POLL).await;
             }
+        }));
+    }
+
+    /// SRV-166: a server session's transcript, asked of its server with
+    /// `session:chat` and fed to the log off the main thread: every [`POLL`]
+    /// while the session runs, every [`POLL_IDLE`] while it doesn't, and at
+    /// once while there's more to read. While the server can't be reached
+    /// it's asked again later; a server older than the call keeps the
+    /// card's terminal ([`super::shows_chat`]), which the card shows from
+    /// its next frame.
+    fn poll_server(&mut self, log: Arc<Mutex<ChatLog>>, cx: &mut Context<'_, Self>) {
+        let nodus = self.state.read(cx).nodus.clone();
+        let (project, session) = (self.project_id.clone(), self.session_id.clone());
+        self._poll = Some(cx.spawn(async move |this, cx| {
+            // What came in pieces shows once it's all in, so a long
+            // transcript opens at once rather than moving in (CHAT-040).
+            let mut dirty = false;
+            loop {
+                let (file, offset) = log.lock().unwrap_or_else(PoisonError::into_inner).at();
+                let asked = nodus.sessions().chat(&project, &session, &file, offset).await;
+                let (read, more) = match asked {
+                    Ok(chunk) => {
+                        let more = chunk.more;
+                        let feeding = Arc::clone(&log);
+                        let read = cx
+                            .background_spawn(async move {
+                                let mut log = feeding.lock().unwrap_or_else(PoisonError::into_inner);
+                                let changed = log.feed(chunk);
+                                (changed, (!more).then(|| log.snapshot()), log.skills())
+                            })
+                            .await;
+                        (Some(read), more)
+                    }
+                    Err(_) if !nodus.sessions().has_chat(&project) => break,
+                    Err(_) => (None, false),
+                };
+                // Until the server first answers, the chat is blank rather
+                // than empty.
+                let live = this
+                    .update(cx, |this, cx| {
+                        if let Some((changed, entries, skills)) = read {
+                            dirty |= changed;
+                            if let Some(entries) = entries.filter(|_| dirty || !this.loaded) {
+                                this.set_entries(entries, cx);
+                                dirty = false;
+                            }
+                            this.slash.set_listed(skills);
+                        }
+                        this.look_at_screen(cx);
+                        this.card(cx).is_some_and(|c| c.live)
+                    })
+                    .ok();
+                let Some(live) = live else {
+                    break;
+                };
+                if !more {
+                    cx.background_executor()
+                        .timer(if live { POLL } else { POLL_IDLE })
+                        .await;
+                }
+            }
+            // The card draws its terminal again.
+            let _ = this.update(cx, |_, cx| cx.notify());
         }));
     }
 
@@ -818,9 +897,16 @@ impl ChatView {
         let at = items.iter().position(|p| p.id == id)?;
         let item = items.remove(at);
         let nodus = self.state.read(cx).nodus.clone();
-        if let Err(err) = nodus.sessions().set_queue(&self.session_id, items) {
-            self.error = Some(err.ipc_message());
-        }
+        let session = self.session_id.clone();
+        cx.spawn(async move |this, cx| {
+            if let Err(err) = nodus.sessions().set_queue(&session, items).await {
+                let _ = this.update(cx, |this, cx| {
+                    this.error = Some(err.ipc_message());
+                    cx.notify();
+                });
+            }
+        })
+        .detach();
         Some(item)
     }
 
@@ -954,8 +1040,6 @@ impl ChatView {
             let live = self.card(cx).is_some_and(|c| c.live);
             let (title, line) = if !self.loaded {
                 ("", "")
-            } else if self.log.is_none() {
-                ("This session runs on a server", "Its chat isn’t available here yet.")
             } else if live {
                 (
                     "Ask Claude anything",

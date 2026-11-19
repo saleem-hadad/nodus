@@ -11,6 +11,7 @@
 //! pieces other domains reuse (the status machine's agents, capture).
 
 pub mod chat;
+mod chunk;
 mod claude;
 pub mod date;
 pub mod edits;

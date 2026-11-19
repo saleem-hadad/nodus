@@ -5,19 +5,19 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use super::EnvMap;
-use super::path_search::find_on_path;
+use super::path_search::{RunBy, find_on_path_for};
 use crate::process::{Command, NODE_MAX_BUFFER};
 
 /// How long `claude --version` gets to answer.
 const VERSION_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Claude Code's own program, preferring the native installer's claude.exe
-/// over an npm shim.
-pub(super) fn find(path_var: &str) -> Option<PathBuf> {
+/// Claude Code's own program, one `run_by` may run, preferring the native
+/// installer's claude.exe over an npm shim.
+pub(super) fn find(path_var: &str, run_by: RunBy) -> Option<PathBuf> {
     if !cfg!(windows) {
-        return find_on_path(&["claude"], path_var);
+        return find_on_path_for(&["claude"], path_var, run_by);
     }
-    let found = find_on_path(&["claude.exe", "claude.cmd"], path_var)?;
+    let found = find_on_path_for(&["claude.exe", "claude.cmd"], path_var, run_by)?;
     let is_shim = found.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("cmd"));
     if !is_shim {
         return Some(found);

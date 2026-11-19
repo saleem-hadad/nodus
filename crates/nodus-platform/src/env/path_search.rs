@@ -9,15 +9,32 @@ use super::EnvMap;
 /// What separates the PATH's folders.
 pub(super) const DELIMITER: char = if cfg!(windows) { ';' } else { ':' };
 
-/// The first of `bins` found on the PATH; each name is looked for in every
-/// folder before the next.
+/// Who must be able to run a program found on the PATH.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum RunBy {
+    /// This process: the kernel's answer for this user, on this mount.
+    ThisProcess,
+    /// Someone: an execute bit in the file's mode. For `nodus serve`, which
+    /// only passes `claude`'s path on to the session host and never runs it
+    /// (SRV-005): its unit mounts `/home/nodus-run` noexec, where asking the
+    /// kernel says no to everything.
+    Anyone,
+}
+
+/// The first of `bins` found on the PATH that this process may run; each
+/// name is looked for in every folder before the next.
 pub(super) fn find_on_path(bins: &[&str], path_var: &str) -> Option<PathBuf> {
+    find_on_path_for(bins, path_var, RunBy::ThisProcess)
+}
+
+/// [`find_on_path`], for programs `run_by` must be able to run.
+pub(super) fn find_on_path_for(bins: &[&str], path_var: &str, run_by: RunBy) -> Option<PathBuf> {
     bins.iter().find_map(|bin| {
         path_var
             .split(DELIMITER)
             .filter(|dir| !dir.is_empty())
             .map(|dir| Path::new(dir).join(bin))
-            .find(|candidate| is_executable_file(candidate))
+            .find(|candidate| is_executable_file(candidate, run_by))
     })
 }
 
@@ -68,8 +85,15 @@ fn fallback_dirs(env: &EnvMap, home: Option<&Path>) -> Vec<PathBuf> {
     dirs
 }
 
-fn is_executable_file(path: &Path) -> bool {
-    fs::metadata(path).is_ok_and(|meta| meta.is_file()) && may_execute(path)
+fn is_executable_file(path: &Path, run_by: RunBy) -> bool {
+    let Ok(meta) = fs::metadata(path) else {
+        return false;
+    };
+    meta.is_file()
+        && match run_by {
+            RunBy::ThisProcess => may_execute(path),
+            RunBy::Anyone => has_execute_bit(&meta),
+        }
 }
 
 #[cfg(unix)]
@@ -77,10 +101,21 @@ fn may_execute(path: &Path) -> bool {
     rustix::fs::access(path, rustix::fs::Access::EXEC_OK).is_ok()
 }
 
+#[cfg(unix)]
+fn has_execute_bit(meta: &fs::Metadata) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    meta.permissions().mode() & 0o111 != 0
+}
+
 /// Windows has no execute permission to ask about: Node's X_OK there only asks
 /// that the file exists.
 #[cfg(not(unix))]
 fn may_execute(_: &Path) -> bool {
+    true
+}
+
+#[cfg(not(unix))]
+fn has_execute_bit(_: &fs::Metadata) -> bool {
     true
 }
 
@@ -143,6 +178,26 @@ mod tests {
         let dir = TempDir::new().unwrap();
         fs::write(dir.path().join("claude"), "not a program").unwrap();
         assert_eq!(find_on_path(&["claude"], &path_of(&[dir.path()])), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn for_anyone_takes_files_with_an_execute_bit() {
+        use std::os::unix::fs::PermissionsExt;
+        let (dir, links) = (TempDir::new().unwrap(), TempDir::new().unwrap());
+        let claude = program(dir.path(), "claude");
+        std::os::unix::fs::symlink(&claude, links.path().join("claude")).unwrap();
+        for folder in [dir.path(), links.path()] {
+            let path = path_of(&[folder]);
+            assert_eq!(
+                find_on_path_for(&["claude"], &path, RunBy::Anyone),
+                Some(folder.join("claude"))
+            );
+        }
+        fs::set_permissions(&claude, fs::Permissions::from_mode(0o644)).unwrap();
+        for folder in [dir.path(), links.path()] {
+            assert_eq!(find_on_path_for(&["claude"], &path_of(&[folder]), RunBy::Anyone), None);
+        }
     }
 
     #[cfg(not(windows))]

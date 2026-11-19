@@ -645,12 +645,7 @@ impl ProjectsView {
         let stats = s.stats.get(&project.id).copied();
         let focus_feature = s.focus_feature();
         // SRV-162: a server project's badge names its server.
-        let server = project.server.as_ref().map(|server_id| ServerBadge {
-            name: s
-                .server_of(project)
-                .map_or_else(|| server_id.clone(), |server| server.name.clone()),
-            away: s.server_away(project),
-        });
+        let server = ServerBadge::of(project, s);
         let id = SharedString::from(format!("folder-{}", project.id));
         let hovered = window.use_keyed_state((id.clone(), 0usize), cx, |_, _| false);
         let pressed = window.use_keyed_state((id.clone(), 2usize), cx, |_, _| TooltipPress::default());

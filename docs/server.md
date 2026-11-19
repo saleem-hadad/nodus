@@ -76,7 +76,7 @@ The server runs Claude in auto mode, so it should reach none of your team's devi
 
 To join a server someone else set up, ask a member to invite your GitHub login, then **Connect to Server…** and sign in with GitHub.
 
-Later, **Add from GitHub on <server>…**, in the same menu as **Connect to Server…**, adds more projects, and Settings → Servers manages members, devices, Claude accounts and the GitHub App, and shows recent activity.
+Later, **Add from GitHub on <server>…** adds more projects: it's in the menu beside **New Project** on the projects grid, with **Connect to Server…**, and in the **New** menu of that server's boards. Settings → Servers manages members, devices, Claude accounts and the GitHub App, and shows recent activity.
 
 ## The two users
 

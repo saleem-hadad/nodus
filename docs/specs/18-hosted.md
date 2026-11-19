@@ -302,7 +302,7 @@ Sessions on a server run on Claude accounts its members add, from `claude setup-
 - **SRV-161** **Linking a project.** The app keeps its servers in `state.json` (`servers`, 01 `ServerRecord`: `id`, `url`, `name`, the sealed `token`, and the `login` and `githubId` it signed in as). Each server project shown in the grid gets an entry in the app's own `projects` with `server: <id>` and an empty `repoPath`. That entry holds only per-person fields (group, focus, order, when it was opened); name, colour and actions come from the server.
   - **Show Server Projects…** (the add menu, Settings → Servers) lists each server's projects with a checkbox (UI-310).
   - Projects other members add aren't shown until you tick them.
-- **SRV-162** **In the grid,** server projects mix with local ones: the same groups, ordering, focus and rail. A server badge sits on the tile, its tooltip naming the server (UI-311). While the server can't be reached, the badge dims and the tile opens the last board read-only (SRV-028).
+- **SRV-162** **In the grid,** server projects mix with local ones: the same groups, ordering, focus and rail. A server badge sits on the tile, its tooltip naming the server (UI-311), and a smaller one on the project's rail item, whose hint names the server (UI-340). While the server can't be reached, the badge dims and the tile opens the last board read-only (SRV-028).
 - **SRV-163** **Local paths don't cross.**
   - Reveal in Finder (Show in File Explorer) and the folder picker are hidden for server projects (UI-312).
   - Files dropped on a server session's terminal and pictures added to a server board are uploaded first (`PUT /api/uploads`), and the server's path or name is typed or kept (TERM-112, SHAPE-041).

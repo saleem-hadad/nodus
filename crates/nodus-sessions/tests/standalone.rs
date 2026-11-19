@@ -253,3 +253,174 @@ async fn waits_through_a_host_on_another_protocol() {
     assert_eq!(output.stdout_text(), "new\n");
     assert_eq!(world.asked.0.load(Ordering::SeqCst), 0);
 }
+
+/// What a scripted host heard, and its way to say more.
+struct Scripted {
+    heard: tokio::sync::mpsc::UnboundedReceiver<String>,
+    say: tokio::sync::mpsc::UnboundedSender<Value>,
+    gone: tokio::task::JoinHandle<()>,
+}
+
+impl Scripted {
+    /// The next message's type, failing after a while.
+    async fn next(&mut self) -> String {
+        tokio::time::timeout(TIMEOUT, self.heard.recv())
+            .await
+            .expect("the host heard nothing more")
+            .expect("the host went")
+    }
+
+    /// Nothing more for a moment.
+    async fn quiet(&mut self) {
+        let more = tokio::time::timeout(Duration::from_millis(400), self.heard.recv()).await;
+        assert!(more.is_err(), "the host heard {more:?}");
+    }
+}
+
+/// A host of this protocol that welcomes with `welcome`, then answers `exec`
+/// with an exit of 0 and says what it's given, until it's asked to stop:
+/// then it goes, and its socket with it, as systemd brings up the next.
+fn scripted_host(socket: &Path, welcome: Value) -> Scripted {
+    std::fs::create_dir_all(socket.parent().unwrap()).unwrap();
+    let listener = UnixListener::bind(socket).unwrap();
+    let socket = socket.to_owned();
+    let (heard_tx, heard) = tokio::sync::mpsc::unbounded_channel();
+    let (say, mut said) = tokio::sync::mpsc::unbounded_channel::<Value>();
+    let gone = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let mut reader = MessageReader::new();
+        let mut buffer = vec![0u8; 4096];
+        loop {
+            tokio::select! {
+                n = stream.read(&mut buffer) => {
+                    let n = n.unwrap();
+                    if n == 0 {
+                        return;
+                    }
+                    for msg in reader.feed(&buffer[..n]) {
+                        let kind = msg["type"].as_str().unwrap_or_default().to_owned();
+                        let _ = heard_tx.send(kind.clone());
+                        let answer = match kind.as_str() {
+                            "hello" => Some(welcome.clone()),
+                            "exec" => Some(json!({"type": "exec-result", "id": msg["id"], "stdout": "", "stderr": "", "code": 0})),
+                            "shutdown" => {
+                                drop(listener);
+                                std::fs::remove_file(&socket).unwrap();
+                                return;
+                            }
+                            _ => None,
+                        };
+                        if let Some(answer) = answer {
+                            stream.write_all((answer.to_string() + "\n").as_bytes()).await.unwrap();
+                        }
+                    }
+                }
+                Some(msg) = said.recv() => {
+                    stream.write_all((msg.to_string() + "\n").as_bytes()).await.unwrap();
+                }
+            }
+        }
+    });
+    Scripted { heard, say, gone }
+}
+
+/// A welcome of this protocol from a host as old as 1.0.29, which doesn't
+/// say its version, running `sessions`.
+fn older_welcome(sessions: &[&str]) -> Value {
+    let sessions: Vec<Value> = sessions
+        .iter()
+        .map(|id| json!({"sessionId": id, "projectId": "p1", "initial": "working", "buffer": "", "history": []}))
+        .collect();
+    json!({"type": "welcome", "protocol": nodus_host_proto::PROTOCOL, "hookPort": 1, "hookToken": "t", "sessions": sessions})
+}
+
+/// SRV-004: a host an update left on the older version, running nothing,
+/// is stopped as one on another protocol is, and the new binary's is used.
+#[tokio::test]
+async fn an_idle_host_of_another_version_is_started_again() {
+    let world = World::new();
+    let mut old = scripted_host(&world.socket, older_welcome(&[]));
+    let runner = HostRunner::new(world.client.clone());
+    let run = tokio::spawn(runner.run(RunRequest::new("/bin/echo").arg("new").env(env())));
+    assert_eq!(old.next().await, "hello");
+    assert_eq!(old.next().await, "shutdown");
+    tokio::time::timeout(TIMEOUT, old.gone).await.unwrap().unwrap();
+    world.start_host();
+    let output = tokio::time::timeout(TIMEOUT, run).await.unwrap().unwrap().unwrap();
+    assert_eq!(output.stdout_text(), "new\n");
+    assert_eq!(world.asked.0.load(Ordering::SeqCst), 0);
+}
+
+/// SRV-004: one still running sessions keeps them, and is used, until the
+/// last has ended: then it's asked to stop, and what comes next waits for
+/// the new binary's.
+#[tokio::test]
+async fn a_busy_host_of_another_version_goes_once_its_sessions_end() {
+    let world = World::new();
+    let mut old = scripted_host(&world.socket, older_welcome(&["s1", "s2"]));
+    let runner = HostRunner::new(world.client.clone());
+    let output = tokio::time::timeout(TIMEOUT, runner.run(RunRequest::new("/bin/true").env(env())))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(output.exit, Exit::Code(0));
+    assert_eq!(old.next().await, "hello");
+    assert_eq!(old.next().await, "exec");
+    assert_eq!(world.client.live_session_ids(), ["s1", "s2"]);
+
+    old.say
+        .send(json!({"type": "exit", "sessionId": "s1", "exitCode": 0}))
+        .unwrap();
+    old.quiet().await;
+    assert_eq!(world.client.live_session_ids(), ["s2"]);
+    old.say
+        .send(json!({"type": "exit", "sessionId": "s2", "exitCode": 0}))
+        .unwrap();
+    assert_eq!(old.next().await, "shutdown");
+    tokio::time::timeout(TIMEOUT, old.gone).await.unwrap().unwrap();
+
+    let run = tokio::spawn(runner.run(RunRequest::new("/bin/echo").arg("new").env(env())));
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    world.start_host();
+    let output = tokio::time::timeout(TIMEOUT, run).await.unwrap().unwrap().unwrap();
+    assert_eq!(output.stdout_text(), "new\n");
+}
+
+/// Started again, a host that still says another version is kept rather
+/// than stopped over and over.
+#[tokio::test]
+async fn a_host_is_started_again_only_once() {
+    let world = World::new();
+    let mut first = scripted_host(&world.socket, older_welcome(&[]));
+    let runner = HostRunner::new(world.client.clone());
+    let run = tokio::spawn(runner.run(RunRequest::new("/bin/true").env(env())));
+    assert_eq!(first.next().await, "hello");
+    assert_eq!(first.next().await, "shutdown");
+    tokio::time::timeout(TIMEOUT, first.gone).await.unwrap().unwrap();
+    let mut second = scripted_host(&world.socket, older_welcome(&[]));
+    let output = tokio::time::timeout(TIMEOUT, run).await.unwrap().unwrap().unwrap();
+    assert_eq!(output.exit, Exit::Code(0));
+    assert_eq!(second.next().await, "hello");
+    assert_eq!(second.next().await, "exec");
+    second.quiet().await;
+}
+
+/// The host of this very version is simply used.
+#[tokio::test]
+async fn a_host_of_this_version_is_kept() {
+    let world = World::new();
+    let welcome = json!({
+        "type": "welcome", "protocol": nodus_host_proto::PROTOCOL, "hookPort": 1, "hookToken": "t",
+        "sessions": [], "version": env!("CARGO_PKG_VERSION"),
+    });
+    let mut host = scripted_host(&world.socket, welcome);
+    let runner = HostRunner::new(world.client.clone());
+    let output = tokio::time::timeout(TIMEOUT, runner.run(RunRequest::new("/bin/true").env(env())))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(output.exit, Exit::Code(0));
+    assert_eq!(host.next().await, "hello");
+    assert_eq!(host.next().await, "exec");
+    host.quiet().await;
+}

@@ -85,8 +85,9 @@ The server reuses what the app already has: `nodus-core`'s headless config (`Nod
      - `nodus` added to the `nodus-run` group;
      - `/srv/nodus/uploads`, 2750 `nodus:nodus-run`;
      - `/opt/nodus/bin` and `/opt/nodus/bin/shims`, owned by `nodus`, 0755.
-  3. Installs `ca-certificates`, `curl`, `gnupg`, `openssl`, `git`, `uidmap`, `dbus-user-session`, `nftables`, and `gh` from GitHub's apt repository. After 1.0.17, also `fonts-dejavu-core`, for the words in the board pictures `look_at_board` draws (TOOL-111).
+  3. Installs `ca-certificates`, `curl`, `gnupg`, `openssl`, `git`, `uidmap`, `dbus-user-session`, `nftables`, and `gh` from GitHub's apt repository. After 1.0.17, also `fonts-dejavu-core`, for the words in the board pictures `look_at_board` draws (TOOL-111). After 1.0.27, also `python3`, for step 4.
   4. Installs Claude Code for `nodus-run` with Anthropic's installer, unless it's there. It updates itself.
+     - After 1.0.27, it also marks Claude Code's onboarding done (`hasCompletedOnboarding` in `/home/nodus-run/.claude.json`). Otherwise every session stops at its first-run theme picker, which nobody answers.
   5. Installs rootless Docker for `nodus-run` from Docker's apt repository (`dockerd-rootless-setuptool.sh install`, `loginctl enable-linger nodus-run`).
      - The system-wide daemon is turned off, since ports it publishes skip the firewall's input chain. One that was running already is left on, with a warning.
      - Where AppArmor restricts user namespaces (Ubuntu 23.10+), a profile lets `rootlesskit` make one.

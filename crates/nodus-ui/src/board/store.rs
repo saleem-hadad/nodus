@@ -34,6 +34,19 @@ fn unstick_notes(notes: &mut [BoardNote], leaving: &[SessionCard]) {
     }
 }
 
+/// BOARD-111: whether a card leaves the board at once as it's archived: a
+/// session nothing was said in, as far as the window knows. On a server
+/// board the server decides, since it's the one that can read the
+/// transcript, and the board loads again once it has (SRV-186): one it
+/// couldn't read is archived there, not removed (SESS-091).
+pub(crate) fn leaves_at_once(card: &SessionCard, patch: Option<&NodePatch>, on_server: bool) -> bool {
+    !on_server
+        && patch.is_some_and(|p| p.archived == Some(true))
+        && !card.node.archived
+        && !crate::board::layout::is_terminal(card)
+        && nodus_board::is_empty_session(card.meta.as_ref())
+}
+
 /// MODAL-028: the session window's card came back archived in a reload
 /// (archived from outside the window, e.g. `archive_self`).
 pub(crate) fn came_back_archived(open: Option<&str>, cards: &[SessionCard]) -> bool {
@@ -102,23 +115,23 @@ impl AppState {
     }
 
     /// `patchCards`: a session nothing was said in leaves the board rather
-    /// than being archived (BOARD-111); archived cards read as done, are
-    /// stamped, leave their section and fold back.
+    /// than being archived (BOARD-111), on a server board once the server
+    /// has said so; archived cards read as done, are stamped, leave their
+    /// section and fold back.
     pub fn patch_cards(&mut self, patches: Vec<NodePatch>, cx: &mut Context<'_, Self>) {
         let Some(board) = self.board.as_mut() else { return };
         if patches.is_empty() {
             return;
         }
+        let on_server = self
+            .projects
+            .iter()
+            .any(|p| p.id == board.project.id && p.server.is_some());
         let patch_of = |id: &str| patches.iter().rev().find(|p| p.session_id == id);
         let dropped: Vec<SessionCard> = board
             .cards
             .iter()
-            .filter(|c| {
-                patch_of(&c.node.session_id).is_some_and(|p| p.archived == Some(true))
-                    && !c.node.archived
-                    && !crate::board::layout::is_terminal(c)
-                    && nodus_board::is_empty_session(c.meta.as_ref())
-            })
+            .filter(|c| leaves_at_once(c, patch_of(&c.node.session_id), on_server))
             .cloned()
             .collect();
         let gone: Vec<&str> = dropped.iter().map(|c| c.node.session_id.as_str()).collect();
@@ -779,6 +792,43 @@ mod tests {
             usage: None,
             servers: Vec::new(),
         }
+    }
+
+    #[test]
+    fn an_empty_card_leaves_at_once_only_on_a_local_board() {
+        let archive = NodePatch {
+            session_id: "a".into(),
+            archived: Some(true),
+            ..NodePatch::default()
+        };
+        let empty = card("a", false);
+        assert!(leaves_at_once(&empty, Some(&archive), false));
+        // SRV-186: the server reads the transcript, and the board reloads.
+        assert!(!leaves_at_once(&empty, Some(&archive), true));
+        // Not being archived, or archived already.
+        let moved = NodePatch {
+            session_id: "a".into(),
+            x: Some(4.0),
+            ..NodePatch::default()
+        };
+        assert!(!leaves_at_once(&empty, Some(&moved), false));
+        assert!(!leaves_at_once(&empty, None, false));
+        assert!(!leaves_at_once(&card("a", true), Some(&archive), false));
+        // Something was said.
+        let mut said = card("a", false);
+        said.meta = Some(nodus_domain::SessionMeta {
+            session_id: "a".into(),
+            title: "Fix it".into(),
+            first_prompt: Some("Fix it".into()),
+            last_prompt: None,
+            last_assistant_text: None,
+            git_branch: None,
+            message_count: 1,
+            created_at: 0.0,
+            updated_at: 0.0,
+            transcript_path: String::new(),
+        });
+        assert!(!leaves_at_once(&said, Some(&archive), false));
     }
 
     #[test]

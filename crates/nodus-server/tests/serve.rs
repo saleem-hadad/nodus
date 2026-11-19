@@ -439,6 +439,54 @@ async fn with_a_host_of_its_own_the_server_runs_everything_there() {
     let _ = host.wait();
 }
 
+/// SRV-005: the host `nodus-host.service` runs lets `nodus serve`, in its
+/// group, read the transcripts Claude Code wrote 0600 in 0700 folders
+/// before it started. On Linux, where servers run.
+#[cfg(target_os = "linux")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_servers_host_lets_its_group_read_the_transcripts() {
+    use std::os::unix::fs::PermissionsExt;
+    let world = World::new();
+    let claude = world.root().join("home/.claude");
+    let folder = claude.join("projects/-srv-projects-shop-worktrees-aa8a1c4d");
+    let subagents = folder.join("s1/subagents");
+    std::fs::create_dir_all(&subagents).unwrap();
+    let (transcript, agent) = (folder.join("s1.jsonl"), subagents.join("agent-a1.jsonl"));
+    let set = |path: &Path, mode| std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).unwrap();
+    for file in [&transcript, &agent] {
+        std::fs::write(file, "{}\n").unwrap();
+        set(file, 0o600);
+    }
+    for dir in [
+        &claude,
+        &claude.join("projects"),
+        &folder,
+        &folder.join("s1"),
+        &subagents,
+    ] {
+        set(dir, 0o700);
+    }
+    let socket = world.root().join("run/host.sock");
+    let mut host = world
+        .command(&["host", "--socket", &socket.to_string_lossy()])
+        .stdout(Stdio::null())
+        .spawn()
+        .unwrap();
+    let mode = |path: &Path| std::fs::metadata(path).unwrap().permissions().mode() & 0o777;
+    let deadline = std::time::Instant::now() + WAIT;
+    while mode(&agent) != 0o640 {
+        assert!(std::time::Instant::now() < deadline, "never shared: {:o}", mode(&agent));
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(mode(&claude), 0o710);
+    assert_eq!(mode(&claude.join("projects")), 0o750);
+    assert_eq!(mode(&folder), 0o750);
+    assert_eq!(mode(&subagents), 0o750);
+    assert_eq!(mode(&transcript), 0o640);
+    let _ = host.kill();
+    let _ = host.wait();
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_session_runs_on_the_server_and_streams_to_the_app() {
     let world = World::new();
@@ -657,6 +705,85 @@ async fn a_folder_on_the_server_is_added_as_it_is() {
     let projects: Vec<Project> = app.call_as(&Request::ProjectsList {}).await.unwrap();
     assert_eq!(Path::new(&projects[0].repo_path), folder);
     assert!(!world.data().join("projects").exists());
+    drop(app);
+    server.stop();
+}
+
+/// SESS-091 on a server: archiving a card keeps it, archived, unless its
+/// session has no transcript at all. One `serve` can't read counts as said:
+/// before 1.0.28 Claude Code's 0600 transcripts in 0700 folders looked
+/// empty to it, and archiving removed the card and its worktree.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn archiving_a_card_keeps_it_unless_nothing_was_said() {
+    use std::os::unix::fs::OpenOptionsExt;
+    let world = World::new();
+    let server = world.serve();
+    let folder = world.root().join("docs");
+    std::fs::create_dir_all(&folder).unwrap();
+    let project = world.add_project(&server, &folder, None).await;
+    let (app, mut events) = server.connect().await;
+    app.call(&Request::Watch {
+        projects: vec![project.id.clone()],
+    })
+    .await
+    .unwrap();
+    let mut ids = Vec::new();
+    for name in ["Said", "Unreadable", "Nothing"] {
+        let card: SessionCard = app
+            .call_as(&Request::SessionCreate {
+                project_id: project.id.clone(),
+                opts: serde_json::from_value(json!({ "x": 0, "y": 0, "name": name })).unwrap(),
+            })
+            .await
+            .unwrap();
+        ids.push(card.node.session_id);
+    }
+    // Where Claude Code writes them, in the sessions' home: one readable,
+    // and one made unreadable from the start, as another user's is.
+    let conversation = "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":\"Fix the docs\"}}\n\
+         {\"type\":\"assistant\",\"message\":{\"id\":\"m1\",\"content\":[{\"type\":\"text\",\"text\":\"Fixed.\"}]}}\n";
+    let home = world.root().join("home");
+    for (id, mode) in [(&ids[0], 0o600), (&ids[1], 0o000)] {
+        let file = nodus_transcripts::transcript_path(&home, &project.repo_path, id);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        let mut out = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(mode)
+            .open(&file)
+            .unwrap();
+        std::io::Write::write_all(&mut out, conversation.as_bytes()).unwrap();
+    }
+    let patches = ids
+        .iter()
+        .map(|id| serde_json::from_value(json!({ "sessionId": id, "archived": true })).unwrap())
+        .collect();
+    app.call(&Request::BoardSaveNodes {
+        project_id: project.id.clone(),
+        patches,
+    })
+    .await
+    .unwrap();
+    // SRV-186: and the app loads the board again.
+    events
+        .until(|e| matches!(e, Event::BoardChanged { project_id } if *project_id == project.id))
+        .await;
+    let board: BoardSnapshot = app
+        .call_as(&Request::BoardLoad {
+            project_id: project.id.clone(),
+        })
+        .await
+        .unwrap();
+    let archived = |id: &str| {
+        board
+            .cards
+            .iter()
+            .find(|c| c.node.session_id == id)
+            .map(|c| c.node.archived)
+    };
+    assert_eq!(archived(&ids[0]), Some(true));
+    assert_eq!(archived(&ids[1]), Some(true));
+    assert_eq!(archived(&ids[2]), None);
     drop(app);
     server.stop();
 }

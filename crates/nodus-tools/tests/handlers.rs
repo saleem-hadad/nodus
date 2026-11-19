@@ -192,7 +192,12 @@ impl Fixture {
 
     /// A transcript with a prompt and a reply, so the session isn't empty.
     fn said_something(&self, session_id: &str) {
-        let dir = self.transcripts.transcript_dir(&self.repo);
+        self.said_something_in(&self.repo, session_id);
+    }
+
+    /// [`Fixture::said_something`], in a card's own folder (SESS-211).
+    fn said_something_in(&self, folder: &str, session_id: &str) {
+        let dir = self.transcripts.transcript_dir(folder);
         std::fs::create_dir_all(&dir).unwrap();
         let lines = [
             json!({ "type": "user", "sessionId": session_id, "timestamp": "2026-01-01T00:00:00.000Z",
@@ -433,6 +438,45 @@ async fn archives_sessions_skipping_what_it_shouldnt_and_removing_empty_ones() {
         err(f.handlers.archive_sessions("gone", "run", &[], false)),
         "Unknown project gone"
     );
+}
+
+/// A card in a worktree of its own is read there (SESS-211), and one whose
+/// transcript can't be read is archived, never removed (SESS-091): removing
+/// a server's card takes its worktree with it.
+#[tokio::test]
+async fn archives_a_worktree_card_by_its_own_transcript() {
+    let f = Fixture::on_a_server();
+    let mut ids = Vec::new();
+    for id in ["full", "locked"] {
+        let folder = f.home.path().join("worktrees").join(id);
+        std::fs::create_dir_all(&folder).unwrap();
+        let folder = folder.to_string_lossy().into_owned();
+        let mut card = node(id, 0.0);
+        card.set_worktree(Some(&nodus_domain::Worktree {
+            path: folder.clone(),
+            branch: format!("nodus/{id}"),
+        }));
+        f.add("p1", card);
+        f.said_something_in(&folder, id);
+        ids.push(id.to_owned());
+    }
+    // As a server's Claude Code leaves its folders, to `nodus serve`.
+    #[cfg(unix)]
+    let locked = {
+        use std::os::unix::fs::PermissionsExt;
+        let folder = f.home.path().join("worktrees/locked");
+        let dir = f.transcripts.transcript_dir(&folder.to_string_lossy());
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o000)).unwrap();
+        move || std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap()
+    };
+    let answer = f.handlers.archive_sessions("p1", "run", &ids, false);
+    #[cfg(unix)]
+    locked();
+    let answer = answer.unwrap();
+    assert_eq!(answer["archived"], json!(["full", "locked"]));
+    assert_eq!(answer["removed"], json!([]));
+    assert!(f.node("p1", "full").unwrap().archived);
+    assert!(f.node("p1", "locked").unwrap().archived);
 }
 
 #[tokio::test]

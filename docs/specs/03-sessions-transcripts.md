@@ -148,14 +148,14 @@ Everything here is UI-free and lands in `nodus-sessions`, `nodus-transcripts` an
 - **SESS-084 · Slot of a card** — An archived card's slot is `col = round((x - archive.x - 40) / 312)`, `row = round((y - archive.y - 64) / 240)`; it has none when `col < 0`, `col >= columns` or `row < 0`; else `row * columns + col`.
 - **SESS-085 · Growing** — The archive never shrinks: `right = max(archive.x + archive.w, every archived node's x + 288 + 40)`, `bottom = max(archive.y + max(archive.h, 320), every archived node's y + 216 + 40)`; `w = right - x`, `h = bottom - y`.
 - **SESS-086 · Archiving outside the board** — `archiveNode(board, node)` (used by board tools and archive_self) does nothing for an archived node; otherwise it stops the process (not awaited), moves the node to slot 0 of the archive, sets `archived: true` and `archivedAt` = now, and removes `sectionId` and `expanded`. It doesn't save; callers do.
-- **SESS-087 · Empty session test** — `isEmpty(project, node)` is false for terminals; otherwise `isEmptySession` of the node's transcript metadata (a missing transcript is empty).
+- **SESS-087 · Empty session test** — `isEmpty(project, node)` is false for terminals; otherwise `isEmptySession` of the node's transcript metadata (a missing transcript is empty; one there that can't be read isn't, SESS-091).
 - **SESS-088 · Dropping** — `dropNode(board, node)` unsticks its notes (SESS-089), deletes the node, and stops its process, forgetting its status once the process is gone (`forgetStatus`, 02). It does not add to `hidden`.
 - **SESS-089 · Unsticking notes** — When a card leaves the board, each note with `sessionId` equal to it loses `sessionId`; if the card wasn't archived, the note moves to the card's `x`/`y`; from an archived card the note keeps its own position.
 
 ### Saving node patches (`board:save-nodes`)
 
 - **SESS-090 · Unknown nodes** — Patches for session ids not on the board are skipped.
-- **SESS-091 · Empty sessions are dropped** — A patch with `archived: true` for a node not yet archived whose session is empty (SESS-087) drops the node instead (SESS-088), and the rest of that patch is ignored.
+- **SESS-091 · Empty sessions are dropped** — A patch with `archived: true` for a node not yet archived whose session is empty (SESS-087) drops the node instead (SESS-088), and the rest of that patch is ignored. The transcript is read from the card's own folder (SESS-211). After 1.0.28, one that may be there but can't be read (its folder or file isn't readable to this user) isn't empty: the card is archived. Before, on a server, every transcript was unreadable to `serve`, so archiving a card removed it and its worktree (SRV-005, SRV-124).
 - **SESS-092 · Position** — `x`/`y` are applied when they are finite numbers (not rounded).
 - **SESS-093 · Title** — A string `title` is trimmed; an empty result removes the custom title.
 - **SESS-094 · Archived flag** — A boolean `archived` applies only to nodes that are not terminals and not views' brains. Going from not archived to archived stops the process (not awaited, status not forgotten) and sets `archivedAt` to now. Un-archiving keeps `archivedAt`.

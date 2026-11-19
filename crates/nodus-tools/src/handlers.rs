@@ -485,9 +485,13 @@ impl BoardToolHandlers for StoreHandlers {
                     continue;
                 }
                 let node = node.expect("a node that wasn't skipped");
-                // Nothing was said in it, so there is nothing to keep.
-                let meta = transcripts.session(&project.repo_path, id).map(|f| f.meta);
-                if is_empty(&node, meta.as_ref()) {
+                // Nothing was said in it, so there is nothing to keep. Its
+                // transcript is in its own folder (SESS-211), and one that
+                // couldn't be read isn't taken for empty (SESS-091).
+                let folder = node.worktree().map_or_else(|| project.repo_path.clone(), |w| w.path);
+                if let Ok(found) = transcripts.try_session(&folder, id)
+                    && is_empty(&node, found.map(|f| f.meta).as_ref())
+                {
                     drop_node(board, id, &mut effects);
                     removed.push(id.clone());
                     continue;

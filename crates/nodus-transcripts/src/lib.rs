@@ -120,6 +120,25 @@ impl Transcripts {
         self.read_session(session_id, &self.transcript_path(repo_path, session_id))
     }
 
+    /// [`Self::session`], where None means there's no transcript: one that
+    /// may be there but couldn't be read (its folder or file not readable
+    /// to this user) is an error instead, so it's never taken for a session
+    /// nothing was said in (SESS-091).
+    pub fn try_session(&self, repo_path: &str, session_id: &str) -> std::io::Result<Option<DiscoveredSession>> {
+        let file = self.transcript_path(repo_path, session_id);
+        if let Some(found) = self.read_session(session_id, &file) {
+            return Ok(Some(found));
+        }
+        match std::fs::metadata(&file) {
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(err),
+            Ok(_) => Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                format!("{} can't be read", file.display()),
+            )),
+        }
+    }
+
     /// The files a session and its agents changed with Claude's file tools,
     /// relative to the root of the repository `repo_path` is in, first
     /// changed first (CARD-060).
@@ -154,5 +173,58 @@ impl Transcripts {
     /// Lets go of what search has read.
     pub fn clear_search_index(&self) {
         self.search.clear();
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    const ID: &str = "00000000-0000-4000-8000-000000000001";
+
+    fn set_mode(path: &Path, mode: u32) {
+        fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
+    }
+
+    #[test]
+    fn a_transcript_that_cant_be_read_is_an_error_not_none() {
+        let home = tempfile::tempdir().unwrap();
+        let repo = home.path().join("repo");
+        fs::create_dir(&repo).unwrap();
+        let repo = repo.to_string_lossy().into_owned();
+        let transcripts = Transcripts::new(home.path().to_owned());
+        // None there: nothing was said.
+        assert!(matches!(transcripts.try_session(&repo, ID), Ok(None)));
+
+        let file = transcripts.transcript_path(&repo, ID);
+        let folder = file.parent().unwrap().to_owned();
+        fs::create_dir_all(&folder).unwrap();
+        fs::write(
+            &file,
+            "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":\"hello\"}}\n",
+        )
+        .unwrap();
+        let found = transcripts.try_session(&repo, ID).unwrap().unwrap();
+        assert_eq!(found.meta.first_prompt.as_deref(), Some("hello"));
+
+        // As a server's `nodus` found Claude Code's folders (0700) before
+        // 1.0.28: not even there, as far as it could tell.
+        set_mode(&folder, 0o000);
+        let root = fs::metadata(&file).is_ok();
+        if !root {
+            assert!(transcripts.session(&repo, ID).is_none());
+            assert!(transcripts.try_session(&repo, ID).is_err());
+        }
+        // And its files (0600): there, but not to be opened.
+        set_mode(&folder, 0o700);
+        set_mode(&file, 0o000);
+        let fresh = Transcripts::new(home.path().to_owned());
+        if !root {
+            assert!(fresh.session(&repo, ID).is_none());
+            assert!(fresh.try_session(&repo, ID).is_err());
+        }
+        set_mode(&file, 0o600);
     }
 }

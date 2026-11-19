@@ -281,7 +281,7 @@ Connections (`nodesConnectable={false}`), edge selection/focus, React Flow's del
 ### Archive, stop, restore, remove
 
 - **BOARD-110** Archiving ids takes the active non-terminal cards among them (none → nothing); if any is live and not `done` it asks first (archive-running confirm) and stops on Cancel; then every target is saved with `archived: true` and its position set to the stack top, and the moved cards are deselected.
-- **BOARD-111** The store turns an archive of a session with nothing said in it into removal from the board instead, sets archived cards to `done`, stamps `archivedAt`, drops them from sections and un-expands them (store, 03/10).
+- **BOARD-111** The store turns an archive of a session with nothing said in it into removal from the board instead (on a server board it leaves that to the server, which reads the transcript, and the board loads again when it says so, SRV-186), sets archived cards to `done`, stamps `archivedAt`, drops them from sections and un-expands them (store, 03/10).
 - **BOARD-112** Stopping ids takes the live non-terminal non-run cards among them (none → nothing); asks with the stop confirm when any of them is not `done`; then kills each and waits for all.
 - **BOARD-113** `Restore to board` saves the card at a free card-sized spot to the right of the dock (dock right + 80, dock top), clear of every other card and of notes/views, with `archived: false`, and pans to show it (card-sized).
 - **BOARD-114** `Remove terminal` asks first only when the shell is live (`Remove terminal?`), then removes the card from the board.

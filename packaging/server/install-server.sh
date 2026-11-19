@@ -304,6 +304,8 @@ create_users() {
 install_packages() {
 	apt_update
 	apt_install ca-certificates curl gnupg openssl git uidmap dbus-user-session nftables
+	# python3, to mark Claude Code's onboarding done (step 4).
+	apt_install python3
 	# A font, for the words in the board pictures sessions look at (TOOL-111).
 	apt_install fonts-dejavu-core
 	# gh, from GitHub's own apt repository.
@@ -333,6 +335,24 @@ install_claude() {
 	version=$(as_user "$RUN_USER" "$RUN_HOME/.local/bin/claude" --version 2>>"$LOG") ||
 		fail "Claude Code didn't install for $RUN_USER: $RUN_HOME/.local/bin/claude --version failed."
 	note "claude $version"
+
+	# Claude Code waits on its first-run screens (the theme picker) until
+	# its onboarding is done, and nobody answers them in a session.
+	run as_user "$RUN_USER" python3 -c '
+import json, os
+path = os.path.expanduser("~/.claude.json")
+try:
+    with open(path) as f:
+        config = json.load(f)
+except FileNotFoundError:
+    config = {}
+if config.get("hasCompletedOnboarding") is not True:
+    config["hasCompletedOnboarding"] = True
+    with open(path + ".nodus", "w") as f:
+        json.dump(config, f, indent=2)
+    os.chmod(path + ".nodus", 0o600)
+    os.replace(path + ".nodus", path)
+' || fail "Couldn't mark Claude Code's onboarding done in $RUN_HOME/.claude.json; see $LOG."
 }
 
 # --------------------------------------------------------------------------

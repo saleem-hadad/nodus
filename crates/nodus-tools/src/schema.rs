@@ -17,8 +17,10 @@ pub const PROTOCOL_VERSION: &str = "2025-06-18";
 
 /// The server's instructions, sent with `initialize` (TOOL-017): 0.9.4's,
 /// and since then the shapes and links (TOOL-110), and looking at the board
-/// and drawing on it unasked (TOOL-114).
-pub const INSTRUCTIONS: &str = "Nodus is the board of Claude Code sessions the user runs this session from. Besides the session cards, it holds sticky notes and views. When the user asks you to put something on the board, or to make notes of it, write it with create_note. Read the notes they have put up with list_notes. Write notes when the user asks for them, or when a short one would help them come back to something later. When the user asks for a view, a dashboard, a table, a chart or other custom UI on the board, put it up with create_view, which hands the building to the view’s own Claude session; list_views, get_view and update_view find and change the views there. To put a note on another project’s board, or read the notes there, pass that project to the note tools; list_projects lists the projects. When the user asks for a new project, add it with create_project. When the user asks you to archive yourself, use archive_self. The board also holds shapes (boxes, ellipses, diamonds, words and emoji stickers) and links, arrows between cards, notes, views and shapes. The user links cards to show how their work relates: list_board shows what is on the board and where, and what this session’s card is linked to. look_at_board shows the board as a picture, with the pictures and ink sketches words can’t describe: look at it when the user points at something on the board or asks about what is there. Draw with draw_on_board when the user asks for something drawn, laid out, linked or marked, and on your own when a small sketch, a picture you made or a mark on what you mean would say it better than words: keep it small and near your card. update_drawing and erase_from_board change and take away drawings; change the user’s only when they ask. The user reads this session as a chat, which can show more than text. To show a chart, stats, a table or a text layout, call show_visual (or put the same JSON in a ```visual block in your reply). To ask the user questions with choices, call ask (or use a ```questions block), then end your turn: the answers arrive as their next message. For a mockup, a side-by-side comparison or a small tool that needs HTML, call show_page, which puts a page on the board beside your card; the nodus:views skill says how to write one. Prefer show_visual and ask, and don't repeat in words what they show.";
+/// and drawing on it unasked (TOOL-114). Claude Code keeps only the first
+/// 2,048 characters of them, so the chat's sentences come first
+/// (TOOLCHAT-004) and the whole stays under that.
+pub const INSTRUCTIONS: &str = "Nodus is the board of Claude Code sessions the user runs this session from. The user reads this session as a chat, which can show more than text. To show a chart, stats, a table or a text layout, call show_visual (or put the same JSON in a ```visual block in your reply). To ask the user questions, call ask (or use a ```questions block) instead of AskUserQuestion or prose, then end your turn: the answers arrive as their next message. For a mockup, a comparison or a small tool that needs HTML, call show_page, which puts a page beside your card; the nodus:views skill says how to write one. Prefer show_visual and ask, and don't repeat in words what they show. Besides the session cards, the board holds sticky notes and views. When the user asks you to put something on the board or make notes of it, use create_note; read their notes with list_notes, and write one unasked only when it would help them come back to something later. For a view, dashboard, table, chart or other custom UI on the board, use create_view, which hands the building to the view’s own Claude session; list_views, get_view and update_view find and change views. Pass another project to the note tools for its board; list_projects lists the projects. Add a project with create_project, and archive yourself with archive_self, when the user asks. The board also holds shapes (boxes, ellipses, diamonds, words, emoji stickers) and links (arrows between cards, notes, views and shapes); list_board shows what is where, and what your card is linked to. look_at_board shows the board as a picture, with the pictures and ink sketches words can’t describe: look at it when the user points at something there. Draw with draw_on_board when asked, and on your own when a small sketch, picture or mark would say it better than words: keep it small and near your card. update_drawing and erase_from_board change and remove drawings; change the user’s only when they ask.";
 
 /// The `--mcp-config` for every claude process (TOOL-002). Claude Code expands
 /// the `${…}` from the environment `hookEnv` gives it, so the token never
@@ -684,5 +686,28 @@ impl ToolLists {
             goal: Value::Array(goal),
             coordinator: Value::Array(coordinator),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Claude Code keeps 2,048 characters of a server's instructions, counted
+    /// as JavaScript counts them, and cuts the rest off with "… [truncated]".
+    #[test]
+    fn the_instructions_fit_what_claude_code_keeps() {
+        let length = INSTRUCTIONS.encode_utf16().count();
+        assert!(
+            length <= 2048,
+            "INSTRUCTIONS is {length} characters; Claude Code keeps 2048"
+        );
+    }
+
+    #[test]
+    fn the_instructions_say_how_to_ask_before_the_board() {
+        let ask = INSTRUCTIONS.find("call ask").unwrap();
+        assert!(ask < INSTRUCTIONS.find("create_note").unwrap());
+        assert!(INSTRUCTIONS.contains("instead of AskUserQuestion or prose"));
     }
 }

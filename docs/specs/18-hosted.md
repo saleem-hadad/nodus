@@ -103,6 +103,7 @@ The server reuses what the app already has: `nodus-core`'s headless config (`Nod
 - **SRV-013** **The units.** Paths are absolute, because in a system unit `%h` is root's home whatever `User=` says.
   - `nodus.service`: `User=nodus`, `SupplementaryGroups=nodus-run`, `ExecStart=/opt/nodus/bin/nodus serve --host-socket /run/nodus/host.sock --run-home /home/nodus-run --uploads /srv/nodus/uploads`, `UMask=0027`, `Restart=always`, `RestartSec=1`, after `nodus-host.service` and `tailscaled.service`.
     - `NoExecPaths=/home/nodus-run /srv/nodus /tmp /var/tmp /dev/shm`, `PrivateTmp=yes` and `NoNewPrivileges=yes`: `nodus` runs nothing `nodus-run` could have written (SRV-005).
+      - After 1.0.27, `serve` finds `claude` by an execute bit in its mode rather than by asking the kernel whether it may run it: on a noexec mount the kernel says no, so from 1.0.17 to 1.0.27 every server session failed with "Claude Code CLI not found". The session host, as `nodus-run`, is what runs it.
     - `StartLimitIntervalSec=0`, so it never stops restarting: a session holding port 7420 for a while delays the server, and can't learn a token from the apps meanwhile (SRV-030).
   - `nodus-host.service`:
     - `User=nodus-run`, `ExecStart=/opt/nodus/bin/nodus host --socket /run/nodus/host.sock`;

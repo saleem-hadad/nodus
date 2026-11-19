@@ -14,6 +14,8 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
+use path_search::RunBy;
+
 pub use claude::exe_behind_shim;
 
 /// Claude Code's own program as [`Env`] finds it at startup: on `env`'s
@@ -24,7 +26,7 @@ pub use claude::exe_behind_shim;
 pub fn find_claude(env: &EnvMap, home: Option<&Path>) -> Option<PathBuf> {
     let mut lookup = env.clone();
     path_search::add_fallback_dirs(&mut lookup, home);
-    claude::find(lookup.get("PATH").map_or("", String::as_str))
+    claude::find(lookup.get("PATH").map_or("", String::as_str), RunBy::ThisProcess)
 }
 
 /// Environment variables by name.
@@ -113,15 +115,20 @@ impl Env {
 
     /// [`Env::with_vars`] without asking `claude` its version, so nothing is
     /// started: for `nodus serve`, which starts no process itself (SRV-005).
-    /// The version is unknown.
-    pub fn given(mut base: EnvMap, home: Option<&Path>) -> Self {
+    /// The version is unknown. `claude` is any file on the PATH with an
+    /// execute bit, since the session host runs it, not this process.
+    pub fn given(base: EnvMap, home: Option<&Path>) -> Self {
+        Self::found(base, home, RunBy::Anyone)
+    }
+
+    fn found(mut base: EnvMap, home: Option<&Path>, run_by: RunBy) -> Self {
         path_search::add_fallback_dirs(&mut base, home);
-        let claude_path = claude::find(base.get("PATH").map_or("", String::as_str));
+        let claude_path = claude::find(base.get("PATH").map_or("", String::as_str), run_by);
         Self::new(base, claude_path, None)
     }
 
     async fn resolve(base: EnvMap, home: Option<&Path>) -> Self {
-        let mut env = Self::given(base, home);
+        let mut env = Self::found(base, home, RunBy::ThisProcess);
         if let Some(claude) = &env.claude_path {
             env.claude_version = claude::read_version(claude, &env.spawn_env()).await;
         }

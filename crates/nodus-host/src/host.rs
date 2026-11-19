@@ -128,6 +128,9 @@ pub(crate) struct Host {
     /// starts and restarts it, so it waits for its app however long it's
     /// gone, and leaves when an app on another protocol says hello.
     pub(crate) standalone: bool,
+    /// Where its user's Claude Code keeps transcripts, on a server's host,
+    /// which lets its group read them (SRV-005). None anywhere else.
+    pub(crate) shared_transcripts: Option<std::path::PathBuf>,
     pub(crate) hook_port: AtomicU64,
     /// Where sessions with their own token get their hook commands' curl
     /// config (SRV-143): `hooks` beside the socket. None in tests.
@@ -146,6 +149,7 @@ impl Host {
         host_key: Option<String>,
         standalone: bool,
         hook_configs: Option<std::path::PathBuf>,
+        shared_transcripts: Option<std::path::PathBuf>,
     ) -> Arc<Self> {
         Arc::new_cyclic(|me| Self {
             me: me.clone(),
@@ -157,6 +161,7 @@ impl Host {
             hook_token,
             host_key,
             standalone,
+            shared_transcripts,
             hook_port: AtomicU64::new(0),
             hook_configs,
             next_id: AtomicU64::new(1),
@@ -810,6 +815,28 @@ impl Host {
         );
     }
 
+    /// SRV-005: on a server, a hook's session's transcript, its folder and
+    /// its subagents' are made readable to the host's group before the hook
+    /// goes on, so `nodus serve` can read what the hook is about.
+    pub(crate) async fn share_transcript(&self, payload: &Value) {
+        let (Some(projects), Some(file)) = (
+            self.shared_transcripts.clone(),
+            payload.get("transcript_path").and_then(Value::as_str),
+        ) else {
+            return;
+        };
+        #[cfg(unix)]
+        {
+            let file = std::path::PathBuf::from(file);
+            let _ = tokio::task::spawn_blocking(move || {
+                crate::share::share_session(&projects, &file, crate::share::user())
+            })
+            .await;
+        }
+        #[cfg(not(unix))]
+        let _ = (projects, file);
+    }
+
     /// A hook or status line report for a session (HOST-073–078). With
     /// `reply`, a Stop hook whose command prints the answer (QUEUE-008)
     /// may hand Claude the session's first queued prompt: then this is the
@@ -1267,7 +1294,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn host_086_each_relay_gives_up_20_seconds_after_it_was_sent() {
         let (log, _lines) = Logger::memory();
-        let host = Host::new(log, "token".into(), None, false, None);
+        let host = Host::new(log, "token".into(), None, false, None, None);
         // An app that never answers.
         let (app, mut heard) = mpsc::unbounded_channel::<Line>();
         host.lock().clients.insert(1, app);
@@ -1308,7 +1335,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn host_064_exits_4_seconds_after_shutdown_whatever_is_left() {
         let (log, lines) = Logger::memory();
-        let host = Host::new(log, "token".into(), None, false, None);
+        let host = Host::new(log, "token".into(), None, false, None, None);
         // A session that ignores SIGTERM and SIGHUP, whose exit the host never
         // hears of (nothing follows its events), so it's still there when the
         // time is up: as a process that outlived SIGKILL would be.
@@ -1362,5 +1389,34 @@ mod tests {
         assert_eq!(exited.await.unwrap(), 0);
         let logged: Vec<String> = lines.lock().unwrap().iter().map(|l| l[25..].to_owned()).collect();
         assert_eq!(logged, ["stopping every session"]);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn srv_005_a_servers_host_shares_the_transcript_a_hook_names() {
+        use std::fs::{self, Permissions};
+        use std::os::unix::fs::PermissionsExt;
+        let home = tempfile::tempdir().unwrap();
+        let projects = home.path().join(".claude/projects");
+        let folder = projects.join("-srv-shop");
+        fs::create_dir_all(&folder).unwrap();
+        let file = folder.join("s1.jsonl");
+        fs::write(&file, "{}\n").unwrap();
+        fs::set_permissions(&file, Permissions::from_mode(0o600)).unwrap();
+        fs::set_permissions(&folder, Permissions::from_mode(0o700)).unwrap();
+        let mode = |path: &std::path::Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
+        let hook = json!({ "hook_event_name": "Stop", "transcript_path": file.to_string_lossy() });
+
+        // The app's host leaves them as Claude Code wrote them.
+        let (log, _lines) = Logger::memory();
+        let host = Host::new(log.clone(), "token".into(), None, false, None, None);
+        host.share_transcript(&hook).await;
+        assert_eq!((mode(&folder), mode(&file)), (0o700, 0o600));
+
+        let host = Host::new(log, "token".into(), None, true, None, Some(projects));
+        host.share_transcript(&json!({ "hook_event_name": "Stop" })).await;
+        assert_eq!((mode(&folder), mode(&file)), (0o700, 0o600));
+        host.share_transcript(&hook).await;
+        assert_eq!((mode(&folder), mode(&file)), (0o750, 0o640));
     }
 }

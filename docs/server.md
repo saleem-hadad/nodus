@@ -76,12 +76,12 @@ The server runs Claude in auto mode, so it should reach none of your team's devi
 
 To join a server someone else set up, ask a member to invite your GitHub login, then **Connect to Server…** and sign in with GitHub.
 
-Later, **Add from GitHub on <server>…**, in the same menu as **Connect to Server…**, adds more projects, and Settings → Servers manages members, devices, Claude accounts and the GitHub App, and shows recent activity.
+Later, **Add from GitHub on <server>…** adds more projects: it's in the menu beside **New Project** on the projects grid, with **Connect to Server…**, and in the **New** menu of that server's boards. Settings → Servers manages members, devices, Claude accounts and the GitHub App, and shows recent activity.
 
 ## The two users
 
 - **`nodus`** runs the server itself (`nodus.service`). It keeps the boards, the members and their devices, the GitHub App's private key, the Claude accounts and the audit log in `/home/nodus`, which only it can read. It never runs anything inside a project.
-- **`nodus-run`** runs the session host (`nodus-host.service`), and through it everything that touches a repository: Claude Code, terminals, git, view commands, setup scripts and rootless Docker. It owns `/home/nodus-run`, with the projects, their worktrees and the transcripts. It can't read `nodus`'s files or change the server's binary.
+- **`nodus-run`** runs the session host (`nodus-host.service`), and through it everything that touches a repository: Claude Code, terminals, git, view commands, setup scripts and rootless Docker. It owns `/home/nodus-run`, with the projects, their worktrees and the transcripts, which the session host lets `nodus` read through the `nodus-run` group. It can't read `nodus`'s files or change the server's binary.
 
 So a session that a repository or a web page steers can't take the App key, the other Claude accounts or members' devices. A member, though, can type into any terminal: treat every member as someone with a shell on the server.
 
@@ -105,7 +105,7 @@ Also remove members who leave, and revoke devices you don't recognize. Every mem
 
 ## Updating
 
-When the app is newer than the server, Settings → Servers and the server's project tiles show **Update Server**. Any member can press it. The server downloads the newest release, checks its signature against the key built into it, never installs an older version, and restarts. Sessions keep running, unless the new version changed how the server talks to its session host: then they stop, and resume when you open them. Everyone's app shows how the update is going.
+When the app is newer than the server, Settings → Servers and the server's project tiles show **Update Server**. Any member can press it. The server downloads the newest release, checks its signature against the key built into it, never installs an older version, and restarts. Sessions keep running, unless the new version changed how the server talks to its session host: then they stop, and resume when you open them. Otherwise the session host stays on the version it started with until the machine restarts or you run `sudo systemctl restart nodus-host`, which stops its sessions (they resume when you open them). Everyone's app shows how the update is going.
 
 Running the install script again also updates the server.
 

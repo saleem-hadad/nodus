@@ -11,10 +11,11 @@
 //! over a Unix socket, or a named pipe on Windows (`nodus-host-proto`). On a
 //! server it runs on its own as `nodus host --socket <path>`, as another
 //! user than `nodus serve`, which connects to it and has it run every
-//! process (SRV-004, SRV-005). It
-//! sends the same messages as the 0.9.4 Node host under protocol number 2
-//! (0.9.4 says 1, decision U1), so an app of either kind that finds the other
-//! kind's host asks to stop its sessions rather than adopting them.
+//! process (SRV-004, SRV-005), and lets that user read Claude Code's
+//! transcripts through its group (`share`). It sends the same messages as
+//! the 0.9.4 Node host under protocol number 2 (0.9.4 says 1, decision U1),
+//! so an app of either kind that finds the other kind's host asks to stop
+//! its sessions rather than adopting them.
 //!
 //! Ports `src/main/host.ts`.
 
@@ -23,6 +24,7 @@ mod host;
 mod http;
 mod log;
 pub mod pty;
+mod share;
 pub mod transport;
 pub mod trust;
 
@@ -91,7 +93,16 @@ async fn serve(socket: &Path, key: Option<&Path>, standalone: bool, log: Logger)
     let host_key = cfg!(windows).then(|| random_hex(32));
     // SRV-143: sessions with tokens of their own keep them beside the socket.
     let hook_configs = socket.parent().map(|dir| dir.join("hooks"));
-    let host = host::Host::new(log.clone(), hook_token, host_key, standalone, hook_configs);
+    // SRV-005: a server's host lets `nodus serve` read the transcripts.
+    let shared_transcripts = share::shares(standalone).then(share::projects_dir).flatten();
+    let host = host::Host::new(
+        log.clone(),
+        hook_token,
+        host_key,
+        standalone,
+        hook_configs,
+        shared_transcripts,
+    );
 
     // HOST-024: two apps starting at once could each start a host; the second one leaves.
     if transport::already_served(socket).await {
@@ -117,6 +128,18 @@ async fn serve(socket: &Path, key: Option<&Path>, standalone: bool, log: Logger)
         if let Err(err) = make_socket_dir(socket) {
             return failed(&err);
         }
+    }
+    // SRV-005: the transcripts Claude Code wrote before this host started,
+    // while it starts.
+    #[cfg(unix)]
+    if let Some(projects) = host.shared_transcripts.clone() {
+        let log = log.clone();
+        tokio::task::spawn_blocking(move || {
+            let changed = share::share_all(&projects, share::user());
+            if changed > 0 {
+                log.log(&["shared transcripts with the group", &changed.to_string()]);
+            }
+        });
     }
     // HOST-026: the hook server first.
     let (hooks, port) = match http::bind().await {

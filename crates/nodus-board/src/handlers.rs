@@ -65,10 +65,14 @@ impl Board {
                 };
                 // SESS-091: a session nothing was said in is removed rather than
                 // archived; its note falls off where the card was before it moved.
+                // One whose transcript couldn't be read is archived: removing
+                // a server's card takes its worktree with it (SRV-124).
                 if patch.archived == Some(true) && !node.archived {
                     let folder = node.worktree().map_or_else(|| project.repo_path.clone(), |w| w.path);
-                    let meta = self.transcripts.session(&folder, &node.session_id).map(|f| f.meta);
-                    if is_empty(node, meta.as_ref()) {
+                    let read = self.transcripts.try_session(&folder, &node.session_id);
+                    if let Ok(found) = read
+                        && is_empty(node, found.map(|f| f.meta).as_ref())
+                    {
                         drop_node(board, &patch.session_id, &mut effects);
                         dropped = true;
                         continue;

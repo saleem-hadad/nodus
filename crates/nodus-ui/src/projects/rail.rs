@@ -21,6 +21,7 @@ use crate::components::icon::{Icon, icon};
 use crate::components::status_dot::status_dot;
 use crate::components::tween::{enter, transition};
 use crate::platform::{Platform, keys};
+use crate::projects::folder_item::ServerBadge;
 use crate::state::{AppState, Route, group_projects};
 use crate::theme::tokens::*;
 use crate::theme::{self, fonts, motion};
@@ -302,6 +303,7 @@ impl ProjectRail {
             folder = folder.saturate(0.4);
         }
         let focus_feature = self.state.read(cx).focus_feature();
+        let server = ServerBadge::of(project, self.state.read(cx));
         let state = self.state.clone();
         let open_id = project.id.clone();
         let rail = cx.entity();
@@ -395,6 +397,18 @@ impl ProjectRail {
                 )
             })
             .child(div().when(unfocused, |d| d.opacity(0.45)).child(folder))
+            // UI-340: a server project's badge, faded with its folder.
+            .when_some(server, |d, server| {
+                d.child(
+                    server
+                        .mark(14., 9., t)
+                        .absolute()
+                        .left(px(1.))
+                        .bottom(px(2.))
+                        .shadow(t.sm())
+                        .when(unfocused, |d| d.opacity(0.45)),
+                )
+            })
             .when_some(status, |d, status| {
                 d.child(
                     div().absolute().top(px(4.)).right(px(3.)).child(
@@ -430,26 +444,15 @@ impl ProjectRail {
                     .group_id
                     .as_ref()
                     .and_then(|g| s.groups.iter().find(|x| &x.id == g))
-                    .map(|g| g.name.clone());
-                let activity = s.stats.get(id).and_then(|st| {
-                    let mut parts = Vec::new();
-                    if st.waiting > 0 {
-                        parts.push(format!("{} waiting", st.waiting));
-                    }
-                    if st.working > 0 {
-                        parts.push(format!("{} working", st.working));
-                    }
-                    (!parts.is_empty()).then(|| parts.join(" · "))
-                });
-                let not_in_focus = (focusing && project.focused != Some(true)).then(|| "Not in focus".to_owned());
-                let number = order
-                    .iter()
-                    .position(|p| &p.id == id)
-                    .map(|i| i + 1)
-                    .filter(|n| *n <= 9)
-                    .map(|n| keys(&format!("⌘{n}")));
-                let parts: Vec<String> = [group, activity, not_in_focus, number].into_iter().flatten().collect();
-                (project.name.clone(), (!parts.is_empty()).then(|| parts.join(" · ")))
+                    .map(|g| g.name.as_str());
+                let detail = HintDetail {
+                    group,
+                    server: ServerBadge::of(project, s),
+                    stats: s.stats.get(id),
+                    not_in_focus: focusing && project.focused != Some(true),
+                    number: order.iter().position(|p| &p.id == id).map(|i| i + 1),
+                };
+                (project.name.clone(), detail.text())
             }
         };
         let slide = enter(
@@ -517,6 +520,41 @@ struct ItemState {
     number: Option<usize>,
     active: bool,
     focusing: bool,
+}
+
+/// What a project's hint says under its name (UI-272).
+struct HintDetail<'a> {
+    group: Option<&'a str>,
+    /// UI-340: where a server project lives.
+    server: Option<ServerBadge>,
+    stats: Option<&'a ProjectStats>,
+    not_in_focus: bool,
+    /// Its place in the rail, from 1.
+    number: Option<usize>,
+}
+
+impl HintDetail<'_> {
+    /// The parts that apply, joined with ` · `: its group, `On <server>`
+    /// (the badge's tooltip), what waits and works, `Not in focus` and its
+    /// shortcut among the first nine; none with none.
+    fn text(&self) -> Option<String> {
+        let mut parts: Vec<String> = Vec::new();
+        parts.extend(self.group.map(str::to_owned));
+        parts.extend(self.server.as_ref().map(ServerBadge::tooltip));
+        if let Some(st) = self.stats {
+            if st.waiting > 0 {
+                parts.push(format!("{} waiting", st.waiting));
+            }
+            if st.working > 0 {
+                parts.push(format!("{} working", st.working));
+            }
+        }
+        if self.not_in_focus {
+            parts.push("Not in focus".to_owned());
+        }
+        parts.extend(self.number.filter(|n| *n <= 9).map(|n| keys(&format!("⌘{n}"))));
+        (!parts.is_empty()).then(|| parts.join(" · "))
+    }
 }
 
 fn hint_key(hint: &Hint) -> SharedString {
@@ -741,5 +779,67 @@ impl Render for ProjectRail {
             .child(deferred(column).with_priority(priority))
             .children(edge)
             .children(hint)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn detail() -> HintDetail<'static> {
+        HintDetail {
+            group: None,
+            server: None,
+            stats: None,
+            not_in_focus: false,
+            number: None,
+        }
+    }
+
+    /// UI-272
+    #[test]
+    fn joins_what_applies() {
+        let stats = ProjectStats {
+            waiting: 1,
+            working: 2,
+            ..ProjectStats::default()
+        };
+        assert_eq!(detail().text(), None);
+        let hint = HintDetail {
+            group: Some("Clients"),
+            stats: Some(&stats),
+            not_in_focus: true,
+            number: Some(3),
+            ..detail()
+        };
+        assert_eq!(
+            hint.text().unwrap(),
+            format!("Clients · 1 waiting · 2 working · Not in focus · {}", keys("⌘3"))
+        );
+        let tenth = HintDetail {
+            number: Some(10),
+            ..detail()
+        };
+        assert_eq!(tenth.text(), None);
+    }
+
+    /// UI-340
+    #[test]
+    fn says_which_server_a_project_is_on() {
+        let on = |away| HintDetail {
+            group: Some("Clients"),
+            server: Some(ServerBadge {
+                name: "Studio".into(),
+                away,
+            }),
+            number: Some(1),
+            ..detail()
+        };
+        let one = keys("⌘1");
+        assert_eq!(on(false).text().unwrap(), format!("Clients · On Studio · {one}"));
+        assert_eq!(
+            on(true).text().unwrap(),
+            format!("Clients · On Studio · Reconnecting… · {one}")
+        );
     }
 }

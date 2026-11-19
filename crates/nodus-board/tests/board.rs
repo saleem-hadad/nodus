@@ -330,6 +330,27 @@ async fn drops_an_empty_session_instead_of_archiving_it() {
     assert_eq!(f.events.take(), [board_changed()]);
 }
 
+/// SESS-091: a transcript that's there but can't be read, as a server's
+/// were to `nodus serve` before 1.0.28, isn't taken for an empty one.
+#[cfg(unix)]
+#[tokio::test]
+async fn archives_a_session_whose_transcript_cant_be_read() {
+    use std::os::unix::fs::PermissionsExt;
+    let f = Fixture::new();
+    f.talk(A, "Fix the login", "Fixed it.", 1);
+    f.put(node(A, json!({ "x": 30, "y": 40 })));
+    // Claude Code's folder, 0700 and another user's there.
+    let folder_mode = |mode| std::fs::set_permissions(f.dir(), std::fs::Permissions::from_mode(mode)).unwrap();
+    folder_mode(0o000);
+    let patch: NodePatch = serde_json::from_value(json!({ "sessionId": A, "archived": true })).unwrap();
+    let saved = f.board.save_nodes("p", &[patch]);
+    folder_mode(0o700);
+    saved.unwrap();
+    let a = f.node(A).expect("still on the board");
+    assert_eq!((a.archived, a.archived_at), (true, Some(NOW)));
+    assert_eq!(f.sessions.log(), [format!("stop:{A}")]);
+}
+
 #[tokio::test]
 async fn saves_sections_and_removes_them() {
     let f = Fixture::new();

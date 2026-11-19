@@ -13,6 +13,7 @@ use crate::components::icon::{Icon, icon};
 use crate::components::status_dot::status_dot;
 use crate::components::tooltip::native_tooltip;
 use crate::components::tween::transition;
+use crate::state::AppState;
 use crate::theme::tokens::*;
 use crate::theme::{self, fonts, motion};
 
@@ -38,8 +39,8 @@ pub struct FolderItem<'a> {
     pub update: Option<AnyElement>,
 }
 
-/// The badge on a server project's folder: its server's name for the
-/// tooltip, dimmed while the server is away (SRV-162).
+/// The badge on a server project's folder, in the grid and the rail: its
+/// server's name for the tooltip, dimmed while the server is away (SRV-162).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServerBadge {
     pub name: String,
@@ -47,12 +48,39 @@ pub struct ServerBadge {
 }
 
 impl ServerBadge {
+    /// A server project's badge, named by its server's id until the server
+    /// is known; none for a local project.
+    pub fn of(project: &Project, s: &AppState) -> Option<Self> {
+        let server_id = project.server.as_ref()?;
+        Some(Self {
+            name: s
+                .server_of(project)
+                .map_or_else(|| server_id.clone(), |server| server.name.clone()),
+            away: s.server_away(project),
+        })
+    }
+
     pub fn tooltip(&self) -> String {
         if self.away {
             format!("On {} · Reconnecting…", self.name)
         } else {
             format!("On {}", self.name)
         }
+    }
+
+    /// The badge itself, `size` across with a `glyph`px server icon, at 45%
+    /// while the server is away; its place is the caller's.
+    pub fn mark(&self, size: f32, glyph: f32, t: Tokens) -> Div {
+        div()
+            .size(px(size))
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded(px(size / 2.))
+            .bg(t.bg_elevated)
+            .shadow(t.md())
+            .when(self.away, |d| d.opacity(0.45))
+            .child(icon(Icon::Server, glyph, 2.4, t.text_secondary))
     }
 }
 
@@ -206,21 +234,13 @@ impl FolderItem<'_> {
                     .children(badges)
                     .when_some(self.server, |d, server| {
                         d.child(
-                            div()
+                            server
+                                .mark(20., 11., t)
                                 .id((id.clone(), "server-badge"))
                                 .absolute()
                                 .bottom(px(16.))
                                 .left(px(2.))
-                                .size(px(20.))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .rounded(px(10.))
-                                .bg(t.bg_elevated)
-                                .shadow(t.md())
-                                .when(server.away, |d| d.opacity(0.45))
-                                .tooltip(native_tooltip(server.tooltip().into()))
-                                .child(icon(Icon::Server, 11., 2.4, t.text_secondary)),
+                                .tooltip(native_tooltip(server.tooltip().into())),
                         )
                     }),
             )

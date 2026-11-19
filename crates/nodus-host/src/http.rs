@@ -118,6 +118,10 @@ async fn route(host: &Host, req: Request<Incoming>) -> Reply {
     // from a process an older app started throws it away, so it never gets
     // a queued prompt (QUEUE-007).
     let reply = first(&query, "reply") == Some("1");
+    // The status line comes every few hundred milliseconds; hooks are enough.
+    if event != nodus_host_proto::STATUS_LINE_EVENT {
+        host.share_transcript(&payload).await;
+    }
     match host.hook(event, session_id, payload, reply) {
         // QUEUE-005
         Some(answer) => ascii_json_reply(&answer),

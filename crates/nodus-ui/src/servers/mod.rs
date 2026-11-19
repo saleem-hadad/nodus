@@ -4,7 +4,8 @@
 //! the server's projects in or out of the grid. Both open from the grid's
 //! New Project menu and from Settings → Servers. That menu also has **Add
 //! from GitHub on <server>…** (SRV-120), which clones one of the server's
-//! GitHub App's repositories as a project.
+//! GitHub App's repositories as a project, and so does a server board's
+//! `New` ([`add_from_github`]).
 
 mod connect;
 
@@ -25,6 +26,7 @@ use nodus_domain::{Project, ServerInfo, ServerState, ServerUpdateStatus};
 use connect::Step;
 
 use crate::components::button::button;
+use crate::components::context_menu::MenuItem;
 use crate::components::focus_ring::focus_ring;
 use crate::components::folder_icon::folder_icon;
 use crate::components::icon::{Icon, icon};
@@ -111,6 +113,25 @@ pub fn tile_update_label(status: Option<&ServerUpdateStatus>) -> String {
         Some(ServerUpdateStatus::Restarting { .. }) => "Restarting…".into(),
         _ => "Update Server".into(),
     }
+}
+
+/// SRV-120: `Add from GitHub on <server>…`, which opens the server's Add
+/// from GitHub dialog (UI-329); none while the server isn't connected. In
+/// the grid's New Project menu (UI-308) and a server board's `New`
+/// (BOARD-147).
+pub fn add_from_github(state: &Entity<AppState>, server: &ServerInfo) -> Option<MenuItem> {
+    if server.state != ServerState::Connected {
+        return None;
+    }
+    let (state, server_id) = (state.clone(), server.id.clone());
+    Some(MenuItem::item(
+        format!("Add from GitHub on {}…", server.name),
+        Icon::FolderPlus,
+        move |_, cx| {
+            let server_id = server_id.clone();
+            state.update(cx, |s, cx| s.open_server_dialog(ServerDialog::Github { server_id }, cx));
+        },
+    ))
 }
 
 /// A server's projects, as the picker has them.

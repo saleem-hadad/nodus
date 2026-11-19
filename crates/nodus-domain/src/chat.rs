@@ -21,6 +21,28 @@ pub struct QueuedPrompt {
     pub at: f64,
 }
 
+/// What a session's transcript gained since a read of it, as raw JSON lines:
+/// what `session:chat` answers (SRV-166), and what the chat view reads on
+/// this computer too. The chat parses the lines itself.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatChunk {
+    /// The file the text is from, named for the next read: its device and
+    /// inode, or `""` when there's no file yet (or nothing names it).
+    pub file: String,
+    /// The text starts the chat over: the file was replaced (CHAT-003).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub restart: bool,
+    /// Whole lines, each ending in a newline, or the start of one too long
+    /// for one read, whose rest follows.
+    pub text: String,
+    /// Where the next read starts, in bytes.
+    pub offset: u64,
+    /// There's more to read at once.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub more: bool,
+}
+
 /// Whether the API error a turn ended on (Claude Code's `error`, as its
 /// transcript and its `StopFailure` hook name it) is one another request can
 /// get past: a dropped connection or stream (`server_error`), an overloaded

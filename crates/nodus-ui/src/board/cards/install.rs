@@ -6,7 +6,7 @@
 use std::rc::Rc;
 
 use gpui::{AnyElement, App, Bounds, IntoElement, ScrollEvent, Window, point, px, size};
-use nodus_domain::{BoardNote, NodePatch, OpenCardRequest, Rect};
+use nodus_domain::{BoardNote, NodePatch, OpenCardRequest, Rect, SessionKind};
 
 use super::present::{Phase, StackLook};
 use super::{
@@ -258,6 +258,7 @@ pub fn env(board: &BoardCx, zoom: f32, window: &Window, cx: &mut App) -> Rc<Boar
         .and_then(|s| s.board.as_ref())
         .filter(|b| b.project.id == board.project_id.as_ref())
         .and_then(coordination);
+    let chat = state.is_none_or(|s| crate::chat::shows_chat(&s.nodus, &board.project_id, SessionKind::Claude));
     let viewport = window.viewport_size();
     Rc::new(BoardEnv {
         scale: Z(zoom),
@@ -265,6 +266,7 @@ pub fn env(board: &BoardCx, zoom: f32, window: &Window, cx: &mut App) -> Rc<Boar
         project_id: board.project_id.to_string(),
         repo_path,
         server_host,
+        chat,
         renaming: board.renaming.as_ref().map(ToString::to_string),
         archive_hot: board.archive_hot,
         stack: StackView {

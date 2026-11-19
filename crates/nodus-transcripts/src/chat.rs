@@ -3,29 +3,26 @@
 //! call as a line, and the charts, forms and pages Claude shows, in the order
 //! the transcript has them.
 //!
-//! [`ChatLog`] follows one transcript file as Claude Code appends to it: each
-//! [`ChatLog::refresh`] reads only the lines added since the last one, and a
+//! [`ChatLog`] follows one transcript as Claude Code appends to it: each
+//! [`ChatLog::refresh`] reads only the lines added since the last one (each
+//! [`ChatLog::feed`], for a transcript read elsewhere, takes them), and a
 //! tool's result, or the answers to a form, update the entry they belong to
 //! in place.
 
 use std::collections::HashMap;
-use std::fs::{self, File};
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock};
 
-use nodus_domain::{Answers, ChatEntry, LineChanges, is_passing_api_error, js, queued_text};
+use nodus_domain::{Answers, ChatChunk, ChatEntry, LineChanges, is_passing_api_error, js, queued_text};
 use nodus_visual::{Segment, split_fences};
 use regex::Regex;
 use serde_json::Value;
 
-use crate::lines::{Json, read_lines};
+pub use crate::chunk::{CHAT_CHUNK_BYTES, CHAT_MAX_BYTES, read_chunk};
+use crate::lines::Json;
 use crate::parse::{describe_tool_use, message_text, prompt_full, task_notification, time_of, tool_name, user_text};
 use crate::slash::{SlashCommand, listed_skills};
 use crate::value::{as_str, field, truthy};
-
-/// Only this much of the end of a long transcript is read when the chat
-/// opens (CHAT-002).
-pub const CHAT_MAX_BYTES: u64 = 16 * 1024 * 1024;
 
 /// How the user's words reached Claude.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -67,9 +64,15 @@ static LOCAL_OUTPUT: LazyLock<Regex> = LazyLock::new(|| {
 
 /// One session's transcript as a chat, kept up to date as the file grows.
 pub struct ChatLog {
-    file: PathBuf,
+    /// The transcript on this computer; none for one read elsewhere and fed
+    /// in (a session on a server, SRV-166).
+    path: Option<PathBuf>,
+    /// The file the last read was from ([`ChatChunk::file`]).
+    file: String,
     /// Where the next read starts.
     offset: u64,
+    /// The start of a line too long for one read, until its newline comes.
+    partial: String,
     entries: Vec<ChatEntry>,
     /// Entries a later line can change, by id: tool calls, forms and pages.
     by_id: HashMap<String, usize>,
@@ -84,9 +87,21 @@ pub struct ChatLog {
 impl ChatLog {
     /// A chat of the transcript at `file`, read on the first [`Self::refresh`].
     pub fn new(file: PathBuf) -> Self {
+        Self::with(Some(file))
+    }
+
+    /// A chat of a transcript read elsewhere, whose reads come to
+    /// [`Self::feed`] (SRV-166).
+    pub fn fed() -> Self {
+        Self::with(None)
+    }
+
+    fn with(path: Option<PathBuf>) -> Self {
         Self {
-            file,
+            path,
+            file: String::new(),
             offset: 0,
+            partial: String::new(),
             entries: Vec::new(),
             by_id: HashMap::new(),
             pages: HashMap::new(),
@@ -98,32 +113,45 @@ impl ChatLog {
 
     /// Reads what the transcript gained since the last call. True when the
     /// chat changed. A missing file is an empty chat (CHAT-001); a file that
-    /// shrank was replaced, so it's read again from the start (CHAT-003).
+    /// shrank or another in its place was replaced, so it's read again from
+    /// the start (CHAT-003). Nothing for a chat that's fed.
     pub fn refresh(&mut self) -> bool {
-        let Ok(stat) = fs::metadata(&self.file) else {
+        let Some(path) = &self.path else {
             return false;
         };
-        let size = stat.len();
-        if size < self.offset {
+        let chunk = read_chunk(path, &self.file, self.offset, u64::MAX);
+        self.feed(chunk)
+    }
+
+    /// The file and offset the next read starts from, to ask for what the
+    /// transcript gained since ([`read_chunk`]).
+    pub fn at(&self) -> (String, u64) {
+        (self.file.clone(), self.offset)
+    }
+
+    /// Takes what a read of the transcript gave, from [`read_chunk`] here or
+    /// `session:chat` on a server (SRV-166): a chunk that starts over clears
+    /// the chat first (CHAT-003), and a line's start waits for its rest.
+    /// True when the chat changed.
+    pub fn feed(&mut self, chunk: ChatChunk) -> bool {
+        let before = self.version;
+        if chunk.restart {
             *self = Self {
                 version: self.version + 1,
-                ..Self::new(std::mem::take(&mut self.file))
+                ..Self::with(self.path.take())
             };
         }
-        if size == self.offset {
-            return false;
-        }
-        let Ok(fd) = File::open(&self.file) else {
-            return false;
-        };
-        // CHAT-002: a long transcript opens at its last 16 MiB.
-        let first = self.offset == 0 && size > CHAT_MAX_BYTES;
-        let start = if first { size - CHAT_MAX_BYTES } else { self.offset };
-        let before = self.version;
-        let mut lines = Vec::new();
-        self.offset = read_lines(&fd, start, size, first, |line| lines.push(line.clone()), None);
-        for line in &lines {
-            self.apply(line);
+        self.file = chunk.file;
+        self.offset = chunk.offset;
+        self.partial.push_str(&chunk.text);
+        if let Some(nl) = self.partial.rfind('\n') {
+            let whole: String = self.partial.drain(..=nl).collect();
+            for raw in whole.split('\n').filter(|raw| !raw.is_empty()) {
+                // Malformed lines, and lines that aren't objects, add nothing.
+                if let Ok(Value::Object(line)) = nodus_domain::json::from_str::<Value>(raw) {
+                    self.apply(&line);
+                }
+            }
         }
         self.version != before
     }
@@ -597,6 +625,7 @@ fn common_lines(a: &[&str], b: &[&str]) -> usize {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use std::io::Write as _;
 
     use serde_json::json;
@@ -916,6 +945,89 @@ mod tests {
         fs::write(&t.path, format!("{}\n", user("u3", &json!("three")))).unwrap();
         assert!(log.refresh());
         assert_eq!(log.entries().len(), 1);
+    }
+
+    /// SRV-166: a server's session, its transcript read there and fed in a
+    /// chunk at a time, as `session:chat` gives them.
+    fn follow(log: &mut ChatLog, path: &std::path::Path, limit: u64) -> bool {
+        let mut changed = false;
+        loop {
+            let (file, offset) = log.at();
+            let chunk = read_chunk(path, &file, offset, limit);
+            let more = chunk.more;
+            changed |= log.feed(chunk);
+            if !more {
+                return changed;
+            }
+        }
+    }
+
+    #[test]
+    fn a_transcript_read_elsewhere_is_fed_in() {
+        let t = Transcript::new();
+        let mut log = ChatLog::fed();
+        assert!(!log.refresh());
+        assert_eq!(log.at(), (String::new(), 0));
+        t.add(&[
+            user("u1", &json!("Why is the build slow?")),
+            assistant(
+                "a1",
+                &json!({ "type": "tool_use", "id": "t1", "name": "Bash", "input": { "command": "cargo build" } }),
+            ),
+        ]);
+        // Fed in pieces smaller than a line, it's the chat the file makes.
+        assert!(follow(&mut log, &t.path, 64));
+        assert_eq!(kinds(&log), ["user", "tool"]);
+        assert!(!follow(&mut log, &t.path, 64));
+        t.add(&[result("u2", "t1", "ok", false)]);
+        assert!(follow(&mut log, &t.path, 64));
+        assert!(matches!(&log.entries()[1], ChatEntry::Tool { done: true, .. }));
+        let mut local = ChatLog::new(t.path.clone());
+        local.refresh();
+        assert_eq!(local.entries(), log.entries());
+
+        // CHAT-003: replaced, it starts over.
+        let version = log.version();
+        fs::write(&t.path, format!("{}\n", user("u3", &json!("three")))).unwrap();
+        assert!(follow(&mut log, &t.path, 64));
+        assert!(log.version() > version);
+        assert_eq!(kinds(&log), ["user"]);
+        // A start over that leaves nothing still clears the chat.
+        fs::write(&t.path, "").unwrap();
+        assert!(follow(&mut log, &t.path, 64));
+        assert!(log.entries().is_empty());
+    }
+
+    #[test]
+    fn chat_002_a_fed_chat_opens_at_the_last_16_mib() {
+        let t = Transcript::new();
+        // A first line that's left out, then filler past 16 MiB, then the end.
+        let pad = "x".repeat(64 * 1024);
+        let filler = json!({ "type": "progress", "pad": pad }).to_string();
+        let mut text = format!("{}\n", user("u0", &json!("long ago")));
+        while text.len() < CHAT_MAX_BYTES as usize + 1024 {
+            text.push_str(&filler);
+            text.push('\n');
+        }
+        text.push_str(&format!("{}\n", user("u1", &json!("lately"))));
+        fs::write(&t.path, &text).unwrap();
+        let mut log = ChatLog::fed();
+        let mut reads = 0;
+        loop {
+            let (file, offset) = log.at();
+            let chunk = read_chunk(&t.path, &file, offset, CHAT_CHUNK_BYTES);
+            assert!(chunk.text.len() as u64 <= CHAT_CHUNK_BYTES);
+            reads += 1;
+            let more = chunk.more;
+            log.feed(chunk);
+            if !more {
+                break;
+            }
+        }
+        assert!(reads >= 32, "{reads}");
+        assert_eq!(kinds(&log), ["user"]);
+        assert!(matches!(&log.entries()[0], ChatEntry::User { text, .. } if text == "lately"));
+        assert_eq!(log.at().1, text.len() as u64);
     }
 
     #[test]

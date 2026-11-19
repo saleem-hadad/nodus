@@ -61,7 +61,7 @@ pub fn read_lines(
 
 /// Reads bytes `[start, end)` with positional reads until they're all read or
 /// the file ends.
-fn read_range(file: &File, start: u64, end: u64) -> Vec<u8> {
+pub(crate) fn read_range(file: &File, start: u64, end: u64) -> Vec<u8> {
     let length = usize::try_from(end - start).unwrap_or(usize::MAX);
     let mut buf = vec![0; length];
     let mut read = 0;

@@ -127,7 +127,7 @@ pub mod hosted {
         SignInStarted, TAILSCALE_TAG, TailscaleIdentity, TailscaleStatus, UsageWindow,
     };
 }
-pub use sessions::{Delivery, SessionsApi};
+pub use sessions::{ChatSource, Delivery, SessionsApi};
 pub use settings::SettingsApi;
 pub use shell::{AppShell, BoxFuture, Headless, ReplaceChoice};
 pub use updates::{RestartOutcome, StopSessionsQuestion, Unseen, UpdatesApi, WHATS_NEW_KEY};

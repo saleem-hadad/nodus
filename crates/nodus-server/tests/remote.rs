@@ -16,9 +16,13 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use nodus_core::domain::{BoardSnapshot, CreateSessionOptions, Event, NodePatch, ProjectPatch, ServerState, Viewport};
-use nodus_core::{EnvSource, HostLauncher, Nodus, NodusConfig, SafeStorage};
+use nodus_core::domain::{
+    BoardSnapshot, ChatEntry, CreateSessionOptions, Event, NodePatch, ProjectPatch, ServerState, SessionStatus,
+    Viewport,
+};
+use nodus_core::{ChatSource, Delivery, EnvSource, HostLauncher, Nodus, NodusConfig, SafeStorage};
 use nodus_host_proto::HostPaths;
+use nodus_transcripts::ChatLog;
 use nodus_wire::Request;
 use nodus_wire::client::{Client, hello};
 use serde_json::json;
@@ -669,4 +673,160 @@ async fn a_server_projects_files_go_through_its_server() {
         .unwrap_err();
     assert_eq!(err.message, nodus_remote::OFFLINE);
     app.shutdown();
+}
+
+/// SRV-166, SRV-167: a server card's chat is read from its transcript on
+/// the server, through `session:chat`, and its queue is the server's.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_server_cards_chat_and_queue_reach_the_app() {
+    let world = World::new();
+    let server = world.serve();
+    let bare = world.bare_repo("shop");
+    world.add_project(&bare).await;
+    let app = world.app().await;
+    let mut heard = Heard::new(app.subscribe());
+    let added = within(app.servers().add(&world.url(), TOKEN)).await.unwrap();
+    heard.server_went(&added.id, ServerState::Connected, WAIT).await;
+    let theirs = within(app.servers().projects(&added.id)).await.unwrap();
+    let project = within(app.servers().link(&added.id, &theirs[0].id)).await.unwrap();
+    within(app.board().load(&project.id)).await.unwrap();
+    let opts: CreateSessionOptions =
+        serde_json::from_value(json!({ "x": 0, "y": 0, "name": "Fix login", "initialPrompt": "look" })).unwrap();
+    let card = within(app.sessions().create(&project.id, &opts)).await.unwrap();
+    let id = card.node.session_id.clone();
+    assert!(card.live && card.status == SessionStatus::Working);
+
+    // CHAT-029: it shows its chat, read from its server.
+    let sessions = app.sessions();
+    assert_eq!(sessions.chat_source(&project.id, &id), Some(ChatSource::Server));
+    assert!(sessions.has_chat(&project.id));
+
+    // Claude Code writes its transcript under the sessions' home.
+    let folder = server_board(&world, &project.id).await.project.repo_path;
+    let transcript = nodus_transcripts::transcript_path(&world.root().join("home"), &folder, &id);
+    std::fs::create_dir_all(transcript.parent().unwrap()).unwrap();
+    let line = |uuid: &str, kind: &str, content: serde_json::Value| {
+        let role = if kind == "user" { "user" } else { "assistant" };
+        format!(
+            "{}\n",
+            json!({ "type": kind, "uuid": uuid, "timestamp": "2026-11-19T10:00:00Z",
+                    "message": { "role": role, "content": content } })
+        )
+    };
+    let append = |text: &str| {
+        use std::io::Write as _;
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&transcript)
+            .unwrap();
+        file.write_all(text.as_bytes()).unwrap();
+    };
+    // What the chat view does: ask from where it got to, feed what comes.
+    let follow = |log: &ChatLog| {
+        let (sessions, project_id, id) = (app.sessions(), project.id.clone(), id.clone());
+        let (file, offset) = log.at();
+        async move { sessions.chat(&project_id, &id, &file, offset).await }
+    };
+
+    // No transcript yet: an empty chat (CHAT-001).
+    let mut log = ChatLog::fed();
+    let chunk = within(follow(&log)).await.unwrap();
+    assert_eq!((chunk.text.as_str(), chunk.offset), ("", 0));
+    assert!(!log.feed(chunk));
+
+    append(&line("u1", "user", json!("look")));
+    append(&line(
+        "a1",
+        "assistant",
+        json!([{ "type": "text", "text": "Looking." }]),
+    ));
+    // A line still being written waits for its newline.
+    let partial = line("a2", "assistant", json!([{ "type": "text", "text": "Found it." }]));
+    append(&partial[..20]);
+    let chunk = within(follow(&log)).await.unwrap();
+    assert!(!chunk.more && !chunk.restart);
+    assert!(log.feed(chunk));
+    let said: Vec<String> = log
+        .entries()
+        .iter()
+        .map(|e| match e {
+            ChatEntry::User { text, .. } => format!("user: {text}"),
+            ChatEntry::Text { markdown, .. } => format!("claude: {markdown}"),
+            other => format!("{other:?}"),
+        })
+        .collect();
+    assert_eq!(said, ["user: look", "claude: Looking."]);
+    append(&partial[20..]);
+    let chunk = within(follow(&log)).await.unwrap();
+    assert!(log.feed(chunk));
+    assert_eq!(log.entries().len(), 3);
+    // Nothing new: nothing changes.
+    let chunk = within(follow(&log)).await.unwrap();
+    assert!(chunk.text.is_empty());
+    assert!(!log.feed(chunk));
+
+    // CHAT-003: replaced, it's read again from the start.
+    std::fs::write(&transcript, line("u9", "user", json!("start over"))).unwrap();
+    let chunk = within(follow(&log)).await.unwrap();
+    assert!(chunk.restart);
+    assert!(log.feed(chunk));
+    assert!(matches!(log.entries(), [ChatEntry::User { text, .. }] if text == "start over"));
+
+    // SRV-167: its queue is the server's. The first look asks for it.
+    assert!(sessions.queue(&id).is_empty());
+    heard
+        .until(
+            WAIT,
+            |e| matches!(e, Event::Queue { session_id, items } if *session_id == id && items.is_empty()),
+        )
+        .await;
+    // QUEUE-013: working, what's sent is queued there, and comes back as events.
+    let delivered = within(sessions.deliver(&project.id, &id, "  run the tests\n"))
+        .await
+        .unwrap();
+    assert_eq!(delivered, Delivery::Queued);
+    let first = heard
+        .until(
+            WAIT,
+            |e| matches!(e, Event::Queue { session_id, items } if *session_id == id && items.len() == 1),
+        )
+        .await;
+    let Event::Queue { items, .. } = first else {
+        unreachable!()
+    };
+    assert_eq!(items[0].text, "run the tests");
+    let second = within(sessions.enqueue(&id, "then commit")).await.unwrap();
+    heard
+        .until(
+            WAIT,
+            |e| matches!(e, Event::Queue { session_id, items } if *session_id == id && items.len() == 2),
+        )
+        .await;
+    assert_eq!(sessions.queue(&id), vec![items[0].clone(), second.clone()]);
+    within(sessions.set_queue(&id, vec![second.clone()])).await.unwrap();
+    heard
+        .until(
+            WAIT,
+            |e| matches!(e, Event::Queue { session_id, items } if *session_id == id && items.len() == 1),
+        )
+        .await;
+    assert_eq!(sessions.queue(&id), vec![second]);
+
+    // Stopped, it has no turn to queue behind, and the queue goes with it.
+    within(sessions.kill(&id)).await;
+    heard
+        .until(
+            WAIT,
+            |e| matches!(e, Event::Status { session_id, live: false, .. } if *session_id == id),
+        )
+        .await;
+    let err = within(sessions.enqueue(&id, "and push")).await.unwrap_err();
+    assert_eq!(
+        (err.channel, err.message.as_str()),
+        ("session:enqueue", "That session isn’t running")
+    );
+
+    app.shutdown();
+    server.stop();
 }

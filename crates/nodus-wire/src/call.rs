@@ -12,7 +12,7 @@
 
 use nodus_domain::{
     BoardGroup, BoardLink, BoardNote, BoardSection, BoardShape, CreateSessionOptions, CreateViewOptions, FolderColor,
-    GitFileChange, GroupPatch, InkStroke, NodePatch, ProjectPatch, Rect, ViewPatch, ViewReport, Viewport,
+    GitFileChange, GroupPatch, InkStroke, NodePatch, ProjectPatch, QueuedPrompt, Rect, ViewPatch, ViewReport, Viewport,
 };
 use serde_json::{Map, Value};
 
@@ -182,6 +182,26 @@ calls! {
     SessionAgents = "session:agents" { project_id: String, session_id: String },
     /// `TranscriptMessage[]`.
     SessionAgentTranscript = "session:agent-transcript" { project_id: String, session_id: String, agent_id: String },
+    /// `ChatChunk`: what the session's transcript gained since `offset` in
+    /// `file` (the last answer's; `""` and 0 at first), as whole JSON lines,
+    /// at most 512 KiB of them, for its chat (SRV-166). A first read of a
+    /// long transcript starts at its last 16 MiB, and another file, or one
+    /// that shrank, is read again from the start (CHAT-002, CHAT-003).
+    SessionChat = "session:chat" {
+        project_id: String,
+        session_id: String,
+        #[serde(default)]
+        file: String,
+        #[serde(default)]
+        offset: u64,
+    },
+    /// `QueuedPrompt[]`: the prompts waiting for the session's turn to end
+    /// (QUEUE-013, SRV-167). `queue` events say when they change.
+    SessionQueue = "session:queue" { session_id: String },
+    /// `null`: the session's queued prompts replaced (QUEUE-013).
+    SessionSetQueue = "session:set-queue" { session_id: String, items: Vec<QueuedPrompt> },
+    /// `QueuedPrompt`: a prompt queued after the others (QUEUE-013).
+    SessionEnqueue = "session:enqueue" { session_id: String, text: String },
 
     // ---- views (VIEW-060…120)
 
@@ -514,6 +534,57 @@ mod tests {
                 method: "sessions".into(),
                 args: Value::Null,
             }
+        );
+    }
+
+    /// SRV-166, SRV-167: a server older than these answers `Not available
+    /// on a server`, so they're new calls rather than changed ones.
+    #[test]
+    fn a_session_s_chat_and_queue_go_by_their_own_calls() {
+        for name in ["session:chat", "session:queue", "session:set-queue", "session:enqueue"] {
+            assert!(CALLS.contains(&name), "{name}");
+        }
+        let first = Request::from_call("session:chat", json!({ "projectId": "p1", "sessionId": "s1" })).unwrap();
+        assert_eq!(
+            first,
+            Request::SessionChat {
+                project_id: "p1".into(),
+                session_id: "s1".into(),
+                file: String::new(),
+                offset: 0,
+            }
+        );
+        let next = Request::SessionChat {
+            project_id: "p1".into(),
+            session_id: "s1".into(),
+            file: "64769:1234".into(),
+            offset: 18_874_368,
+        };
+        assert_eq!(
+            nodus_domain::json::to_string(&next.args()).unwrap(),
+            r#"{"projectId":"p1","sessionId":"s1","file":"64769:1234","offset":18874368}"#
+        );
+        assert_eq!(
+            Request::from_call(
+                "session:set-queue",
+                json!({ "sessionId": "s1", "items": [{ "id": "q1", "text": "run the tests", "at": 1 }] })
+            )
+            .unwrap(),
+            Request::SessionSetQueue {
+                session_id: "s1".into(),
+                items: vec![QueuedPrompt {
+                    id: "q1".into(),
+                    text: "run the tests".into(),
+                    at: 1.0,
+                }],
+            }
+        );
+        assert!(
+            !Request::SessionEnqueue {
+                session_id: "s1".into(),
+                text: "then commit".into()
+            }
+            .is_server_call()
         );
     }
 

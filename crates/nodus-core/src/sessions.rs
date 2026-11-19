@@ -3,11 +3,12 @@
 //! `src/main/ipc.ts`).
 
 use nodus_domain::{
-    AgentInfo, CreateSessionOptions, ModelSwitch, OpenSessionResult, QueuedPrompt, SessionCard, SessionSearchHit,
-    SessionStatus, SummaryResult, TranscriptMessage,
+    AgentInfo, ChatChunk, CreateSessionOptions, ModelSwitch, OpenSessionResult, QueuedPrompt, SessionCard,
+    SessionSearchHit, SessionStatus, SummaryResult, TranscriptMessage,
 };
-use nodus_remote::Request;
+use nodus_remote::{NOT_AVAILABLE, Request};
 use nodus_sessions::launch;
+use nodus_transcripts::chat::{CHAT_CHUNK_BYTES, read_chunk};
 
 use crate::error::OnChannel;
 use crate::projects::now_ms;
@@ -15,14 +16,21 @@ use crate::routing::Route;
 use crate::wiring::CoreLauncher;
 use crate::{CommandError, CommandResult, Nodus};
 
-/// Queueing isn't offered for a session on a server board yet (QUEUE-013).
-const QUEUE_ON_SERVER: &str = "Prompts can’t be queued for a session on a server yet";
 /// A session that isn't running has no turn to queue behind (QUEUE-013).
 const QUEUE_NOT_RUNNING: &str = "That session isn’t running";
 /// A prompt of nothing but spaces (QUEUE-013).
 const QUEUE_NOTHING: &str = "There’s nothing to queue";
 /// A restart while Claude asks something would lose the question (MODEL-011).
 const SWITCH_WAITING: &str = "Claude is asking you something. Answer it, then switch.";
+
+/// Where the chat view reads a session from (CHAT-001).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ChatSource {
+    /// Its transcript on this computer, followed with `ChatLog::refresh`.
+    File(std::path::PathBuf),
+    /// Its server, asked with [`SessionsApi::chat`] (SRV-166).
+    Server,
+}
 
 /// What [`SessionsApi::deliver`] did with a message.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -229,11 +237,12 @@ impl SessionsApi<'_> {
     /// The prompts waiting for a running session's turn to end, first to go
     /// first (QUEUE-013). When the turn ends the first goes to Claude as the
     /// user's next message; `Event::Queue` says whenever they change. None
-    /// for a session that isn't running, or one on a server board, where
-    /// queueing isn't offered yet.
+    /// for a session that isn't running. A server session's are kept here
+    /// from its server, asked for the first time they're looked at
+    /// (SRV-167): empty until the answer comes as `Event::Queue`.
     pub fn queue(&self, session_id: &str) -> Vec<QueuedPrompt> {
-        if self.nodus.route_session(session_id).is_some() {
-            return Vec::new();
+        if let Some(route) = self.nodus.route_session(session_id) {
+            return route.queue(session_id);
         }
         self.nodus.inner.host.queue(session_id)
     }
@@ -241,11 +250,14 @@ impl SessionsApi<'_> {
     /// Replaces a running session's queued prompts, to edit, reorder or
     /// remove them (QUEUE-013); `Event::Queue` follows when they changed. A
     /// prompt already on its way to Claude stays gone, whatever `items`
-    /// says (QUEUE-003). Fails with `That session isn’t running`, or, on a
-    /// server board, `Prompts can’t be queued for a session on a server yet`.
-    pub fn set_queue(&self, session_id: &str, items: Vec<QueuedPrompt>) -> CommandResult<()> {
+    /// says (QUEUE-003). Fails with `That session isn’t running`. A server
+    /// session's queue is its server's (`session:set-queue`, SRV-167).
+    pub async fn set_queue(&self, session_id: &str, items: Vec<QueuedPrompt>) -> CommandResult<()> {
         const CHANNEL: &str = "session:set-queue";
-        self.queueable(CHANNEL, session_id)?;
+        if let Some(route) = self.nodus.route_session(session_id) {
+            let session_id = session_id.to_owned();
+            return route.call(Request::SessionSetQueue { session_id, items }).await;
+        }
         if !self.nodus.inner.host.set_queue(session_id, items) {
             return Err(CommandError::new(CHANNEL, QUEUE_NOT_RUNNING));
         }
@@ -256,13 +268,18 @@ impl SessionsApi<'_> {
     /// prompt sent from the board is (SESS-141), with a new id and now as
     /// its time, and gives it back (QUEUE-013); `Event::Queue` follows.
     /// Fails with `There’s nothing to queue` for a prompt of only spaces,
-    /// and as [`SessionsApi::set_queue`] does.
-    pub fn enqueue(&self, session_id: &str, text: &str) -> CommandResult<QueuedPrompt> {
+    /// and as [`SessionsApi::set_queue`] does. A server session's server
+    /// queues it (`session:enqueue`, SRV-167), the member as its writer
+    /// (SRV-142).
+    pub async fn enqueue(&self, session_id: &str, text: &str) -> CommandResult<QueuedPrompt> {
         const CHANNEL: &str = "session:enqueue";
-        self.queueable(CHANNEL, session_id)?;
         let text = nodus_domain::js::trim(text);
         if text.is_empty() {
             return Err(CommandError::new(CHANNEL, QUEUE_NOTHING));
+        }
+        if let Some(route) = self.nodus.route_session(session_id) {
+            let (session_id, text) = (session_id.to_owned(), text.to_owned());
+            return route.call(Request::SessionEnqueue { session_id, text }).await;
         }
         let item = QueuedPrompt {
             id: uuid::Uuid::new_v4().to_string(),
@@ -272,16 +289,8 @@ impl SessionsApi<'_> {
         if !self.nodus.inner.host.enqueue(session_id, item.clone()) {
             return Err(CommandError::new(CHANNEL, QUEUE_NOT_RUNNING));
         }
+        self.wrote(session_id);
         Ok(item)
-    }
-
-    /// Sessions on a server board can't queue yet: their server has no
-    /// request for it.
-    fn queueable(&self, channel: &'static str, session_id: &str) -> CommandResult<()> {
-        match self.nodus.route_session(session_id) {
-            Some(_) => Err(CommandError::new(channel, QUEUE_ON_SERVER)),
-            None => Ok(()),
-        }
     }
 
     /// SRV-142: on a server, the member writing is the session's last writer,
@@ -431,30 +440,82 @@ impl SessionsApi<'_> {
     /// message. Queued while a running session works or waits on the user,
     /// so it goes when the turn ends (QUEUE-005); otherwise sent as
     /// [`SessionsApi::send`] does: typed in, or resuming the session with it.
+    /// A server session is busy as its card last was (QUEUE-013), and its
+    /// server queues the text.
     pub async fn deliver(&self, project_id: &str, session_id: &str, text: &str) -> CommandResult<Delivery> {
         let inner = &self.nodus.inner;
-        let busy = self.nodus.route_session(session_id).is_none()
-            && inner.host.is_live(session_id)
-            && matches!(
-                inner.status.status(session_id),
-                SessionStatus::Working | SessionStatus::Waiting
-            );
+        let busy = match self.nodus.route_session(session_id) {
+            Some(_) => inner.remotes.busy(session_id),
+            None => {
+                inner.host.is_live(session_id)
+                    && matches!(
+                        inner.status.status(session_id),
+                        SessionStatus::Working | SessionStatus::Waiting
+                    )
+            }
+        };
         if busy {
-            self.enqueue(session_id, text)?;
+            self.enqueue(session_id, text).await?;
             return Ok(Delivery::Queued);
         }
         self.send(project_id, session_id, text).await?;
         Ok(Delivery::Sent)
     }
 
-    /// Where a session's transcript is, for the chat view to follow
-    /// (CHAT-001). None for a session on a server board, whose transcript
-    /// isn't on this computer, and for one this board doesn't have.
-    pub fn transcript_file(&self, project_id: &str, session_id: &str) -> Option<std::path::PathBuf> {
+    /// Where the chat view reads a session from (CHAT-001): its transcript
+    /// here, or its server for a session on a server board (SRV-166). None
+    /// for one this board doesn't have.
+    pub fn chat_source(&self, project_id: &str, session_id: &str) -> Option<ChatSource> {
         if self.nodus.route_project(project_id).is_some() {
-            return None;
+            return Some(ChatSource::Server);
         }
-        self.nodus.inner.board.transcript_file(project_id, session_id).ok()
+        let file = self.nodus.inner.board.transcript_file(project_id, session_id).ok()?;
+        Some(ChatSource::File(file))
+    }
+
+    /// CHAT-029: whether a project's Claude cards can show their chat: a
+    /// local project's can, and a server project's unless its server is
+    /// known to be older than `session:chat` (SRV-166), whose cards keep
+    /// their terminals.
+    pub fn has_chat(&self, project_id: &str) -> bool {
+        self.nodus
+            .route_project(project_id)
+            .is_none_or(|route| !self.nodus.inner.remotes.lacks_chat(route.server_id()))
+    }
+
+    /// `session:chat` (SRV-166): what a session's transcript gained since
+    /// `offset` in `file` (the last chunk's; `""` and 0 at first), as whole
+    /// JSON lines, at most 512 KiB of them, for `ChatLog::feed`. Fails with
+    /// the project unknown; a server older than the call fails with `Not
+    /// available on a server`, after which [`SessionsApi::has_chat`] says no
+    /// for its projects.
+    pub async fn chat(&self, project_id: &str, session_id: &str, file: &str, offset: u64) -> CommandResult<ChatChunk> {
+        const CHANNEL: &str = "session:chat";
+        if let Some(route) = self.nodus.route_project(project_id) {
+            let answer = route
+                .call(Request::SessionChat {
+                    project_id: project_id.to_owned(),
+                    session_id: session_id.to_owned(),
+                    file: file.to_owned(),
+                    offset,
+                })
+                .await;
+            if answer.as_ref().is_err_and(|err| err.message == NOT_AVAILABLE) {
+                self.nodus.inner.remotes.chat_unavailable(route.server_id());
+            }
+            return answer;
+        }
+        let path = self
+            .nodus
+            .inner
+            .board
+            .transcript_file(project_id, session_id)
+            .on(CHANNEL)?;
+        let file = file.to_owned();
+        Ok(self
+            .nodus
+            .on_core(async move { read_chunk(&path, &file, offset, CHAT_CHUNK_BYTES) })
+            .await)
     }
 
     /// The home folder and the session's folder its slash commands are read

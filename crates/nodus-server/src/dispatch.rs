@@ -219,6 +219,22 @@ pub(crate) async fn answer(nodus: Nodus, member: Option<String>, request: Reques
                 .agent_transcript(&project_id, &session_id, &agent_id)
                 .await,
         ),
+        // SRV-166: read here, under the sessions' home, as `session:transcript` is.
+        Request::SessionChat {
+            project_id,
+            session_id,
+            file,
+            offset,
+        } => done(
+            channel,
+            nodus.sessions().chat(&project_id, &session_id, &file, offset).await,
+        ),
+        // SRV-167: the host's queues, which its Stop hook hands over.
+        Request::SessionQueue { session_id } => give(channel, nodus.sessions().queue(&session_id)),
+        Request::SessionSetQueue { session_id, items } => {
+            done(channel, nodus.sessions().set_queue(&session_id, items).await)
+        }
+        Request::SessionEnqueue { session_id, text } => done(channel, by.sessions().enqueue(&session_id, &text).await),
 
         Request::ViewsCreate { project_id, opts } => done(channel, by.views().create(&project_id, &opts).await),
         Request::ViewsSave { project_id, patch } => {

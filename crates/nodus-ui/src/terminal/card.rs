@@ -206,9 +206,9 @@ impl CardTerminals {
             Rc::new(move |ctrl: bool, cx: &mut App| gate(&id, ctrl, cx)) as WheelGate
         });
         let zoom = self.zoom;
-        // CHAT-029: a session on a server board keeps its terminal.
-        let on_server = Terminals::global(cx).read(cx).nodus.sessions().on_server(&id);
-        let chat_state = (kind == SessionKind::Claude && !on_server)
+        // CHAT-029: a Claude card shows its chat, and a shell card its terminal.
+        let nodus = Terminals::global(cx).read(cx).nodus.clone();
+        let chat_state = crate::chat::shows_chat(&nodus, &self.project_id, kind)
             .then(|| crate::shell::window::main_shell(cx).map(|s| s.read(cx).state.clone()))
             .flatten();
         host.update(cx, |h, cx| {

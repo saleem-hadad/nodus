@@ -202,15 +202,18 @@ impl World {
 }
 
 /// The stand-in `claude`: `--version` answers at once; otherwise it logs its
-/// arguments (each ended by NUL) and environment by session, turns on
-/// bracketed paste, says it's ready and echoes every line it reads.
+/// environment and then its arguments (each ended by NUL) by session, turns
+/// on bracketed paste, says it's ready and echoes every line it reads. Each
+/// log is renamed into place whole, and the environment first: a test that
+/// sees a run's arguments reads that run's environment, never a half-written
+/// one (`env >` empties the file before it fills it).
 fn write_stand_in(file: &Path, log: &Path) {
     use std::os::unix::fs::PermissionsExt;
     let script = format!(
         r#"#!/bin/sh
 if [ "$1" = "--version" ]; then echo "9.9.9 (Claude Code)"; exit 0; fi
-for a in "$@"; do printf '%s\000' "$a"; done > "{log}/argv.$NODUS_SESSION.$$"
-env > "{log}/env.$NODUS_SESSION"
+env > "{log}/tmp.env.$$" && mv "{log}/tmp.env.$$" "{log}/env.$NODUS_SESSION"
+for a in "$@"; do printf '%s\000' "$a"; done > "{log}/tmp.argv.$$" && mv "{log}/tmp.argv.$$" "{log}/argv.$NODUS_SESSION.$$"
 printf '\033[?2004h'
 echo "stand-in ready"
 while IFS= read -r line; do echo "got: $line"; done

@@ -127,6 +127,10 @@ impl Transcript {
             let queue = msg.as_object_mut().and_then(|fields| fields.shift_remove("queue"));
             let expected = (self.protocol == PROTOCOL).then(|| json!(true));
             assert_eq!(queue, expected, "{} got {msg}", conn.name);
+            // SRV-004: so does the version it runs.
+            let version = msg.as_object_mut().and_then(|fields| fields.shift_remove("version"));
+            let expected = (self.protocol == PROTOCOL).then(|| json!(env!("CARGO_PKG_VERSION")));
+            assert_eq!(version, expected, "{} got {msg}", conn.name);
         }
         self.note(format!(
             "{}← {}",

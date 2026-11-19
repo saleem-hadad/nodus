@@ -14,8 +14,8 @@
 //!    over the old one.
 //! 4. It answers, then exits, and systemd starts the new version
 //!    (`Restart=always`). The session host keeps running, and its sessions
-//!    with it, unless the new version speaks another host protocol
-//!    (SRV-004).
+//!    with it, unless the new version speaks another host protocol; it's
+//!    started again from the new binary once it runs no sessions (SRV-004).
 //!
 //! Every member's app hears how it's going as `server-update` events, and
 //! each call writes a line to the audit log (SRV-210).

@@ -180,9 +180,11 @@ async fn queue_001_a_welcome_says_the_host_keeps_queues() {
     let host = TestHost::start().await;
     let (_app, welcome) = Conn::app(&host).await;
     assert_eq!(welcome["queue"], json!(true));
-    // Between hookAuthHeader and a Windows key, as Welcome's fields go.
+    // Between hookAuthHeader and a Windows key, as Welcome's fields go; the
+    // version comes last (SRV-004).
     let keys: Vec<&String> = welcome.as_object().unwrap().keys().collect();
-    assert_eq!(keys[keys.len() - 2..], ["hookAuthHeader", "queue"]);
+    assert_eq!(keys[keys.len() - 3..], ["hookAuthHeader", "queue", "version"]);
+    assert_eq!(welcome["version"], json!(env!("CARGO_PKG_VERSION")));
 }
 
 #[tokio::test]

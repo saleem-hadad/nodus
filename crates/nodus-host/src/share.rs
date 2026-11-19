@@ -3,7 +3,8 @@
 //! user's group, but Claude Code writes its transcripts 0600 and their
 //! folders 0700 whatever the umask. So a server's host adds the group's
 //! read bits itself: over every transcript once as it starts, and over a
-//! session's own on each of its hooks.
+//! session's own on each of its hooks, or as soon as it's written when the
+//! hook came first.
 //!
 //! Only what this user owns is changed, never through a symlink, and no bit
 //! is ever taken away.
@@ -34,6 +35,14 @@ pub(crate) fn projects_dir() -> Option<PathBuf> {
 /// `<folder>/<session id>/subagents/agent-<id>.jsonl`.
 #[cfg(unix)]
 const DEPTH: usize = 4;
+
+/// How long a hook's transcript that isn't there yet is looked for, and
+/// how often: Claude Code writes a new session's just after the hook for
+/// its first prompt.
+#[cfg(unix)]
+const WRITTEN_WITHIN: std::time::Duration = std::time::Duration::from_secs(30);
+#[cfg(unix)]
+const WRITTEN_POLL: std::time::Duration = std::time::Duration::from_millis(100);
 
 /// Group read, and for a folder group search too.
 #[cfg(unix)]
@@ -80,6 +89,26 @@ pub(crate) fn share_session(projects: &Path, transcript: &Path, uid: u32) -> usi
     add(transcript, FILE_BITS, uid, &mut changed);
     share_tree(&folder.join(session), uid, DEPTH - 2, &mut changed);
     changed
+}
+
+/// [`share_session`] for a transcript a hook named before Claude Code wrote
+/// it, as at a new session's first prompt: shared once it's there, looked
+/// for every 100 ms for 30 s. Nothing for one outside `projects`.
+#[cfg(unix)]
+pub(crate) async fn share_once_written(projects: PathBuf, transcript: PathBuf, uid: u32) -> usize {
+    if !transcript.starts_with(&projects) {
+        return 0;
+    }
+    let deadline = tokio::time::Instant::now() + WRITTEN_WITHIN;
+    while std::fs::symlink_metadata(&transcript).is_err() {
+        if tokio::time::Instant::now() >= deadline {
+            return 0;
+        }
+        tokio::time::sleep(WRITTEN_POLL).await;
+    }
+    tokio::task::spawn_blocking(move || share_session(&projects, &transcript, uid))
+        .await
+        .unwrap_or(0)
 }
 
 /// The way down to `projects`: the group may pass through Claude Code's own
@@ -291,6 +320,40 @@ mod tests {
         }
         assert_eq!(mode(&secret), 0o600);
         assert_eq!(mode(&claude.other), 0o600);
+    }
+
+    #[tokio::test]
+    async fn a_transcript_written_after_its_hook_is_shared_once_its_there() {
+        use std::os::unix::fs::OpenOptionsExt;
+        let claude = Claude::new();
+        // A new session: its folder and transcript come with its first prompt.
+        let folder = claude.projects.join("-srv-projects-shop-worktrees-bb9c2d1e");
+        let transcript = folder.join(format!("{SESSION}.jsonl"));
+        let watching = tokio::spawn(share_once_written(
+            claude.projects.clone(),
+            transcript.clone(),
+            claude.uid(),
+        ));
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        assert!(!watching.is_finished());
+        fs::create_dir(&folder).unwrap();
+        set_mode(&folder, 0o700);
+        fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&transcript)
+            .unwrap();
+        assert!(watching.await.unwrap() > 0);
+        assert_eq!(mode(&folder), 0o750);
+        assert_eq!(mode(&transcript), 0o640);
+
+        // One a hook made up outside `projects` isn't looked for.
+        let outside = claude.claude.join("secret.jsonl");
+        assert_eq!(
+            share_once_written(claude.projects.clone(), outside, claude.uid()).await,
+            0
+        );
     }
 
     #[test]

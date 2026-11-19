@@ -66,6 +66,8 @@ const HOST_START_POLL: Duration = Duration::from_millis(100);
 const WELCOME: Duration = Duration::from_millis(5000);
 /// How often a standalone host is tried until it's up (SRV-004).
 const STANDALONE_RETRY: Duration = Duration::from_secs(1);
+/// The Nodus version this is, which a standalone host should run too (SRV-004).
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The hook that ends a turn, when a queued prompt can go (QUEUE-011).
 const STOP_EVENT: &str = "Stop";
@@ -197,6 +199,15 @@ struct State {
     /// Each session's terminal size, as last started or resized, so a
     /// restart keeps it (MODEL-011).
     sizes: HashMap<String, (f64, f64)>,
+    /// SRV-004: the standalone host runs another version, as an update
+    /// leaves it, and goes once it runs nothing ([`Inner::retire_if_idle`]).
+    stale_host: bool,
+    /// A host of another version was asked to go once already: one that
+    /// still says another version after that is kept, not stopped again.
+    restarted_host: bool,
+    /// The stale host asked to go, until it has: connecting again waits
+    /// for it, so the next host is the new binary's.
+    retiring: Option<Conn>,
 }
 
 struct Running {
@@ -755,10 +766,16 @@ impl Inner {
     /// without, once (at launch, a host that isn't up has no sessions). One
     /// on another protocol exits on this hello, for systemd to start the new
     /// binary's; it's also asked to stop, as a host that doesn't exit by
-    /// itself only would (HOST-038), and its going is waited for. No one is
-    /// asked about its sessions (HOST-102): they're the server's.
+    /// itself only would (HOST-038), and its going is waited for. So is one
+    /// of another version that runs nothing, and one let go of for that
+    /// once its sessions ended. No one is asked about its sessions
+    /// (HOST-102): they're the server's.
     async fn connect_standalone(self: &Arc<Self>, wait: bool) -> Result<(), ClientError> {
         loop {
+            let retiring = self.lock().retiring.take();
+            if let Some(old) = retiring {
+                old.closed().await;
+            }
             if let Ok(stream) = nodus_host::transport::connect(&self.paths.socket).await {
                 match self.greet(stream).await {
                     Ok((true, _)) => return Ok(()),
@@ -1176,6 +1193,27 @@ impl Inner {
         }
     }
 
+    /// SRV-004: a stale host that runs no session, and has nothing of ours
+    /// under way, is asked to stop, for systemd to start the new binary's.
+    /// It's let go of at once, so what comes next connects to that one.
+    /// Called with the order lock held.
+    fn retire_if_idle(&self) {
+        let mut state = self.lock();
+        let idle = state.running.is_empty()
+            && state.spawning.is_empty()
+            && state.pending_spawns.is_empty()
+            && state.pending_execs.is_empty()
+            && state.pending_trusts.is_empty();
+        if !state.stale_host || !idle || state.quitting {
+            return;
+        }
+        let Some(host) = state.host.take() else { return };
+        state.stale_host = false;
+        state.restarted_host = true;
+        host.write(encode(&ClientMessage::Shutdown));
+        state.retiring = Some(host);
+    }
+
     /// HOST-109: the host went away, and its sessions with it. Called with
     /// the order lock held.
     fn lost(&self, conn: &Conn) {
@@ -1270,8 +1308,23 @@ impl Reader for Inner {
             let _ = greeting.send(Err(DIDNT_ANSWER.into()));
             return false;
         };
+        // SRV-004: a standalone host of another version, as updating the
+        // server leaves it, is started again from the new binary: at once
+        // when it runs nothing (stopped as one on another protocol is),
+        // otherwise once it doesn't. Only once, so one that still says
+        // another version then is kept.
+        let stale = self.standalone && welcome.version.as_deref() != Some(VERSION) && !self.lock().restarted_host;
+        if stale && welcome.sessions.is_empty() {
+            self.lock().restarted_host = true;
+            let _ = greeting.send(Ok(false));
+            return true;
+        }
         let _order = self.order();
-        self.lock().host = Some(conn.clone());
+        {
+            let mut state = self.lock();
+            state.host = Some(conn.clone());
+            state.stale_host = stale;
+        }
         self.adopt(welcome);
         let _ = greeting.send(Ok(true));
         true
@@ -1280,6 +1333,7 @@ impl Reader for Inner {
     fn message(&self, _conn: &Conn, msg: &Value) {
         let _order = self.order();
         self.handle(msg);
+        self.retire_if_idle();
     }
 
     fn closed(&self, conn: &Conn, greeting: Option<oneshot::Sender<Greeting>>) {

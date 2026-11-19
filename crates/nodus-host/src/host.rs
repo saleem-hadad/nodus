@@ -360,7 +360,8 @@ impl Host {
     /// HOST-037: every live session, in spawn order, with its output,
     /// history, status line and queue.
     /// A server that asked (`sessionTokens` in its hello) also hears that
-    /// this host gives sessions their own tokens (SRV-143).
+    /// this host gives sessions their own tokens (SRV-143). The version it
+    /// runs lets a server start it again after an update (SRV-004).
     fn welcome(&self, state: &State, asked_tokens: bool) -> HostMessage {
         let sessions = state
             .sessions
@@ -387,6 +388,7 @@ impl Host {
             queue: Some(true),
             key: self.host_key.clone(),
             session_tokens: asked_tokens.then_some(true),
+            version: Some(env!("CARGO_PKG_VERSION").to_owned()),
         })
     }
 
@@ -817,7 +819,9 @@ impl Host {
 
     /// SRV-005: on a server, a hook's session's transcript, its folder and
     /// its subagents' are made readable to the host's group before the hook
-    /// goes on, so `nodus serve` can read what the hook is about.
+    /// goes on, so `nodus serve` can read what the hook is about. A
+    /// transcript that isn't there yet, as at a new session's first prompt,
+    /// is shared once Claude Code writes it, and the hook doesn't wait.
     pub(crate) async fn share_transcript(&self, payload: &Value) {
         let (Some(projects), Some(file)) = (
             self.shared_transcripts.clone(),
@@ -828,6 +832,10 @@ impl Host {
         #[cfg(unix)]
         {
             let file = std::path::PathBuf::from(file);
+            if std::fs::symlink_metadata(&file).is_err() {
+                tokio::spawn(crate::share::share_once_written(projects, file, crate::share::user()));
+                return;
+            }
             let _ = tokio::task::spawn_blocking(move || {
                 crate::share::share_session(&projects, &file, crate::share::user())
             })

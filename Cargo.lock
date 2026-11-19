@@ -4128,7 +4128,7 @@ dependencies = [
 
 [[package]]
 name = "nodus"
-version = "1.0.29"
+version = "1.0.30"
 dependencies = [
  "embed-resource",
  "nodus-domain",
@@ -4143,7 +4143,7 @@ dependencies = [
 
 [[package]]
 name = "nodus-actions"
-version = "1.0.29"
+version = "1.0.30"
 dependencies = [
  "chrono",
  "nodus-domain",
@@ -4159,7 +4159,7 @@ dependencies = [
 
 [[package]]
 name = "nodus-board"
-version = "1.0.29"
+version = "1.0.30"
 dependencies = [
  "chrono",
  "indexmap",
@@ -4177,7 +4177,7 @@ dependencies = [
 
 [[package]]
 name = "nodus-capture"
-version = "1.0.29"
+version = "1.0.30"
 dependencies = [
  "image",
  "indexmap",
@@ -4202,7 +4202,7 @@ dependencies = [
 
 [[package]]
 name = "nodus-core"
-version = "1.0.29"
+version = "1.0.30"
 dependencies = [
  "indexmap",
  "libc",
@@ -4235,7 +4235,7 @@ dependencies = [
 
 [[package]]
 name = "nodus-domain"
-version = "1.0.29"
+version = "1.0.30"
 dependencies = [
  "ryu",
  "serde",
@@ -4244,7 +4244,7 @@ dependencies = [
 
 [[package]]
 name = "nodus-feedback"
-version = "1.0.29"
+version = "1.0.30"
 dependencies = [
  "image",
  "reqwest",
@@ -4255,7 +4255,7 @@ dependencies = [
 
 [[package]]
 name = "nodus-git"
-version = "1.0.29"
+version = "1.0.30"
 dependencies = [
  "icu_collator",
  "nodus-domain",
@@ -4268,7 +4268,7 @@ dependencies = [
 
 [[package]]
 name = "nodus-host"
-version = "1.0.29"
+version = "1.0.30"
 dependencies = [
  "getrandom 0.3.4",
  "http-body-util",
@@ -4287,7 +4287,7 @@ dependencies = [
 
 [[package]]
 name = "nodus-host-proto"
-version = "1.0.29"
+version = "1.0.30"
 dependencies = [
  "nodus-domain",
  "serde",
@@ -4299,7 +4299,7 @@ dependencies = [
 
 [[package]]
 name = "nodus-platform"
-version = "1.0.29"
+version = "1.0.30"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -4332,7 +4332,7 @@ dependencies = [
 
 [[package]]
 name = "nodus-remote"
-version = "1.0.29"
+version = "1.0.30"
 dependencies = [
  "futures-util",
  "nodus-domain",
@@ -4347,7 +4347,7 @@ dependencies = [
 
 [[package]]
 name = "nodus-server"
-version = "1.0.29"
+version = "1.0.30"
 dependencies = [
  "base64 0.22.1",
  "flate2",
@@ -4381,7 +4381,7 @@ dependencies = [
 
 [[package]]
 name = "nodus-sessions"
-version = "1.0.29"
+version = "1.0.30"
 dependencies = [
  "indexmap",
  "libc",
@@ -4401,7 +4401,7 @@ dependencies = [
 
 [[package]]
 name = "nodus-store"
-version = "1.0.29"
+version = "1.0.30"
 dependencies = [
  "indexmap",
  "nodus-domain",
@@ -4416,7 +4416,7 @@ dependencies = [
 
 [[package]]
 name = "nodus-terminal"
-version = "1.0.29"
+version = "1.0.30"
 dependencies = [
  "alacritty_terminal",
  "nodus-domain",
@@ -4430,7 +4430,7 @@ dependencies = [
 
 [[package]]
 name = "nodus-tools"
-version = "1.0.29"
+version = "1.0.30"
 dependencies = [
  "base64 0.22.1",
  "nodus-board",
@@ -4448,7 +4448,7 @@ dependencies = [
 
 [[package]]
 name = "nodus-transcripts"
-version = "1.0.29"
+version = "1.0.30"
 dependencies = [
  "indexmap",
  "nodus-domain",
@@ -4465,7 +4465,7 @@ dependencies = [
 
 [[package]]
 name = "nodus-ui"
-version = "1.0.29"
+version = "1.0.30"
 dependencies = [
  "anyhow",
  "block2 0.6.2",
@@ -4508,7 +4508,7 @@ dependencies = [
 
 [[package]]
 name = "nodus-updater"
-version = "1.0.29"
+version = "1.0.30"
 dependencies = [
  "nodus-domain",
  "nodus-platform",
@@ -4525,7 +4525,7 @@ dependencies = [
 
 [[package]]
 name = "nodus-views"
-version = "1.0.29"
+version = "1.0.30"
 dependencies = [
  "nodus-board",
  "nodus-domain",
@@ -4543,14 +4543,14 @@ dependencies = [
 
 [[package]]
 name = "nodus-visual"
-version = "1.0.29"
+version = "1.0.30"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "nodus-voice"
-version = "1.0.29"
+version = "1.0.30"
 dependencies = [
  "getrandom 0.3.4",
  "nodus-domain",
@@ -4571,7 +4571,7 @@ dependencies = [
 
 [[package]]
 name = "nodus-wire"
-version = "1.0.29"
+version = "1.0.30"
 dependencies = [
  "futures-util",
  "getrandom 0.3.4",

@@ -276,6 +276,11 @@ pub struct Welcome {
     /// requests (SRV-143, SRV-084). A server takes no host without it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_tokens: Option<bool>,
+    /// The Nodus version the host runs. A server starts a host of another
+    /// version again from the new binary once it runs no sessions, so an
+    /// update reaches the host too (SRV-004). An older host leaves it out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
 }
 
 /// Host → app (`HostMessage`).
@@ -473,6 +478,7 @@ mod tests {
             queue: None,
             key: None,
             session_tokens: None,
+            version: None,
         });
         let cases = [
             (
@@ -665,6 +671,7 @@ mod tests {
             queue: None,
             key: Some("k".repeat(64)),
             session_tokens: None,
+            version: None,
         };
         assert_eq!(
             encode(&HostMessage::Welcome(welcome)),
@@ -763,6 +770,7 @@ mod tests {
             queue: Some(true),
             key: None,
             session_tokens: None,
+            version: None,
         });
         let wire = r#"{"type":"welcome","protocol":2,"hookPort":1,"hookToken":"t","sessions":[{"sessionId":"s1","projectId":"p1","initial":"working","buffer":"","history":[],"queue":[{"id":"q1","text":"run the tests","at":1762600000000}]},{"sessionId":"s2","projectId":"p1","initial":"done","buffer":"","history":[]}],"mcp":true,"hookAuthHeader":true,"queue":true}"#;
         assert_eq!(encode(&welcome), format!("{wire}\n"));

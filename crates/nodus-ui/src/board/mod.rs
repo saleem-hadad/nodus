@@ -129,7 +129,7 @@ pub fn loading(spinning: bool, cx: &App) -> AnyElement {
 /// BOARD-147: the title bar's `New` menu (spec 09 § Title-bar actions): a
 /// session, terminal or view, then an automation (SCHED-045) or a goal
 /// (GOAL-014), with the project's worktree switch on a board in the app
-/// (SESS-217).
+/// (SESS-217), or Add from GitHub on a server's (SRV-120).
 pub fn new_button(
     board: &Entity<canvas::BoardCanvas>,
     menus: &Entity<MenuLayer>,
@@ -189,6 +189,7 @@ pub fn new_button(
         );
     }
     items.extend(worktree_switch(board, cx).into_iter().flatten());
+    items.extend(add_from_github(board, cx).into_iter().flatten());
     MenuButton {
         id: "new".into(),
         label: "New".into(),
@@ -196,6 +197,17 @@ pub fn new_button(
         items,
     }
     .render(menus, window, cx)
+}
+
+/// SRV-120: `Add from GitHub on <server>…` on a server's board, for more
+/// projects from its server, while that's connected (UI-329).
+fn add_from_github(board: &Entity<canvas::BoardCanvas>, cx: &App) -> Option<[MenuItem; 2]> {
+    let canvas = board.read(cx);
+    let state = canvas.state.clone();
+    let s = state.read(cx);
+    let project = s.projects.iter().find(|p| p.id == canvas.project_id)?;
+    let item = crate::servers::add_from_github(&state, s.server_of(project)?)?;
+    Some([MenuItem::Separator, item])
 }
 
 /// SESS-217: `Own worktree per session`, a checkbox for the board's project,

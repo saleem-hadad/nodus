@@ -412,20 +412,13 @@ pub fn new_project_button(
         connect.update(cx, |s, cx| s.open_server_dialog(ServerDialog::Connect, cx));
     })];
     // SRV-120: a project from one of a server's GitHub repositories.
-    for server in &state.read(cx).servers {
-        if server.state != nodus_domain::ServerState::Connected {
-            continue;
-        }
-        let (open, server_id) = (state.clone(), server.id.clone());
-        items.push(MenuItem::item(
-            format!("Add from GitHub on {}…", server.name),
-            Icon::FolderPlus,
-            move |_, cx| {
-                let server_id = server_id.clone();
-                open.update(cx, |s, cx| s.open_server_dialog(ServerDialog::Github { server_id }, cx));
-            },
-        ));
-    }
+    items.extend(
+        state
+            .read(cx)
+            .servers
+            .iter()
+            .filter_map(|server| crate::servers::add_from_github(state, server)),
+    );
     if !state.read(cx).servers.is_empty() {
         let show = state.clone();
         items.push(MenuItem::item(

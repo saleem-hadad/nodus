@@ -1526,7 +1526,7 @@ impl ServersDialog {
             )
             .child(heading_owned(format!("{name} Is Ready")))
             .child(intro(
-                "Members, devices, Claude accounts and its GitHub App are in Settings → Servers. Add more projects with Add from GitHub in the projects grid.",
+                "Members, devices, Claude accounts and its GitHub App are in Settings → Servers. Add more projects with Add from GitHub in the projects grid or a board’s New menu.",
                 t,
             ))
             .child(footer(

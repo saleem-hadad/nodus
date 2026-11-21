@@ -34,6 +34,10 @@ struct ShellState {
     background: String,
 }
 
+/// What a frame says when the user presses in its page, as the shell's own
+/// messages are written.
+pub const PRESSED: &str = r#"{"p":true}"#;
+
 /// `#rrggbb` for a solid colour.
 pub fn css_color(c: Rgba) -> String {
     let ch = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
@@ -82,6 +86,8 @@ impl PageWebview {
         let serve_state = Arc::clone(&shell_state);
         let pending = Rc::new(Cell::new(true));
         let (nav_id, ipc_id) = (view_id.to_owned(), view_id.to_owned());
+        #[cfg(target_os = "macos")]
+        let press_tx = tx.clone();
         let builder = WebViewBuilder::new()
             .with_custom_protocol(shell::SCHEME.into(), move |_, req| serve(&nodus, &serve_state, &req))
             .with_url(url)
@@ -123,6 +129,13 @@ impl PageWebview {
             let container =
                 super::mac::Container::new(&parent).ok_or_else(|| anyhow::anyhow!("not on the main thread"))?;
             container.adopt(&webview.webview());
+            // A press in the page is the board's news too (`relay::pressed`).
+            container.on_press(move || {
+                let _ = press_tx.send(Incoming {
+                    frame,
+                    body: PRESSED.to_owned(),
+                });
+            });
             container
         };
         #[cfg(target_os = "macos")]
@@ -274,6 +287,20 @@ impl PageWebview {
         self.container.set_passthrough(on);
         #[cfg(not(target_os = "macos"))]
         let _ = on;
+    }
+
+    /// Cuts the page away where the board's chrome lies over it (`holes`,
+    /// window px; none: the whole page shows), and lets the pointer through
+    /// there. WebView2 has no holes: its page steps aside instead (`swap.rs`).
+    pub fn set_holes(&self, holes: &[Bounds<Pixels>], ui: f32) {
+        #[cfg(target_os = "macos")]
+        {
+            let ui = if ui.is_finite() && ui > 0.0 { ui } else { 1.0 };
+            let holes: Vec<_> = holes.iter().map(|b| points(*b, ui)).collect();
+            self.container.set_holes(holes);
+        }
+        #[cfg(not(target_os = "macos"))]
+        let _ = (holes, ui);
     }
 
     /// The pointer goes to the board this close to the page's sides and

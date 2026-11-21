@@ -174,6 +174,16 @@ impl BoardCanvas {
                 self.focus_board(window, cx);
                 let Some(node) = self.node(id) else { return };
                 let handle = self.on_handle(node, e.position);
+                // VIEW-142: only its caption selects a view; a press on its
+                // panel (its page while that's a picture) is as one in the
+                // page, which never shows the resize handles.
+                if matches!(node.kind, NodeKind::View { .. }) && !handle {
+                    self.close_menu(cx);
+                    if self.nodes.iter().any(|n| n.selected) || self.selection_rect {
+                        self.clear_selection(cx);
+                    }
+                    return;
+                }
                 let m = e.modifiers;
                 self.gesture = Gesture::Press {
                     node: Some(id.to_owned()),

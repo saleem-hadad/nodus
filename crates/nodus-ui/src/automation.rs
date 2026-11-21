@@ -41,7 +41,9 @@
 //! {"cmd":"terminal","action":"open",…}                the terminal's windows (terminal::driver)
 //! {"cmd":"views"}                                   views' frames: live or snapshot, and why
 //! {"cmd":"native-click","x":500,"y":300}            a click AppKit routes (into a page, or GPUI);
-//!                                                   "button": "right" or "control" (⌃-click)
+//!                                                   "button": "right" or "control" (⌃-click);
+//!                                                   "queue": true posts a left click through the
+//!                                                   app's queue too, as a real one comes
 //! {"cmd":"native-mouse","kind":"down","x":500,"y":300}   a left drag's step as AppKit routes it
 //!                                                   ("down" | "drag" | "up" | "move")
 //! {"cmd":"native-copy"}                             ⌘C as AppKit routes it in an active app:
@@ -633,7 +635,8 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
             let (x, y) = (f64::from(num(command, "x")), f64::from(num(command, "y")));
             let number = with_window(cx, |window, _| crate::mac::window_number(window))?.ok_or("no window")?;
             let button = command.get("button").and_then(Value::as_str).unwrap_or("left");
-            crate::views::native_click(number, x, y, button == "right", button == "control");
+            let queued = command.get("queue") == Some(&Value::Bool(true));
+            crate::views::native_click(number, x, y, button == "right", button == "control", queued);
             Ok(Value::Null)
         }
         #[cfg(target_os = "macos")]

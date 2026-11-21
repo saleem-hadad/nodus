@@ -10,13 +10,21 @@
 //!
 //! What covers a page is found while the frame paints, from GPUI's own hit
 //! test of that frame: anything drawn later that blocks the pointer over
-//! the body's probe (`frames::probe`), or a tooltip over it, covers it. Every
-//! hitbox of a frame is in by then, so a page that a menu or a dialog opens
-//! over steps aside in the frame that first shows it, and that frame is
-//! presented with the webview change (`Window::present_with_native_views`),
-//! as an iframe under 0.9.4's menus was covered the frame they opened. A
-//! snapshot is kept ready for that, taken again a while after the page last
-//! changed; a page with none yet steps aside once one is taken.
+//! the body's probe (`frames::probe`), or a tooltip over it. Every hitbox of
+//! a frame is in by then, so a page that a menu or a dialog opens over steps
+//! aside in the frame that first shows it, and that frame is presented with
+//! the webview change (`Window::present_with_native_views`), as an iframe
+//! under 0.9.4's menus was covered the frame they opened. A snapshot is kept
+//! ready for that, taken again a while after the page last changed; a page
+//! with none yet steps aside once one is taken.
+//!
+//! The board's own chrome (the dock, the prompt bar, the zoom pill, the
+//! minimap, a note over the page) only cuts holes in a page (macOS): the page
+//! stays live and takes the pointer everywhere else, as a session card under
+//! the prompt bar does, and GPUI draws the chrome in the holes, over the
+//! page's snapshot. Only what comes and goes over everything (menus,
+//! popovers, modals, tooltips), or chrome over all of the page, still puts
+//! the page behind its snapshot.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -40,6 +48,8 @@ const READY_EVERY: Duration = Duration::from_millis(1000);
 /// A snapshot WebKit couldn't take (a page not drawn yet) is tried again
 /// after this, twice as long after each failure in a row, up to 16 times.
 const RETRY: Duration = Duration::from_millis(120);
+/// More holes than this in a page and it goes behind its snapshot instead.
+const MAX_HOLES: usize = 24;
 
 /// A frame's probe painted: its webview follows the body, what covers the
 /// page this frame is decided, and the snapshot comes back for the probe to
@@ -91,10 +101,21 @@ pub fn placed(
         // with this frame: presented on GPUI's own clock, the frame lands a
         // few vsyncs after the webview has moved, and the page swims ahead
         // of its card while the board moves.
-        moved = fr.live && changed && !(was_offscreen && fr.web.offscreen());
+        moved |= fr.live && changed && !(was_offscreen && fr.web.offscreen());
         fr.web.set_edge(g.edge);
         let visible = g.document.intersect(&g.clip);
-        fr.occluded = !fr.web.offscreen() && covered(&hitbox, visible, window);
+        let cover = if fr.web.offscreen() {
+            Cover::default()
+        } else {
+            cover(&hitbox, visible, window)
+        };
+        fr.occluded = cover.whole;
+        if fr.holes != cover.holes {
+            // Cut in the frame that first draws what's over the page.
+            fr.web.set_holes(&cover.holes, window.ui_zoom());
+            fr.holes = cover.holes;
+            moved |= fr.live;
+        }
         fr.probe = Some(hitbox);
         fr.want = parity || g.forced || g.reveal || fr.occluded || fr.tooltip || zoom_moving;
         if g.reveal && fr.live && fr.snapshot.is_none() {
@@ -112,6 +133,8 @@ pub fn placed(
             update_ink(fr, ink.as_ref(), window);
         }
         fr.web.set_passthrough(!fr.live || g.passthrough);
+        // Under a live page too, where its picture shows round the chrome
+        // drawn in its holes.
         paint = fr.snapshot.clone().map(|image| (image, !fr.live));
     }
     drop(f);
@@ -300,32 +323,86 @@ fn take_snapshot(id: u64, window: &mut Window, cx: &mut App) {
     });
 }
 
-/// Whether, in the frame being drawn, anything drawn after the probe blocks
-/// the pointer somewhere over the visible part of the page, or a tooltip
-/// is over it.
-fn covered(probe: &Hitbox, visible: Bounds<Pixels>, window: &Window) -> bool {
-    let (x, y) = (f32::from(visible.origin.x), f32::from(visible.origin.y));
+/// What GPUI draws over a page in the frame being drawn.
+#[derive(Debug, Default, PartialEq)]
+struct Cover {
+    /// The page goes behind its snapshot.
+    whole: bool,
+    /// Else, where the board's chrome lies over the page (window px): the
+    /// page is cut away there and lets the pointer through.
+    holes: Vec<Bounds<Pixels>>,
+}
+
+/// What, in the frame being drawn, blocks the pointer from the probe over
+/// the visible part of the page (`Hitbox::blocks_in_frame`), or a tooltip
+/// over it: a menu, a popover, a modal or a tooltip covers the page; the
+/// board's chrome cuts holes in it, where a page can have holes.
+fn cover(probe: &Hitbox, visible: Bounds<Pixels>, window: &Window) -> Cover {
     let (w, h) = (f32::from(visible.size.width), f32::from(visible.size.height));
     if w < 2.0 || h < 2.0 {
-        return false;
+        return Cover::default();
     }
     // GPUI's tooltips take no pointer, so no hitbox says they're there.
     if window.tooltip_bounds().is_some_and(|tip| tip.intersects(&visible)) {
-        return true;
+        return Cover {
+            whole: true,
+            holes: Vec::new(),
+        };
     }
-    let cols = ((w / 14.0).ceil() as usize).clamp(2, 64);
-    let rows = ((h / 14.0).ceil() as usize).clamp(2, 64);
-    let inset = 0.75;
-    for r in 0..=rows {
-        let py = y + inset + (h - 2.0 * inset) * r as f32 / rows as f32;
-        for c in 0..=cols {
-            let px_ = x + inset + (w - 2.0 * inset) * c as f32 / cols as f32;
-            if !probe.is_hovered_at_in_frame(point(px(px_), px(py)), window) {
-                return true;
+    let blocks = probe.blocks_in_frame(visible, window);
+    if blocks.is_empty() {
+        return Cover::default();
+    }
+    // WebView2 pages can't have holes yet.
+    let whole = !cfg!(target_os = "macos")
+        || blocks.iter().any(|b| b.deferred)
+        || blocks.len() > MAX_HOLES
+        || uncovered(visible, blocks.iter().map(|b| b.bounds)).is_empty();
+    Cover {
+        whole,
+        holes: if whole {
+            Vec::new()
+        } else {
+            blocks.into_iter().map(|b| b.bounds).collect()
+        },
+    }
+}
+
+/// What of `area` the `holes` leave, as boxes that don't overlap (none
+/// thinner than a pixel).
+pub fn uncovered(area: Bounds<Pixels>, holes: impl IntoIterator<Item = Bounds<Pixels>>) -> Vec<Bounds<Pixels>> {
+    let mut left = vec![area];
+    for hole in holes {
+        let mut next = Vec::with_capacity(left.len() + 3);
+        for piece in left {
+            if !piece.intersects(&hole) {
+                next.push(piece);
+                continue;
             }
+            let (top, bottom) = (piece.top(), piece.bottom());
+            let (inner_top, inner_bottom) = (hole.top().max(top), hole.bottom().min(bottom));
+            // Above the hole, below it, then beside it between the two.
+            let strips = [
+                Bounds::from_corners(piece.origin, point(piece.right(), inner_top)),
+                Bounds::from_corners(point(piece.left(), inner_bottom), piece.bottom_right()),
+                Bounds::from_corners(
+                    point(piece.left(), inner_top),
+                    point(hole.left().max(piece.left()), inner_bottom),
+                ),
+                Bounds::from_corners(
+                    point(hole.right().min(piece.right()), inner_top),
+                    point(piece.right(), inner_bottom),
+                ),
+            ];
+            next.extend(
+                strips
+                    .into_iter()
+                    .filter(|s| s.size.width >= px(1.) && s.size.height >= px(1.)),
+            );
         }
+        left = next;
     }
-    false
+    left
 }
 
 /// Whether every page that should be behind a picture has one that's
@@ -400,5 +477,44 @@ pub fn set_tooltip(view_id: &str, shown: bool, cx: &mut App) {
     };
     if let Some(window) = window {
         let _ = window.update(cx, |_, window, _| window.refresh());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::size;
+
+    fn b(x: f32, y: f32, w: f32, h: f32) -> Bounds<Pixels> {
+        Bounds::new(point(px(x), px(y)), size(px(w), px(h)))
+    }
+
+    fn area(pieces: &[Bounds<Pixels>]) -> f32 {
+        pieces
+            .iter()
+            .map(|p| f32::from(p.size.width) * f32::from(p.size.height))
+            .sum()
+    }
+
+    #[test]
+    fn leaves_what_the_holes_dont_cover() {
+        let page = b(0., 0., 100., 80.);
+        assert_eq!(uncovered(page, []), vec![page]);
+        // The prompt bar over its bottom edge, the dock over its left.
+        let left = uncovered(page, [b(30., 70., 50., 30.), b(-10., 20., 15., 40.)]);
+        assert!((area(&left) - (8000. - 500. - 200.)).abs() < 0.01, "{left:?}");
+        for (i, p) in left.iter().enumerate() {
+            for q in &left[i + 1..] {
+                assert!(!p.intersects(q), "{p:?} overlaps {q:?}");
+            }
+        }
+        // A button inside the bar cuts nothing more.
+        let more = uncovered(
+            page,
+            [b(30., 70., 50., 30.), b(-10., 20., 15., 40.), b(40., 72., 10., 6.)],
+        );
+        assert!((area(&more) - area(&left)).abs() < 0.01);
+        // Covered all over: nothing left.
+        assert!(uncovered(page, [b(-1., -1., 60., 90.), b(50., -1., 60., 90.)]).is_empty());
     }
 }

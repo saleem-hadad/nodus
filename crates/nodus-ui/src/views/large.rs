@@ -123,8 +123,9 @@ fn render_parts(
                     d.child(frames::probe(id.clone(), Slot::Large, geometry))
                 }),
         );
-    // The page's snapshot, while it's behind one, is painted by the probe in
-    // the panel, under its rounded corners and in its enter animation.
+    // The page's snapshot, while it's behind one (and under it while it's
+    // live), is painted by the probe in the panel, under its rounded corners
+    // and in its enter animation.
     Some(vec![
         Modal::new(ElementId::Name("view-modal".into()), width, on_close).render(content, window, cx),
     ])

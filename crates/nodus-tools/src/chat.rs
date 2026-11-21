@@ -37,7 +37,7 @@ pub(crate) fn ask(args: &Value) -> Result<Value, ToolError> {
 /// does, rather than going to a brain (VIEW-161).
 pub(crate) fn page_args(args: &Value) -> Value {
     let mut out = Map::new();
-    for key in ["title", "html", "description", "data", "width", "height"] {
+    for key in ["title", "html", "description", "data", "width", "height", "background"] {
         match args.get(key) {
             None | Some(Value::Null) if key == "html" => {
                 out.insert(key.to_owned(), Value::String(String::new()));

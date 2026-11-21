@@ -459,7 +459,7 @@ pub fn ignore_window_occlusion(webview: &NSView) {
 }
 
 /// `-[WKWebView takeSnapshotWithConfiguration:completionHandler:]`, as BGRA
-/// pixels in sRGB (premultiplied), for a GPUI image. `done` runs on the main
+/// pixels in sRGB (straight alpha), for a GPUI image. `done` runs on the main
 /// thread, with None when there's no picture.
 pub fn snapshot(webview: &NSView, done: impl FnOnce(Option<(u32, u32, Vec<u8>)>) + 'static) {
     let done = RefCell::new(Some(done));
@@ -503,6 +503,17 @@ fn pixels(image: *mut AnyObject) -> Option<(u32, u32, Vec<u8>)> {
     );
     CGContext::draw_image(Some(&ctx), rect, Some(cg));
     drop(ctx);
+    // GPUI's images are straight alpha, Core Graphics draws premultiplied:
+    // a page without its panel (transparent round what it draws) would get
+    // dark edges and shadows.
+    for pixel in buf.as_chunks_mut::<4>().0 {
+        let a = u16::from(pixel[3]);
+        if a != 0 && a != 255 {
+            for c in &mut pixel[..3] {
+                *c = ((u16::from(*c) * 255 + a / 2) / a).min(255) as u8;
+            }
+        }
+    }
     Some((w as u32, h as u32, buf))
 }
 

@@ -38,6 +38,12 @@ struct ShellState {
 #[cfg(target_os = "macos")]
 const PRESSED: &str = r#"{"p":true}"#;
 
+/// The shell's ground: the panel's colour, or none for a page without a
+/// panel (`BoardView::background`).
+fn css_ground(background: Option<Rgba>) -> String {
+    background.map_or_else(|| "transparent".to_owned(), css_color)
+}
+
 /// `#rrggbb` for a solid colour.
 pub fn css_color(c: Rgba) -> String {
     let ch = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
@@ -67,7 +73,7 @@ impl PageWebview {
         view_id: &str,
         version: u32,
         title: &str,
-        background: Rgba,
+        background: Option<Rgba>,
         nodus: Nodus,
         tx: UnboundedSender<Incoming>,
     ) -> anyhow::Result<Self> {
@@ -76,7 +82,7 @@ impl PageWebview {
             frame,
             version,
             title: title.to_owned(),
-            background: css_color(background),
+            background: css_ground(background),
         }));
         let url = shell::shell_url(view_id, frame);
         let serve_state = Arc::clone(&shell_state);
@@ -108,7 +114,7 @@ impl PageWebview {
             .with_back_forward_navigation_gestures(false)
             .with_hotkeys_zoom(false)
             .with_focused(false)
-            .with_background_color(rgba8(background));
+            .with_background_color(background.map_or((0, 0, 0, 0), rgba8));
         #[cfg(windows)]
         let builder = {
             use wry::WebViewBuilderExtWindows as _;
@@ -298,9 +304,10 @@ impl PageWebview {
     }
 
     /// A new version reloads the page (VIEW-027); the title is the frame's
-    /// accessible name; the background follows the theme.
-    pub fn update(&self, version: u32, title: &str, background: Rgba) {
-        let background = css_color(background);
+    /// accessible name; the background follows the theme, or is none for a
+    /// page without a panel.
+    pub fn update(&self, version: u32, title: &str, background: Option<Rgba>) {
+        let background = css_ground(background);
         let (src, title_arg, bg_arg) = {
             let Ok(mut s) = self.shell.lock() else { return };
             let src = (s.version != version).then(|| shell::page_url(&s.view_id, version));
@@ -325,10 +332,10 @@ impl PageWebview {
             js(title_arg),
             js(bg_arg.clone())
         ));
-        if let Some(bg) = bg_arg
-            && let Some(c) = parse_hex(&bg)
-        {
-            let _ = self.webview.set_background_color(c);
+        if let Some(bg) = bg_arg {
+            let _ = self
+                .webview
+                .set_background_color(parse_hex(&bg).unwrap_or((0, 0, 0, 0)));
         }
     }
 

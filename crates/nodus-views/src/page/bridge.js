@@ -3,6 +3,8 @@
   var boot = __BOOT__;
   var seq = 0, pending = {}, listeners = {};
   var current = { data: boot.data, state: boot.state, results: boot.results || {} };
+  // A view without the board's panel: its ground is the board (theme.css).
+  if (boot.background === false) document.documentElement.classList.add('nodus-bare');
   function post(msg) { msg.nodus = 1; parent.postMessage(msg, '*'); }
   function call(method, args) {
     return new Promise(function (resolve, reject) {

@@ -329,6 +329,7 @@ Feedback #9 asked for Claude to understand the board visually and add to it. `lo
 - **VIEW-159** Nodus has a Claude Code plugin of its own, `nodus`, with one skill, `nodus:views` (`crates/nodus-views/src/skill.rs`). At start the app writes it to `<userData>/claude-plugin/`: `.claude-plugin/plugin.json` (`{"name": "nodus", "version": <app version>, "description": "Nodus's own skills, for the Claude sessions it runs."}`, pretty-printed) and `skills/views/SKILL.md`, each only when it says something new, through `<name>.<pid>.tmp` and a rename. Every Claude process that gets the board tools (cards, brains, action runs; SESS-123) also gets `--plugin-dir <that folder>` right after the tool rules, so the skill is that process's alone: nothing goes into the user's `~/.claude` or the repository. If it can't be written the app logs `[views] couldn’t write the nodus plugin: <error>` and launches without it.
 - **VIEW-160** `SKILL.md` is one file, so the Skill tool loads it whole and Claude never reads outside the project for it (a read there stops to ask the user): its frontmatter (`name: views`, a description naming create_view, show_page and update_view), which tool fits what (show_visual, ask, show_page, create_view), how to hand a view to its brain and what its brief must say, how to write a page (data first, start from an example, read the errors, then send data), `## How a page works` with `VIEW_GUIDE` (platform variant included), and `## Examples`: four pages that follow the guide, each with what it shows, in an `html` fence (a table fed by a command, numbers and an SVG chart from `nodus.data` with Claude's look while asked, the board's sessions with `nodus-dot`, and a `show_page` choice sent with `nodus.submit`).
 - **VIEW-161** `create_view` without `html` (missing or `null`) hands the view to its brain. `description` is then required: `clip(description, 4000)` empty → `Describe the view for its brain, which builds it without this conversation: what it shows, where the data comes from and how fresh it should be. Or send the html to build it yourself`. Everything else is checked and the view made as VIEW-102…VIEW-105 (placement, size, commands, refresh, `start_sessions`, `autoMode` from the caller, VIEW-155), but with `version: 0` and no `index.html`. Data and refresh go into its runtime as VIEW-106. Its brain then starts on `Build this view:\n\n<description>` (VIEW-089, in the view's mode, so a session not in auto mode gets a brain that asks before it runs things); if that fails the view and its files go and the error is returned. There is no page check. The answer is `{view_id, waiting_for_approval, building: "Its brain, a Claude session of its own, is building it now beside your card, and keeps it up to date. Tell the user it’s on its way, and carry on: don’t wait for it or build it yourself."}`. `show_page` always passes `html` (`""` when missing or `null`), so a page is never handed off (TOOLCHAT-003). `create_view`'s description and `html`/`description` parameters say this, and point a session writing html itself to the skill; `update_view`'s and `show_page`'s descriptions and the server's instructions point to it too.
+- **VIEW-162** Claude decides whether a view sits on the board's panel. `create_view`, `update_view` and `show_page` take `background`: `false` stores `background: false` on the view (only `false` itself on create); `true` on update removes it. A change on update bumps `version` (when it's above 0), so the page loads again. `get_view` returns `background: <boolean>` (`true` unless it's `false`). The page's boot carries `background: false`, and the bridge puts class `nodus-bare` on `<html>`, whose theme ground is then transparent. On the board such a view keeps its caption but draws no panel behind the page: no fill, no shadow, only the selection's 2px accent ring while selected or dragged; its frame's shell and webview are transparent, so the board shows wherever the page draws nothing, live or as its picture (snapshots are straight alpha). The panel comes back while the view shows approvals, an error line or the ask bar, and before it has a page (the empty state). The theme gives every page the note papers `--nodus-note-{yellow,blue,green,pink,purple,orange,red,graphite}` (the board's papers, light and dark), `--nodus-note-ink`, `--nodus-note-ink-2` and `--nodus-note-shadow`, and the guide says when to go without the panel and how to draw a sticky note with them.
 
 ### Views: board edits, removal, reports
 
@@ -618,6 +619,10 @@ Nodus is the board of Claude Code sessions the user runs this session from. The 
           "type": "boolean",
           "description": "Lets the page start Claude sessions on the board with nodus.startSession, from buttons the user clicks. Only turn it on when the user asks for the view to start sessions."
         },
+        "background": {
+          "type": "boolean",
+          "description": "false takes away the board’s panel, the rounded card behind the page, so the page sits straight on the board, transparent where it draws nothing, and draws its own surface: a sticky note, a sticker, one big number. Leave it out for tables, dashboards and forms, which suit the panel. true puts the panel back."
+        },
         "width": {
           "type": "number",
           "description": "Card width in board units. Defaults to 480."
@@ -707,6 +712,10 @@ Nodus is the board of Claude Code sessions the user runs this session from. The 
         "start_sessions": {
           "type": "boolean",
           "description": "Lets the page start Claude sessions on the board with nodus.startSession, from buttons the user clicks. Only turn it on when the user asks for the view to start sessions."
+        },
+        "background": {
+          "type": "boolean",
+          "description": "false takes away the board’s panel, the rounded card behind the page, so the page sits straight on the board, transparent where it draws nothing, and draws its own surface: a sticky note, a sticker, one big number. Leave it out for tables, dashboards and forms, which suit the panel. true puts the panel back."
         },
         "width": {
           "type": "number",
@@ -1754,3 +1763,4 @@ One line per behavior ID, in the order above. Tick only when the Rust build matc
 - [x] VIEW-159 The app writes its nodus plugin into userData and every Claude process with the board tools gets --plugin-dir for it…
 - [x] VIEW-160 SKILL.md is one file: which tool, the brief, writing a page, VIEW_GUIDE and four example pages…
 - [x] VIEW-161 create_view without html needs a description, makes a version 0 view and starts its brain on building it…
+- [x] VIEW-162 background: false takes the panel away; Claude decides; transparent frame and snapshot; note papers in the theme

@@ -37,6 +37,8 @@ pub struct Frame {
     /// (VIEW-046).
     pub version: u32,
     pub title: String,
+    /// The page sits on the board's panel (`BoardView::background`).
+    pub background: bool,
     pub web: PageWebview,
     // How it's shown.
     /// The page shows (and takes the pointer); else GPUI draws `snapshot`.
@@ -309,8 +311,12 @@ pub fn sync_board(canvas: &mut BoardCanvas, window: &mut Window, cx: &mut Contex
     for (view, slot) in wanted {
         match f.get_mut(&view.id, slot) {
             Some(fr) => {
-                if fr.version != view.version || fr.title != view.title || theme_changed {
-                    fr.web.update(view.version, &view.title, t.bg_elevated);
+                let background = view.has_background();
+                if fr.version != view.version || fr.title != view.title || fr.background != background || theme_changed
+                {
+                    fr.web
+                        .update(view.version, &view.title, background.then_some(t.bg_elevated));
+                    fr.background = background;
                     if theme_changed {
                         fr.web.set_dark(t.dark);
                     }
@@ -331,7 +337,7 @@ pub fn sync_board(canvas: &mut BoardCanvas, window: &mut Window, cx: &mut Contex
                     &view.id,
                     view.version,
                     &view.title,
-                    t.bg_elevated,
+                    view.has_background().then_some(t.bg_elevated),
                     nodus.clone(),
                     f.tx.clone(),
                 );
@@ -347,6 +353,7 @@ pub fn sync_board(canvas: &mut BoardCanvas, window: &mut Window, cx: &mut Contex
                         slot,
                         version: view.version,
                         title: view.title.clone(),
+                        background: view.has_background(),
                         live: true,
                         snapshot: None,
                         snapshot_at: None,

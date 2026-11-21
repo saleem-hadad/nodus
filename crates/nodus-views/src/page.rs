@@ -51,6 +51,9 @@ pub struct ViewBoot {
     pub title: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub starts_sessions: Option<bool>,
+    /// `false`: the page has no panel behind it, so its ground is the board's.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub background: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]

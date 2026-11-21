@@ -362,6 +362,7 @@ impl Views {
             view_id: view_id.to_owned(),
             title: view.title.clone(),
             starts_sessions: view.starts_sessions,
+            background: view.background,
             data,
             state,
             results: Some(results),
@@ -406,6 +407,7 @@ impl Views {
             auto_mode: Some(true),
             allowed_runs: None,
             denied_runs: None,
+            background: None,
             extra: Map::new(),
         };
         self.inner.store.update(|state| {

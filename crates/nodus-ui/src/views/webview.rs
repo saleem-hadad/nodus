@@ -33,6 +33,17 @@ struct ShellState {
     background: String,
 }
 
+/// What a frame says when the user presses in its page, as the shell's own
+/// messages are written.
+#[cfg(target_os = "macos")]
+const PRESSED: &str = r#"{"p":true}"#;
+
+/// The shell's ground: the panel's colour, or none for a page without a
+/// panel (`BoardView::background`).
+fn css_ground(background: Option<Rgba>) -> String {
+    background.map_or_else(|| "transparent".to_owned(), css_color)
+}
+
 /// `#rrggbb` for a solid colour.
 pub fn css_color(c: Rgba) -> String {
     let ch = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
@@ -62,7 +73,7 @@ impl PageWebview {
         view_id: &str,
         version: u32,
         title: &str,
-        background: Rgba,
+        background: Option<Rgba>,
         nodus: Nodus,
         tx: UnboundedSender<Incoming>,
     ) -> anyhow::Result<Self> {
@@ -71,12 +82,14 @@ impl PageWebview {
             frame,
             version,
             title: title.to_owned(),
-            background: css_color(background),
+            background: css_ground(background),
         }));
         let url = shell::shell_url(view_id, frame);
         let serve_state = Arc::clone(&shell_state);
         let pending = Rc::new(Cell::new(true));
         let (nav_id, ipc_id) = (view_id.to_owned(), view_id.to_owned());
+        #[cfg(target_os = "macos")]
+        let press_tx = tx.clone();
         let builder = WebViewBuilder::new()
             .with_custom_protocol(shell::SCHEME.into(), move |_, req| serve(&nodus, &serve_state, &req))
             .with_url(url)
@@ -101,7 +114,7 @@ impl PageWebview {
             .with_back_forward_navigation_gestures(false)
             .with_hotkeys_zoom(false)
             .with_focused(false)
-            .with_background_color(rgba8(background));
+            .with_background_color(background.map_or((0, 0, 0, 0), rgba8));
         #[cfg(windows)]
         let builder = {
             use wry::WebViewBuilderExtWindows as _;
@@ -118,6 +131,13 @@ impl PageWebview {
             let container =
                 super::mac::Container::new(&parent).ok_or_else(|| anyhow::anyhow!("not on the main thread"))?;
             container.adopt(&webview.webview());
+            // A press in the page is the board's news too (`relay::pressed`).
+            container.on_press(move || {
+                let _ = press_tx.send(Incoming {
+                    frame,
+                    body: PRESSED.to_owned(),
+                });
+            });
             container
         };
         #[cfg(target_os = "macos")]
@@ -252,6 +272,20 @@ impl PageWebview {
         let _ = on;
     }
 
+    /// Cuts the page away where the board's chrome lies over it (`holes`,
+    /// window px; none: the whole page shows), and lets the pointer through
+    /// there. WebView2 has no holes: its page steps aside instead (`swap.rs`).
+    pub fn set_holes(&self, holes: &[Bounds<Pixels>], ui: f32) {
+        #[cfg(target_os = "macos")]
+        {
+            let ui = if ui.is_finite() && ui > 0.0 { ui } else { 1.0 };
+            let holes: Vec<_> = holes.iter().map(|b| points(*b, ui)).collect();
+            self.container.set_holes(holes);
+        }
+        #[cfg(not(target_os = "macos"))]
+        let _ = (holes, ui);
+    }
+
     /// The pointer goes to the board this close to the page's sides and
     /// bottom: the resize handles there (VIEW-140).
     pub fn set_edge(&self, edge: f32) {
@@ -270,9 +304,10 @@ impl PageWebview {
     }
 
     /// A new version reloads the page (VIEW-027); the title is the frame's
-    /// accessible name; the background follows the theme.
-    pub fn update(&self, version: u32, title: &str, background: Rgba) {
-        let background = css_color(background);
+    /// accessible name; the background follows the theme, or is none for a
+    /// page without a panel.
+    pub fn update(&self, version: u32, title: &str, background: Option<Rgba>) {
+        let background = css_ground(background);
         let (src, title_arg, bg_arg) = {
             let Ok(mut s) = self.shell.lock() else { return };
             let src = (s.version != version).then(|| shell::page_url(&s.view_id, version));
@@ -297,10 +332,10 @@ impl PageWebview {
             js(title_arg),
             js(bg_arg.clone())
         ));
-        if let Some(bg) = bg_arg
-            && let Some(c) = parse_hex(&bg)
-        {
-            let _ = self.webview.set_background_color(c);
+        if let Some(bg) = bg_arg {
+            let _ = self
+                .webview
+                .set_background_color(parse_hex(&bg).unwrap_or((0, 0, 0, 0)));
         }
     }
 

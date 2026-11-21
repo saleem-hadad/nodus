@@ -35,7 +35,8 @@ struct ShellState {
 
 /// What a frame says when the user presses in its page, as the shell's own
 /// messages are written.
-pub const PRESSED: &str = r#"{"p":true}"#;
+#[cfg(target_os = "macos")]
+const PRESSED: &str = r#"{"p":true}"#;
 
 /// `#rrggbb` for a solid colour.
 pub fn css_color(c: Rgba) -> String {

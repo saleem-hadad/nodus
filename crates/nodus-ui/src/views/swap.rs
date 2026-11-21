@@ -29,6 +29,9 @@ use super::frames::{Frame, Geometry, Slot, frames};
 const ZOOM_SETTLE: Duration = Duration::from_millis(180);
 /// A page whose body changed size gets this long to lay out again.
 const RELAYOUT: Duration = Duration::from_millis(150);
+/// A page given a new scale (a zoom, a size) stays behind its snapshot until
+/// it has drawn at it, or this long at most.
+const RESCALE: Duration = Duration::from_millis(500);
 /// A snapshot shown this long while the page may have changed is taken again.
 const STALE_AFTER: Duration = Duration::from_millis(400);
 /// A live page that changed gets a new snapshot at most this often, ready
@@ -39,8 +42,11 @@ const READY_EVERY: Duration = Duration::from_millis(1000);
 const RETRY: Duration = Duration::from_millis(120);
 
 /// A frame's probe painted: its webview follows the body, what covers the
-/// page this frame is decided, and the snapshot to draw in the page's place
-/// (if it's behind one) comes back for the probe to paint.
+/// page this frame is decided, and the snapshot comes back for the probe to
+/// paint, with whether it's in the page's place (else it's under the live
+/// page, and shows only while the webview shows nothing: WebKit between two
+/// drawings of the page, or the webview hidden a frame before GPUI's frame
+/// with the snapshot lands).
 pub fn placed(
     view_id: &str,
     slot: Slot,
@@ -48,7 +54,7 @@ pub fn placed(
     hitbox: Hitbox,
     window: &mut Window,
     cx: &mut App,
-) -> Option<Arc<RenderImage>> {
+) -> Option<(Arc<RenderImage>, bool)> {
     let parity = crate::parity::frozen(cx);
     let rc = frames(cx);
     let mut f = rc.borrow_mut();
@@ -106,9 +112,7 @@ pub fn placed(
             update_ink(fr, ink.as_ref(), window);
         }
         fr.web.set_passthrough(!fr.live || g.passthrough);
-        if !fr.live {
-            paint = fr.snapshot.clone();
-        }
+        paint = fr.snapshot.clone().map(|image| (image, !fr.live));
     }
     drop(f);
     if swapped || moved {
@@ -179,8 +183,9 @@ fn after_frame(window: &mut Window, cx: &mut App) {
             if (needed || ready) && !fr.pending && !unloaded {
                 let retrying = fr.retry_at.is_some_and(|t| now < t);
                 // A body that just changed size lays its page out again
-                // first; a picture now would be of the old layout.
-                let relaying = fr.resized.is_some_and(|t| now.duration_since(t) < RELAYOUT);
+                // first, and a new scale draws first; a picture now would be
+                // of the old layout, or the old scale.
+                let relaying = fr.resized.is_some_and(|t| now.duration_since(t) < RELAYOUT) || !fr.web.scaled(RESCALE);
                 let stale = fr.snapshot_at.is_none_or(|t| now.duration_since(t) >= STALE_AFTER);
                 if retrying || relaying || (needed && !fr.live && !stale && !parity) {
                     settle = true;
@@ -190,6 +195,14 @@ fn after_frame(window: &mut Window, cx: &mut App) {
             }
             if !fr.want && !fr.live {
                 fr.web.place(g.document, g.clip, g.zoom, g.rounding, ui);
+                // The page waits behind its snapshot until it shows the zoom
+                // it was just given (`page_scaled` draws again then): the
+                // webview would show the old one for a frame or two, and the
+                // page would flicker as the board's zoom settles.
+                if !fr.web.scaled(RESCALE) {
+                    settle = true;
+                    continue;
+                }
                 update_ink(fr, ink.as_ref(), window);
                 fr.live = true;
                 fr.web.set_live(true);
@@ -350,6 +363,24 @@ pub fn page_loaded(frame: u64, cx: &mut App) {
     let mut f = rc.borrow_mut();
     if let Some(fr) = f.by_id_mut(frame) {
         fr.loaded = true;
+    }
+}
+
+/// The shell drew its page at scale `n`: a page waiting behind its snapshot
+/// for it can come back.
+pub fn page_scaled(frame: u64, n: u64, cx: &mut App) {
+    let Some(rc) = super::frames::existing(cx) else { return };
+    let window = {
+        let mut f = rc.borrow_mut();
+        let Some(fr) = f.by_id_mut(frame) else { return };
+        fr.web.scale_drawn(n);
+        if fr.live {
+            return;
+        }
+        f.window
+    };
+    if let Some(window) = window {
+        let _ = window.update(cx, |_, window, _| window.refresh());
     }
 }
 

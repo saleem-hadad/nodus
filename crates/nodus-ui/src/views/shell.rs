@@ -99,6 +99,8 @@ pub fn shell_html(view_id: &str, version: u32, title: &str, background: &str) ->
 
 /// The relay: messages from the frame go to the app with whether the user
 /// had just clicked or pressed something in it; the app's go to the frame.
+/// Once a scale is drawn (the webview at its new size, a frame painted at
+/// it), the shell says so with its number (`{"s": n}`).
 const SCRIPT: &str = r#"(function(){
 var f=document.getElementById('f');
 addEventListener('message',function(e){
@@ -114,9 +116,14 @@ window.ipc.postMessage(text);
 f.addEventListener('mouseenter',function(){window.ipc.postMessage('{"h":true}');});
 f.addEventListener('mouseleave',function(){window.ipc.postMessage('{"h":false}');});
 window.__nodusDeliver=function(m){if(f.contentWindow)f.contentWindow.postMessage(m,'*');};
-window.__nodusScale=function(z,w,h){
+window.__nodusScale=function(z,w,h,n){
 f.style.width=w+'px';f.style.height=h+'px';f.style.transformOrigin='0 0';
 f.style.transform=z===1?'':'scale('+z+')';
+var tries=0;
+(function drawn(){requestAnimationFrame(function(){
+if(++tries<30&&(Math.abs(innerWidth-w*z)>1.5||Math.abs(innerHeight-h*z)>1.5))return drawn();
+requestAnimationFrame(function(){window.ipc.postMessage('{"s":'+n+'}');});
+});})();
 };
 window.__nodusFrame=function(src,title,bg){
 if(title!==null)f.title=title;

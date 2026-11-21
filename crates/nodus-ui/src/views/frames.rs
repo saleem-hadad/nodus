@@ -421,7 +421,8 @@ pub fn describe(cx: &App) -> serde_json::Value {
 /// The body's probe: an invisible box over a frame's body, last in its card,
 /// so whatever GPUI hit-tests above it covers the page. Painting it places
 /// the frame's webview there, and paints the page's snapshot in its place
-/// while it's behind one (decided in that same paint, `swap::placed`).
+/// while it's behind one (decided in that same paint, `swap::placed`), and
+/// under it while it's live.
 pub fn probe(
     view_id: String,
     slot: Slot,
@@ -430,8 +431,8 @@ pub fn probe(
     probe_into(view_id, slot, geometry, None)
 }
 
-/// The picture a probe painted this frame, for what's drawn over it, and
-/// when it first painted one.
+/// The picture a probe painted in the page's place this frame, for what's
+/// drawn over it, and when it first painted one.
 pub type Painted = Rc<RefCell<Option<(Arc<RenderImage>, Instant)>>>;
 
 /// [`probe`], handing the snapshot it paints to `painted` as well.
@@ -446,14 +447,14 @@ pub fn probe_into(
         move |bounds, hitbox, window, cx| {
             let g = geometry(bounds, window.content_mask().bounds);
             let image = super::swap::placed(&view_id, slot, g, hitbox, window, cx);
-            if let Some(image) = &image {
+            if let Some((image, _)) = &image {
                 // `object-fit: fill`, with the page's rounded corners.
                 let _ = window.paint_image(bounds, bounds, g.rounding.corners(), image.clone(), 0, false);
             }
             if let Some(painted) = &painted {
                 let mut painted = painted.borrow_mut();
                 let first = painted.as_ref().map_or_else(Instant::now, |p| p.1);
-                *painted = image.map(|image| (image, first));
+                *painted = image.filter(|(_, shown)| *shown).map(|(image, _)| (image, first));
             }
         },
     )

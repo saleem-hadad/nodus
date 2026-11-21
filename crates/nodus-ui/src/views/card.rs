@@ -472,8 +472,9 @@ fn body(
             }
         }
     };
-    // The probe paints the page's snapshot while it's behind one. The fill
-    // takes the panel's corners: GPUI's overflow clip is square.
+    // The probe paints the page's snapshot while it's behind one, and under
+    // it while it's live. The fill takes the panel's corners: GPUI's overflow
+    // clip is square.
     let base = base
         .bg(t.bg_elevated)
         .when(rounding.top, |d| d.rounded_t(fu(RADIUS)))

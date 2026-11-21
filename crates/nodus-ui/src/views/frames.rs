@@ -54,6 +54,9 @@ pub struct Frame {
     pub probe: Option<Hitbox>,
     /// Something GPUI drew covers the page (last check).
     pub occluded: bool,
+    /// Where the board's chrome lies over the live page, which is cut away
+    /// there (window px, last check; `swap.rs`).
+    pub holes: Vec<Bounds<Pixels>>,
     /// The page should be behind its snapshot (last check).
     pub want: bool,
     /// A snapshot failed: the next try waits until then, longer after each
@@ -353,6 +356,7 @@ pub fn sync_board(canvas: &mut BoardCanvas, window: &mut Window, cx: &mut Contex
                         geometry: None,
                         probe: None,
                         occluded: false,
+                        holes: Vec::new(),
                         want: false,
                         retry_at: None,
                         failed: 0,
@@ -394,6 +398,12 @@ pub fn describe(cx: &App) -> serde_json::Value {
                     "live": fr.live,
                     "snapshot": fr.snapshot.is_some(),
                     "occluded": fr.occluded,
+                    "holes": fr.holes.iter().map(|b| [
+                        f32::from(b.origin.x),
+                        f32::from(b.origin.y),
+                        f32::from(b.size.width),
+                        f32::from(b.size.height),
+                    ]).collect::<Vec<_>>(),
                     "want": fr.want,
                     "pending": fr.pending,
                     "ink": fr.ink.as_ref().map(|i| i.marks.len()),

@@ -239,7 +239,7 @@ pub fn render(node: ViewNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut
         revealing,
         working,
         waiting,
-        (resizing, state.dragging),
+        (resizing, state.dragging, state.selected && !renaming),
         rounding,
         z,
         window,
@@ -428,7 +428,7 @@ fn body(
     revealing: Option<super::reveal::Revealing>,
     working: bool,
     waiting: bool,
-    (resizing, dragging): (bool, bool),
+    (resizing, dragging, resizable): (bool, bool, bool),
     rounding: Rounding,
     z: f32,
     window: &mut Window,
@@ -467,7 +467,8 @@ fn body(
                     || pointer.marquee.is_some()
                     || pointer.moving
                     || resizing,
-                edge: 5.0 * z,
+                // The resize handles reach into the page only while they're there.
+                edge: if resizable { 5.0 * z } else { 0.0 },
                 reveal,
             }
         }

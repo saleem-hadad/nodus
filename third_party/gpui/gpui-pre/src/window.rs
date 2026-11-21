@@ -906,6 +906,52 @@ impl Hitbox {
             .any(|id| self.id == *id)
     }
 
+    /// Nodus patch: where, within `area`, a hitbox in front of this one keeps the pointer from
+    /// it in the frame being drawn while it draws (else in the last frame drawn): every later
+    /// hitbox that blocks the mouse (`occlude`, `block_mouse_except_scroll`), clipped to its
+    /// content mask and to `area`. One inserted under a transform gives the box around it as
+    /// transformed. `deferred` marks the deferred draws' (menus, popovers, modals), the
+    /// prompt's, the drag's and the tooltip's: what comes and goes over everything else.
+    pub fn blocks_in_frame(&self, area: Bounds<Pixels>, window: &Window) -> Vec<HitboxBlock> {
+        let frame = if window.invalidator.not_drawing() {
+            &window.rendered_frame
+        } else {
+            &window.next_frame
+        };
+        let Some(start) = frame
+            .hitboxes
+            .iter()
+            .position(|hitbox| hitbox.id == self.id)
+        else {
+            return Vec::new();
+        };
+        let mut blocks = Vec::new();
+        for (index, hitbox) in frame.hitboxes.iter().enumerate().skip(start + 1) {
+            if !matches!(
+                hitbox.behavior,
+                HitboxBehavior::BlockMouse | HitboxBehavior::BlockMouseExceptScroll
+            ) {
+                continue;
+            }
+            let mut bounds = hitbox.bounds.intersect(&hitbox.content_mask.bounds);
+            if let Some(transform) = frame.hitbox_transforms.get(index).and_then(Option::as_ref) {
+                match transformed_bounds(transform, bounds) {
+                    Some(outer) => bounds = outer,
+                    None => continue,
+                }
+            }
+            let bounds = bounds.intersect(&area);
+            if bounds.size.width <= Pixels::ZERO || bounds.size.height <= Pixels::ZERO {
+                continue;
+            }
+            blocks.push(HitboxBlock {
+                bounds,
+                deferred: index >= frame.deferred_hitboxes_from,
+            });
+        }
+        blocks
+    }
+
     /// Checks if the hitbox contains the mouse and should handle scroll events. Typically this
     /// should only be used when handling `ScrollEvent`, and otherwise `is_hovered` should be
     /// used. See the documentation of `Hitbox::is_hovered` for details about this distinction.
@@ -914,6 +960,46 @@ impl Hitbox {
     /// this sets `HitboxBehavior::BlockMouse` (`InteractiveElement::occlude`).
     pub fn should_handle_scroll(&self, window: &Window) -> bool {
         self.id.should_handle_scroll(window)
+    }
+}
+
+/// Nodus patch: a part of a hitbox another hitbox in front of it blocks
+/// (`Hitbox::blocks_in_frame`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HitboxBlock {
+    /// What it blocks, in window coordinates.
+    pub bounds: Bounds<Pixels>,
+    /// It's drawn by a deferred draw, the prompt, the drag or the tooltip.
+    pub deferred: bool,
+}
+
+/// Nodus patch: the box around `bounds`, given in the space of the element `transform` was
+/// inserted under, in the window's space, clipped by the content masks outside each
+/// transform; None when nothing of it shows.
+fn transformed_bounds(transform: &HitTransform, bounds: Bounds<Pixels>) -> Option<Bounds<Pixels>> {
+    let forward = transform.inverse.inverse()?;
+    let corners = [
+        bounds.origin,
+        bounds.top_right(),
+        bounds.bottom_right(),
+        bounds.bottom_left(),
+    ]
+    .map(|p| forward.apply_f32([p.x.0, p.y.0]));
+    let (mut min_x, mut min_y, mut max_x, mut max_y) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+    for [x, y] in corners {
+        min_x = min_x.min(x);
+        min_y = min_y.min(y);
+        max_x = max_x.max(x);
+        max_y = max_y.max(y);
+    }
+    let outer = Bounds::from_corners(point(px(min_x), px(min_y)), point(px(max_x), px(max_y)))
+        .intersect(&transform.parent_mask.bounds);
+    if outer.size.width <= Pixels::ZERO || outer.size.height <= Pixels::ZERO {
+        return None;
+    }
+    match &transform.parent {
+        Some(parent) => transformed_bounds(parent, outer),
+        None => Some(outer),
     }
 }
 
@@ -1078,6 +1164,9 @@ pub(crate) struct Frame {
     /// The transform each hitbox of `hitboxes` was inserted under, if any
     /// (Nodus patch: hit testing through element transforms).
     pub(crate) hitbox_transforms: Vec<Option<Arc<HitTransform>>>,
+    /// Where the hitboxes of deferred draws (and the prompt's, the drag's and the tooltip's
+    /// after them) start in `hitboxes` (Nodus patch: `Hitbox::blocks_in_frame`).
+    pub(crate) deferred_hitboxes_from: usize,
     pub(crate) window_control_hitboxes: Vec<(WindowControlArea, Hitbox)>,
     pub(crate) deferred_draws: Vec<DeferredDraw>,
     pub(crate) input_handlers: Vec<Option<PlatformInputHandler>>,
@@ -1135,6 +1224,7 @@ impl Frame {
             scene: Scene::default(),
             hitboxes: Vec::new(),
             hitbox_transforms: Vec::new(),
+            deferred_hitboxes_from: usize::MAX,
             window_control_hitboxes: Vec::new(),
             deferred_draws: Vec::new(),
             input_handlers: Vec::new(),
@@ -1166,6 +1256,7 @@ impl Frame {
         self.cursor_styles.clear();
         self.hitboxes.clear();
         self.hitbox_transforms.clear();
+        self.deferred_hitboxes_from = usize::MAX;
         self.window_control_hitboxes.clear();
         self.deferred_draws.clear();
         self.tab_stops.clear();
@@ -4123,6 +4214,7 @@ impl Window {
         #[cfg(any(feature = "inspector", debug_assertions))]
         let inspector_element = self.prepaint_inspector(_inspector_width, cx);
 
+        self.next_frame.deferred_hitboxes_from = self.next_frame.hitboxes.len();
         self.prepaint_deferred_draws(cx);
 
         let mut prompt_element = None;

@@ -399,6 +399,13 @@ fn view_properties() -> Vec<(&'static str, Value)> {
             }),
         ),
         (
+            "background",
+            json!({
+                "type": "boolean",
+                "description": "false takes away the board’s panel, the rounded card behind the page, so the page sits straight on the board, transparent where it draws nothing, and draws its own surface: a sticky note, a sticker, one big number. Leave it out for tables, dashboards and forms, which suit the panel. true puts the panel back."
+            }),
+        ),
+        (
             "width",
             json!({ "type": "number", "description": "Card width in board units. Defaults to 480." }),
         ),
@@ -528,7 +535,8 @@ fn chat_tools() -> Vec<Value> {
                     "description": { "type": "string", "description": "What the page is for." },
                     "data": { "description": "JSON the page reads as nodus.data." },
                     "width": { "type": "number", "description": "Width in px; defaults to 480." },
-                    "height": { "type": "number", "description": "Height in px; defaults to 330." }
+                    "height": { "type": "number", "description": "Height in px; defaults to 330." },
+                    "background": { "type": "boolean", "description": "false: no panel behind the page, which sits straight on the board and draws its own surface, as for create_view." }
                 },
                 "required": ["title", "html"]
             }

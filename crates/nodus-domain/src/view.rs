@@ -55,6 +55,11 @@ pub struct BoardView {
     pub allowed_runs: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub denied_runs: Option<Vec<String>>,
+    /// `false`: the page sits straight on the board, with no panel behind it,
+    /// and draws its own surface (a sticky note, a sticker, one big number).
+    /// Unset is the panel.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub background: Option<bool>,
     /// Fields this version doesn't know, written back as they were read.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
@@ -88,6 +93,11 @@ pub struct ViewCommand {
 }
 
 impl BoardView {
+    /// Whether the page sits on the board's panel (its `background`).
+    pub fn has_background(&self) -> bool {
+        self.background != Some(false)
+    }
+
     /// Whether its brain, and the sessions its page starts, run in auto mode
     /// (VIEW-155): a view the user made does; one a session put up only when
     /// that session ran in auto mode, and only until a session that doesn't

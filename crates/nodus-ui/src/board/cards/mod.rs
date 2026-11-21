@@ -430,6 +430,9 @@ pub trait CardActions {
     fn resize(&self, node: &Resized, rect: (f32, f32, f32, f32), done: bool, cx: &mut App);
     /// A card's title text was pressed (`.card-title`, BOARD-043/047).
     fn press_title(&self);
+    /// A card's chat was pressed: the window's text selection takes the
+    /// press, and the card stays put (CHAT-009).
+    fn press_chat(&self) {}
     /// Raises a card while its agent fan is out (z 1400, DECK-014).
     fn raise(&self, session_id: &str, raised: bool, cx: &mut App);
     /// Asks a server a card's session started to stop (DRAWER-024).

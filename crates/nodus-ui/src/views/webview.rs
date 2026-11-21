@@ -125,6 +125,7 @@ impl PageWebview {
             use wry::WebViewExtMacOS as _;
             super::mac::ignore_window_occlusion(&webview.webview());
             super::mac::no_context_menu(&webview.webview());
+            super::mac::copy_from_pages(window);
         }
         Ok(Self {
             frame,

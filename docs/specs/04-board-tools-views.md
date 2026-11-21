@@ -368,7 +368,7 @@ Feedback #9 asked for Claude to understand the board visually and add to it. `lo
 - **VIEW-146** `patchView` applies the patch's defined fields to the board state immediately and sends `views.save` (not awaited).
 - **VIEW-147** Large modal: a modal over the board (`view-modal`) with a header (`LayoutDashboard` 15 px, the title as heading, a close button `X` 15 px with tooltip/aria-label `Close`) and a second frame of the same page filling the body; Escape (when the board, not the page, has focus) or a backdrop click closes it.
 - **VIEW-148** Dragging views: a view dropped onto the archive or the note pad bounces back to where its drag started; otherwise its rounded position is saved with `patchView`.
-- **VIEW-149** Keyboard on the board: Backspace/Delete (no ⌘/Ctrl, no ⌥) with views selected → delete them, asking first (together with deleting selected notes and archiving selected cards); Escape clears the selection; Enter does nothing for views; ⌘A (select all active) doesn't select views. Keys typed while a page has focus go to the page, not the board.
+- **VIEW-149** Keyboard on the board: Backspace/Delete (no ⌘/Ctrl, no ⌥) with views selected → delete them, asking first (together with deleting selected notes and archiving selected cards); Escape clears the selection; Enter does nothing for views; ⌘A (select all active) doesn't select views. Keys typed while a page has focus go to the page, not the board, and so does ⌘C: it copies the text selected in the page (Edit › Copy).
 - **VIEW-150** A source handle on the card's right edge (1 × 1 px, invisible, not connectable) anchors the dashed lines to sessions the view started.
 
 ### Views: the New view dialog

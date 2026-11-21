@@ -43,7 +43,7 @@ use gpui::{AnyElement, App, Context, Window};
 use crate::board::canvas::BoardCanvas;
 use crate::board::nodes::ViewRenderer;
 #[cfg(target_os = "macos")]
-pub use mac::{hit_class, native_click, native_keys, responder_class};
+pub use mac::{hit_class, native_click, native_copy, native_keys, native_mouse, responder_class};
 
 /// A press anywhere GPUI draws gives GPUI the keyboard back from the page
 /// the user last clicked, as a click outside a frame blurs it (VIEW-051,

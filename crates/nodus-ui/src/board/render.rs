@@ -1277,10 +1277,14 @@ impl Render for BoardCanvas {
             )
             .on_scroll(cx.listener(|this, e, _, cx| this.wheel(e, cx)))
             .on_pinch(cx.listener(|this, e, _, cx| this.pinch(e, cx)))
-            // BOARD-178: Edit › Copy and Paste, with the board's keys.
-            .on_action(cx.listener(|this, _: &gpui::component::input::Copy, _, cx| {
-                if this.cover(false, cx).shortcuts() {
-                    this.copy_notes(cx);
+            // BOARD-178: Edit › Copy and Paste, with the board's keys. A chat's
+            // selected text comes first, and with no notes copied ⌘C goes on
+            // to the window's text selection (CHAT-009) or to a page.
+            .on_action(cx.listener(|this, _: &gpui::component::input::Copy, window, cx| {
+                if gpui::base::TextSelection::has_selection(window, cx)
+                    || !(this.cover(false, cx).shortcuts() && this.copy_notes(cx))
+                {
+                    cx.propagate();
                 }
             }))
             .on_action(cx.listener(|this, _: &gpui::component::input::Paste, _, cx| {

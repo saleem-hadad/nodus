@@ -42,6 +42,10 @@
 //! {"cmd":"views"}                                   views' frames: live or snapshot, and why
 //! {"cmd":"native-click","x":500,"y":300}            a click AppKit routes (into a page, or GPUI);
 //!                                                   "button": "right" or "control" (⌃-click)
+//! {"cmd":"native-mouse","kind":"down","x":500,"y":300}   a left drag's step as AppKit routes it
+//!                                                   ("down" | "drag" | "up" | "move")
+//! {"cmd":"native-copy"}                             ⌘C as AppKit routes it in an active app:
+//!                                                   "gpui" | "responder" | "app" took it
 //! {"cmd":"hit","x":500,"y":300}                     the native view a click there reaches
 //! {"cmd":"responder"}                               the class of the window's first responder
 //! {"cmd":"quit"}
@@ -631,6 +635,23 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
             let button = command.get("button").and_then(Value::as_str).unwrap_or("left");
             crate::views::native_click(number, x, y, button == "right", button == "control");
             Ok(Value::Null)
+        }
+        #[cfg(target_os = "macos")]
+        "native-mouse" => {
+            let (x, y) = (f64::from(num(command, "x")), f64::from(num(command, "y")));
+            let number = with_window(cx, |window, _| crate::mac::window_number(window))?.ok_or("no window")?;
+            let kind = command.get("kind").and_then(Value::as_str).unwrap_or("move").to_owned();
+            crate::views::native_mouse(number, x, y, &kind);
+            Ok(Value::Null)
+        }
+        #[cfg(target_os = "macos")]
+        "native-copy" => {
+            let number = with_window(cx, |window, _| crate::mac::window_number(window))?.ok_or("no window")?;
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            crate::views::native_copy(number, move |took| {
+                let _ = tx.send(took);
+            });
+            Ok(Value::String(rx.await.map_err(|e| e.to_string())?.to_owned()))
         }
         // Keys typed as AppKit delivers them (the platform's path, not GPUI's
         // dispatch): lowercase letters and spaces.

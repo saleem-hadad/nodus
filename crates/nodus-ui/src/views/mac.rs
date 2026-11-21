@@ -409,6 +409,94 @@ pub fn no_context_menu(webview: &NSView) {
     });
 }
 
+/// GPUI's own `-performKeyEquivalent:`, which [`copy_from_pages`] wraps.
+static GPUI_KEY_EQUIVALENT: std::sync::OnceLock<objc2::runtime::Imp> = std::sync::OnceLock::new();
+
+/// ⌘C copies from the page that has the keyboard (VIEW-051). GPUI's view
+/// sees every key equivalent before the menu does, and GPUI takes ⌘C on the
+/// board (BOARD-178's notes, a chat's selection) whether or not it copies
+/// anything, so Edit › Copy never sent `copy:` to a page the user had just
+/// selected text in. While a page (a view inside GPUI's) is the window's
+/// first responder, GPUI's view lets ⌘C go by. Done once for GPUI's class.
+pub fn copy_from_pages(window: &Window) {
+    static DONE: std::sync::Once = std::sync::Once::new();
+    unsafe extern "C-unwind" fn perform_key_equivalent(
+        this: *mut AnyObject,
+        cmd: objc2::runtime::Sel,
+        event: *mut AnyObject,
+    ) -> Bool {
+        // SAFETY: AppKit's receiver and event, on the main thread.
+        if unsafe { page_copy(this, event) } {
+            return Bool::NO;
+        }
+        let Some(gpui) = GPUI_KEY_EQUIVALENT.get() else {
+            return Bool::NO;
+        };
+        // SAFETY: GPUI's IMP for this selector, called as AppKit would.
+        unsafe {
+            let gpui: unsafe extern "C-unwind" fn(*mut AnyObject, objc2::runtime::Sel, *mut AnyObject) -> Bool =
+                std::mem::transmute(*gpui);
+            gpui(this, cmd, event)
+        }
+    }
+    let Some(view) = content_view(window) else {
+        return;
+    };
+    let class = view.class();
+    DONE.call_once(|| {
+        let sel = objc2::sel!(performKeyEquivalent:);
+        let Some(gpui) = class.instance_method(sel).map(objc2::runtime::Method::implementation) else {
+            return;
+        };
+        let _ = GPUI_KEY_EQUIVALENT.set(gpui);
+        // SAFETY: an IMP with the selector's signature (BOOL, id, SEL, id),
+        // on a class the runtime owns; "c@:@" says so where it's added.
+        unsafe {
+            let imp: objc2::runtime::Imp = std::mem::transmute(
+                perform_key_equivalent
+                    as unsafe extern "C-unwind" fn(*mut AnyObject, objc2::runtime::Sel, *mut AnyObject) -> Bool,
+            );
+            objc2::ffi::class_replaceMethod(std::ptr::from_ref(class).cast_mut(), sel, imp, c"c@:@".as_ptr());
+        }
+    });
+}
+
+/// Whether `event` is ⌘C while a view inside `view` (a page's webview) has
+/// its window's keyboard.
+///
+/// # Safety
+/// `view` and `event` are live, on the main thread.
+unsafe fn page_copy(view: *mut AnyObject, event: *mut AnyObject) -> bool {
+    // NSEventModifierFlag{Shift, Control, Option, Command}.
+    const MODIFIERS: usize = (1 << 17) | (1 << 18) | (1 << 19) | (1 << 20);
+    const COMMAND: usize = 1 << 20;
+    // SAFETY: the caller's live objects; nil is checked before use.
+    unsafe {
+        if view.is_null() || event.is_null() {
+            return false;
+        }
+        let flags: usize = msg_send![event, modifierFlags];
+        if flags & MODIFIERS != COMMAND {
+            return false;
+        }
+        let chars: Option<Retained<objc2_foundation::NSString>> = msg_send![event, charactersIgnoringModifiers];
+        if chars.is_none_or(|c| c.to_string() != "c") {
+            return false;
+        }
+        let window: *mut AnyObject = msg_send![view, window];
+        if window.is_null() {
+            return false;
+        }
+        let first: *mut AnyObject = msg_send![window, firstResponder];
+        if first.is_null() || std::ptr::eq(first, view) {
+            return false;
+        }
+        let is_view: bool = msg_send![first, isKindOfClass: objc2::class!(NSView)];
+        let inside: bool = is_view && msg_send![first, isDescendantOf: view];
+        inside
+    }
+}
+
 /// Gives the keyboard back to GPUI's view after a press on the board: AppKit
 /// leaves it with the page the user last clicked, where a browser would move
 /// the focus off the frame. GPUI's own view, not the window's content view
@@ -502,6 +590,104 @@ pub fn native_click(window_number: isize, x: f64, y: f64, right: bool, control: 
                 }
             }
         }
+    });
+}
+
+/// Test driver: one step of a left-button drag at a point in the window
+/// (`down`, `drag` or `up`), through `-[NSWindow sendEvent:]` as a mouse's
+/// come: AppKit's hit test gives the press to a page or GPUI's view, and the
+/// drags and the release go where the press went. Off any GPUI update, on
+/// the main queue; never moves the user's pointer.
+pub fn native_mouse(window_number: isize, x: f64, y: f64, kind: &str) {
+    // NSEventType{LeftMouseDown, LeftMouseDragged, LeftMouseUp, MouseMoved}.
+    let (ty, pressure) = match kind {
+        "down" => (1usize, 1.0f32),
+        "drag" => (6, 1.0),
+        "up" => (2, 0.0),
+        _ => (5, 0.0),
+    };
+    dispatch2::DispatchQueue::main().exec_async(move || {
+        // SAFETY: NSApplication, NSWindow and NSEvent on the main thread;
+        // every object is checked for nil before use.
+        unsafe {
+            let app: *mut AnyObject = msg_send![objc2::class!(NSApplication), sharedApplication];
+            let w: *mut AnyObject = msg_send![app, windowWithWindowNumber: window_number];
+            if w.is_null() {
+                return;
+            }
+            let content: *mut AnyObject = msg_send![w, contentView];
+            if content.is_null() {
+                return;
+            }
+            let frame: NSRect = msg_send![content, frame];
+            let ev: *mut AnyObject = msg_send![objc2::class!(NSEvent),
+                mouseEventWithType: ty,
+                location: NSPoint::new(x, frame.size.height - y),
+                modifierFlags: 0usize,
+                timestamp: 0.0f64,
+                windowNumber: window_number,
+                context: std::ptr::null_mut::<AnyObject>(),
+                eventNumber: 0isize,
+                clickCount: 1isize,
+                pressure: pressure];
+            if !ev.is_null() {
+                let _: () = msg_send![w, sendEvent: ev];
+            }
+        }
+    });
+}
+
+/// Test driver: ⌘C as AppKit gives it to an active app's key window: to the
+/// window's views first (GPUI's key equivalents), then Edit › Copy's
+/// `copy:` up the window's responder chain, then the app (GPUI's menu
+/// item). The driven app is never active, so its menu can't be reached the
+/// way a real ⌘C reaches it. Calls back with what took it: "gpui",
+/// "responder" or "app".
+pub fn native_copy(window_number: isize, done: impl FnOnce(&'static str) + Send + 'static) {
+    dispatch2::DispatchQueue::main().exec_async(move || {
+        // SAFETY: NSApplication, NSWindow and NSEvent on the main thread;
+        // every object is checked for nil before use.
+        let took = unsafe {
+            let app: *mut AnyObject = msg_send![objc2::class!(NSApplication), sharedApplication];
+            let w: *mut AnyObject = msg_send![app, windowWithWindowNumber: window_number];
+            if w.is_null() {
+                return done("none");
+            }
+            let c = objc2_foundation::NSString::from_str("c");
+            // NSEventTypeKeyDown; NSEventModifierFlagCommand; kVK_ANSI_C.
+            let ev: *mut AnyObject = msg_send![objc2::class!(NSEvent),
+                keyEventWithType: 10usize,
+                location: NSPoint::new(0.0, 0.0),
+                modifierFlags: 1usize << 20,
+                timestamp: 0.0f64,
+                windowNumber: window_number,
+                context: std::ptr::null_mut::<AnyObject>(),
+                characters: &*c,
+                charactersIgnoringModifiers: &*c,
+                isARepeat: false,
+                keyCode: 8u16];
+            if ev.is_null() {
+                return done("none");
+            }
+            let gpui: Bool = msg_send![w, performKeyEquivalent: ev];
+            if gpui.as_bool() {
+                "gpui"
+            } else {
+                let first: *mut AnyObject = msg_send![w, firstResponder];
+                let took: Bool = if first.is_null() {
+                    Bool::NO
+                } else {
+                    msg_send![first, tryToPerform: objc2::sel!(copy:), with: std::ptr::null_mut::<AnyObject>()]
+                };
+                if took.as_bool() {
+                    "responder"
+                } else {
+                    let _: Bool = msg_send![app, sendAction: objc2::sel!(copy:), to: std::ptr::null_mut::<AnyObject>(), from: std::ptr::null_mut::<AnyObject>()];
+                    "app"
+                }
+            }
+        };
+        done(took);
     });
 }
 

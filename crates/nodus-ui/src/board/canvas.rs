@@ -201,6 +201,7 @@ pub struct BoardCanvas {
     /// The post-marquee selection rectangle (`nodesSelectionActive`).
     pub(crate) selection_rect: bool,
     pub(crate) title_pressed: Rc<Cell<bool>>,
+    pub(crate) chat_pressed: Rc<Cell<bool>>,
     pub(crate) title_click: Option<Task<()>>,
 
     // Nodes that keep their live position while the store changes.
@@ -333,6 +334,7 @@ impl BoardCanvas {
             pointer: None,
             selection_rect: false,
             title_pressed: Rc::new(Cell::new(false)),
+            chat_pressed: Rc::new(Cell::new(false)),
             title_click: None,
             busy: HashSet::new(),
             drag_start: HashMap::new(),
@@ -1179,6 +1181,7 @@ impl BoardCanvas {
             actions: BoardActions {
                 canvas: cx.entity().downgrade(),
                 title_pressed: self.title_pressed.clone(),
+                chat_pressed: self.chat_pressed.clone(),
             },
             pointer: BoardPointer {
                 dragging: matches!(self.gesture, Gesture::Drag(_)) || self.section_drag.is_some(),

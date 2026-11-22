@@ -7,7 +7,6 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use gpui::base::TextSelection;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, CursorStyle, DispatchPhase, FontWeight, Global, HitboxBehavior, InteractiveElement, IntoElement,
@@ -208,6 +207,7 @@ pub fn body(
     };
     let focusing = host.clone();
     let focus_id = id.clone();
+    let pressing = env.actions.clone();
     let term_body = div()
         .id(anim::key(&id, "term"))
         .relative()
@@ -222,21 +222,22 @@ pub fn body(
                 .cursor(CursorStyle::IBeam)
         })
         .when(chat, |d| d.bg(t.bg_elevated))
-        .on_mouse_down(MouseButton::Left, move |e, window, cx| {
-            // CHAT-009: a press on the chat's text goes on to the window's
-            // text selection, the node letting it be (`node_mouse_down`).
-            if chat && TextSelection::is_selectable_at(e.position, window, cx) {
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            // CHAT-009: a press anywhere in the chat goes on to the window's
+            // text selection, as in the session window, and the node lets it
+            // be (`node_mouse_down`).
+            if chat {
+                pressing.press_chat();
                 return;
             }
             cx.stop_propagation();
-            if enabled
-                && !chat
-                && let Some(h) = &focusing
-            {
+            if enabled && let Some(h) = &focusing {
                 h.focus(&focus_id, window, cx);
             }
         })
-        .on_click(|_, _, cx| cx.stop_propagation())
+        // Not a chat's: the window's text selection ends a drag on its
+        // release, and a selection never ended goes on following the pointer.
+        .when(!chat, |d| d.on_click(|_, _, cx| cx.stop_propagation()))
         // XCARD-027, XCARD-028: a gesture that began over a terminal scrolls
         // it, not the board (the terminal asks the same in its own content
         // box, through its wheel gate); a disabled one never claims.

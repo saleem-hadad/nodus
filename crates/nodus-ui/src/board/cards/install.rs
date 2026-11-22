@@ -185,6 +185,9 @@ impl CardActions for CanvasActions {
     fn press_title(&self) {
         self.0.press_title();
     }
+    fn press_chat(&self) {
+        self.0.press_chat();
+    }
     fn raise(&self, session_id: &str, raised: bool, cx: &mut App) {
         self.0.raise(session_id, raised, cx);
     }

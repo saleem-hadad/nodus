@@ -157,6 +157,7 @@ impl BoardCanvas {
         cx: &mut Context<'_, Self>,
     ) {
         let title = self.title_pressed.replace(false);
+        let chat = self.chat_pressed.replace(false);
         self.pointer = Some(e.position);
         match e.button {
             MouseButton::Middle => {
@@ -165,8 +166,9 @@ impl BoardCanvas {
                 self.move_started(cx);
             }
             MouseButton::Left => {
-                // CHAT-009: a press on a chat's text selects it; the card stays put.
-                if TextSelection::is_selectable_at(e.position, window, cx) {
+                // CHAT-009: a press in a chat, or on its text, selects; the
+                // card stays put.
+                if chat || TextSelection::is_selectable_at(e.position, window, cx) {
                     return;
                 }
                 self.focus_board(window, cx);

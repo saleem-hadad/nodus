@@ -28,7 +28,10 @@
 //!   `nowheel`;
 //! - a card's title text calls [`BoardActions::press_title`] in its own
 //!   mouse-down (without stopping it), so the canvas knows the click landed
-//!   on `.card-title` (BOARD-043, BOARD-047).
+//!   on `.card-title` (BOARD-043, BOARD-047);
+//! - a card's chat calls [`BoardActions::press_chat`] the same way, so the
+//!   press goes on to the window's text selection and the card stays put
+//!   (CHAT-009).
 //!
 //! Selection, dragging and opening follow BOARD-038…BOARD-066; renderers only
 //! read [`NodeState`].
@@ -226,12 +229,15 @@ pub struct BoardPointer {
 pub struct BoardActions {
     pub(crate) canvas: WeakEntity<BoardCanvas>,
     pub(crate) title_pressed: Rc<Cell<bool>>,
+    pub(crate) chat_pressed: Rc<Cell<bool>>,
 }
 
 /// The same board's actions (a node drawn with either draws the same).
 impl PartialEq for BoardActions {
     fn eq(&self, other: &Self) -> bool {
-        self.canvas.entity_id() == other.canvas.entity_id() && Rc::ptr_eq(&self.title_pressed, &other.title_pressed)
+        self.canvas.entity_id() == other.canvas.entity_id()
+            && Rc::ptr_eq(&self.title_pressed, &other.title_pressed)
+            && Rc::ptr_eq(&self.chat_pressed, &other.chat_pressed)
     }
 }
 
@@ -245,6 +251,11 @@ impl BoardActions {
     /// The press under way landed on a card's title text (`.card-title`).
     pub fn press_title(&self) {
         self.title_pressed.set(true);
+    }
+
+    /// The press under way landed in a card's chat (CHAT-009).
+    pub fn press_chat(&self) {
+        self.chat_pressed.set(true);
     }
 
     /// Commits a new title for a card (empty clears the override, BOARD-149).

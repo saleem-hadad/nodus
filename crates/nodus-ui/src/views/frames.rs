@@ -11,11 +11,12 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use gpui::{
-    AnyWindowHandle, App, Bounds, Context, Corners, EntityId, Global, Hitbox, HitboxBehavior, IntoElement, Pixels,
-    RenderImage, Styled, Window, canvas, px,
+    AnyWindowHandle, App, Bounds, ContentMask, Context, Corners, EntityId, Global, Hitbox, HitboxBehavior, IntoElement,
+    Pixels, RenderImage, Styled, Window, canvas, px,
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
+use super::swap::Place;
 use super::webview::{Incoming, PageWebview};
 use crate::board::canvas::BoardCanvas;
 
@@ -439,7 +440,7 @@ pub fn describe(cx: &App) -> serde_json::Value {
 /// so whatever GPUI hit-tests above it covers the page. Painting it places
 /// the frame's webview there, and paints the page's snapshot in its place
 /// while it's behind one (decided in that same paint, `swap::placed`), and
-/// under it while it's live.
+/// under it while it's live (a page without its panel: only in its holes).
 pub fn probe(
     view_id: String,
     slot: Slot,
@@ -464,14 +465,26 @@ pub fn probe_into(
         move |bounds, hitbox, window, cx| {
             let g = geometry(bounds, window.content_mask().bounds);
             let image = super::swap::placed(&view_id, slot, g, hitbox, window, cx);
-            if let Some((image, _)) = &image {
+            if let Some((image, place)) = &image {
                 // `object-fit: fill`, with the page's rounded corners.
-                let _ = window.paint_image(bounds, bounds, g.rounding.corners(), image.clone(), 0, false);
+                let paint = |window: &mut Window| {
+                    let _ = window.paint_image(bounds, bounds, g.rounding.corners(), image.clone(), 0, false);
+                };
+                match place {
+                    Place::Holes(holes) => {
+                        for &hole in holes {
+                            window.with_content_mask(Some(ContentMask { bounds: hole }), paint);
+                        }
+                    }
+                    Place::Instead | Place::Under => paint(window),
+                }
             }
             if let Some(painted) = &painted {
                 let mut painted = painted.borrow_mut();
                 let first = painted.as_ref().map_or_else(Instant::now, |p| p.1);
-                *painted = image.filter(|(_, shown)| *shown).map(|(image, _)| (image, first));
+                *painted = image
+                    .filter(|(_, place)| *place == Place::Instead)
+                    .map(|(image, _)| (image, first));
             }
         },
     )

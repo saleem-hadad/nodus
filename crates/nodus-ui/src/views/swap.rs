@@ -51,12 +51,25 @@ const RETRY: Duration = Duration::from_millis(120);
 /// More holes than this in a page and it goes behind its snapshot instead.
 const MAX_HOLES: usize = 24;
 
+/// Where a probe paints the page's snapshot.
+#[derive(Debug, PartialEq)]
+pub enum Place {
+    /// In the page's place: the page is behind it.
+    Instead,
+    /// Under the live page, which is opaque: it shows only where the webview
+    /// shows nothing (round the chrome drawn in the page's holes, WebKit
+    /// between two drawings of the page, or the webview hidden a frame
+    /// before GPUI's frame with the snapshot lands).
+    Under,
+    /// Under a live page without its panel, only in its holes (window px):
+    /// anywhere else an old picture would show through where the page draws
+    /// nothing.
+    Holes(Vec<Bounds<Pixels>>),
+}
+
 /// A frame's probe painted: its webview follows the body, what covers the
 /// page this frame is decided, and the snapshot comes back for the probe to
-/// paint, with whether it's in the page's place (else it's under the live
-/// page, and shows only while the webview shows nothing: WebKit between two
-/// drawings of the page, or the webview hidden a frame before GPUI's frame
-/// with the snapshot lands).
+/// paint, with where.
 pub fn placed(
     view_id: &str,
     slot: Slot,
@@ -64,7 +77,7 @@ pub fn placed(
     hitbox: Hitbox,
     window: &mut Window,
     cx: &mut App,
-) -> Option<(Arc<RenderImage>, bool)> {
+) -> Option<(Arc<RenderImage>, Place)> {
     let parity = crate::parity::frozen(cx);
     let rc = frames(cx);
     let mut f = rc.borrow_mut();
@@ -133,9 +146,18 @@ pub fn placed(
             update_ink(fr, ink.as_ref(), window);
         }
         fr.web.set_passthrough(!fr.live || g.passthrough);
-        // Under a live page too, where its picture shows round the chrome
-        // drawn in its holes.
-        paint = fr.snapshot.clone().map(|image| (image, !fr.live));
+        paint = fr.snapshot.clone().and_then(|image| {
+            let place = if !fr.live {
+                Place::Instead
+            } else if fr.background {
+                Place::Under
+            } else if !fr.holes.is_empty() {
+                Place::Holes(fr.holes.clone())
+            } else {
+                return None;
+            };
+            Some((image, place))
+        });
     }
     drop(f);
     if swapped || moved {

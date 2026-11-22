@@ -8,6 +8,7 @@ use std::borrow::Cow;
 use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use gpui::{Bounds, Pixels, RenderImage, Rgba, Window};
 use nodus_core::Nodus;
@@ -49,6 +50,10 @@ pub struct PageWebview {
     shell: Arc<Mutex<ShellState>>,
     /// The zoom and the page's size in CSS px the shell last scaled it to.
     scale: Cell<(f64, f64, f64)>,
+    /// The number of the scale last sent to the shell, and when; the number
+    /// of the last one it has drawn.
+    scale_sent: Cell<(u64, Instant)>,
+    scale_drawn: Cell<u64>,
     offscreen: Cell<bool>,
     live: Cell<bool>,
 }
@@ -134,6 +139,8 @@ impl PageWebview {
             container,
             shell: shell_state,
             scale: Cell::new((1.0, 0.0, 0.0)),
+            scale_sent: Cell::new((0, Instant::now())),
+            scale_drawn: Cell::new(0),
             offscreen: Cell::new(true),
             live: Cell::new(true),
         })
@@ -213,13 +220,29 @@ impl PageWebview {
             return;
         }
         self.scale.set((z, cw, ch));
+        let sent = self.scale_sent.get().0 + 1;
+        self.scale_sent.set((sent, Instant::now()));
         let n = |v: f64| nodus_domain::json::number_to_string((v * 1000.0).round() / 1000.0);
         let _ = self.webview.evaluate_script(&format!(
-            "window.__nodusScale&&window.__nodusScale({},{},{})",
+            "window.__nodusScale&&window.__nodusScale({},{},{},{sent})",
             n(z),
             n(cw),
             n(ch)
         ));
+    }
+
+    /// The shell drew scale `n`.
+    pub fn scale_drawn(&self, n: u64) {
+        self.scale_drawn.set(self.scale_drawn.get().max(n));
+    }
+
+    /// Whether the page shows the scale last sent: the shell has drawn it,
+    /// or it was sent `wait` ago (a shell that never says). Until then the
+    /// webview may still show the old one: the page small in its corner
+    /// after a zoom in, cropped after a zoom out.
+    pub fn scaled(&self, wait: Duration) -> bool {
+        let (sent, at) = self.scale_sent.get();
+        self.scale_drawn.get() >= sent || at.elapsed() >= wait
     }
 
     /// Off screen: the visible part of the body is empty.

@@ -192,6 +192,11 @@ fn incoming(msg: &Incoming, cx: &mut App) {
         set_hovered(msg.frame, hover, cx);
         return;
     }
+    // The shell drew the page at a new scale.
+    if let Some(n) = body.get("s").and_then(Value::as_u64) {
+        super::swap::page_scaled(msg.frame, n, cx);
+        return;
+    }
     // VIEW-051: the user just clicked or pressed something in this page (the
     // shell's transient activation, with its frame focused), and nothing
     // else on the board since.

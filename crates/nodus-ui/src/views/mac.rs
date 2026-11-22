@@ -1,12 +1,13 @@
 //! AppKit glue for views' webviews (spike S1 step 4): the container that
 //! clips a WKWebView to the visible part of its card with the card's rounded
-//! corners and lets the pointer through on demand, and page snapshots for
-//! GPUI to draw while something covers the page (decision D3).
+//! corners, cuts holes in it where the board's chrome lies over the page and
+//! lets the pointer through on demand, and page snapshots for GPUI to draw
+//! while something covers the page (decision D3).
 //!
 //! AppKit calls that dispatch events synchronously must run outside GPUI
 //! update closures; nothing here does (frames and alpha only).
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 
 use gpui::{Bounds, Pixels, Window};
 use objc2::rc::Retained;
@@ -36,6 +37,14 @@ pub struct HostIvars {
     /// The page on screen, in the container's coordinates (x, y from the
     /// top, w, h): the webview itself is larger when scaled down.
     page: Cell<(f64, f64, f64, f64)>,
+    /// The holes cut in the page, in the container's coordinates: the
+    /// pointer goes to GPUI there, which draws the board's chrome in them.
+    holes: RefCell<Vec<NSRect>>,
+    /// Told when a left press lands in the page.
+    on_press: RefCell<Option<Box<dyn Fn()>>>,
+    /// The last press told about (its event's timestamp): AppKit may hit
+    /// test one press more than once.
+    pressed_at: Cell<f64>,
 }
 
 define_class!(
@@ -52,11 +61,11 @@ define_class!(
             if self.ivars().passthrough.get() || secondary_click() {
                 return std::ptr::null_mut();
             }
+            // `point` is in the superview's coordinates.
+            // SAFETY: the container's superview is GPUI's view, alive.
+            let local = self.convertPoint_fromView(point, unsafe { self.superview() }.as_deref());
             let edge = self.ivars().edge.get();
             if edge > 0.0 {
-                // `point` is in the superview's coordinates.
-                // SAFETY: the container's superview is GPUI's view, alive.
-                let local = self.convertPoint_fromView(point, unsafe { self.superview() }.as_deref());
                 let (x, y, w, h) = self.ivars().page.get();
                 let from_top = if self.isFlipped() {
                     local.y
@@ -67,11 +76,50 @@ define_class!(
                     return std::ptr::null_mut();
                 }
             }
+            if self.ivars().holes.borrow().iter().any(|hole| contains(*hole, local)) {
+                return std::ptr::null_mut();
+            }
             // SAFETY: NSView's own hit test, on this view.
-            unsafe { msg_send![super(self), hitTest: point] }
+            let hit: *mut NSView = unsafe { msg_send![super(self), hitTest: point] };
+            if !hit.is_null()
+                && let Some(at) = left_press()
+                && at != self.ivars().pressed_at.replace(at)
+                && let Some(on_press) = self.ivars().on_press.borrow().as_ref()
+            {
+                on_press();
+            }
+            hit
         }
     }
 );
+
+fn contains(r: NSRect, p: NSPoint) -> bool {
+    p.x >= r.origin.x && p.x < r.origin.x + r.size.width && p.y >= r.origin.y && p.y < r.origin.y + r.size.height
+}
+
+/// The timestamp of the left press AppKit is placing, if it's placing one.
+fn left_press() -> Option<f64> {
+    // NSEventTypeLeftMouseDown.
+    const LEFT_DOWN: usize = 1;
+    // SAFETY: NSApplication's current event, on the main thread (hit tests
+    // run there); nil is checked before use.
+    unsafe {
+        let app: *mut AnyObject = msg_send![objc2::class!(NSApplication), sharedApplication];
+        if app.is_null() {
+            return None;
+        }
+        let event: *mut AnyObject = msg_send![app, currentEvent];
+        if event.is_null() {
+            return None;
+        }
+        let ty: usize = msg_send![event, type];
+        if ty != LEFT_DOWN {
+            return None;
+        }
+        let at: f64 = msg_send![event, timestamp];
+        Some(at)
+    }
+}
 
 /// Whether AppKit is placing a right-click, or a ⌃-click (GPUI's right
 /// click): those are the board's, which opens the view's menu (VIEW-143), so
@@ -112,6 +160,12 @@ pub struct Container {
     body: Cell<(f64, f64, f64)>,
     /// Points per GPUI px: the window's UI zoom.
     ui: Cell<f64>,
+    /// The container's frame in the window's points (x, y from the top, w, h).
+    visible: Cell<(f64, f64, f64, f64)>,
+    /// The holes in the window's points (`set_holes`).
+    holes: RefCell<Vec<Bounds<Pixels>>>,
+    /// The layer masking the page round its holes, while it has some.
+    mask: RefCell<Option<Retained<AnyObject>>>,
 }
 
 impl Container {
@@ -121,6 +175,9 @@ impl Container {
             passthrough: Cell::new(false),
             edge: Cell::new(0.0),
             page: Cell::new((0.0, 0.0, 0.0, 0.0)),
+            holes: RefCell::new(Vec::new()),
+            on_press: RefCell::new(None),
+            pressed_at: Cell::new(f64::NAN),
         });
         let zero = NSRect::new(NSPoint::new(0., 0.), NSSize::new(0., 0.));
         // SAFETY: NSView's designated initialiser.
@@ -142,7 +199,110 @@ impl Container {
             ink_rect: Cell::new(None),
             body: Cell::new((0.0, 0.0, 0.0)),
             ui: Cell::new(1.0),
+            visible: Cell::new((0.0, 0.0, 0.0, 0.0)),
+            holes: RefCell::new(Vec::new()),
+            mask: RefCell::new(None),
         })
+    }
+
+    /// `on_press` runs whenever a left press lands in the page (from AppKit's
+    /// hit test, before the page gets it).
+    pub fn on_press(&self, on_press: impl Fn() + 'static) {
+        *self.view.ivars().on_press.borrow_mut() = Some(Box::new(on_press));
+    }
+
+    /// Cuts the page away where `holes` are (the window's points, from the
+    /// top left; none: the whole page shows), and lets the pointer through
+    /// there.
+    pub fn set_holes(&self, holes: Vec<Bounds<Pixels>>) {
+        if *self.holes.borrow() == holes {
+            return;
+        }
+        *self.holes.borrow_mut() = holes;
+        self.cut();
+    }
+
+    /// Masks the container round its holes, where it is now.
+    fn cut(&self) {
+        let (vx, vy, vw, vh) = self.visible.get();
+        let flipped = self.view.isFlipped();
+        // A box from the container's top left, in its own coordinates.
+        let rect = |x: f64, top: f64, w: f64, h: f64| {
+            NSRect::new(
+                NSPoint::new(x, if flipped { top } else { vh - top - h }),
+                NSSize::new(w, h),
+            )
+        };
+        let holes: Vec<Bounds<Pixels>> = self
+            .holes
+            .borrow()
+            .iter()
+            .map(|b| {
+                Bounds::new(
+                    gpui::point(b.origin.x - gpui::px(vx as f32), b.origin.y - gpui::px(vy as f32)),
+                    b.size,
+                )
+            })
+            .collect();
+        let f = |p: Pixels| f64::from(f32::from(p));
+        *self.view.ivars().holes.borrow_mut() = holes
+            .iter()
+            .map(|b| rect(f(b.origin.x), f(b.origin.y), f(b.size.width), f(b.size.height)))
+            .collect();
+        // SAFETY: the container is layer-backed; CAShapeLayer and
+        // CATransaction on the main thread, with the arguments they take.
+        unsafe {
+            let layer: *mut AnyObject = msg_send![&*self.view, layer];
+            if layer.is_null() {
+                return;
+            }
+            // Cut at once, in the frame GPUI draws the chrome in.
+            let _: () = msg_send![objc2::class!(CATransaction), begin];
+            let _: () = msg_send![objc2::class!(CATransaction), setDisableActions: Bool::YES];
+            if holes.is_empty() {
+                if self.mask.borrow_mut().take().is_some() {
+                    let _: () = msg_send![layer, setMask: std::ptr::null_mut::<AnyObject>()];
+                }
+            } else {
+                let area = Bounds::new(
+                    gpui::point(Pixels::ZERO, Pixels::ZERO),
+                    gpui::size(gpui::px(vw as f32), gpui::px(vh as f32)),
+                );
+                let path = objc2_core_graphics::CGMutablePath::new();
+                for piece in super::swap::uncovered(area, holes) {
+                    let r = rect(
+                        f(piece.origin.x),
+                        f(piece.origin.y),
+                        f(piece.size.width),
+                        f(piece.size.height),
+                    );
+                    objc2_core_graphics::CGMutablePath::add_rect(Some(&path), std::ptr::null(), r);
+                }
+                let mut mask = self.mask.borrow_mut();
+                let shape = match mask.as_ref() {
+                    Some(shape) => Retained::as_ptr(shape).cast_mut(),
+                    None => {
+                        let made: *mut AnyObject = msg_send![objc2::class!(CAShapeLayer), layer];
+                        let Some(made) = Retained::retain(made) else {
+                            let _: () = msg_send![objc2::class!(CATransaction), commit];
+                            return;
+                        };
+                        let ptr = Retained::as_ptr(&made).cast_mut();
+                        *mask = Some(made);
+                        ptr
+                    }
+                };
+                let bounds = NSRect::new(NSPoint::new(0., 0.), NSSize::new(vw, vh));
+                let _: () = msg_send![shape, setFrame: bounds];
+                let path: *const objc2_core_graphics::CGPath = std::ptr::from_ref(&**path).cast();
+                let _: () = msg_send![shape, setPath: path];
+                let current: *mut AnyObject = msg_send![layer, mask];
+                if !std::ptr::eq(current, shape) {
+                    let _: () = msg_send![layer, setMask: shape];
+                }
+            }
+            let _: () = msg_send![objc2::class!(CATransaction), commit];
+        }
     }
 
     /// Moves a view (the WKWebView) into the container, under the ink.
@@ -223,6 +383,9 @@ impl Container {
         if self.view.frame() != frame {
             self.view.setFrame(frame);
         }
+        if self.visible.replace((vx, vy, vw, vh)) != (vx, vy, vw, vh) && !self.holes.borrow().is_empty() {
+            self.cut();
+        }
         let dx = f64::from(f32::from(document.origin.x)) - vx;
         let dy = f64::from(f32::from(document.origin.y)) - vy;
         let (dw, dh) = (
@@ -296,10 +459,10 @@ pub fn ignore_window_occlusion(webview: &NSView) {
 }
 
 /// `-[WKWebView takeSnapshotWithConfiguration:completionHandler:]`, as BGRA
-/// pixels in sRGB (premultiplied), for a GPUI image. `done` runs on the main
+/// pixels in sRGB (straight alpha), for a GPUI image. `done` runs on the main
 /// thread, with None when there's no picture.
 pub fn snapshot(webview: &NSView, done: impl FnOnce(Option<(u32, u32, Vec<u8>)>) + 'static) {
-    let done = std::cell::RefCell::new(Some(done));
+    let done = RefCell::new(Some(done));
     let block = block2::RcBlock::new(move |image: *mut AnyObject, _error: *mut AnyObject| {
         let Some(done) = done.borrow_mut().take() else { return };
         done(if image.is_null() { None } else { pixels(image) });
@@ -340,6 +503,17 @@ fn pixels(image: *mut AnyObject) -> Option<(u32, u32, Vec<u8>)> {
     );
     CGContext::draw_image(Some(&ctx), rect, Some(cg));
     drop(ctx);
+    // GPUI's images are straight alpha, Core Graphics draws premultiplied:
+    // a page without its panel (transparent round what it draws) would get
+    // dark edges and shadows.
+    for pixel in buf.as_chunks_mut::<4>().0 {
+        let a = u16::from(pixel[3]);
+        if a != 0 && a != 255 {
+            for c in &mut pixel[..3] {
+                *c = ((u16::from(*c) * 255 + a / 2) / a).min(255) as u8;
+            }
+        }
+    }
     Some((w as u32, h as u32, buf))
 }
 
@@ -543,10 +717,11 @@ pub fn responder_class(window: &Window) -> String {
 }
 
 /// Test driver: a left click (or a right click, or a ⌃-click) at a point in
-/// the window through `-[NSWindow sendEvent:]`, so AppKit's own hit test
-/// picks the view (a page, or GPUI's). Runs off any GPUI update, on the main
-/// queue; never moves the user's pointer.
-pub fn native_click(window_number: isize, x: f64, y: f64, right: bool, control: bool) {
+/// the window through `-[NSWindow sendEvent:]` (or the app's queue, when
+/// `queued`), so AppKit's own hit test picks the view (a page, or GPUI's).
+/// Runs off any GPUI update, on the main queue; never moves the user's
+/// pointer.
+pub fn native_click(window_number: isize, x: f64, y: f64, right: bool, control: bool, queued: bool) {
     dispatch2::DispatchQueue::main().exec_async(move || {
         // SAFETY: NSApplication, NSWindow and NSEvent on the main thread;
         // every object is checked for nil before use.
@@ -580,10 +755,10 @@ pub fn native_click(window_number: isize, x: f64, y: f64, right: bool, control: 
                     continue;
                 }
                 let ev = if right { right_button(ev) } else { ev };
-                if right || control {
+                if right || control || queued {
                     // Through the app's queue, as a real click comes: AppKit
                     // makes it the current event, which the page's hit test
-                    // reads (`secondary_click`).
+                    // reads (`secondary_click`, `left_press`).
                     let _: () = msg_send![app, postEvent: ev, atStart: Bool::NO];
                 } else {
                     let _: () = msg_send![w, sendEvent: ev];

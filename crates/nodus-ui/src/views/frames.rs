@@ -11,11 +11,12 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use gpui::{
-    AnyWindowHandle, App, Bounds, Context, Corners, EntityId, Global, Hitbox, HitboxBehavior, IntoElement, Pixels,
-    RenderImage, Styled, Window, canvas, px,
+    AnyWindowHandle, App, Bounds, ContentMask, Context, Corners, EntityId, Global, Hitbox, HitboxBehavior, IntoElement,
+    Pixels, RenderImage, Styled, Window, canvas, px,
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
+use super::swap::Place;
 use super::webview::{Incoming, PageWebview};
 use crate::board::canvas::BoardCanvas;
 
@@ -37,6 +38,8 @@ pub struct Frame {
     /// (VIEW-046).
     pub version: u32,
     pub title: String,
+    /// The page sits on the board's panel (`BoardView::background`).
+    pub background: bool,
     pub web: PageWebview,
     // How it's shown.
     /// The page shows (and takes the pointer); else GPUI draws `snapshot`.
@@ -54,6 +57,9 @@ pub struct Frame {
     pub probe: Option<Hitbox>,
     /// Something GPUI drew covers the page (last check).
     pub occluded: bool,
+    /// Where the board's chrome lies over the live page, which is cut away
+    /// there (window px, last check; `swap.rs`).
+    pub holes: Vec<Bounds<Pixels>>,
     /// The page should be behind its snapshot (last check).
     pub want: bool,
     /// A snapshot failed: the next try waits until then, longer after each
@@ -306,8 +312,12 @@ pub fn sync_board(canvas: &mut BoardCanvas, window: &mut Window, cx: &mut Contex
     for (view, slot) in wanted {
         match f.get_mut(&view.id, slot) {
             Some(fr) => {
-                if fr.version != view.version || fr.title != view.title || theme_changed {
-                    fr.web.update(view.version, &view.title, t.bg_elevated);
+                let background = view.has_background();
+                if fr.version != view.version || fr.title != view.title || fr.background != background || theme_changed
+                {
+                    fr.web
+                        .update(view.version, &view.title, background.then_some(t.bg_elevated));
+                    fr.background = background;
                     if theme_changed {
                         fr.web.set_dark(t.dark);
                     }
@@ -328,7 +338,7 @@ pub fn sync_board(canvas: &mut BoardCanvas, window: &mut Window, cx: &mut Contex
                     &view.id,
                     view.version,
                     &view.title,
-                    t.bg_elevated,
+                    view.has_background().then_some(t.bg_elevated),
                     nodus.clone(),
                     f.tx.clone(),
                 );
@@ -344,6 +354,7 @@ pub fn sync_board(canvas: &mut BoardCanvas, window: &mut Window, cx: &mut Contex
                         slot,
                         version: view.version,
                         title: view.title.clone(),
+                        background: view.has_background(),
                         live: true,
                         snapshot: None,
                         snapshot_at: None,
@@ -353,6 +364,7 @@ pub fn sync_board(canvas: &mut BoardCanvas, window: &mut Window, cx: &mut Contex
                         geometry: None,
                         probe: None,
                         occluded: false,
+                        holes: Vec::new(),
                         want: false,
                         retry_at: None,
                         failed: 0,
@@ -394,6 +406,12 @@ pub fn describe(cx: &App) -> serde_json::Value {
                     "live": fr.live,
                     "snapshot": fr.snapshot.is_some(),
                     "occluded": fr.occluded,
+                    "holes": fr.holes.iter().map(|b| [
+                        f32::from(b.origin.x),
+                        f32::from(b.origin.y),
+                        f32::from(b.size.width),
+                        f32::from(b.size.height),
+                    ]).collect::<Vec<_>>(),
                     "want": fr.want,
                     "pending": fr.pending,
                     "ink": fr.ink.as_ref().map(|i| i.marks.len()),
@@ -422,7 +440,7 @@ pub fn describe(cx: &App) -> serde_json::Value {
 /// so whatever GPUI hit-tests above it covers the page. Painting it places
 /// the frame's webview there, and paints the page's snapshot in its place
 /// while it's behind one (decided in that same paint, `swap::placed`), and
-/// under it while it's live.
+/// under it while it's live (a page without its panel: only in its holes).
 pub fn probe(
     view_id: String,
     slot: Slot,
@@ -447,14 +465,26 @@ pub fn probe_into(
         move |bounds, hitbox, window, cx| {
             let g = geometry(bounds, window.content_mask().bounds);
             let image = super::swap::placed(&view_id, slot, g, hitbox, window, cx);
-            if let Some((image, _)) = &image {
+            if let Some((image, place)) = &image {
                 // `object-fit: fill`, with the page's rounded corners.
-                let _ = window.paint_image(bounds, bounds, g.rounding.corners(), image.clone(), 0, false);
+                let paint = |window: &mut Window| {
+                    let _ = window.paint_image(bounds, bounds, g.rounding.corners(), image.clone(), 0, false);
+                };
+                match place {
+                    Place::Holes(holes) => {
+                        for &hole in holes {
+                            window.with_content_mask(Some(ContentMask { bounds: hole }), paint);
+                        }
+                    }
+                    Place::Instead | Place::Under => paint(window),
+                }
             }
             if let Some(painted) = &painted {
                 let mut painted = painted.borrow_mut();
                 let first = painted.as_ref().map_or_else(Instant::now, |p| p.1);
-                *painted = image.filter(|(_, shown)| *shown).map(|(image, _)| (image, first));
+                *painted = image
+                    .filter(|(_, place)| *place == Place::Instead)
+                    .map(|(image, _)| (image, first));
             }
         },
     )

@@ -127,6 +127,8 @@ impl Views {
         // VIEW-155, VIEW-157
         let auto = self.writer_runs_in_auto_mode(project_id, self_id);
         let start_sessions = args.get("start_sessions") == Some(&Value::Bool(true));
+        // Only `false` itself takes the panel away.
+        let background = (args.get("background") == Some(&Value::Bool(false))).then_some(false);
         if start_sessions && !auto {
             return Err(ViewError::new(STARTS_SESSIONS_REFUSED));
         }
@@ -165,6 +167,7 @@ impl Views {
             session_id: None,
             allowed_runs: None,
             denied_runs: None,
+            background,
             extra: Map::new(),
         };
         if let Some(html) = &html {
@@ -235,6 +238,7 @@ impl Views {
         let size = tool_size(args);
         let description = args.get("description").map(|d| clip(Some(d), MAX_DESCRIPTION_CHARS));
         let start_sessions = args.get("start_sessions").and_then(Value::as_bool);
+        let background = args.get("background").and_then(Value::as_bool);
         // VIEW-156, VIEW-157: its own brain runs in the view's mode, so it may
         // turn starting sessions on when the user asks it to.
         let auto = self.writer_runs_in_auto_mode(project_id, self_id);
@@ -276,7 +280,13 @@ impl Views {
                 Some(false) => v.starts_sessions = None,
                 None => {}
             }
-            if html.is_some() {
+            // A page that gains or loses its panel loads again, drawn on
+            // the board's ground or on its own.
+            let restyled = background.is_some_and(|b| b != v.has_background()) && v.version > 0;
+            if let Some(b) = background {
+                v.background = (!b).then_some(false);
+            }
+            if html.is_some() || restyled {
                 v.version += 1;
             }
             v.updated_at = now;
@@ -385,6 +395,7 @@ impl Views {
             out["refresh"] = serde_json::to_value(refresh).unwrap_or(Value::Null);
         }
         out["start_sessions"] = Value::Bool(view.starts_sessions == Some(true));
+        out["background"] = Value::Bool(view.has_background());
         out["errors"] = Value::Array(
             errors
                 .iter()

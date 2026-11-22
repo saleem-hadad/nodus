@@ -197,6 +197,11 @@ fn incoming(msg: &Incoming, cx: &mut App) {
         super::swap::page_scaled(msg.frame, n, cx);
         return;
     }
+    // A press in the page, from its container.
+    if body.get("p") == Some(&Value::Bool(true)) {
+        pressed(cx);
+        return;
+    }
     // VIEW-051: the user just clicked or pressed something in this page (the
     // shell's transient activation, with its frame focused), and nothing
     // else on the board since.
@@ -244,6 +249,21 @@ fn incoming(msg: &Incoming, cx: &mut App) {
             })
             .detach();
         }
+    }
+}
+
+/// The user pressed in a live page (VIEW-142): as a press anywhere else on
+/// the board, it closes the board's menu and drops the selection, the view's
+/// own included, so using a page never shows the view's resize handles; only
+/// a press on its caption selects it.
+fn pressed(cx: &mut App) {
+    if let Some(canvas) = canvas(cx) {
+        canvas.update(cx, |c, cx| {
+            c.close_menu(cx);
+            if c.nodes.iter().any(|n| n.selected) || c.selection_rect {
+                c.clear_selection(cx);
+            }
+        });
     }
 }
 

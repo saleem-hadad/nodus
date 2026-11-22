@@ -94,6 +94,7 @@ fn boot_from(raw: &Value) -> ViewBoot {
         view_id: raw["viewId"].as_str().unwrap().into(),
         title: raw["title"].as_str().unwrap().into(),
         starts_sessions: raw.get("startsSessions").and_then(Value::as_bool),
+        background: raw.get("background").and_then(Value::as_bool),
         data: raw.get("data").cloned(),
         state: raw.get("state").cloned(),
         results: raw.get("results").and_then(Value::as_object).cloned(),

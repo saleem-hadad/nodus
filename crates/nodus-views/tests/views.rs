@@ -236,6 +236,41 @@ async fn create_view_needs_a_title_and_a_page() {
 }
 
 #[tokio::test]
+async fn claude_decides_whether_a_view_sits_on_the_panel() {
+    let f = Fixture::new();
+    let id = create_id(&f, json!({ "title": "Remember", "html": HTML, "background": false })).await;
+    assert_eq!(f.view(&id).unwrap().background, Some(false));
+    let get = |f: &Fixture| f.views.get_view_for_tool(P, "s1", Some(&json!(id))).unwrap()["background"].clone();
+    assert_eq!(get(&f), false);
+    assert!(
+        f.views
+            .serve_page(&format!("nodus-view://{id}/"))
+            .body
+            .contains("\"background\":false")
+    );
+    // Back on the panel: the page loads again, on its panel's ground.
+    let before = f.view(&id).unwrap().version;
+    f.views
+        .update_view_from_tool(P, "s1", &json!({ "view_id": id, "background": true }))
+        .await
+        .unwrap();
+    assert_eq!(f.view(&id).unwrap().background, None);
+    assert_eq!(f.view(&id).unwrap().version, before + 1);
+    assert_eq!(get(&f), true);
+    // Unchanged, or not a boolean: nothing to load again.
+    for background in [json!(true), json!("no")] {
+        f.views
+            .update_view_from_tool(P, "s1", &json!({ "view_id": id, "background": background }))
+            .await
+            .unwrap();
+        assert_eq!(f.view(&id).unwrap().version, before + 1);
+    }
+    // Only `false` itself takes the panel away from a new view.
+    let other = create_id(&f, json!({ "title": "Table", "html": HTML, "background": "false" })).await;
+    assert_eq!(f.view(&other).unwrap().background, None);
+}
+
+#[tokio::test]
 async fn starting_sessions_stays_off_unless_claude_turns_it_on() {
     let f = Fixture::new();
     let id = create_id(&f, json!({ "title": "Tests", "html": HTML })).await;

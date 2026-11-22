@@ -184,6 +184,15 @@ fn card_shadow(t: &Tokens, hovered: bool, waiting: bool, selected: bool, draggin
     }
 }
 
+/// A view without its panel shows only the selection's ring.
+fn bare_shadow(t: &Tokens, selected: bool, dragging: bool, z: f32) -> Vec<BoxShadow> {
+    if selected || dragging {
+        vec![ring(2.0, t.accent, z)]
+    } else {
+        Vec::new()
+    }
+}
+
 /// `ViewNode`: the view in its node's box. (By value: the canvas's renderer type.)
 #[allow(clippy::needless_pass_by_value)]
 pub fn render(node: ViewNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut App) -> AnyElement {
@@ -231,6 +240,9 @@ pub fn render(node: ViewNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut
         top: approvals.is_none(),
         bottom: error.is_none() && !asking,
     };
+    // A page without the panel (VIEW-162) sits straight on the board while
+    // nothing of the view's own is drawn with it.
+    let bare = !view.has_background() && framed && approvals.is_none() && error.is_none() && !asking;
     let body = body(
         &view,
         board,
@@ -239,8 +251,9 @@ pub fn render(node: ViewNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut
         revealing,
         working,
         waiting,
-        (resizing, state.dragging),
+        (resizing, state.dragging, state.selected && !renaming),
         rounding,
+        bare,
         z,
         window,
         cx,
@@ -256,8 +269,12 @@ pub fn render(node: ViewNode<'_>, board: &BoardCx, window: &mut Window, cx: &mut
         .flex_1()
         .min_h_0()
         .rounded(fu(RADIUS))
-        .bg(t.bg_elevated)
-        .shadow(card_shadow(&t, hovered, waiting, state.selected, state.dragging, z))
+        .when(!bare, |d| d.bg(t.bg_elevated))
+        .shadow(if bare {
+            bare_shadow(&t, state.selected, state.dragging, z)
+        } else {
+            card_shadow(&t, hovered, waiting, state.selected, state.dragging, z)
+        })
         .overflow_hidden()
         .children(approvals)
         .child(body)
@@ -428,8 +445,9 @@ fn body(
     revealing: Option<super::reveal::Revealing>,
     working: bool,
     waiting: bool,
-    (resizing, dragging): (bool, bool),
+    (resizing, dragging, resizable): (bool, bool, bool),
     rounding: Rounding,
+    bare: bool,
     z: f32,
     window: &mut Window,
     cx: &mut App,
@@ -467,7 +485,8 @@ fn body(
                     || pointer.marquee.is_some()
                     || pointer.moving
                     || resizing,
-                edge: 5.0 * z,
+                // The resize handles reach into the page only while they're there.
+                edge: if resizable { 5.0 * z } else { 0.0 },
                 reveal,
             }
         }
@@ -476,7 +495,7 @@ fn body(
     // it while it's live. The fill takes the panel's corners: GPUI's overflow
     // clip is square.
     let base = base
-        .bg(t.bg_elevated)
+        .when(!bare, |d| d.bg(t.bg_elevated))
         .when(rounding.top, |d| d.rounded_t(fu(RADIUS)))
         .when(rounding.bottom, |d| d.rounded_b(fu(RADIUS)));
     let Some(revealing) = revealing else {

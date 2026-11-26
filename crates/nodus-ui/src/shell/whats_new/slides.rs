@@ -24,6 +24,13 @@ macro_rules! shot {
 
 pub const SLIDES: &[Slide] = &[
     Slide {
+        version: "1.0.32",
+        title: "A loupe for the board",
+        text: "Zoomed out, tap {L} and move the lens over cards, chats and pages to read them. Click to zoom in.",
+        light: shot!("1.0.32-loupe-light"),
+        dark: shot!("1.0.32-loupe-dark"),
+    },
+    Slide {
         version: "1.0.27",
         title: "A coordinator (beta)",
         text: "One session looks after the others. They report to it when they finish, and it can start its own.",

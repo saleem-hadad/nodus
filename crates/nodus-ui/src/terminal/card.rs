@@ -51,6 +51,12 @@ use super::host::{HostConfig, TerminalHost, WheelGate};
 use super::store::Terminals;
 use crate::chat::{ChatView, ChatViews};
 
+/// The chat a session's expanded card shows, once it's been drawn (the
+/// board's loupe draws its last rows again, LOUPE-006).
+pub fn card_chat(session_id: &str, cx: &App) -> Option<Entity<ChatView>> {
+    cx.try_global::<CardHosts>()?.chats.get(session_id)?.upgrade()
+}
+
 /// Says whether a wheel event over a session's card terminal scrolls it;
 /// called with the session id and whether Ctrl is held (TERM-104…TERM-106).
 pub type CardWheelGate = Rc<dyn Fn(&str, bool, &mut App) -> bool>;

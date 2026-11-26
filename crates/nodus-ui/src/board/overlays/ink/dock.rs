@@ -22,6 +22,7 @@ impl BoardCanvas {
             let me = me.clone();
             let glyph = move |fg: Rgba| match each {
                 InkTool::Select => ov_icon(OvIcon::MousePointer2, 15., 2., fg),
+                InkTool::Loupe => icon(Icon::Search, 15., 2., fg),
                 InkTool::Bubble => ov_icon(OvIcon::MessageCircleMore, 15., 2., fg),
                 InkTool::Mic => ov_icon(OvIcon::Mic, 15., 2., fg),
                 InkTool::Pen => icon(Icon::Pencil, 15., 2., fg),

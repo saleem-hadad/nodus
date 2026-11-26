@@ -697,7 +697,7 @@ impl BoardCanvas {
 
     /// The edges, in canvas pixels: their Bézier, stroke, width and dashes
     /// (BOARD-025…BOARD-031).
-    fn edge_paths(&self, t: &Tokens) -> Vec<EdgePaint> {
+    pub(super) fn edge_paths(&self, t: &Tokens) -> Vec<EdgePaint> {
         let vp = self.viewport;
         let rect_of = |id: &str| self.node(id).filter(|n| !n.hidden).map(FlowNode::rect);
         let view = self.visible_rect();
@@ -789,7 +789,7 @@ fn on_canvas(pts: &[Point; 4], w: f64, h: f64) -> bool {
 }
 
 /// Two rects share some area (React Flow's partial overlap).
-fn overlaps(a: Rect, b: Rect) -> bool {
+pub(super) fn overlaps(a: Rect, b: Rect) -> bool {
     a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
 }
 
@@ -806,7 +806,7 @@ fn still(r: Rect, now: Instant) -> Glide {
 }
 
 /// One edge to paint.
-struct EdgePaint {
+pub(super) struct EdgePaint {
     pts: [Point; 4],
     color: gpui::Rgba,
     width: f64,
@@ -855,7 +855,7 @@ fn length(pts: &[Point]) -> f64 {
 }
 
 /// Paints an edge; `phase` (0…1) is how far the dashes have marched.
-fn paint_edge(edge: &EdgePaint, origin: gpui::Point<Pixels>, phase: f64, window: &mut Window) {
+pub(super) fn paint_edge(edge: &EdgePaint, origin: gpui::Point<Pixels>, phase: f64, window: &mut Window) {
     let at = |p: Point| point(origin.x + px(p.x as f32), origin.y + px(p.y as f32));
     let width = px(edge.width as f32);
     let (from, to) = edge.span;
@@ -1003,7 +1003,7 @@ impl WithAlpha for gpui::Rgba {
 }
 
 /// The dotted background (`Background` variant Dots, gap 22, size 1.6).
-fn paint_dots(bounds: Bounds<Pixels>, vp: nodus_domain::Viewport, color: gpui::Rgba, window: &mut Window) {
+pub(super) fn paint_dots(bounds: Bounds<Pixels>, vp: nodus_domain::Viewport, color: gpui::Rgba, window: &mut Window) {
     let gap = {
         let g = 22.0 * vp.zoom;
         if g == 0.0 { 1.0 } else { g }
@@ -1086,7 +1086,8 @@ impl Render for BoardCanvas {
         let node_views: HashSet<EntityId> = self.node_views.values().map(Entity::entity_id).collect();
         // Others' pointers moving draw nothing on the nodes (SRV-181).
         let peers = self.state.read(cx).peers.entity_id();
-        let partial = node_view::partial_frame(&node_views, &[peers], window, cx);
+        // LOUPE-003: the lens following the pointer redraws only itself.
+        let partial = node_view::partial_frame(&node_views, &[peers, self.loupe.tick_id()], window, cx);
         for node in &nodes {
             let (drawn, moving) = self.drawn(node, now, cx);
             gliding |= moving;
@@ -1223,6 +1224,8 @@ impl Render for BoardCanvas {
         let ink_hitbox = self.render_ink_hitbox(cx);
         // SRV-181, SRV-182: others' pointers, and whom this window follows.
         let cursors = self.render_cursors(window, cx);
+        // LOUPE-003: the lens, over the nodes and the ink, under the dock.
+        let loupe = self.render_loupe(window, cx);
         let following = self.render_following(cx);
         // SHAPE-008: pictures dropped from Finder go up where they land,
         // over the nodes too (which hide the board's own box from a drop).
@@ -1304,6 +1307,7 @@ impl Render for BoardCanvas {
             .children(selection)
             .children(marquee)
             .children(cursors)
+            .children(loupe)
             .child(ink_hitbox)
             .child(drop_layer)
             .children(hint)

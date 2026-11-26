@@ -79,6 +79,24 @@ enum Arrival {
 }
 
 impl ChatView {
+    /// LOUPE-006: the last `count` rows drawn again at `scale`, for the
+    /// board's loupe. The list keeps its own scale and what it measured.
+    pub(crate) fn lens_rows(
+        &mut self,
+        scale: f32,
+        count: usize,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> Vec<AnyElement> {
+        let kept = std::mem::replace(&mut self.scale, scale);
+        let start = self.rows.len().saturating_sub(count);
+        let rows = (start..self.rows.len())
+            .map(|ix| self.render_row(ix, window, cx))
+            .collect();
+        self.scale = kept;
+        rows
+    }
+
     pub(crate) fn render_row(&mut self, ix: usize, window: &mut Window, cx: &mut Context<'_, Self>) -> AnyElement {
         let t = theme::tokens(cx);
         let Some(row) = self.rows.get(ix).copied() else {

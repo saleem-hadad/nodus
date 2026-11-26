@@ -157,6 +157,8 @@ pub struct Flight {
     /// The canvas's centre and its larger side (d3's `p` and `w`).
     p: (f64, f64),
     w: f64,
+    /// A zoom that holds this canvas point still all the way (LOUPE-007).
+    about: Option<(f64, f64)>,
 }
 
 impl Flight {
@@ -166,6 +168,20 @@ impl Flight {
             to,
             p: (canvas_w / 2.0, canvas_h / 2.0),
             w: canvas_w.max(canvas_h),
+            about: None,
+        }
+    }
+
+    /// A zoom to `zoom` about the canvas point (`px`, `py`), which stays
+    /// under itself the whole way: the zoom moves by the same factor each
+    /// step, eased cubic-in-out.
+    pub fn about(from: Viewport, zoom: f64, px: f64, py: f64) -> Self {
+        Self {
+            from,
+            to: zoom_about(from, zoom, px, py),
+            p: (px, py),
+            w: 1.0,
+            about: Some((px, py)),
         }
     }
 
@@ -179,6 +195,10 @@ impl Flight {
             return self.to;
         }
         let t = ease_cubic_in_out(t.max(0.0));
+        if let Some((px, py)) = self.about {
+            let zoom = self.from.zoom * (self.to.zoom / self.from.zoom).powf(t);
+            return zoom_about(self.from, zoom, px, py);
+        }
         let (px, py) = self.p;
         // a.invert(p).concat(w / a.k)
         let a = [
@@ -366,6 +386,24 @@ mod tests {
         let v = f.at(0.3);
         let (cx, cy) = to_flow(v, 720.0, 424.0);
         assert!((cx - 720.0).abs() < 1e-6 && (cy - 424.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_zoom_about_a_point_holds_it_still_all_the_way() {
+        let from = Viewport {
+            x: -120.0,
+            y: 40.0,
+            zoom: 0.25,
+        };
+        let f = Flight::about(from, 0.75, 300.0, 200.0);
+        let spot = to_flow(from, 300.0, 200.0);
+        for t in [0.0, 0.2, 0.5, 0.8, 1.0] {
+            let v = f.at(t);
+            let (x, y) = to_flow(v, 300.0, 200.0);
+            assert!((x - spot.0).abs() < 1e-6 && (y - spot.1).abs() < 1e-6, "{t}: {v:?}");
+        }
+        assert!(close(f.at(1.0), zoom_about(from, 0.75, 300.0, 200.0)));
+        assert!((f.at(0.5).zoom - (0.25f64 * 0.75).sqrt()).abs() < 1e-9);
     }
 
     #[test]

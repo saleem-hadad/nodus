@@ -473,6 +473,26 @@ pub fn snapshot(webview: &NSView, done: impl FnOnce(Option<(u32, u32, Vec<u8>)>)
     }
 }
 
+/// [`snapshot`], with the page drawn `scale` times its size on screen: WebKit
+/// paints it again at that size (LOUPE-006), so its text stays sharp.
+pub fn snapshot_scaled(webview: &NSView, scale: f64, done: impl FnOnce(Option<(u32, u32, Vec<u8>)>) + 'static) {
+    let done = RefCell::new(Some(done));
+    let block = block2::RcBlock::new(move |image: *mut AnyObject, _error: *mut AnyObject| {
+        let Some(done) = done.borrow_mut().take() else { return };
+        done(if image.is_null() { None } else { pixels(image) });
+    });
+    // SAFETY: a WKWebView; a configuration with only a width snapshots its
+    // whole bounds drawn at that width.
+    unsafe {
+        let bounds: NSRect = msg_send![webview, bounds];
+        let width: Retained<AnyObject> =
+            msg_send![objc2::class!(NSNumber), numberWithDouble: bounds.size.width * scale];
+        let config: Retained<AnyObject> = msg_send![objc2::class!(WKSnapshotConfiguration), new];
+        let _: () = msg_send![&*config, setSnapshotWidth: &*width];
+        let _: () = msg_send![webview, takeSnapshotWithConfiguration: &*config, completionHandler: &*block];
+    }
+}
+
 /// An NSImage's best bitmap, drawn into an sRGB BGRA buffer.
 fn pixels(image: *mut AnyObject) -> Option<(u32, u32, Vec<u8>)> {
     use objc2_core_graphics::{CGBitmapContextCreate, CGColorSpace, CGContext, CGImage, kCGColorSpaceSRGB};

@@ -61,7 +61,8 @@ impl BoardCanvas {
                     InkTool::Mic => window.set_cursor_style(crate::board::overlays::bubble::mic_cursor(), &hitbox),
                     InkTool::Select if hover => window.set_cursor_style(CursorStyle::Move, &hitbox),
                     InkTool::Select if hover_link => window.set_cursor_style(CursorStyle::PointingHand, &hitbox),
-                    InkTool::Select => {}
+                    // LOUPE-005: the arrow, over the lens.
+                    InkTool::Select | InkTool::Loupe => {}
                 }
                 me.update(cx, |c, _| c.overlays.ink.hitbox = Some(hitbox));
             },

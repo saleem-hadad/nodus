@@ -45,6 +45,8 @@ use crate::theme::{self, fonts, motion, tokens::DUR_FAST};
 pub enum InkTool {
     #[default]
     Select,
+    /// A lens at the pointer that reads the board up close (LOUPE-001).
+    Loupe,
     /// A click opens the bubble there (BUBBLE-001).
     Bubble,
     /// A click starts speaking there, the next one sends it (BUBBLE-040).
@@ -62,8 +64,9 @@ pub enum InkTool {
 }
 
 /// The dock's tools: tool, name, its key.
-const TOOLS: [(InkTool, &str, Option<&str>); 9] = [
+const TOOLS: [(InkTool, &str, Option<&str>); 10] = [
     (InkTool::Select, "Pointer", Some("Esc")),
+    (InkTool::Loupe, "Loupe", Some("L")),
     (InkTool::Bubble, "Ask Claude here", Some("B")),
     (InkTool::Mic, "Speak to Claude here", Some("M")),
     (InkTool::Pen, "Pen", Some("P")),
@@ -241,6 +244,11 @@ pub(crate) struct LinkLabelDraft {
 }
 
 impl Ink {
+    /// The pointer is on the board's surface, not on its chrome (INKUI-006).
+    pub(crate) fn on_board(&self, window: &Window) -> bool {
+        self.hitbox.as_ref().is_some_and(|h| h.is_hovered(window))
+    }
+
     pub fn color(&self, _: &App) -> InkColor {
         self.color.unwrap_or(InkColor::Red)
     }

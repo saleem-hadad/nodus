@@ -198,6 +198,8 @@ pub struct BoardCanvas {
     pub(crate) gesture: Gesture,
     pub(crate) space: bool,
     pub(crate) pointer: Option<GPoint<Pixels>>,
+    /// The loupe's lens and its key (LOUPE).
+    pub(crate) loupe: super::loupe::Loupe,
     /// The post-marquee selection rectangle (`nodesSelectionActive`).
     pub(crate) selection_rect: bool,
     pub(crate) title_pressed: Rc<Cell<bool>>,
@@ -332,6 +334,7 @@ impl BoardCanvas {
             gesture: Gesture::Idle,
             space: false,
             pointer: None,
+            loupe: super::loupe::Loupe::new(cx),
             selection_rect: false,
             title_pressed: Rc::new(Cell::new(false)),
             chat_pressed: Rc::new(Cell::new(false)),
@@ -733,6 +736,19 @@ impl BoardCanvas {
             flight: VpFlight::new(self.viewport, to, w, h),
             start: Instant::now(),
             duration: crate::theme::motion::duration(cx, Duration::from_millis(duration_ms as u64)),
+        });
+        self.move_started(cx);
+        cx.notify();
+    }
+
+    /// LOUPE-007: zooms to `zoom` about the canvas point (`px`, `py`), which
+    /// stays where it is the whole way.
+    pub(crate) fn fly_about(&mut self, px: f64, py: f64, zoom: f64, duration_ms: u64, cx: &mut Context<'_, Self>) {
+        self.stop_following(cx);
+        self.anim = Some(ViewportAnim {
+            flight: VpFlight::about(self.viewport, zoom, px, py),
+            start: Instant::now(),
+            duration: crate::theme::motion::duration(cx, Duration::from_millis(duration_ms)),
         });
         self.move_started(cx);
         cx.notify();

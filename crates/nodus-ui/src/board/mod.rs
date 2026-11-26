@@ -25,6 +25,7 @@ mod hud;
 mod images;
 mod input;
 pub mod layout;
+mod loupe;
 mod menus;
 pub(crate) mod moments;
 mod naming;

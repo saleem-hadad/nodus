@@ -283,6 +283,8 @@ impl BoardCanvas {
     /// Every pointer move over the window.
     pub(crate) fn pointer_move(&mut self, e: &MouseMoveEvent, cx: &mut Context<'_, Self>) {
         self.pointer = Some(e.position);
+        // LOUPE-003: the lens follows the pointer.
+        self.loupe_moved(cx);
         // SRV-180: where the pointer is, for the others on a server board.
         self.share_presence(cx);
         // BOARD-074: hovering the stack, with no button down.
@@ -1416,6 +1418,14 @@ impl BoardCanvas {
                     }
                     true
                 }
+                // LOUPE-002: a tap takes the loupe up or puts it down; held,
+                // it's out until the key comes up.
+                "l" => {
+                    if !e.is_held {
+                        self.loupe_key_down(cx);
+                    }
+                    true
+                }
                 // BOARD-168.
                 "e" => {
                     let active: Vec<bool> = self
@@ -1447,11 +1457,16 @@ impl BoardCanvas {
             self.space = false;
             cx.notify();
         }
+        if e.keystroke.key == "l" {
+            self.loupe_key_up(cx);
+        }
     }
 
     /// Window blur and any context menu let go of held keys.
     pub fn release_keys(&mut self) {
         self.space = false;
+        // LOUPE-002: the loupe held out goes back with the key.
+        self.loupe_release();
         // INKUI-012, INKUI-020: a gesture the window lost goes.
         self.overlays.ink.drop_gesture();
     }

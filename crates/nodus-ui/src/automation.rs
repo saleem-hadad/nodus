@@ -10,6 +10,7 @@
 //! {"cmd":"menu","command":"settings"}               a menu command, as the menu sends it
 //! {"cmd":"action","name":"nodus::ZoomIn"}            a GPUI action by name (a menu item's)
 //! {"cmd":"key","keystroke":"cmd-o"}                 a keystroke through GPUI
+//! {"cmd":"key-up","keystroke":"l"}                 that key coming up (a key held: key, wait, key-up)
 //! {"cmd":"type","text":"Hello"}                    text typed into what has the keyboard
 //! {"cmd":"modifiers","meta":true}                   modifiers held (⌘ for the rail's numbers)
 //! {"cmd":"mouse","kind":"click","x":100,"y":200}    move | down | up | click | double | right
@@ -298,6 +299,15 @@ async fn run(command: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
             let keystroke = Keystroke::parse(spec).map_err(|e| e.to_string())?;
             with_window(cx, move |window, cx| {
                 window.dispatch_keystroke(keystroke, cx);
+            })?;
+            Ok(Value::Null)
+        }
+        "key-up" => {
+            let spec = command.get("keystroke").and_then(Value::as_str).unwrap_or_default();
+            let spec: &'static str = Box::leak(spec.to_owned().into_boxed_str());
+            let keystroke = Keystroke::parse(spec).map_err(|e| e.to_string())?;
+            with_window(cx, move |window, cx| {
+                window.dispatch_event(PlatformInput::KeyUp(gpui::KeyUpEvent { keystroke }), cx);
             })?;
             Ok(Value::Null)
         }

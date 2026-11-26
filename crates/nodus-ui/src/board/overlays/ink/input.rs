@@ -151,6 +151,8 @@ impl BoardCanvas {
         match tool {
             InkTool::Bubble => return self.bubble_press(e.position, window, cx),
             InkTool::Mic => return self.voice_press(e.position, window, cx),
+            // LOUPE-007: a press dives in where the lens is.
+            InkTool::Loupe => return self.loupe_press(e.position, cx),
             _ => {}
         }
         let color = self.overlays.ink.color(cx);
@@ -234,7 +236,7 @@ impl BoardCanvas {
                 self.overlays.ink.picker = None;
                 self.add_shape(ShapeKind::Sticker, rect, emoji, None, false, cx);
             }
-            InkTool::Select | InkTool::Bubble | InkTool::Mic => {}
+            InkTool::Select | InkTool::Loupe | InkTool::Bubble | InkTool::Mic => {}
         }
         cx.notify();
     }

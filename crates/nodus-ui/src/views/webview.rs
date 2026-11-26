@@ -397,6 +397,27 @@ impl PageWebview {
         done(None);
     }
 
+    /// A picture of the page drawn `scale` times its size on screen, for the
+    /// board's loupe (LOUPE-006); `done` gets it on the main thread. None
+    /// where pages can't be pictured.
+    pub fn snapshot_scaled(&self, scale: f64, done: impl FnOnce(Option<Arc<RenderImage>>) + 'static) {
+        #[cfg(target_os = "macos")]
+        {
+            use wry::WebViewExtMacOS as _;
+            super::mac::snapshot_scaled(&self.webview.webview(), scale, move |pixels| {
+                done(pixels.and_then(|(w, h, bgra)| {
+                    let buf = image::RgbaImage::from_raw(w, h, bgra)?;
+                    Some(Arc::new(RenderImage::new(vec![image::Frame::new(buf)])))
+                }));
+            });
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = scale;
+            done(None);
+        }
+    }
+
     /// Whether the page has the window's keyboard (the user last clicked or
     /// typed in it, not elsewhere on the board).
     pub fn has_keyboard(&self) -> bool {

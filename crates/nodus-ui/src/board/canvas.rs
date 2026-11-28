@@ -63,12 +63,15 @@ pub(crate) struct ViewportAnim {
 pub(crate) enum Gesture {
     Idle,
     /// Left pressed on a node (or on the selection rectangle, `node: None`);
-    /// a drag starts past 1px (`nodeDragThreshold`).
+    /// a drag starts past 4px (BOARD-186).
     Press {
         node: Option<String>,
         start: GPoint<Pixels>,
-        /// The pointer has moved at all: no click (`nodeClickDistance = 0`).
+        /// The pointer has gone past 4px: no click (BOARD-186).
         moved: bool,
+        /// The press selected the node (BOARD-187): its click leaves the
+        /// selection as it is.
+        selected_by_press: bool,
         /// On the node's drag handle (section header, archive header, view head).
         handle: bool,
         /// On a card's title text (`.card-title`).
@@ -81,7 +84,7 @@ pub(crate) enum Gesture {
     },
     /// Nodes being dragged.
     Drag(DragState),
-    /// Left pressed on the pane; a marquee starts past 1px (`paneClickDistance`).
+    /// Left pressed on the pane; a marquee starts past 4px (BOARD-186).
     PanePress {
         start: GPoint<Pixels>,
         click_count: usize,

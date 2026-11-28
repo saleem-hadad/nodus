@@ -226,7 +226,7 @@ fn animate(node: &str, s: &Surface, stacked: bool, window: &mut Window, cx: &mut
     };
     let ms = Duration::from_millis;
     Surface {
-        shadow: transition(window, cx, anim::key(node, "shadow"), s.shadow, ms(220), out),
+        shadow: transition(window, cx, anim::key(node, "shadow"), s.shadow, ms(220), out).ring_at_once(&s.shadow),
         ty: transition(
             window,
             cx,

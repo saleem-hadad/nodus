@@ -11,7 +11,7 @@ Sources:
 
 ## Summary
 
-The board is one project's infinite, pannable, zoomable canvas. It draws, back to front: a dotted background; section frames; the archive frame (a stack of archived cards that opens into a searchable panel) and the note pad under it; lineage edges; session cards (compact or expanded with a live terminal), views and sticky notes; then HUD chrome (zoom pill bottom-left, minimap bottom-right, the empty-board hint at the top, the prompt bar with toasts and the selection bar at the bottom centre, the actions rail on the right). It is built on React Flow today; the Rust port re-implements every React Flow mechanic it relies on: wheel/trackpad pan, pinch and modifier-wheel zoom, middle-drag and Space-drag pan, marquee selection with partial overlap, Shift/⌘ multi-select, a 1px drag threshold, selection elevation, auto-pan at the edges, fit-view maths, the minimap and the post-marquee selection rectangle.
+The board is one project's infinite, pannable, zoomable canvas. It draws, back to front: a dotted background; section frames; the archive frame (a stack of archived cards that opens into a searchable panel) and the note pad under it; lineage edges; session cards (compact or expanded with a live terminal), views and sticky notes; then HUD chrome (zoom pill bottom-left, minimap bottom-right, the empty-board hint at the top, the prompt bar with toasts and the selection bar at the bottom centre, the actions rail on the right). It is built on React Flow today; the Rust port re-implements every React Flow mechanic it relies on: wheel/trackpad pan, pinch and modifier-wheel zoom, middle-drag and Space-drag pan, marquee selection with partial overlap, Shift/⌘ multi-select, a 4px click tolerance (BOARD-186; React Flow's was 1px), selection elevation, auto-pan at the edges, fit-view maths, the minimap and the post-marquee selection rectangle.
 
 On top of that the board orchestrates: where new cards, notes, views and sections go (free-spot search), drag-and-drop resolution (into/out of sections, into/out of the archive, bounce-backs), every context menu, every board shortcut and its guards, viewport persistence (400ms debounce), the archive stack's open/close/scroll/flight state, the confirm dialog, toasts, and the wiring of overlays owned by 11 (prompt bar, ⌘K search, merge dialog, ink, selection bar) and nodes owned by 10 (cards, notes, archive) and 04 (views).
 
@@ -71,15 +71,15 @@ All values are from the installed React Flow + the props in `BoardView.tsx:2533-
 
 | Mechanic | Value |
 | --- | --- |
-| Marquee start | left button, primary pointer, pointer-down **on the pane itself** (not on a node; section frame interiors are click-through so they count as pane). Starts once the pointer moves **more than 1px** (`paneClickDistance = 1`, screen px) from the down point. |
+| Marquee start | left button, primary pointer, pointer-down **on the pane itself** (not on a node; section frame interiors are click-through so they count as pane). Starts once the pointer moves **more than 4px** (screen px) from the down point (BOARD-186; React Flow's `paneClickDistance = 1`). |
 | Marquee start effect | clears the whole selection (cards, notes, views) first — a marquee always replaces, even with Shift/⌘ held. |
 | Marquee hit rule | `SelectionMode.Partial`: any node whose rect overlaps the marquee with area > 0; only selectable, non-hidden nodes (active cards, archived result cards, notes, views; never sections, archive, pad, pad's top sheet, pile cards). Live while dragging. |
 | Marquee auto-pan | while the pointer is within 40px of a canvas edge the board pans by `clamp(distanceIntoBand, 1, 40)/40 × 15` px per animation frame per axis (towards the edge), extending the marquee. |
 | Marquee visual | fill accent 8%, border 1px solid accent 55%, no radius, drawn above all nodes (z 6). |
 | After a marquee that selected ≥ 1 node | a **selection rectangle** (React Flow `NodesSelection`) covers the bounding box of all selected nodes with the same fill and border, **above** the nodes (z 3 over the node layer). It captures the pointer: dragging it moves every selected node (and fires the same drag-start/drag/drop handling as dragging a node, with the first selected node as "the node"); clicks, double-clicks and right-clicks on it do nothing (no menu, no open). Cursor `grab`. It follows the selection's bounds and disappears when nothing is selected, on a pane click, or on a click on any node. Not shown for selections made by click, ⌘A, search jump or section `Select cards`. |
-| Click on a node (selectable) | not selected → it becomes the only selected node (or is added, with multi-select held); selected + multi-select held → it is deselected; selected without modifier → nothing changes (a multi-selection stays). Clicking also clears the selection rectangle. |
+| Press and click on a node (selectable) | not selected → it becomes the only selected node (or is added, with multi-select held) **as it's pressed** (BOARD-187); selected + multi-select held → the click deselects it; selected without modifier → nothing changes (a multi-selection stays, so a drag takes it all along). Pressing also clears the selection rectangle. |
 | Multi-select keys | `Meta` or `Shift` held alone (`multiSelectionKeyCode = ['Meta', 'Shift']`, on every platform; Windows key counts as Meta; Ctrl does not). Tracked on window keydown/keyup; reset on blur/`contextmenu`/Meta keyup. |
-| Click on empty pane | deselects every node (cards, notes, views), clears the selection rectangle, closes the context menu. A pane click is a pointer-up on the pane with no marquee started (≤ 1px movement). |
+| Press and click on empty pane | the press deselects every node (cards, notes, views) and clears the selection rectangle (BOARD-187); the click closes the context menu. A pane click is a pointer-up on the pane with no marquee started (≤ 4px movement, BOARD-186). |
 | Selection elevation | `elevateNodesOnSelect`: a selected node's z-index is its own + 1000. Edges are not elevated. |
 | Store sync | after every selection change, the store's `selection` = ids of selected **session** nodes (notes/views stay local to the canvas). |
 | Keyboard a11y | disabled: no arrow-key nudging, no auto-pan on focus, no focus of the selection rectangle. Cards, notes and views are still `tabIndex=0` (focus outline suppressed). |
@@ -88,11 +88,11 @@ All values are from the installed React Flow + the props in `BoardView.tsx:2533-
 
 | Mechanic | Value |
 | --- | --- |
-| Threshold | drag starts when the pointer has moved **> 1px** (screen, Euclidean) from pointer-down (`nodeDragThreshold = 1`). |
-| Click suppression | `nodeClickDistance = 0`: if the pointer moved at all (> 0px) between down and up on a draggable node, no click fires (no select-on-click, no open). Movement in (0, 1] px therefore yields neither click nor drag. |
+| Threshold | drag starts when the pointer has moved **> 4px** (screen, Euclidean) from pointer-down (BOARD-186; React Flow's `nodeDragThreshold = 1`). The dragged nodes keep their offsets from the pointer-down point, so they catch up the 4px at once. |
+| Click suppression | a pointer that moved more than 4px between down and up (a drag, or a press that can't drag) fires no click (no open). Within 4px it is a click (BOARD-186). React Flow's `nodeClickDistance = 0` dropped clicks that moved at all, and movement in (0, 1] px gave neither click nor drag. |
 | Buttons | left only (`!event.button`). |
 | Handles | sections drag only by `.section-header` (44px strip), the archive only by `.archive-header` (52px strip), views only by their caption `.view-head` (04); cards and notes anywhere except `nodrag` regions (10). |
-| Select on drag | starting a drag on an unselected selectable node selects it (replacing the selection unless multi-select held) before moving. Starting a drag on a non-selectable node (section, archive, pile top card) while no multi-select key is held **clears the whole selection**. |
+| Select on drag | the press has already selected the node (BOARD-187); starting a drag on an unselected selectable node (the selection rectangle's, say) selects it (replacing the selection unless multi-select held) before moving, and a selected one stays selected, multi-select held or not. Starting a drag on a non-selectable node (section, archive, pile top card) while no multi-select key is held **clears the whole selection**. |
 | What moves | the grabbed node plus every selected draggable node (pile cards and non-draggable nodes never). Positions = pointer − grab offset, unsnapped (`snapToGrid` off), unclamped. |
 | Auto-pan | as for the marquee: within 40px of an edge, up to 15px/frame, moving the dragged nodes with it. |
 | Cursor | `grabbing` while a node is dragged; otherwise nodes show `default` (React Flow's `grab`/`pointer` are overridden by `board.css`), section and archive headers show `grab` (`grabbing` while dragging). |
@@ -203,6 +203,8 @@ Connections (`nodesConnectable={false}`), edge selection/focus, React Flow's del
 - **BOARD-047** A double-click on a card's title text (active card or result, not a pile card) cancels the pending title-click open and starts renaming the card.
 - **BOARD-048** A double-click whose target is the pane itself creates a session centred on the pointer (top-left = pointer − (144, 108)) unless the point is inside the dock (archive zone — folded or open — ∪ pad); double-clicks on nodes, HUD or the selection rectangle never do. Section interiors count as pane, so the session lands (and joins) there.
 - **BOARD-049** A click on the empty pane closes the context menu (and deselects everything per Canvas mechanics).
+- **BOARD-186** A press stays a click while the pointer stays within 4px (screen, Euclidean) of where it went down: past that a press on a node drags it and one on the pane draws a marquee. A mouse or trackpad click often moves the pointer a point or two, and React Flow's 1px drag threshold with `nodeClickDistance = 0` dropped those clicks or made them tiny drags (feedback #15, added after 1.0.32).
+- **BOARD-187** Selection follows the press, not the click: a left press on an unselected selectable node selects it at once (its group too, GROUP-010; added to the selection with multi-select held), and a left press on the empty pane deselects everything at once. What waits for the click: deselecting a selected node with multi-select held, and opening a card (BOARD-043). A press on a selected node changes nothing, so a drag moves the whole selection (added after 1.0.32).
 
 ### Pointer: drag and drop
 
@@ -835,6 +837,8 @@ New Rust tests to add in `nodus-board` (pure functions, ported from layout.ts/se
 - [x] BOARD-048 A double-click whose target is the pane itself creates a session centred on the pointer (top-left = pointer − (144…
 - [x] BOARD-049 A click on the empty pane closes the context menu (and deselects everything per Canvas mechanics).
 - [x] BOARD-050 Any drag start closes the context menu and cancels a pending title-click open.
+- [x] BOARD-186 A press stays a click within 4px; past it, a drag or a marquee (feedback #15)
+- [x] BOARD-187 A press selects an unselected node (or clears on the pane) at once; deselect and open wait for the click (feedback #15)
 - [x] BOARD-051 Dragging the archive: marks the archive busy and the board `is-moving-archive` (card, note and pad glides off)…
 - [x] BOARD-052 Dropping the archive saves the archive rect `{x: round(x), y: round(y), w, h}` (stored w/h unchanged) to the store…
 - [x] BOARD-053 Dragging a section by its header marks it and its members busy, sets `is-moving-section` (card glides off), and…

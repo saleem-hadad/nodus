@@ -167,6 +167,16 @@ impl Shadow {
             .collect()
     }
 
+    /// This shadow, part way through a transition, with `target`'s ring
+    /// (its first layer, when it is one) already there: a selection shows
+    /// the moment it's made, and fades as it goes (CARD-007, NOTEUI-005).
+    pub fn ring_at_once(mut self, target: &Shadow) -> Self {
+        if Self::is_ring(&target.0[0]) {
+            self.0[0] = target.0[0];
+        }
+        self
+    }
+
     /// Whether a layer is a ring: `0 0 0 <spread> <colour>`.
     fn is_ring(l: &Shade) -> bool {
         !l.inset && l.blur == 0.0 && l.x == 0.0 && l.y == 0.0 && l.spread > 0.0 && l.color.a > 0.0
@@ -568,6 +578,21 @@ mod tests {
         // The third layer fades in from nothing.
         let mid = sm.mix(sel, 0.5);
         assert!((mid.0[2].color.a - 0.05).abs() < 1e-5);
+    }
+
+    #[test]
+    fn a_ring_shows_at_once_and_fades_as_it_goes() {
+        let t = Tokens::LIGHT;
+        let sm = Shadow::with(&[], &t.shadow_sm);
+        let sel = Shadow::with(&[Shade::ring(2.0, t.accent)], &t.shadow_md);
+        // Just selected: the ring is all there, the soft layers still glide.
+        let start = sm.mix(sel, 0.05).ring_at_once(&sel);
+        assert_eq!(start.0[0], sel.0[0]);
+        assert!(Shadow::is_ring(&start.0[0]));
+        assert_ne!(start.0[1], sel.0[1]);
+        // Just let go: nothing is forced, so the ring fades.
+        let going = sel.mix(sm, 0.05).ring_at_once(&sm);
+        assert_eq!(going, sel.mix(sm, 0.05));
     }
 
     #[test]

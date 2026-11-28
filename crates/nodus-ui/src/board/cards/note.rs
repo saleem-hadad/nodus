@@ -88,7 +88,7 @@ pub fn note(
     };
     let ease = motion::ease_out as fn(f32) -> f32;
     let ms = Duration::from_millis;
-    let shadow = transition(window, cx, anim::key(&id, "note-shadow"), target, ms(220), ease);
+    let shadow = transition(window, cx, anim::key(&id, "note-shadow"), target, ms(220), ease).ring_at_once(&target);
     // NOTEUI-006: dragged, −1.5° and 1.02 about the centre; NOTEUI-044: the
     // pad's top sheet peels −2° and 2px up about its bottom-left corner.
     let (rot, ty, scale) = if dragging {

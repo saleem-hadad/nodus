@@ -108,6 +108,56 @@ async fn a_missing_transcript_folder_never_wipes_the_layout() {
 }
 
 #[tokio::test]
+async fn a_card_keeps_only_the_pull_requests_it_opened() {
+    let f = Fixture::new();
+    let pr = |n: u64| json!({ "url": format!("https://github.com/o/r/pull/{n}"), "number": n, "title": format!("PR {n}"), "state": "merged" });
+    let opens = |n: u64| {
+        [
+            json!({ "type": "assistant", "timestamp": ts(2), "message": { "content": [
+                { "type": "tool_use", "id": format!("t{n}"), "name": "Bash", "input": { "command": "gh pr create --fill" } }
+            ] } }),
+            json!({ "type": "user", "timestamp": ts(3), "message": { "content": [
+                { "type": "tool_result", "tool_use_id": format!("t{n}"), "content": format!("https://github.com/o/r/pull/{n}\n") }
+            ] } }),
+        ]
+    };
+    // A opened #1 and #5 in the project's checkout; #2 came from another
+    // session's branch there, as did B's #1.
+    let mut a = conversation("Ship it", "Opening one", 1);
+    a.extend(opens(1));
+    a.extend(opens(5));
+    f.write(A, &a);
+    f.put(node(A, json!({ "createdByApp": true, "prs": [pr(1), pr(2)] })));
+    f.talk(B, "Look around", "Looked", 1);
+    f.put(node(B, json!({ "createdByApp": true, "prs": [pr(1)] })));
+    // C's worktree is its own, so the pull request on its branch is its.
+    let worktree = format!("{}/.claude/worktrees/nodus-0000000c", f.repo);
+    let dir = f.transcripts.transcript_dir(&worktree);
+    std::fs::create_dir_all(&dir).unwrap();
+    let text: String = conversation("Fix it", "Fixed", 1)
+        .iter()
+        .map(|l| format!("{l}\n"))
+        .collect();
+    std::fs::write(dir.join(format!("{C}.jsonl")), text).unwrap();
+    f.put(node(
+        C,
+        json!({ "createdByApp": true, "prs": [pr(3)], "worktree": { "path": worktree, "branch": "worktree-nodus-0000000c" } }),
+    ));
+    // D's transcript can't be read, so what it keeps stays.
+    f.put(node(D, json!({ "createdByApp": true, "prs": [pr(4)] })));
+
+    f.board.load("p").unwrap();
+
+    let numbers = |id: &str| f.node(id).unwrap().prs().iter().map(|p| p.number).collect::<Vec<_>>();
+    assert_eq!(numbers(A), [1, 5]);
+    assert_eq!(f.node(A).unwrap().prs()[0].title, "PR 1");
+    assert!(numbers(B).is_empty());
+    assert!(!f.board_json()["nodes"][B].as_object().unwrap().contains_key("prs"));
+    assert_eq!(numbers(C), [3]);
+    assert_eq!(numbers(D), [4]);
+}
+
+#[tokio::test]
 async fn an_unknown_project_fails_to_load() {
     let f = Fixture::new();
     let err = f.board.load("nope").unwrap_err();

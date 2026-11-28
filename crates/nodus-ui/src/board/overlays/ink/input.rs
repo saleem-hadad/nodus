@@ -223,19 +223,6 @@ impl BoardCanvas {
                 self.ink_set_tool(InkTool::Select, Some(window), cx);
                 self.add_shape(ShapeKind::Text, rect, String::new(), None, true, cx);
             }
-            // SHAPE-005: the sticker picked, centred on the press.
-            InkTool::Sticker => {
-                let side = shapes::default_size(ShapeKind::Sticker).0 * scale;
-                let rect = Rect {
-                    x: p[0] - side / 2.0,
-                    y: p[1] - side / 2.0,
-                    w: side,
-                    h: side,
-                };
-                let emoji = self.overlays.ink.sticker().to_owned();
-                self.overlays.ink.picker = None;
-                self.add_shape(ShapeKind::Sticker, rect, emoji, None, false, cx);
-            }
             InkTool::Select | InkTool::Loupe | InkTool::Bubble | InkTool::Mic => {}
         }
         cx.notify();

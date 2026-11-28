@@ -1,5 +1,5 @@
-//! Shapes and links on the board: boxes, ellipses, diamonds, words, stickers
-//! and pictures, and the arrows between them and the cards, notes and views.
+//! Shapes and links on the board: boxes, ellipses, diamonds, words and
+//! pictures, and the arrows between them and the cards, notes and views.
 //! Added after 0.9.4. What the window or a session's board tools send is
 //! checked here before it's kept.
 //!
@@ -22,8 +22,6 @@ pub const SHAPE_MAX: f64 = 4000.0;
 pub const SHAPE_CORNER: f64 = 6.0;
 /// How much text a shape keeps, in UTF-16 units.
 pub const SHAPE_MAX_TEXT: usize = 2000;
-/// How long a sticker's emoji is at most.
-pub const STICKER_MAX_TEXT: usize = 16;
 /// How much text a link's label keeps.
 pub const LINK_MAX_LABEL: usize = 200;
 /// How many shapes and links a board keeps.
@@ -62,13 +60,9 @@ pub fn clean_shape(shape: &BoardShape) -> Option<BoardShape> {
         return None;
     }
     let text = match shape.kind {
-        ShapeKind::Sticker => js::slice_utf16(js::trim(&shape.text), 0, STICKER_MAX_TEXT),
         ShapeKind::Image => String::new(),
         _ => js::slice_utf16(js::trim_end(&shape.text), 0, SHAPE_MAX_TEXT),
     };
-    if shape.kind == ShapeKind::Sticker && text.is_empty() {
-        return None;
-    }
     let image = match shape.kind {
         ShapeKind::Image => Some(shape.image.clone().filter(|n| image_name_ok(n))?),
         _ => None,
@@ -256,14 +250,13 @@ pub fn new_id() -> String {
 }
 
 /// How big a shape a session draws with its board tools is when it doesn't
-/// say: room for a few words in a box, a line of words, an emoji.
+/// say: room for a few words in a box, a line of words.
 pub fn drawn_size(kind: ShapeKind) -> Size {
     let size = |w: f64, h: f64| Size { w, h };
     match kind {
         ShapeKind::Rect | ShapeKind::Ellipse => size(180.0, 90.0),
         ShapeKind::Diamond => size(160.0, 110.0),
         ShapeKind::Text => size(220.0, 44.0),
-        ShapeKind::Sticker => size(64.0, 64.0),
         ShapeKind::Image => size(240.0, 180.0),
     }
 }
@@ -370,14 +363,7 @@ mod tests {
         };
         let s = clean_shape(&tiny).unwrap();
         assert_eq!((s.w, s.h), (SHAPE_MIN, SHAPE_MAX));
-        // A sticker needs its emoji; a picture its file, by a plain name.
-        assert!(
-            clean_shape(&BoardShape {
-                text: " ".into(),
-                ..shape("s", ShapeKind::Sticker)
-            })
-            .is_none()
-        );
+        // A picture needs its file, by a plain name.
         assert!(clean_shape(&shape("i", ShapeKind::Image)).is_none());
         for bad in ["../x.png", "a/b.png", ".hidden", ""] {
             let s = BoardShape {
@@ -421,6 +407,28 @@ mod tests {
             (kept.x, kept.created_at, kept.by.as_deref()),
             (300.0, 5.0, Some("sess"))
         );
+    }
+
+    #[test]
+    fn shape_030_a_boards_old_stickers_are_kept_unread() {
+        let sticker = serde_json::json!({
+            "id": "s", "kind": "sticker", "x": 0, "y": 0, "w": 64, "h": 64,
+            "color": "graphite", "text": "👍", "createdAt": 1
+        });
+        let mut board = BoardState {
+            shapes: serde_json::from_value(serde_json::json!({ "s": sticker })).unwrap(),
+            ..BoardState::default()
+        };
+        board.notes.insert("n".into(), note("n"));
+        save_shapes(&mut board, &[shape("r", ShapeKind::Rect)], 2.0);
+        save_links(&mut board, &[link("l", LinkEnd::on("n"), LinkEnd::on("s"))], 3.0);
+        prune_links(&mut board);
+        // Not a shape this version draws, but written back as it was, and a
+        // link to it waits for it.
+        let ids: Vec<&str> = board.shapes.values().map(|s| s.id.as_str()).collect();
+        assert_eq!(ids, ["r"]);
+        assert_eq!(serde_json::to_value(&board.shapes).unwrap()["s"], sticker);
+        assert!(board.links.get("l").is_some());
     }
 
     #[test]

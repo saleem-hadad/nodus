@@ -30,12 +30,11 @@ use serde_json::{Map, Value, json};
 
 /// The kinds a session can draw: all of them, a picture from a file
 /// (TOOL-112).
-pub(crate) const DRAWN_KINDS: [ShapeKind; 6] = [
+pub(crate) const DRAWN_KINDS: [ShapeKind; 5] = [
     ShapeKind::Rect,
     ShapeKind::Ellipse,
     ShapeKind::Diamond,
     ShapeKind::Text,
-    ShapeKind::Sticker,
     ShapeKind::Image,
 ];
 
@@ -52,7 +51,7 @@ const NOTE_PREVIEW: usize = 200;
 /// How much of a note's first line names it in a link.
 const NAME_CHARS: usize = 60;
 
-const KINDS: &str = "rect, ellipse, diamond, text, sticker or image";
+const KINDS: &str = "rect, ellipse, diamond, text or image";
 /// How many ink strokes list_board lists, the newest.
 const INK_LISTED: usize = 300;
 /// How far a mark keeps from what it goes around or under.
@@ -109,13 +108,11 @@ fn side(n: f64) -> f64 {
     js::round(n.clamp(SHAPE_MIN, SHAPE_MAX))
 }
 
-/// The words a shape of `kind` holds, checked: words on their own need some,
-/// and a sticker its emoji.
+/// The words a shape of `kind` holds, checked: words on their own need some.
 fn shape_text(kind: ShapeKind, text: &str, at: &str) -> Result<String, String> {
     let blank = js::trim(text).is_empty();
     match kind {
         ShapeKind::Text if blank => Err(format!("{at}: a text shape needs some text")),
-        ShapeKind::Sticker if blank => Err(format!("{at}: a sticker needs its emoji in text")),
         ShapeKind::Image if !text.is_empty() => Err(format!("{at}: a picture has no text")),
         _ => Ok(text.to_owned()),
     }

@@ -1,8 +1,8 @@
 //! Shapes on the board (spec 14, SHAPE-001, SHAPE-012…SHAPE-016): a
 //! rectangle, ellipse or diamond filled with its colour's tint and edged
-//! in its tone, words centred in it; words on their own; a sticker's
-//! emoji; a picture. Selected, a shape shows an accent ring and resizes
-//! from its edges; a double-click writes in it.
+//! in its tone, words centred in it; words on their own; a picture.
+//! Selected, a shape shows an accent ring and resizes from its edges; a
+//! double-click writes in it.
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -45,8 +45,7 @@ pub fn render(env: &Rc<BoardEnv>, node: &ShapeNode<'_>, window: &mut Window, cx:
     let selected = node.node.selected;
 
     // MOTION-021: Claude drawing it: the outline traced, then the fill and
-    // the words; words on their own typed; a sticker stamped; a picture
-    // coming into focus.
+    // the words; words on their own typed; a picture coming into focus.
     let drawing = node.drawing.filter(|_| !editing);
     let body: AnyElement = match shape.kind {
         ShapeKind::Rect | ShapeKind::Ellipse | ShapeKind::Diamond => {
@@ -157,28 +156,6 @@ pub fn render(env: &Rc<BoardEnv>, node: &ShapeNode<'_>, window: &mut Window, cx:
                 cx,
             );
             div().size_full().flex().items_center().child(words).into_any_element()
-        }
-        ShapeKind::Sticker => {
-            let stamp = div()
-                .size_full()
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_size(z.px(w.min(h) * 0.78))
-                .line_height(z.px(h))
-                .child(shape.text.clone());
-            match drawing {
-                // Stamped: in from small and turned, on the spring.
-                Some(p) => {
-                    let e = motion::ease_spring(p);
-                    stamp
-                        .opacity(motion::ease_out((p / 0.3).min(1.0)))
-                        .rotate(gpui::radians((-14.0 * (1.0 - e)).to_radians()))
-                        .scale(0.2 + 0.8 * e)
-                        .into_any_element()
-                }
-                None => stamp.into_any_element(),
-            }
         }
         ShapeKind::Image => {
             let radius = z.px(8.0);

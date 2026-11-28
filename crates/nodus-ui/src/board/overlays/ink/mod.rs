@@ -58,13 +58,11 @@ pub enum InkTool {
     Arrow,
     /// Words on their own, a shape (SHAPE-004).
     Text,
-    /// The emoji picked, stamped where clicked (SHAPE-005).
-    Sticker,
     Eraser,
 }
 
 /// The dock's tools: tool, name, its key.
-const TOOLS: [(InkTool, &str, Option<&str>); 10] = [
+const TOOLS: [(InkTool, &str, Option<&str>); 9] = [
     (InkTool::Select, "Pointer", Some("Esc")),
     (InkTool::Loupe, "Loupe", Some("L")),
     (InkTool::Bubble, "Ask Claude here", Some("B")),
@@ -73,7 +71,6 @@ const TOOLS: [(InkTool, &str, Option<&str>); 10] = [
     (InkTool::Shape, "Shape", Some("R")),
     (InkTool::Arrow, "Arrow", Some("A")),
     (InkTool::Text, "Text", None),
-    (InkTool::Sticker, "Sticker", Some("S")),
     (InkTool::Eraser, "Eraser", Some("X")),
 ];
 
@@ -82,11 +79,6 @@ pub const SHAPE_KINDS: [(ShapeKind, &str); 3] = [
     (ShapeKind::Rect, "Rectangle"),
     (ShapeKind::Ellipse, "Ellipse"),
     (ShapeKind::Diamond, "Diamond"),
-];
-
-/// The stickers the picker offers.
-pub const STICKERS: [&str; 16] = [
-    "👍", "❤️", "🔥", "✅", "❌", "⭐", "🎉", "💡", "⚠️", "🚀", "👀", "❓", "🐛", "📌", "⏳", "😀",
 ];
 
 /// INKUI-002, INKUI-027, BUBBLE-001, BUBBLE-040, SHAPE-002: the board's
@@ -98,7 +90,6 @@ pub fn tool_for_key(key: &str) -> Option<InkTool> {
         "p" => Some(InkTool::Pen),
         "a" => Some(InkTool::Arrow),
         "r" => Some(InkTool::Shape),
-        "s" => Some(InkTool::Sticker),
         "x" => Some(InkTool::Eraser),
         _ => None,
     }
@@ -244,12 +235,10 @@ pub(crate) struct Ink {
     /// A link's label being written (LINK-020).
     link_label: Option<LinkLabelDraft>,
     pub palette: bool,
-    /// The Shape tool's picker or the Sticker tool's is out.
+    /// The Shape tool's picker is out.
     pub picker: Option<InkTool>,
-    /// What the Shape tool draws (a rectangle at first), and the Sticker
-    /// tool stamps.
+    /// What the Shape tool draws (a rectangle at first).
     pub shape_kind: Option<ShapeKind>,
-    pub sticker: Option<&'static str>,
     pub(crate) history: BoardHistory,
     /// The layer's hitbox: a press is on the board when it's hovered.
     hitbox: Option<Hitbox>,
@@ -296,10 +285,6 @@ impl Ink {
 
     pub fn shape_kind(&self) -> ShapeKind {
         self.shape_kind.unwrap_or(ShapeKind::Rect)
-    }
-
-    pub fn sticker(&self) -> &'static str {
-        self.sticker.unwrap_or(STICKERS[0])
     }
 
     /// Lets go of a gesture under way (the window lost the pointer).

@@ -1441,7 +1441,7 @@ impl BoardCanvas {
                     self.bar_focus_from_board(Some("/".to_owned()), cx);
                     true
                 }
-                "p" | "a" | "r" | "s" | "x" | "b" | "m" => {
+                "p" | "a" | "r" | "x" | "b" | "m" => {
                     if let Some(tool) = super::overlays::ink::tool_for_key(&ch) {
                         self.ink_set_tool(tool, None, cx);
                     }

@@ -51,7 +51,7 @@ impl BoardCanvas {
             move |bounds, window, _| window.insert_hitbox(bounds, HitboxBehavior::Normal),
             move |_, hitbox, window, cx| {
                 match tool {
-                    InkTool::Pen | InkTool::Arrow | InkTool::Shape | InkTool::Sticker => {
+                    InkTool::Pen | InkTool::Arrow | InkTool::Shape => {
                         window.set_cursor_style(CursorStyle::Crosshair, &hitbox);
                     }
                     InkTool::Eraser => window.set_cursor_style(cursor::eraser(), &hitbox),

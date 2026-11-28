@@ -530,11 +530,7 @@ pub fn build_nodes(input: BuildInput<'_>) -> Vec<FlowNode> {
             },
             size: live.map_or(Size { w: shape.w, h: shape.h }, |r| Size { w: r.w, h: r.h }),
             hidden: false,
-            z: if shape.kind == nodus_domain::ShapeKind::Sticker {
-                2
-            } else {
-                0
-            },
+            z: 0,
             draggable: true,
             selectable: true,
             selected: selected_of(&shape.id),

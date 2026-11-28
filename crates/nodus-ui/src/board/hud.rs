@@ -525,7 +525,7 @@ fn paint_minimap(
                 let color = board
                     .and_then(|b| b.shapes.get(*index))
                     .map_or(nodus_domain::InkColor::Graphite, |s| s.color);
-                (super::overlays::ink::ink_rgba(t, color), None)
+                (super::overlays::ink::shape_tone(t, color).1, None)
             }
             NodeKind::Card { index, .. } => {
                 let card = board.and_then(|b| b.cards.get(*index));

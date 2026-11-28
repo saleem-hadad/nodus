@@ -122,6 +122,13 @@ pub struct Tokens {
     pub ink_blue: Rgba,
     pub ink_purple: Rgba,
 
+    // Board shapes (SHAPE-013), in `InkColor::ALL`'s order: the fill, the
+    // edge, and words on their own; and a link in Graphite (LINK-002).
+    pub shape_fill: [Rgba; 6],
+    pub shape_edge: [Rgba; 6],
+    pub shape_words: [Rgba; 6],
+    pub link_line: Rgba,
+
     // Terminal
     pub term_bg: Rgba,
     pub term_fg: Rgba,
@@ -209,6 +216,31 @@ impl Tokens {
         ink_green: hex(0x28cd41),
         ink_blue: hex(0x007aff),
         ink_purple: hex(0xaf52de),
+        shape_fill: [
+            hex(0xffffff),
+            hex(0xfde4e1),
+            hex(0xfeecd6),
+            hex(0xe1f4e4),
+            hex(0xe1edfe),
+            hex(0xefe4fb),
+        ],
+        shape_edge: [
+            hex(0xc4c4ca),
+            hex(0xef7f75),
+            hex(0xf2a94a),
+            hex(0x62bd77),
+            hex(0x5f99ef),
+            hex(0xb383e4),
+        ],
+        shape_words: [
+            rgba(0, 0, 0, 0.88),
+            hex(0xd0342a),
+            hex(0xb86a0a),
+            hex(0x25893b),
+            hex(0x0a66d6),
+            hex(0x9447c4),
+        ],
+        link_line: hex(0xa3a3aa),
         term_bg: hex(0x1e1e20),
         term_fg: hex(0xe6e6e6),
         shadow_sm: [
@@ -288,6 +320,31 @@ impl Tokens {
         ink_green: hex(0x32d74b),
         ink_blue: hex(0x0a84ff),
         ink_purple: hex(0xbf5af2),
+        shape_fill: [
+            hex(0x2c2c30),
+            hex(0x432826),
+            hex(0x43341f),
+            hex(0x223a28),
+            hex(0x213450),
+            hex(0x382a48),
+        ],
+        shape_edge: [
+            hex(0x5c5c63),
+            hex(0xc4625a),
+            hex(0xc99447),
+            hex(0x58a86a),
+            hex(0x5389d6),
+            hex(0x9c72c6),
+        ],
+        shape_words: [
+            rgba(255, 255, 255, 0.9),
+            hex(0xff7f75),
+            hex(0xffb347),
+            hex(0x5fd677),
+            hex(0x5aa5ff),
+            hex(0xcc84f2),
+        ],
+        link_line: hex(0x74747c),
         term_bg: hex(0x1e1e20),
         term_fg: hex(0xe6e6e6),
         shadow_sm: [

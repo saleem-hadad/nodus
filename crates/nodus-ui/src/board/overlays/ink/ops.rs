@@ -169,16 +169,21 @@ impl BoardCanvas {
     }
 
     /// INKUI-004: a colour from the palette; a selected stroke takes it
-    /// too, as do the selected shapes and link (SHAPE-015, LINK-021).
+    /// too, as do the selected shapes and link (SHAPE-015, LINK-021). It's
+    /// the pen's colour from then on, or the shapes' while the palette
+    /// works on them (SHAPE-017).
     pub(crate) fn ink_pick_color(&mut self, color: InkColor, cx: &mut Context<'_, Self>) {
+        let for_shapes = self.palette_for_shapes();
         self.recolor_selected(color, cx);
-        self.overlays.ink.color = Some(color);
+        let key = if for_shapes {
+            self.overlays.ink.shape_color = Some(color);
+            SHAPE_COLOR_KEY
+        } else {
+            self.overlays.ink.color = Some(color);
+            COLOR_KEY
+        };
         self.overlays.ink.palette = false;
-        self.state
-            .read(cx)
-            .nodus
-            .local_storage()
-            .set(COLOR_KEY, Some(color.as_str()));
+        self.state.read(cx).nodus.local_storage().set(key, Some(color.as_str()));
         let current = self.ink_strokes();
         if let Some(id) = self.overlays.ink.selected.clone()
             && current.iter().any(|s| s.id == id && s.color != color)
@@ -190,6 +195,17 @@ impl BoardCanvas {
             self.ink_commit(next, cx);
         }
         cx.notify();
+    }
+
+    /// SHAPE-017: the palette works on the shapes' colour while the tool out
+    /// draws shapes, words or arrows, or the pointer has shapes or a link
+    /// selected and no ink; else on the pen's.
+    pub(crate) fn palette_for_shapes(&self) -> bool {
+        let ink = &self.overlays.ink;
+        ink.tool_draws_shapes()
+            || (ink.tool == InkTool::Select
+                && ink.selected.is_none()
+                && (ink.link.is_some() || !self.selected_shapes().is_empty()))
     }
 
     /// INKUI-005.

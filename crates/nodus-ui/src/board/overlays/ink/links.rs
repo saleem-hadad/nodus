@@ -9,11 +9,11 @@ use super::*;
 use crate::board::moments::Arrival;
 use crate::board::shapes::{self, LINK_HEAD, LINK_WIDTH};
 
-/// A label's words: the UI font, semibold, 13 board units, a line 22 tall
-/// with 8 units each side.
+/// A label's words: the UI font, medium, 13 board units, a line 22 tall
+/// with 10 units each side.
 pub(crate) const LINK_LABEL_FONT: f64 = 13.0;
 pub(crate) const LINK_LABEL_H: f64 = 22.0;
-pub(crate) const LINK_LABEL_PAD: f64 = 8.0;
+pub(crate) const LINK_LABEL_PAD: f64 = 10.0;
 
 /// How wide words are in a label, in board units.
 pub(crate) fn link_label_measure(window: &Window) -> impl Fn(&str) -> f64 + use<> {
@@ -23,7 +23,7 @@ pub(crate) fn link_label_measure(window: &Window) -> impl Fn(&str) -> f64 + use<
             return 0.0;
         }
         let font = gpui::Font {
-            weight: FontWeight::SEMIBOLD,
+            weight: FontWeight::MEDIUM,
             ..gpui::font(fonts::UI)
         };
         let run = TextRun {
@@ -44,9 +44,9 @@ pub(crate) fn link_label_measure(window: &Window) -> impl Fn(&str) -> f64 + use<
     }
 }
 
-/// A label's box, centred on the middle of its link.
-pub(crate) fn label_rect(curve: &[Point; 4], text: &str, measure: &dyn Fn(&str) -> f64) -> Rect {
-    let mid = shapes::at(curve, 0.5);
+/// A label's box, centred halfway along its link.
+pub(crate) fn label_rect(line: &[Point], text: &str, measure: &dyn Fn(&str) -> f64) -> Rect {
+    let mid = shapes::at(line, 0.5);
     let w = measure(text) + 2.0 * LINK_LABEL_PAD;
     Rect {
         x: mid.x - w / 2.0,
@@ -58,7 +58,7 @@ pub(crate) fn label_rect(curve: &[Point; 4], text: &str, measure: &dyn Fn(&str) 
 
 /// A link as painted this frame.
 pub(crate) struct LinkPaint {
-    pub curve: [Point; 4],
+    pub line: Vec<Point>,
     pub color: Rgba,
     pub dashed: bool,
     /// The selected link shows its ends, to take elsewhere.
@@ -75,8 +75,8 @@ impl BoardCanvas {
             .rev()
             .filter(|l| !l.label.is_empty())
             .find(|l| {
-                self.link_curve(l).is_some_and(|c| {
-                    let r = label_rect(&c, &l.label, measure);
+                self.link_line(l).is_some_and(|line| {
+                    let r = label_rect(&line, &l.label, measure);
                     p[0] >= r.x && p[0] <= r.x + r.w && p[1] >= r.y && p[1] <= r.y + r.h
                 })
             })
@@ -124,14 +124,14 @@ impl BoardCanvas {
                 }
                 target = over.as_deref().and_then(|id| self.attach_rect(id));
             }
-            let Some(curve) = self.link_curve(&shown) else { continue };
+            let Some(line) = self.link_line(&shown) else { continue };
             let selected = ink.link.as_deref() == Some(link.id.as_str());
-            let mut color = if selected { t.accent } else { ink_rgba(t, link.color) };
+            let mut color = if selected { t.accent } else { link_rgba(t, link.color) };
             if erasing.contains(&link.id) {
                 color.a *= 0.25;
             }
             out.push(LinkPaint {
-                curve,
+                line,
                 color,
                 dashed: false,
                 handles: selected,
@@ -154,16 +154,16 @@ impl BoardCanvas {
                 id: String::new(),
                 from: from.clone(),
                 to,
-                color: ink.color.unwrap_or(InkColor::Red),
+                color: ink.shape_color(),
                 label: String::new(),
                 by: None,
                 created_at: 0.0,
                 extra: serde_json::Map::new(),
             };
-            if let Some(curve) = self.link_curve(&live) {
+            if let Some(line) = self.link_line(&live) {
                 out.push(LinkPaint {
-                    curve,
-                    color: ink_rgba(t, live.color),
+                    line,
+                    color: link_rgba(t, live.color),
                     dashed: over.is_none(),
                     handles: false,
                     grow: 1.0,
@@ -248,7 +248,7 @@ impl BoardCanvas {
         let mut out = Vec::new();
         let now = std::time::Instant::now();
         for link in self.links() {
-            let Some(curve) = self.link_curve(link) else { continue };
+            let Some(line) = self.link_line(link) else { continue };
             let is_editing = editing.as_deref() == Some(link.id.as_str());
             if link.label.is_empty() && !is_editing {
                 continue;
@@ -262,9 +262,10 @@ impl BoardCanvas {
                 _ => link.label.clone(),
             };
             let shown = if text.is_empty() { "Label" } else { text.as_str() };
-            let r = label_rect(&curve, shown, &measure);
+            let r = label_rect(&line, shown, &measure);
             let selected = self.overlays.ink.link.as_deref() == Some(link.id.as_str());
-            let edge = if selected { t.accent } else { ink_rgba(t, link.color) };
+            // LINK-004: a chip on the line; the selected link's has an
+            // accent edge.
             let pill = div()
                 .absolute()
                 .left(px((vp.x + r.x * z) as f32))
@@ -274,18 +275,16 @@ impl BoardCanvas {
                 .px(px((LINK_LABEL_PAD * z) as f32))
                 .flex()
                 .items_center()
-                .rounded(px((6.0 * z) as f32))
+                .rounded(px((LINK_LABEL_H / 2.0 * z) as f32))
                 .bg(t.bg_elevated)
-                .border(px((1.0 * z).max(0.5) as f32))
-                .border_color(Rgba {
-                    a: edge.a * 0.6,
-                    ..edge
+                .when(selected || is_editing, |d| {
+                    d.border(px((1.0 * z).max(0.5) as f32)).border_color(t.accent)
                 })
                 .font_family(fonts::UI)
-                .font_weight(FontWeight::SEMIBOLD)
+                .font_weight(FontWeight::MEDIUM)
                 .text_size(px((LINK_LABEL_FONT * z) as f32))
                 .line_height(px((LINK_LABEL_H * z) as f32))
-                .text_color(t.text_primary)
+                .text_color(if is_editing { t.text_primary } else { t.text_secondary })
                 .whitespace_nowrap();
             let pill = match (&self.overlays.ink.link_label, is_editing) {
                 (Some(draft), true) => pill
@@ -322,7 +321,7 @@ impl BoardCanvas {
     }
 }
 
-/// Paints a link: its curve, its head, dashes while it's loose, and the
+/// Paints a link: its line, its head, dashes while it's loose, and the
 /// selected one's ends as handles.
 pub(crate) fn paint_link(
     link: &LinkPaint,
@@ -333,13 +332,17 @@ pub(crate) fn paint_link(
 ) {
     let p = |q: Point| at([q.x, q.y]);
     let width = (LINK_WIDTH * zoom) as f32;
-    if link.grow <= 0.0 {
+    if link.grow <= 0.0 || link.line.len() < 2 {
         return;
     }
-    let grown = shapes::part(&link.curve, link.grow);
-    let c = if link.grow < 1.0 { &grown } else { &link.curve };
-    let head = shapes::head(c, LINK_HEAD);
-    // The line stops short of the tip, under the head.
+    let grown;
+    let line: &[Point] = if link.grow < 1.0 {
+        grown = shapes::line_part(&link.line, link.grow).0;
+        &grown
+    } else {
+        &link.line
+    };
+    let head = shapes::head(line, LINK_HEAD);
     let options = StrokeOptions::default()
         .with_line_width(width)
         .with_line_cap(LineCap::Round)
@@ -348,12 +351,18 @@ pub(crate) fn paint_link(
     if link.dashed {
         path = path.dash_array(&[px(6.0 * zoom as f32), px(4.0 * zoom as f32)]);
     }
+    // The line stops short of the tip, under the head, when its last run
+    // is long enough to.
     let base = Point {
         x: (head[1].x + head[2].x) / 2.0,
         y: (head[1].y + head[2].y) / 2.0,
     };
-    path.move_to(p(c[0]));
-    path.cubic_bezier_to(p(base), p(c[1]), p(c[2]));
+    let (last, before) = (line[line.len() - 1], line[line.len() - 2]);
+    let under_head = (last.x - before.x).hypot(last.y - before.y) > LINK_HEAD;
+    path.move_to(p(line[0]));
+    for (i, &q) in line.iter().enumerate().skip(1) {
+        path.line_to(p(if i == line.len() - 1 && under_head { base } else { q }));
+    }
     if let Ok(path) = path.build() {
         window.paint_path(path, link.color);
     }
@@ -366,7 +375,7 @@ pub(crate) fn paint_link(
         window.paint_path(tri, link.color);
     }
     if link.handles {
-        for end in [c[0], c[3]] {
+        for end in [line[0], line[line.len() - 1]] {
             let centre = p(end);
             let r = px(5.0);
             let b = Bounds::new(point(centre.x - r, centre.y - r), gpui::size(r * 2.0, r * 2.0));
@@ -448,7 +457,7 @@ pub(crate) fn shape_path(path: &mut PathBuilder, kind: ShapeKind, r: Rect, at: &
             path.close();
         }
         _ => {
-            let rad = (10.0f64).min(w / 2.0).min(h / 2.0);
+            let rad = nodus_board::shapes::SHAPE_CORNER.min(w / 2.0).min(h / 2.0);
             let k = 0.552_284_75 * rad;
             path.move_to(at([x + rad, y]));
             path.line_to(at([x + w - rad, y]));

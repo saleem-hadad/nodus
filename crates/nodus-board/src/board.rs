@@ -327,16 +327,21 @@ impl Board {
 }
 
 /// DRAWER-011: the pull requests an active card's transcript says its
-/// session opened join the ones the card keeps.
+/// session opened join the ones the card keeps. A card in the project's own
+/// checkout keeps only those (DRAWER-012), so one that another session's
+/// branch once gave it goes.
 fn keep_opened_prs(board: &mut BoardState, disk: &IndexMap<String, DiscoveredSession>) {
     for node in board.nodes.values_mut().filter(|n| !n.archived) {
-        let Some(found) = disk.get(&node.session_id).filter(|f| !f.opened_prs.is_empty()) else {
+        let Some(found) = disk.get(&node.session_id) else {
             continue;
         };
-        let kept = node.prs();
-        let before = kept.len();
+        let mut kept = node.prs();
+        let had = kept.clone();
+        if node.worktree().is_none() {
+            kept.retain(|pr| found.opened_prs.contains(&pr.url));
+        }
         let prs = nodus_domain::merge_prs(kept, &found.opened_prs);
-        if prs.len() != before {
+        if prs != had {
             node.set_prs(&prs);
         }
     }

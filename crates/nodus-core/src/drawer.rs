@@ -172,11 +172,10 @@ impl Inner {
                 .into_iter()
                 .map(|(session_id, prs, worktree)| {
                     let folder = worktree.as_ref().map_or_else(|| repo_path.clone(), |w| w.path.clone());
-                    let branch = transcripts
+                    let seen = transcripts
                         .session(&folder, &session_id)
-                        .and_then(|f| f.meta.git_branch)
-                        .or_else(|| worktree.map(|w| w.branch))
-                        .filter(|b| !b.is_empty() && !DEFAULT_BRANCHES.contains(&b.as_str()));
+                        .and_then(|f| f.meta.git_branch);
+                    let branch = own_branch(worktree.as_ref(), seen);
                     Want {
                         session_id,
                         prs,
@@ -304,6 +303,16 @@ impl Inner {
             message.to_owned()
         })
     }
+}
+
+/// The branch whose open pull request is the card's (DRAWER-012): its own
+/// worktree's, as its transcript last had it. A card in the project's own
+/// checkout has none, since that checkout is on whatever branch any session
+/// there last switched to.
+fn own_branch(worktree: Option<&nodus_domain::Worktree>, seen: Option<String>) -> Option<String> {
+    let worktree = worktree?;
+    Some(seen.unwrap_or_else(|| worktree.branch.clone()))
+        .filter(|b| !b.is_empty() && !DEFAULT_BRANCHES.contains(&b.as_str()))
 }
 
 /// An active Claude card: one with a transcript, that the drawer shows.
@@ -636,6 +645,25 @@ mod tests {
         // Another repository's pull request is left as it was.
         let other = vec![CardPr::found("https://github.com/x/y/pull/1").unwrap()];
         assert_eq!(updated(other.clone(), None, None, &answers), other);
+    }
+
+    #[test]
+    fn only_a_cards_own_worktree_has_its_branch() {
+        let worktree = nodus_domain::Worktree {
+            path: "/r/.claude/worktrees/nodus-0000000a".into(),
+            branch: "worktree-nodus-0000000a".into(),
+        };
+        // The project's checkout is on another session's branch.
+        assert_eq!(own_branch(None, Some("fix/theirs".into())), None);
+        assert_eq!(
+            own_branch(Some(&worktree), Some("fix/mine".into())).as_deref(),
+            Some("fix/mine")
+        );
+        assert_eq!(
+            own_branch(Some(&worktree), None).as_deref(),
+            Some("worktree-nodus-0000000a")
+        );
+        assert_eq!(own_branch(Some(&worktree), Some("main".into())), None);
     }
 
     #[test]

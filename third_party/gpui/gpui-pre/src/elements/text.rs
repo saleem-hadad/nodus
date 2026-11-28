@@ -621,6 +621,8 @@ impl IntoElement for StyledText {
 /// instead, with its runs, or none when it fits. For a clamp it also returns
 /// the width its last row is aligned by: the row as it was wrapped, without
 /// its hanging spaces, since Chromium aligns the row before it truncates it.
+/// Right-to-left text keeps the same logical start: what fits is measured
+/// by adding up the widths of the glyphs it keeps, wherever they sit.
 fn chromium_ellipsis(
     text: &SharedString,
     runs: &[TextRun],
@@ -658,39 +660,94 @@ fn chromium_ellipsis(
     }
     let (line, row, hidden_after) = found?;
     let layout = &line.unwrapped_layout;
-    let glyph_at = |boundary: &crate::WrapBoundary| {
-        let glyph = &layout.runs[boundary.run_ix].glyphs[boundary.glyph_ix];
-        (glyph.index, glyph.position.x)
+    // The line's glyphs in visual order, and the row's: from the glyph that
+    // starts it to the one that starts the next row.
+    let glyphs: Vec<_> = layout
+        .runs
+        .iter()
+        .flat_map(|run| run.glyphs.iter())
+        .collect();
+    let glyph_ix = |boundary: &crate::WrapBoundary| {
+        layout.runs[..boundary.run_ix]
+            .iter()
+            .map(|run| run.glyphs.len())
+            .sum::<usize>()
+            + boundary.glyph_ix
     };
-    let (row_start, row_start_x) = if row == 0 {
-        (0, Pixels::ZERO)
+    let first = if row == 0 {
+        0
     } else {
-        glyph_at(&line.wrap_boundaries()[row - 1])
+        glyph_ix(&line.wrap_boundaries()[row - 1])
     };
-    let (row_end, row_end_x) = line
+    let last = line
         .wrap_boundaries()
         .get(row)
-        .map_or((line.len(), layout.width), glyph_at);
-    let overflows = row_end_x - row_start_x > width;
+        .map_or(glyphs.len(), glyph_ix);
+    let row_glyphs = glyphs.get(first..last)?;
+    let x_at = |ix: usize| {
+        glyphs
+            .get(ix)
+            .map_or(layout.width, |glyph| glyph.position.x)
+    };
+    let row_start_x = if row == 0 { Pixels::ZERO } else { x_at(first) };
+    let overflows = x_at(last) - row_start_x > width;
     if !hidden_after && !overflows {
         return None;
     }
 
-    // Where each grapheme of the row starts.
-    let line_text = &line.text;
-    let x_of = |index: usize| {
-        layout
-            .runs
-            .iter()
-            .flat_map(|run| run.glyphs.iter())
-            .find(|glyph| glyph.index >= index)
-            .map_or(layout.width, |glyph| glyph.position.x)
+    // The row's text: from its first character to the end of its last, in
+    // the text's order. In left-to-right text that is the bytes up to the
+    // next row's first glyph, but right-to-left runs come in visual order, so
+    // the glyphs that start this row and the next can be in either order.
+    let row_indices = || row_glyphs.iter().map(|glyph| glyph.index);
+    let row_start = if row == 0 {
+        0
+    } else {
+        row_indices().min().unwrap_or(line.len())
+    };
+    let row_end = row_indices()
+        .max()
+        .and_then(|max| {
+            glyphs
+                .iter()
+                .map(|glyph| glyph.index)
+                .filter(|&index| index > max)
+                .min()
+        })
+        .unwrap_or(line.len());
+    let row_text = line.text.get(row_start..row_end)?;
+    // How wide the row's text before `end` is: its glyphs' widths, added up
+    // span by span as they sit in the row. In left-to-right text that is one
+    // span, from the row's start to where the glyph at `end` starts.
+    let kept_width = |end: usize| {
+        let mut kept = Pixels::ZERO;
+        let mut span_start = None;
+        for (ix, glyph) in row_glyphs.iter().enumerate() {
+            match (glyph.index < end, span_start) {
+                (true, None) => {
+                    span_start = Some(if ix == 0 {
+                        row_start_x
+                    } else {
+                        x_at(first + ix)
+                    })
+                }
+                (false, Some(start)) => {
+                    kept += x_at(first + ix) - start;
+                    span_start = None;
+                }
+                _ => {}
+            }
+        }
+        if let Some(start) = span_start {
+            kept += x_at(last) - start;
+        }
+        kept
     };
     let mut content_end = row_end;
     let mut align_width = None;
     if clamp.is_some() {
-        content_end = row_start + line_text[row_start..row_end].trim_end_matches(' ').len();
-        align_width = Some(x_of(content_end) - row_start_x);
+        content_end = row_start + row_text.trim_end_matches(' ').len();
+        align_width = Some(kept_width(content_end));
     }
 
     // The ellipsis in the style of the text it follows.
@@ -712,14 +769,14 @@ fn chromium_ellipsis(
         .shape_line(affix.clone(), font_size, &[affix_run], None)
         .width;
 
-    let cut = if clamp.is_some() && x_of(content_end) - row_start_x + affix_width <= width {
+    let cut = if clamp.is_some() && kept_width(content_end) + affix_width <= width {
         content_end
     } else {
-        line_text[row_start..content_end]
+        row_text[..content_end - row_start]
             .grapheme_indices(true)
             .map(|(offset, _)| row_start + offset)
             .chain([content_end])
-            .take_while(|&index| x_of(index) - row_start_x + affix_width <= width)
+            .take_while(|&index| kept_width(index) + affix_width <= width)
             .last()
             .unwrap_or(row_start)
     };

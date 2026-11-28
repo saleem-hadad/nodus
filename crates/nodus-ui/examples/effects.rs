@@ -349,6 +349,25 @@ impl Render for Effects {
             }
         }
 
+        // Patch 10's ellipsis, laid out but not drawn, at widths where rows
+        // break inside the Arabic run: its glyphs come in visual order, so a
+        // row can start at a later byte than the next one does (a panic in
+        // 1.0.32, from a capture's title).
+        for width in 10..40 {
+            root = root.child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .w(px(width as f32))
+                    .invisible()
+                    .text_size(px(13.))
+                    .line_clamp(2)
+                    .text_ellipsis()
+                    .child("why صنع بـ is not correct, it's flipped and…"),
+            );
+        }
+
         root.child(
             canvas(
                 |_, _, _| {},

@@ -491,11 +491,10 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
   transition: transform 220ms var(--ease-out), box-shadow 220ms var(--ease-out);
 }
 .sticky.is-dragging { transform: rotate(-1.5deg) scale(1.02); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08), 0 20px 32px -12px rgba(0, 0, 0, 0.36); }
-.sticky.is-new, .shape.is-new, .sticker.is-new, .picture.is-new, [data-view].is-new { animation: pop 320ms cubic-bezier(0.34, 1.4, 0.64, 1); }
+.sticky.is-new, .shape.is-new, .picture.is-new, [data-view].is-new { animation: pop 320ms cubic-bezier(0.34, 1.4, 0.64, 1); }
 
-/* Shapes, stickers and pictures from the dock. */
+/* Shapes and pictures from the dock. */
 .shape { display: grid; place-items: center; padding: 8px; border: 2px solid var(--c); border-radius: 12px; background: color-mix(in srgb, var(--c) 7%, transparent); color: var(--text); font-size: 15px; font-weight: 600; text-align: center; }
-.sticker { width: 64px; height: 64px; border-radius: 50%; font-size: 48px; line-height: 64px; text-align: center; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.2)); }
 .picture { overflow: hidden; border-radius: 10px; background: var(--elevated); box-shadow: var(--shadow-md); }
 .picture img { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
 
@@ -700,10 +699,10 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
 .board.is-inking .ink { pointer-events: auto; cursor: crosshair; }
 .board[data-tool='text'] .ink { cursor: text; }
 .board[data-tool='eraser'] .ink { cursor: cell; }
-.board[data-tool='bubble'] .ink, .board[data-tool='sticker'] .ink { cursor: copy; }
+.board[data-tool='bubble'] .ink { cursor: copy; }
 .ink-input { position: absolute; z-index: 5002; min-width: 40px; height: 22px; padding: 0; border: 0; outline: 0; background: transparent; font-family: var(--font-display); font-size: 16px; font-weight: 600; user-select: text; -webkit-user-select: text; }
 
-/* The dock: pointer, ask here, speak here; pen, shape, arrow, text, sticker, picture, eraser; colour, clear. */
+/* The dock: pointer, ask here, speak here; pen, shape, arrow, text, picture, eraser; colour, clear. */
 .dock {
   position: absolute;
   z-index: 5001;
@@ -730,9 +729,6 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
 .palette { bottom: 30px; }
 .palette button { width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; background: var(--c); cursor: pointer; }
 .palette button.is-on { box-shadow: 0 0 0 2px var(--elevated), 0 0 0 3.5px var(--accent); }
-.stickers { bottom: 128px; gap: 2px; padding: 4px; }
-.stickers button { width: 34px; height: 34px; padding: 0; border: 0; border-radius: 8px; background: none; font-size: 22px; cursor: pointer; }
-.stickers button:hover, .stickers button.is-on { background: var(--hover); }
 
 /* The prompt bar, bottom centre, with the mic beside it. */
 .bar {
@@ -1329,7 +1325,6 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
     <symbol id="i-square" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/></symbol>
     <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M13 5h6v6"/><path d="M19 5 5 19"/></symbol>
     <symbol id="i-type" viewBox="0 0 24 24"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></symbol>
-    <symbol id="i-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/></symbol>
     <symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21"/></symbol>
     <symbol id="i-eraser" viewBox="0 0 24 24"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></symbol>
@@ -1534,15 +1529,11 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
               <button class="dock-tool" type="button" tabindex="-1" data-tool="shape" title="Shape (R)"><svg class="icon" width="16" height="16"><use href="#i-square"/></svg></button>
               <button class="dock-tool" type="button" tabindex="-1" data-tool="arrow" title="Arrow (A): draw from one thing to another to link them"><svg class="icon" width="16" height="16"><use href="#i-arrow"/></svg></button>
               <button class="dock-tool" type="button" tabindex="-1" data-tool="text" title="Text"><svg class="icon" width="16" height="16"><use href="#i-type"/></svg></button>
-              <button class="dock-tool" type="button" tabindex="-1" data-tool="sticker" title="Sticker (S)"><svg class="icon" width="16" height="16"><use href="#i-smile"/></svg></button>
               <button class="dock-tool" type="button" tabindex="-1" data-picture title="Add a picture…"><svg class="icon" width="16" height="16"><use href="#i-image"/></svg></button>
               <button class="dock-tool" type="button" tabindex="-1" data-tool="eraser" title="Eraser (X)"><svg class="icon" width="16" height="16"><use href="#i-eraser"/></svg></button>
               <i class="sep"></i>
               <button class="dock-tool" type="button" tabindex="-1" data-ink-color title="Ink colour"><i class="ink-swatch" style="--c: var(--ink-red)"></i></button>
               <button class="dock-tool" type="button" tabindex="-1" data-ink-clear title="Clear all ink"><svg class="icon" width="16" height="16"><use href="#i-trash"/></svg></button>
-              <div class="pop-menu stickers" data-stickers hidden>
-                <button class="is-on" type="button" tabindex="-1">👍</button><button type="button" tabindex="-1">🚀</button><button type="button" tabindex="-1">🎉</button><button type="button" tabindex="-1">⭐️</button><button type="button" tabindex="-1">❤️</button><button type="button" tabindex="-1">👀</button>
-              </div>
               <div class="pop-menu palette" data-palette hidden>
                 <button type="button" tabindex="-1" data-color="graphite" style="--c: var(--ink-graphite)" title="Graphite"></button>
                 <button class="is-on" type="button" tabindex="-1" data-color="red" style="--c: var(--ink-red)" title="Red"></button>
@@ -1837,12 +1828,11 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
         <div class="feature-copy">
           <p class="feature-label"><i style="background: var(--ink-red)" aria-hidden="true"></i>Whiteboard</p>
           <h2 class="display">Sketch it out, with Claude beside you.</h2>
-          <p class="body">Draw with the pen, drop in shapes, stickers and pictures, and link anything to anything with arrows that follow it around. Claude sees the board too: ask it to lay out a plan or link what's related, and it draws right next to your work.</p>
+          <p class="body">Draw with the pen, drop in shapes and pictures, and link anything to anything with arrows that follow it around. Claude sees the board too: ask it to lay out a plan or link what's related, and it draws right next to your work.</p>
           <ul class="feature-keys">
             <li><kbd class="kbd">P</kbd>pen</li>
             <li><kbd class="kbd">R</kbd>shape</li>
             <li><kbd class="kbd">A</kbd>link two things</li>
-            <li><kbd class="kbd">S</kbd>sticker</li>
           </ul>
         </div>
         <div class="wb-visual dots" data-animate aria-hidden="true">
@@ -1880,12 +1870,11 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
               <path d="M484 324.5 l1.4 4.2 4.2 1.4 -4.2 1.4 -1.4 4.2 -1.4 -4.2 -4.2 -1.4 4.2 -1.4z" style="fill: var(--sparkle)"/>
               <text class="wb-claude-text" x="494" y="335.5">Claude</text>
             </g>
-            <!-- What people put there: a note, a sticker, and some ink. -->
+            <!-- What people put there: a note and some ink. -->
             <rect class="wb-note" x="44" y="268" width="180" height="140" rx="3" transform="rotate(-2.5 134 338)"/>
             <text class="wb-note-text" x="62" y="300" transform="rotate(-2.5 134 338)">Ask design about the</text>
             <text class="wb-note-text" x="62" y="320" transform="rotate(-2.5 134 338)">empty state before</text>
             <text class="wb-note-text" x="62" y="340" transform="rotate(-2.5 134 338)">we build it.</text>
-            <text x="610" y="400" style="font-size: 44px">🚀</text>
             <path class="wb-ink" d="M300 376 Q330 366 360 374 T420 372 T470 378"/>
             <text class="wb-ink-text" x="318" y="410">ship it Friday</text>
           </svg>
@@ -2306,7 +2295,7 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
 // while Claude works waits in the queue) and answer when they ask. The prompt bar starts sessions, makes notes and views
 // (/note, /view) and replies to the selected session. Select things (⇧-click for more) and the selection bar starts a
 // session from their context, groups them, frames them (Claude names the frame) or archives them. The dock draws ink,
-// shapes, stickers, pictures and links that follow what they join, and the bubble asks Claude on the spot. Nothing
+// shapes, pictures and links that follow what they join, and the bubble asks Claude on the spot. Nothing
 // here talks to a server: Claude's side is scripted, and says so when you ask it something new.
 (() => {
   const frame = document.querySelector('[data-board-frame]')
@@ -3334,15 +3323,13 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
     lineage('view', s.id, 'is-view-edge')
   })
 
-  // ------------------------------------------------------------- ink, shapes, stickers, links
+  // ------------------------------------------------------------- ink, shapes, links
 
   const ink = $('[data-ink]')
   const dock = $('[data-dock]')
   const palette = $('[data-palette]')
-  const stickers = $('[data-stickers]')
   let tool = 'pointer'
   let color = 'red'
-  let sticker = '👍'
   let stroke = null
 
   const setTool = (next) => {
@@ -3350,7 +3337,6 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
     board.dataset.tool = next
     board.classList.toggle('is-inking', next !== 'pointer')
     $$('[data-tool]', dock).forEach((button) => button.classList.toggle('is-on', button.dataset.tool === next))
-    stickers.hidden = next !== 'sticker'
     palette.hidden = true
     closeBubble()
   }
@@ -3383,7 +3369,7 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
       .filter((el) => x >= el.offsetLeft && x <= el.offsetLeft + el.offsetWidth && y >= el.offsetTop && y <= el.offsetTop + el.offsetHeight)
       .sort((a, b) => (Number(b.style.zIndex) || 2) - (Number(a.style.zIndex) || 2))[0]
 
-  // The eraser takes ink, links, and the shapes, stickers and pictures made here.
+  // The eraser takes ink, links, and the shapes and pictures made here.
   const near = (el, x, y) => {
     if (el.tagName === 'text') {
       const box = el.getBBox()
@@ -3399,7 +3385,7 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
   const erase = (x, y) => {
     $$('path, text', ink).forEach((el) => near(el, x, y) && el.remove())
     const hit = nodeAt(x, y)
-    if (hit?.matches('.shape, .sticker, .picture')) forget(hit)
+    if (hit?.matches('.shape, .picture')) forget(hit)
   }
 
   // Text goes in where you click, and lands on the board on Enter (Esc drops it).
@@ -3455,7 +3441,6 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
     const at = toBoard(e)
     if (tool === 'text') return write(...at)
     if (tool === 'bubble') return openBubble(...at)
-    if (tool === 'sticker') return addNode('sticker', at[0] - 32, at[1] - 32, 64, 64, sticker)
     ink.setPointerCapture(e.pointerId)
     if (tool === 'eraser') {
       stroke = { erasing: true }
@@ -3530,15 +3515,10 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
   dock.addEventListener('click', (e) => {
     const pick = e.target.closest('[data-tool]')
     const swatch = e.target.closest('[data-color]')
-    const emoji = e.target.closest('[data-stickers] button')
     if (pick) setTool(pick.dataset.tool)
     if (e.target.closest('[data-picture]')) pictureFile.click()
     if (e.target.closest('[data-ink-color]')) palette.hidden = !palette.hidden
     if (e.target.closest('[data-ink-clear]')) $$('path, text', ink).forEach((el) => el.remove())
-    if (emoji) {
-      sticker = emoji.textContent
-      $$('button', stickers).forEach((b) => b.classList.toggle('is-on', b === emoji))
-    }
     if (swatch) {
       color = swatch.dataset.color
       $$('[data-color]', palette).forEach((button) => button.classList.toggle('is-on', button === swatch))
@@ -3698,7 +3678,7 @@ code { font-family: var(--font-mono); font-size: 0.92em; }
       return
     }
     const key = e.key.toLowerCase()
-    const next = { p: 'pen', a: 'arrow', r: 'shape', x: 'eraser', b: 'bubble', s: 'sticker' }[key]
+    const next = { p: 'pen', a: 'arrow', r: 'shape', x: 'eraser', b: 'bubble' }[key]
     // Taken here, so a field that takes the keyboard on the way doesn't get the letter too.
     if (next || key === 'm' || key === 'e') e.preventDefault()
     if (next) setTool(next)

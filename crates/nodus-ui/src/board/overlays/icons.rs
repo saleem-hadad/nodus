@@ -21,12 +21,11 @@ pub enum OvIcon {
     AlertCircle,
     RotateCcw,
     Diamond,
-    Smile,
     Image,
 }
 
 impl OvIcon {
-    const ALL: [Self; 16] = [
+    const ALL: [Self; 15] = [
         Self::MousePointer2,
         Self::MessageCircleMore,
         Self::MoveUpRight,
@@ -41,7 +40,6 @@ impl OvIcon {
         Self::AlertCircle,
         Self::RotateCcw,
         Self::Diamond,
-        Self::Smile,
         Self::Image,
     ];
 
@@ -61,7 +59,6 @@ impl OvIcon {
             Self::AlertCircle => "circle-alert",
             Self::RotateCcw => "rotate-ccw",
             Self::Diamond => "diamond",
-            Self::Smile => "smile",
             Self::Image => "image",
         }
     }
@@ -96,9 +93,6 @@ impl OvIcon {
             Self::RotateCcw => r#"<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>"#,
             Self::Diamond => {
                 r#"<path d="M2.7 10.3a2.41 2.41 0 0 0 0 3.41l7.59 7.59a2.41 2.41 0 0 0 3.41 0l7.59-7.59a2.41 2.41 0 0 0 0-3.41l-7.59-7.59a2.41 2.41 0 0 0-3.41 0Z"/>"#
-            }
-            Self::Smile => {
-                r#"<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/>"#
             }
             Self::Image => {
                 r#"<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>"#

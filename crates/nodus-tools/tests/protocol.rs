@@ -637,7 +637,7 @@ async fn tools_describe_the_drawing_tools_with_the_ink_colours_and_drawable_kind
     let shape = &draw["inputSchema"]["properties"]["shapes"]["items"];
     assert_eq!(
         shape["properties"]["kind"]["enum"],
-        json!(["rect", "ellipse", "diamond", "text", "sticker", "image"])
+        json!(["rect", "ellipse", "diamond", "text", "image"])
     );
     let mark = &draw["inputSchema"]["properties"]["ink"]["items"];
     assert_eq!(

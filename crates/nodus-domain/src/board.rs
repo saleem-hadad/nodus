@@ -273,13 +273,14 @@ impl InkStroke {
 
 string_enum! {
     /// What a shape on the board is: a box, an ellipse or a diamond with
-    /// words in it, words on their own, an emoji sticker, or a picture.
+    /// words in it, words on their own, or a picture. Emoji stickers
+    /// (`"sticker"`, from 1.0.9) were taken out; a board's are kept unread
+    /// (SHAPE-030).
     pub enum ShapeKind {
         Rect = "rect",
         Ellipse = "ellipse",
         Diamond = "diamond",
         Text = "text",
-        Sticker = "sticker",
         Image = "image",
     }
 }
@@ -304,7 +305,7 @@ pub struct BoardShape {
     pub w: f64,
     pub h: f64,
     pub color: InkColor,
-    /// The words in it; a sticker's emoji.
+    /// The words in it.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub text: String,
     /// A picture's file, by name, in the app's board images folder.
@@ -614,8 +615,9 @@ pub struct BoardSnapshot {
     pub views: Vec<BoardView>,
     /// Ink drawn on the board, oldest first.
     pub ink: Vec<InkStroke>,
-    /// Shapes, oldest first (drawn in this order).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    /// Shapes, oldest first (drawn in this order). One this version can't
+    /// read, from a server on another version, is left out (SHAPE-030).
+    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "readable")]
     pub shapes: Vec<BoardShape>,
     /// Links, oldest first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -641,6 +643,20 @@ pub struct BoardSnapshot {
     /// reached: show it read-only, under `Reconnecting…` (SRV-028).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub offline: bool,
+}
+
+/// The items of a list this version can read, the rest left out, so one
+/// shape from another version doesn't make a whole board unreadable.
+fn readable<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::de::DeserializeOwned,
+{
+    let items = Vec::<Value>::deserialize(deserializer)?;
+    Ok(items
+        .into_iter()
+        .filter_map(|item| serde_json::from_value(item).ok())
+        .collect())
 }
 
 /// The changes `board.saveNodes` makes to a card.

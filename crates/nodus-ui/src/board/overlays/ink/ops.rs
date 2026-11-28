@@ -99,12 +99,12 @@ impl BoardCanvas {
         cx.notify();
     }
 
-    /// SHAPE-003: the Shape and Sticker buttons take up their tool with its
-    /// picker out, and a second press puts the picker away.
+    /// SHAPE-003: the Shape button takes up its tool with its picker out,
+    /// and a second press puts the picker away.
     pub(crate) fn ink_dock_press(&mut self, tool: InkTool, window: &mut Window, cx: &mut Context<'_, Self>) {
         let again = self.overlays.ink.tool == tool;
         self.ink_set_tool(tool, Some(window), cx);
-        if matches!(tool, InkTool::Shape | InkTool::Sticker) {
+        if tool == InkTool::Shape {
             self.overlays.ink.picker = (!again || self.overlays.ink.picker.is_none()).then_some(tool);
             cx.notify();
         }

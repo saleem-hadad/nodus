@@ -38,7 +38,6 @@ impl BoardCanvas {
                 InkTool::Shape => ov_icon(shape_icon(shape_kind), 15., 2., fg),
                 InkTool::Arrow => ov_icon(OvIcon::MoveUpRight, 15., 2., fg),
                 InkTool::Text => ov_icon(OvIcon::Type, 15., 2., fg),
-                InkTool::Sticker => ov_icon(OvIcon::Smile, 15., 2., fg),
                 InkTool::Eraser => ov_icon(OvIcon::Eraser, 15., 2., fg),
             };
             let title = match key {
@@ -60,18 +59,15 @@ impl BoardCanvas {
                 window,
                 cx,
             );
-            // SHAPE-003, SHAPE-005: the Shape and Sticker tools' pickers.
-            let flyout = (picker == Some(each)).then(|| match each {
-                InkTool::Shape => self.render_shape_picker(&t, shape_kind, window, cx),
-                _ => self.render_sticker_picker(&t, window, cx),
-            });
+            // SHAPE-003: the Shape tool's picker.
+            let flyout = (picker == Some(each)).then(|| self.render_shape_picker(&t, shape_kind, window, cx));
             children.push(div().relative().child(button).children(flyout).into_any_element());
             // The asking tools stand apart from the ink's.
             if each == InkTool::Mic {
                 children.push(separator(&t));
             }
-            // SHAPE-006: pictures come in from a file, beside the sticker.
-            if each == InkTool::Sticker {
+            // SHAPE-006: pictures come in from a file, under Text.
+            if each == InkTool::Text {
                 let me = cx.entity().downgrade();
                 children.push(tool_button(
                     "ink-image",
@@ -338,40 +334,6 @@ impl BoardCanvas {
             window,
             cx,
         )
-    }
-
-    /// SHAPE-005: the stickers, two rows of eight.
-    fn render_sticker_picker(&mut self, t: &Tokens, window: &mut Window, cx: &mut Context<'_, Self>) -> AnyElement {
-        let me = cx.entity().downgrade();
-        let current = self.overlays.ink.sticker();
-        let cells: Vec<AnyElement> = STICKERS
-            .iter()
-            .enumerate()
-            .map(|(i, &emoji)| {
-                let me = me.clone();
-                tool_button(
-                    ("ink-sticker", i),
-                    t,
-                    emoji == current,
-                    false,
-                    emoji.to_owned(),
-                    move |el, _| el.text_size(px(17.)).child(emoji),
-                    move |_, cx| {
-                        if let Some(c) = me.upgrade() {
-                            c.update(cx, |c, cx| {
-                                c.overlays.ink.sticker = Some(emoji);
-                                c.overlays.ink.picker = None;
-                                cx.notify();
-                            });
-                        }
-                    },
-                    window,
-                    cx,
-                )
-            })
-            .collect();
-        let grid = div().flex().flex_wrap().w(px(8. * 30.)).gap(px(2.)).children(cells);
-        self.picker_panel(t, "ink-sticker-picker-in", grid, window, cx)
     }
 
     /// A picker's frosted panel to the right of its button, as the palette's,

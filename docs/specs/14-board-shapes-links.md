@@ -1,4 +1,4 @@
-# 14 · Shapes, stickers, pictures and links
+# 14 · Shapes, pictures and links
 
 Added after 1.0.8; 0.9.4 had none of this. It makes the board work like Claude Whiteboards: things on it move freely, and arrows tie them together. The board tools that let a session draw are spec 04's TOOL-101…TOOL-110; after 1.0.17 a session also sees the board as a picture, puts up pictures from files and draws ink (TOOL-111…TOOL-114).
 
@@ -12,16 +12,16 @@ Sources:
 
 ## Summary
 
-A **shape** is a thing on the board, like a note: a rectangle, ellipse or diamond with words in it, words on their own, an emoji sticker, or a picture. It is a node in the board's scene (09), so it is selected, marquee'd, dragged, multi-dragged and resized with the cards, notes and views. A **link** is an arrow from one thing to another: an active card, a free note, a view or a shape, or a loose point. Links run between the boxes as drawn, so they follow anything that moves. Ink (11) stays as it was: marks over the board, not things on it.
+A **shape** is a thing on the board, like a note: a rectangle, ellipse or diamond with words in it, words on their own, or a picture. It is a node in the board's scene (09), so it is selected, marquee'd, dragged, multi-dragged and resized with the cards, notes and views. A **link** is an arrow from one thing to another: an active card, a free note, a view or a shape, or a loose point. Links run between the boxes as drawn, so they follow anything that moves. Ink (11) stays as it was: marks over the board, not things on it.
 
 ## Data
 
-- **SHAPE-030** A board's `shapes` and `links` sit in `state.json` beside `ink`, as objects keyed by id, oldest first. They're left out while empty, so a board without any is written byte for byte as before. A record this version can't read, such as a newer version's kind of shape, is kept as it was and written back. It isn't drawn, and it doesn't make `state.json` unreadable (`Records`).
-- `BoardShape { id, kind: rect|ellipse|diamond|text|sticker|image, x, y, w, h, color: <ink colour>, text?, image?, by?, createdAt }`.
-  - `text` holds the words, or a sticker's emoji.
+- **SHAPE-030** A board's `shapes` and `links` sit in `state.json` beside `ink`, as objects keyed by id, oldest first. They're left out while empty, so a board without any is written byte for byte as before. A record this version can't read, such as a newer version's kind of shape or an emoji sticker from before they were taken out (SHAPE-005), is kept as it was and written back. It isn't drawn, and it doesn't make `state.json` unreadable (`Records`). A server board's snapshot leaves such a shape out in the same way, so a server on another version can't make its board unreadable.
+- `BoardShape { id, kind: rect|ellipse|diamond|text|image, x, y, w, h, color: <ink colour>, text?, image?, by?, createdAt }`.
+  - `text` holds the words.
   - `image` is a picture's file name in `<userData>/board-images/`: a plain name, never a path.
   - `by` is the session that drew it with its board tools.
-  - Saved shapes are checked. Sizes are rounded into 16–4000 board units and positions rounded. Words are kept up to 2000 UTF-16 units, a sticker up to 16. A sticker needs its emoji and a picture its file. A board keeps at most 2000 shapes.
+  - Saved shapes are checked. Sizes are rounded into 16–4000 board units and positions rounded. Words are kept up to 2000 UTF-16 units. A picture needs its file. A board keeps at most 2000 shapes.
 - `BoardLink { id, from: LinkEnd, to: LinkEnd, color, label?, by?, createdAt }`, `LinkEnd { node?, x, y }`.
   - An end holds the id of a card (its session id), a note, a view or a shape. Without one it's loose at `x, y`.
   - `to` has the arrowhead.
@@ -30,12 +30,12 @@ A **shape** is a thing on the board, like a note: a rectangle, ellipse or diamon
 
 ## Shapes
 
-- **SHAPE-001** Shapes are nodes, oldest first, after the views and before the free notes. They draw at z 0, stickers at z 2 with the notes, so a sticker on a card shows over it. Every one is draggable and selectable.
+- **SHAPE-001** Shapes are nodes, oldest first, after the views and before the free notes. They draw at z 0. Every one is draggable and selectable.
 - **SHAPE-002** The dock's **Shape** tool (key `R`, in the place of 1.0.7's ink rectangle) draws the kind picked, from corner to corner. Shift keeps it square, or a circle. A press that moves less than 8 screen px puts one down at its usual size, centred on the press: 180×96 for a rectangle or ellipse, 160×112 for a diamond, scaled by `sizeAt(zoom)` so it looks the same size at any zoom. The new shape has the shapes' colour (SHAPE-017). It's selected with its words open for writing, and the tool goes back to the Pointer.
 - **SHAPE-003** Pressing the Shape button takes up the tool with its picker out, to its right: Rectangle, Ellipse, Diamond, the current one shown on. Pressing the button again puts the picker away, as does a press anywhere else or Esc. The button's icon is the current kind's. `R` takes up the tool without the picker.
 - **SHAPE-004** **Text** (no key) puts down words on their own, 240×40 (scaled), the line centred on the press, open for writing. The tool goes back to the Pointer. Words left empty go.
-- **SHAPE-005** **Sticker** (`S`) stamps the emoji picked, 64×64 (scaled), centred on each press. The tool stays out. Its button opens a picker of 16 stickers in two rows (👍 ❤️ 🔥 ✅ ❌ ⭐ 🎉 💡 ⚠️ 🚀 👀 ❓ 🐛 📌 ⏳ 😀) and works the picker as SHAPE-003's does. The first is 👍.
-- **SHAPE-006** **Add a picture…** (the dock button under Sticker) opens the system's file picker for several files. PNG, JPEG, GIF and WebP files go up in the middle of the view, each 32 units (scaled) down and right of the one before.
+- **SHAPE-005** Emoji stickers were taken out after 1.0.33 (feedback #17). From 1.0.9 the dock had a **Sticker** tool (`S`) that stamped an emoji from a picker of 16, and the board tools had a `sticker` kind. Now the dock has no Sticker button, `S` does nothing on the board, and `draw_on_board` refuses `sticker` as it refuses any kind it doesn't know (TOOL-103). Stickers already on a board stay in `state.json` but aren't drawn (SHAPE-030), and a link to one is kept and isn't drawn either (LINK-003).
+- **SHAPE-006** **Add a picture…** (the dock button under Text) opens the system's file picker for several files. PNG, JPEG, GIF and WebP files go up in the middle of the view, each 32 units (scaled) down and right of the one before.
 - **SHAPE-007** ⌘V (Ctrl+V) on the board with a picture on the clipboard and no copied notes puts it up at the pointer, or the view's middle.
 - **SHAPE-008** Picture files dropped on the board, over cards and notes too, go up where they're dropped.
 - **SHAPE-041** On a server board (hosted Nodus, added after 1.0.12), a picture added by SHAPE-006…SHAPE-008 is uploaded to the server (`PUT /api/uploads`), which picks its name, and the shape holds that name; the bytes are kept here too, in `server-files/<server>/<name>`. A picture the board has but this app hasn't is fetched once with `GET /api/files/<name>` when it's first drawn, and the board redraws when it's in; until then, and while the server is away, it draws as a picture not yet loaded. Adding a picture while the server is away fails, as every change to a server board does (SRV-163, SRV-028).
@@ -92,7 +92,7 @@ A **shape** is a thing on the board, like a note: a rectangle, ellipse or diamon
 
 ## Keys
 
-`R` Shape, `A` Arrow, `S` Sticker (with the board's usual guards, INKUI-002). ↩ writes in the one selected shape. ⌫ deletes selected shapes and the selected link. ⌘Z / ⇧⌘Z (SHAPE-040).
+`R` Shape, `A` Arrow (with the board's usual guards, INKUI-002). ↩ writes in the one selected shape. ⌫ deletes selected shapes and the selected link. ⌘Z / ⇧⌘Z (SHAPE-040).
 
 ## Known limits
 

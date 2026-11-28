@@ -151,7 +151,6 @@ fn draw_ms(what: What, text: &str) -> f64 {
     match what {
         What::Shape(ShapeKind::Rect | ShapeKind::Ellipse | ShapeKind::Diamond) => 680.0,
         What::Shape(ShapeKind::Text) => (40.0 * text.chars().count() as f64).clamp(260.0, 720.0),
-        What::Shape(ShapeKind::Sticker) => 420.0,
         What::Shape(ShapeKind::Image) => 480.0,
         What::Link | What::Note | What::View => 520.0,
     }

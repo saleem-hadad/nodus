@@ -116,7 +116,6 @@ pub fn default_size(kind: ShapeKind) -> (f64, f64) {
         ShapeKind::Rect | ShapeKind::Ellipse => (180.0, 96.0),
         ShapeKind::Diamond => (160.0, 112.0),
         ShapeKind::Text => (240.0, 40.0),
-        ShapeKind::Sticker => (64.0, 64.0),
         ShapeKind::Image => (320.0, 240.0),
     }
 }

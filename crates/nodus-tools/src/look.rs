@@ -45,7 +45,6 @@ const MAX_INK_TAGS: usize = 60;
 const MAX_PICTURE_SIDE: u32 = 8000;
 
 const FONT: &str = "'Helvetica Neue', Helvetica, 'Segoe UI', Arial, 'DejaVu Sans', sans-serif";
-const EMOJI_FONT: &str = "'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif";
 
 // The light board's colours (theme tokens, spec 08).
 const BOARD: &str = "#f3f3f1";
@@ -566,9 +565,9 @@ pub(crate) fn look(
         tags.add('f', &section.id, "frame", &section.name, corner(r), false);
     }
 
-    // Shapes but stickers, in board order, then views and cards.
+    // Shapes, in board order, then views and cards.
     let mut picture_files: HashMap<String, Arc<Vec<u8>>> = HashMap::new();
-    for shape in board.shapes.values().filter(|s| s.kind != ShapeKind::Sticker) {
+    for shape in board.shapes.values() {
         let r = shape.rect();
         if !seen(r) {
             continue;
@@ -616,7 +615,7 @@ pub(crate) fn look(
         tags.add('c', &card.id, "card", &card.title, corner(r), false);
     }
 
-    // Free notes and stickers, over the cards.
+    // Free notes, over the cards.
     let mut notes: Vec<_> = board.notes.values().collect();
     notes.sort_by(|a, b| {
         a.created_at
@@ -647,14 +646,6 @@ pub(crate) fn look(
             corner(r),
             false,
         );
-    }
-    for shape in board.shapes.values().filter(|s| s.kind == ShapeKind::Sticker) {
-        let r = shape.rect();
-        if !seen(r) {
-            continue;
-        }
-        draw_shape(&mut svg, shape, pictures, &mut picture_files);
-        tags.add('s', &shape.id, "sticker", &shape.text, corner(r), false);
     }
 
     // Links, then ink, over the things: along the board's right-angle
@@ -1006,18 +997,6 @@ fn draw_shape(
                     fill: words,
                     align: Align::Middle,
                 },
-            );
-            return;
-        }
-        ShapeKind::Sticker => {
-            let size = r.h * 0.78;
-            let _ = write!(
-                svg.out,
-                r#"<text font-family="{EMOJI_FONT}" font-size="{}" text-anchor="middle" x="{}" y="{}">{}</text>"#,
-                n(size),
-                n(r.x + r.w / 2.0),
-                n(r.y + r.h * 0.8),
-                esc(&shape.text)
             );
             return;
         }

@@ -158,6 +158,21 @@ fn colours_and_kinds_are_the_typescript_lists() {
 }
 
 #[test]
+fn shape_030_a_snapshot_leaves_out_a_shape_it_cannot_read() {
+    // A server on an older version still sends a board's emoji stickers.
+    let snapshot: BoardSnapshot = json::from_str(concat!(
+        r#"{"project":{"id":"p","name":"p","repoPath":"/tmp/p","color":"graphite","createdAt":1},"#,
+        r#""cards":[],"archive":{"x":0,"y":0,"w":10,"h":10},"sections":[],"notes":[],"views":[],"ink":[],"#,
+        r#""shapes":[{"id":"s","kind":"sticker","x":0,"y":0,"w":64,"h":64,"color":"graphite","text":"👍","createdAt":1},"#,
+        r#"{"id":"r","kind":"rect","x":0,"y":0,"w":180,"h":96,"color":"blue","text":"API","createdAt":2}]}"#
+    ))
+    .unwrap();
+    let ids: Vec<&str> = snapshot.shapes.iter().map(|s| s.id.as_str()).collect();
+    assert_eq!(ids, ["r"]);
+    assert_eq!(ShapeKind::parse("sticker"), None);
+}
+
+#[test]
 fn board_node_as_session_create_writes_it() {
     let node: BoardNode = round_trip(concat!(
         r#"{"sessionId":"0b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d","kind":"terminal","x":120,"y":-48.5,"archived":false,"#,

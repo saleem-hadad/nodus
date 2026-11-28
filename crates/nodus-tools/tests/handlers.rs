@@ -706,7 +706,7 @@ async fn draws_shapes_in_a_row_beside_the_sessions_card_and_links_them() {
                 "shapes": [
                     { "key": "api", "kind": "rect", "text": "API" },
                     { "key": "db", "kind": "ellipse", "text": "DB", "color": "blue" },
-                    { "kind": "sticker", "text": "🚀" }
+                    { "kind": "text", "text": "Ship it" }
                 ],
                 "links": [
                     { "from": "api", "to": "db", "label": "reads" },
@@ -722,21 +722,21 @@ async fn draws_shapes_in_a_row_beside_the_sessions_card_and_links_them() {
     let shape = |name: &str| f.shape(drawn["shapes"][name].as_str().unwrap()).unwrap();
     // TOOL-104: right of s1's card at (2000, 0), lined up with its top; in a
     // row 64 apart, on their middles.
-    let (api, db, sticker) = (shape("api"), shape("db"), shape("2"));
+    let (api, db, words) = (shape("api"), shape("db"), shape("2"));
     assert_eq!(
         (api.kind, api.x, api.y, api.w, api.h),
         (ShapeKind::Rect, 2320.0, 0.0, 180.0, 90.0)
     );
     assert_eq!((db.kind, db.x, db.color), (ShapeKind::Ellipse, 2564.0, InkColor::Blue));
     assert_eq!(
-        (sticker.x, sticker.y, sticker.w, sticker.text.as_str()),
-        (2808.0, 13.0, 64.0, "🚀")
+        (words.kind, words.x, words.y, words.w, words.text.as_str()),
+        (ShapeKind::Text, 2808.0, 23.0, 220.0, "Ship it")
     );
     assert_eq!(
         (api.color, api.by.as_deref(), api.created_at),
         (InkColor::Graphite, Some("s1"), NOW)
     );
-    assert_eq!(drawn["area"], json!({ "x": 2320.0, "y": 0.0, "w": 552.0, "h": 90.0 }));
+    assert_eq!(drawn["area"], json!({ "x": 2320.0, "y": 0.0, "w": 708.0, "h": 90.0 }));
 
     let links = ids(&drawn["links"]);
     assert_eq!(links.len(), 3);
@@ -823,11 +823,11 @@ async fn keeps_a_drawing_clear_of_what_is_on_the_board() {
     f.add("p1", run);
     let drawn = f
         .handlers
-        .draw_on_board("p1", "run", &json!({ "shapes": [{ "kind": "sticker", "text": "✅" }] }))
+        .draw_on_board("p1", "run", &json!({ "shapes": [{ "kind": "text", "text": "Done" }] }))
         .unwrap();
     let c = area(&drawn);
     assert!(
-        c.x >= 2000.0 - GAP - 64.0 && c.x <= 2000.0 + 288.0 + GAP + 600.0,
+        c.x >= 2000.0 - GAP - 220.0 && c.x <= 2000.0 + 288.0 + GAP + 600.0,
         "{c:?}"
     );
 
@@ -840,7 +840,7 @@ async fn keeps_a_drawing_clear_of_what_is_on_the_board() {
         .draw_on_board(
             "p1",
             "brain",
-            &json!({ "shapes": [{ "kind": "sticker", "text": "📈" }] }),
+            &json!({ "shapes": [{ "kind": "text", "text": "Revenue" }] }),
         )
         .unwrap();
     assert_eq!(
@@ -861,7 +861,7 @@ async fn refuses_a_drawing_it_cant_make_and_draws_none_of_it() {
         (json!({ "shapes": "box" }), "shapes must be a list"),
         (
             json!({ "shapes": [{ "kind": "star" }] }),
-            "shapes[0]: kind must be rect, ellipse, diamond, text, sticker or image",
+            "shapes[0]: kind must be rect, ellipse, diamond, text or image",
         ),
         (
             json!({ "shapes": [{ "kind": "rect" }, { "kind": "image" }] }),
@@ -911,9 +911,10 @@ async fn refuses_a_drawing_it_cant_make_and_draws_none_of_it() {
             json!({ "shapes": [{ "kind": "text", "text": "  " }] }),
             "shapes[0]: a text shape needs some text",
         ),
+        // Emoji stickers were taken out (SHAPE-005).
         (
-            json!({ "shapes": [{ "kind": "sticker" }] }),
-            "shapes[0]: a sticker needs its emoji in text",
+            json!({ "shapes": [{ "kind": "sticker", "text": "👍" }] }),
+            "shapes[0]: kind must be rect, ellipse, diamond, text or image",
         ),
         (
             json!({ "shapes": [{ "kind": "rect", "color": "yellow" }] }),
@@ -1085,12 +1086,12 @@ async fn changes_shapes_and_links_and_moves_cards_notes_and_views_as_dragging_wo
             "p1",
             "s1",
             &json!({
-                "shapes": [{ "key": "a", "kind": "rect", "text": "API" }, { "key": "s", "kind": "sticker", "text": "🚀" }],
+                "shapes": [{ "key": "a", "kind": "rect", "text": "API" }, { "key": "s", "kind": "text", "text": "Ship it" }],
                 "links": [{ "from": "a", "to": "self" }]
             }),
         )
         .unwrap();
-    let (a, sticker) = (
+    let (a, words) = (
         drawn["shapes"]["a"].as_str().unwrap().to_owned(),
         drawn["shapes"]["s"].as_str().unwrap().to_owned(),
     );
@@ -1177,8 +1178,8 @@ async fn changes_shapes_and_links_and_moves_cards_notes_and_views_as_dragging_wo
         (json!({ "items": [{ "id": a }] }), "items[0]: nothing to change; give x, y, w, h, text or color".to_owned()),
         (json!({ "items": [{ "x": 1 }] }), "items[0]: id is required".to_owned()),
         (
-            json!({ "items": [{ "id": sticker, "text": "" }] }),
-            "items[0]: a sticker needs its emoji in text".to_owned(),
+            json!({ "items": [{ "id": words, "text": "" }] }),
+            "items[0]: a text shape needs some text".to_owned(),
         ),
         (
             json!({ "links": [{ "id": link, "from": "s2" }] }),

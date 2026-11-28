@@ -145,7 +145,8 @@ pub fn body(
         s.shadow,
         ms(220),
         motion::ease_out,
-    );
+    )
+    .ring_at_once(&s.shadow);
     let shadow = super::session_card::flash_shadow(&t, node.flash, window).unwrap_or(shadow);
     let grip = transition(
         window,

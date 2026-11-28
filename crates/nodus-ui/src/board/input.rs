@@ -23,8 +23,9 @@ use super::scene::{FlowNode, NodeKind, paint_order};
 use super::viewport;
 use crate::platform::Platform;
 
-/// `nodeDragThreshold` and `paneClickDistance`, screen px.
-const DRAG_THRESHOLD: f32 = 1.0;
+/// How far the pointer may wander in a click, screen px (BOARD-186): past
+/// it a press on a node drags it and one on the pane draws a marquee.
+const DRAG_THRESHOLD: f32 = 4.0;
 /// The archive frame's drag handle (`.archive-header`).
 pub(crate) const ARCHIVE_HEADER_H: f64 = 52.0;
 /// A view's drag handle (`.view-head`): the caption above its page.
@@ -185,17 +186,26 @@ impl BoardCanvas {
                     return;
                 }
                 let m = e.modifiers;
+                let multi = multi_select(&m);
+                // BOARD-187: an unselected node is selected as it's pressed;
+                // a selected one waits for the click, so a drag takes the
+                // whole selection along.
+                let selected_by_press = node.selectable && !node.selected;
+                if selected_by_press {
+                    self.handle_node_click(id, multi, cx);
+                }
                 self.gesture = Gesture::Press {
                     node: Some(id.to_owned()),
                     start: e.position,
                     moved: false,
+                    selected_by_press,
                     handle,
                     title,
                     click_count: e.click_count,
                     shift: m.shift,
                     meta: m.platform,
                     ctrl: m.control,
-                    multi: multi_select(&m),
+                    multi,
                 };
             }
             _ => {}
@@ -218,6 +228,7 @@ impl BoardCanvas {
                     node: None,
                     start: e.position,
                     moved: false,
+                    selected_by_press: false,
                     handle: true,
                     title: false,
                     click_count: e.click_count,
@@ -249,6 +260,11 @@ impl BoardCanvas {
                     self.gesture = Gesture::Pan { last: e.position };
                     self.move_started(cx);
                 } else {
+                    // BOARD-187: the selection goes as the pane is pressed,
+                    // as the click or the marquee would take it anyway.
+                    if self.nodes.iter().any(|n| n.selected) || self.selection_rect {
+                        self.clear_selection(cx);
+                    }
                     self.gesture = Gesture::PanePress {
                         start: e.position,
                         click_count: e.click_count,
@@ -341,7 +357,7 @@ impl BoardCanvas {
                 ..
             } => {
                 let d = distance(start, e.position);
-                if d > 0.0
+                if d > DRAG_THRESHOLD
                     && !moved
                     && let Gesture::Press { moved, .. } = &mut self.gesture
                 {
@@ -352,7 +368,7 @@ impl BoardCanvas {
                         .as_deref()
                         .is_none_or(|id| self.node(id).is_some_and(|n| n.draggable));
                     if draggable {
-                        self.start_drag(node, multi, e.position, cx);
+                        self.start_drag(node, multi, start, e.position, cx);
                     }
                 }
             }
@@ -387,6 +403,7 @@ impl BoardCanvas {
             Gesture::Press {
                 node,
                 moved,
+                selected_by_press,
                 title,
                 click_count,
                 shift,
@@ -395,9 +412,10 @@ impl BoardCanvas {
                 multi,
                 ..
             } if e.button == MouseButton::Left => {
-                // `nodeClickDistance = 0`: any movement means no click.
+                // BOARD-186: within 4px it's still a click.
                 if !moved && let Some(id) = node {
-                    self.node_click(&id, click_count, title, shift || meta || ctrl, multi, window, cx);
+                    let modifier = shift || meta || ctrl;
+                    self.node_click(&id, click_count, title, modifier, multi, selected_by_press, window, cx);
                     if click_count == 2 {
                         self.node_double_click(&id, title, cx);
                     }
@@ -436,8 +454,8 @@ impl BoardCanvas {
         self.sync_selection(cx);
     }
 
-    /// A click on a node: React Flow's selection, then `onNodeClick`
-    /// (BOARD-038…BOARD-044).
+    /// A click on a node: React Flow's selection (unless the press already
+    /// made it, BOARD-187), then `onNodeClick` (BOARD-038…BOARD-044).
     #[allow(clippy::too_many_arguments)]
     fn node_click(
         &mut self,
@@ -446,11 +464,12 @@ impl BoardCanvas {
         title: bool,
         modifier: bool,
         multi: bool,
+        selected_by_press: bool,
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
         let Some(node) = self.node(id).cloned() else { return };
-        if node.selectable {
+        if node.selectable && !selected_by_press {
             self.handle_node_click(id, multi, cx);
         } else {
             self.selection_rect = false;
@@ -605,8 +624,17 @@ impl BoardCanvas {
 
     // ---- dragging ---------------------------------------------------------------------------
 
-    /// XYDrag's `startDrag`: selection first, then what moves.
-    fn start_drag(&mut self, node: Option<String>, multi: bool, at: GPoint<Pixels>, cx: &mut Context<'_, Self>) {
+    /// XYDrag's `startDrag`: selection first, then what moves. Each node
+    /// keeps its offset from where it was pressed (`from`), so it catches
+    /// up the 4px the pointer went before the drag began (BOARD-186).
+    fn start_drag(
+        &mut self,
+        node: Option<String>,
+        multi: bool,
+        from: GPoint<Pixels>,
+        at: GPoint<Pixels>,
+        cx: &mut Context<'_, Self>,
+    ) {
         if let Some(id) = &node {
             let Some(n) = self.node(id).cloned() else { return };
             if !n.selectable && !multi && !n.selected {
@@ -614,11 +642,11 @@ impl BoardCanvas {
                     other.selected = false;
                 }
             }
-            if n.selectable {
+            if n.selectable && !n.selected {
                 self.handle_node_click(id, multi, cx);
             }
         }
-        let p = self.to_flow(at);
+        let p = self.to_flow(from);
         let items: Vec<(String, Point)> = self
             .nodes
             .iter()
@@ -646,11 +674,12 @@ impl BoardCanvas {
         let drag = DragState {
             node,
             items,
-            last: p,
+            last: self.to_flow(at),
             pointer: at,
         };
         self.gesture = Gesture::Drag(drag.clone());
         self.on_drag_start(&lead, &drag, cx);
+        self.move_dragged(&drag, cx);
         cx.notify();
     }
 

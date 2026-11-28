@@ -33,7 +33,7 @@ All values below are resolved for **light** and **dark**. The theme follows `nat
 - **CARD-004** A card whose `status === 'waiting'` draws a 1px ring in `--status-waiting` at 45% alpha (light `rgba(255,59,48,0.45)`, dark `rgba(255,69,58,0.45)`) plus `--shadow-md`, hovered or not (waiting beats hover).
 - **CARD-005** A selected card draws a 2px `--accent` ring (light `#007aff`, dark `#0a84ff`) plus `--shadow-md`; selection overrides the waiting ring (the waiting ring is not drawn while selected).
 - **CARD-006** A card being dragged draws the 2px accent ring plus `--shadow-lg` and scales to 1.015 around its centre; this overrides selected and waiting. (Exception: ARCH-017.)
-- **CARD-007** Shadow changes animate over 220ms `cubic-bezier(0.2,0.8,0.2,1)`, opacity over 220ms `ease`, transform (the drag scale) over 220ms `cubic-bezier(0.2,0.8,0.2,1)`.
+- **CARD-007** Shadow changes animate over 220ms `cubic-bezier(0.2,0.8,0.2,1)`, opacity over 220ms `ease`, transform (the drag scale) over 220ms `cubic-bezier(0.2,0.8,0.2,1)`. A ring coming on (selected, dragged, waiting) shows at once, so a selection shows the moment it's made; it fades as it goes (feedback #15, added after 1.0.32).
 - **CARD-008** An archived card has opacity 0.78, restored to 1 on hover, selected or dragging; in 0.9.4 every rendered archived card also matches the stack rules, so the effective opacity is 1 (stack depth 0–2 and results) or 0 (depth 3) — see ARCH-014. Port the rule and the override so the cascade result is identical.
 - **CARD-009** The pointer cursor over a card is the default arrow; while a card is being dragged the cursor is `grabbing`.
 - **CARD-010** The header row is a horizontal flex, items aligned to the top, 9px gap, minimum height 20px.
@@ -207,7 +207,7 @@ All values below are resolved for **light** and **dark**. The theme follows `nat
 - **NOTEUI-002** A note's paper is its colour's hue (`FOLDER_HUES[color].frontTop`) mixed 72% into the theme paper (`#ffffff` light, `#b4b4b8` dark) — resolved hex in UI details §Note colours.
 - **NOTEUI-003** Over the paper, a vertical gradient from `rgba(0,0,0,0.035)` at the top edge to transparent at 22px darkens the strip where it sticks.
 - **NOTEUI-004** The note box: padding 16px 18px, radius 4px, shadow `--note-shadow`, text colour `--note-ink` `rgba(0,0,0,0.82)` (both themes).
-- **NOTEUI-005** A selected note, and a note being written in, draws a 2px `--accent` ring outside `--note-shadow`.
+- **NOTEUI-005** A selected note, and a note being written in, draws a 2px `--accent` ring outside `--note-shadow`. The ring shows at once and fades out over the shadow's 220ms (as CARD-007).
 - **NOTEUI-006** A note being dragged rotates −1.5° and scales 1.02 about its centre with `--note-shadow-lifted` (plus the 2px accent ring if selected).
 - **NOTEUI-007** Shadow and transform changes animate over 220ms `cubic-bezier(0.2,0.8,0.2,1)`.
 - **NOTEUI-008** The note text is `--font-ui` 15px, line-height 1.4 (21px), whitespace and newlines preserved, wrapping anywhere, clipped to the note's content box, with the bottom 18px of that box fading linearly to transparent; it is not selectable.

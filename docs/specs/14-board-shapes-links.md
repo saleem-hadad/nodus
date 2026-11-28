@@ -4,10 +4,11 @@ Added after 1.0.8; 0.9.4 had none of this. It makes the board work like Claude W
 
 Sources:
 - `crates/nodus-domain/src/board.rs` (`ShapeKind`, `BoardShape`, `LinkEnd`, `BoardLink`)
+- `crates/nodus-board/src/routes.rs` (where a link runs)
 - `crates/nodus-store/src/records.rs` (how `state.json` keeps them), `state.rs`
 - `crates/nodus-board/src/shapes.rs` (checks, saving, pruning), `drawing.rs` (the undo history)
 - `crates/nodus-core/src/board.rs` (`save_shapes`, `remove_shapes`, `save_links`, `remove_links`, `save_image`, `import_image`)
-- `crates/nodus-ui/src/board/shapes.rs` (the canvas's side), `images.rs`, `cards/shape.rs` (drawing a shape), `overlays/ink/links.rs` (drawing links), `overlays/ink/{input,dock,ops,draw}.rs` (the tools)
+- `crates/nodus-ui/src/board/shapes.rs` (the canvas's side), `images.rs`, `cards/shape.rs` (drawing a shape), `overlays/ink/links.rs` (drawing links), `overlays/ink/{input,dock,ops,draw}.rs` (the tools), `theme/tokens.rs` (the shapes' palette)
 
 ## Summary
 
@@ -30,7 +31,7 @@ A **shape** is a thing on the board, like a note: a rectangle, ellipse or diamon
 ## Shapes
 
 - **SHAPE-001** Shapes are nodes, oldest first, after the views and before the free notes. They draw at z 0, stickers at z 2 with the notes, so a sticker on a card shows over it. Every one is draggable and selectable.
-- **SHAPE-002** The dock's **Shape** tool (key `R`, in the place of 1.0.7's ink rectangle) draws the kind picked, from corner to corner. Shift keeps it square, or a circle. A press that moves less than 8 screen px puts one down at its usual size, centred on the press: 180×96 for a rectangle or ellipse, 160×112 for a diamond, scaled by `sizeAt(zoom)` so it looks the same size at any zoom. The new shape has the current ink colour. It's selected with its words open for writing, and the tool goes back to the Pointer.
+- **SHAPE-002** The dock's **Shape** tool (key `R`, in the place of 1.0.7's ink rectangle) draws the kind picked, from corner to corner. Shift keeps it square, or a circle. A press that moves less than 8 screen px puts one down at its usual size, centred on the press: 180×96 for a rectangle or ellipse, 160×112 for a diamond, scaled by `sizeAt(zoom)` so it looks the same size at any zoom. The new shape has the shapes' colour (SHAPE-017). It's selected with its words open for writing, and the tool goes back to the Pointer.
 - **SHAPE-003** Pressing the Shape button takes up the tool with its picker out, to its right: Rectangle, Ellipse, Diamond, the current one shown on. Pressing the button again puts the picker away, as does a press anywhere else or Esc. The button's icon is the current kind's. `R` takes up the tool without the picker.
 - **SHAPE-004** **Text** (no key) puts down words on their own, 240×40 (scaled), the line centred on the press, open for writing. The tool goes back to the Pointer. Words left empty go.
 - **SHAPE-005** **Sticker** (`S`) stamps the emoji picked, 64×64 (scaled), centred on each press. The tool stays out. Its button opens a picker of 16 stickers in two rows (👍 ❤️ 🔥 ✅ ❌ ⭐ 🎉 💡 ⚠️ 🚀 👀 ❓ 🐛 📌 ⏳ 😀) and works the picker as SHAPE-003's does. The first is 👍.
@@ -45,11 +46,23 @@ A **shape** is a thing on the board, like a note: a rectangle, ellipse or diamon
 - **SHAPE-011** Selected, a shape resizes from its edges and corners as a note does (NOTEUI-025): 9px handles, down to 16 units.
 - **SHAPE-012** Double-click, Return (the one shape selected) or the menu's **Edit text** writes in a rectangle, ellipse, diamond or text.
   - Esc, ⌘Return, or leaving the field puts the words in, and the board takes the keyboard back. Keys, presses and the wheel stay in the field meanwhile.
-  - A box's words are centred, the UI font at 15/21, medium, in the theme's text colour. A diamond's keep to its middle half.
-  - Text on its own is 18/24 semibold in the shape's colour.
-- **SHAPE-013** A rectangle (10-unit corners), ellipse or diamond is filled with its colour 14% into `--bg-elevated` and outlined 2 units in its colour, inside its box. A picture is shown whole (`contain`) with 8-unit corners and a small shadow. Selected or being written in, a shape has a 1.5px accent ring 3 units outside its box.
-- **SHAPE-015** Picking a colour in the ink palette also recolours the selected shapes and the selected link, as one change.
-- **SHAPE-016** The minimap draws shapes in their colour.
+  - A box's words are centred, the UI font at 15/21, semibold, in the theme's text colour. A diamond's keep to its middle half.
+  - Text on its own is 18/24 semibold in its colour's words tone (SHAPE-013).
+- **SHAPE-013** Shapes have a palette of their own, apart from the pen's, picked for each theme (added after 1.0.32; until then a shape was its ink colour, outlined in it over a 14% tint). Each colour has a fill, an edge and a words tone:
+
+  | Colour | Light: fill / edge / words | Dark: fill / edge / words |
+  |---|---|---|
+  | Graphite | `#ffffff` / `#c4c4ca` / text | `#2c2c30` / `#5c5c63` / text |
+  | Red | `#fde4e1` / `#ef7f75` / `#d0342a` | `#432826` / `#c4625a` / `#ff7f75` |
+  | Orange | `#feecd6` / `#f2a94a` / `#b86a0a` | `#43341f` / `#c99447` / `#ffb347` |
+  | Green | `#e1f4e4` / `#62bd77` / `#25893b` | `#223a28` / `#58a86a` / `#5fd677` |
+  | Blue | `#e1edfe` / `#5f99ef` / `#0a66d6` | `#213450` / `#5389d6` / `#5aa5ff` |
+  | Purple | `#efe4fb` / `#b383e4` / `#9447c4` | `#382a48` / `#9c72c6` / `#cc84f2` |
+
+  A rectangle (6-unit corners), ellipse or diamond is filled with its fill and edged 2 units in its edge, inside its box. A picture is shown whole (`contain`) with 8-unit corners and a small shadow. Selected or being written in, a shape has a 1.5px accent ring 3 units outside its box, a rectangle's ring rounded 9 units to follow its corners.
+- **SHAPE-015** Picking a colour in the palette also recolours the selected shapes and the selected link, as one change.
+- **SHAPE-016** The minimap draws shapes in their edge colour.
+- **SHAPE-017** New shapes, words and arrows take the shapes' colour, which is kept apart from the pen's (INKUI-004): Graphite at first, then the colour last picked for them, app-wide and across restarts (key `nodus.shapeColor`). The palette works on it while the Shape, Arrow or Text tool is out, or the Pointer has shapes or a link selected and no ink stroke; its button then reads **Shape colour** and its dot and swatches show the shapes' edge colours. Otherwise it works on the pen's colour, as before.
 - **SHAPE-020** ⌫ / Delete deletes the selected shapes with the cards, notes and views selected beside them, and every link they held, as one change.
 - **SHAPE-021** The eraser takes shapes it passes over (within 6 screen px of the box) and links it passes over (within 6 screen px of the curve), with the ink, as one change. A shape's links go with it.
 - **SHAPE-022** A shape's right-click menu: **Edit text** (↩, for the kinds with words), then **Delete** (⌫), or **Delete N shapes** for a selection.
@@ -57,14 +70,18 @@ A **shape** is a thing on the board, like a note: a rectangle, ellipse or diamon
 
 ## Links
 
-- **LINK-001** A link runs between the boxes of what holds its ends, as drawn now. Two boxes: the lineage edge's Bézier between their facing sides (BOARD-029, BOARD-030). A box and a loose point: from the box's side facing the point, curving out, then straight to it. Two points: a straight line.
-- **LINK-002** Drawn above the cards and under the ink's strokes, 2 units wide in its colour (the accent when selected), with a filled 12-unit arrowhead at `to`.
+- **LINK-001** A link runs between the boxes of what holds its ends, as drawn now, in straight runs at right angles with bends rounded 10 units (less where a run is short). Until 1.0.32 it was the lineage edge's Bézier, which lineage edges keep (BOARD-029, BOARD-030).
+  - Two boxes at least 24 units apart one way: from the side of one to the facing side of the other. Straight across where their facing sides share 16 units or more (at the middle of the two boxes' middles, kept 8 units inside what they share); else a step halfway between them.
+  - At least 24 units apart both ways: one bend, out of the side facing along the longer way and into the other's top or bottom (or out of the top or bottom and into a side).
+  - Closer than that: as for the way they're further apart; overlapping: straight between their edges.
+  - A box and a loose point: out of the side facing the point (the box's proportions decide which, as BOARD-029's do), straight when the point is level with that side, else one bend. Two points: a straight line.
+- **LINK-002** Drawn above the cards and under the ink's strokes, 1.75 units wide (the accent when selected), with a filled 10-unit arrowhead at `to`. A Graphite link is a quiet grey (`#a3a3aa` light, `#74747c` dark); another colour is its shape edge (SHAPE-013).
 - **LINK-003** It's drawn while both ends are. That leaves out an archived card, a note stuck on a card, and something hidden.
-- **LINK-004** A label sits on the link's middle: a pill with 6-unit corners in `--bg-elevated`, with a 1-unit border in the link's colour at 60%. Its words are the UI font 13/22 semibold, with 8 units each side.
+- **LINK-004** A label sits halfway along the link: a chip with round ends in `--bg-elevated`, with a 1-unit accent border while its link is selected or it's being written. Its words are the UI font 13/22 medium in `--text-secondary`, with 10 units each side.
 - **LINK-005** The selected link shows both ends as handles: 10px circles in its colour around a `--bg-elevated` centre.
 - **LINK-010** The **Arrow** tool (`A`) draws a link from what's pressed, or from the spot.
   - While dragging, what's under the pointer that it can hold has a dashed accent box 6px outside it, and a loose end is dashed.
-  - On release it holds what's under the pointer, or ends loose there. It has the current ink colour, and the tool stays out. 1.0.7's ink arrows stay as ink.
+  - On release it holds what's under the pointer, or ends loose there. It has the shapes' colour (SHAPE-017), and the tool stays out. 1.0.7's ink arrows stay as ink.
 - **LINK-011** A link that reached nothing and moved less than 8 screen px is a slip and isn't kept.
 - **LINK-012** With the Pointer, a press within 6 screen px of a link, or on its label, selects it. This drops the selection of cards, notes, views and ink, and the board doesn't see the press. A press elsewhere drops it. Hovering one shows the pointing hand.
 - **LINK-013** ⌫ / Delete deletes the selected link. Esc lets go of it.

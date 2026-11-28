@@ -127,17 +127,44 @@ pub fn ink_rgba(t: &Tokens, color: InkColor) -> Rgba {
     }
 }
 
-/// INKUI-004: where the colour picked last is kept, app-wide and across
-/// restarts (`localStorage`, brought over from 0.9.4's).
-pub const COLOR_KEY: &str = "nodus.inkColor";
+/// A shape's colours in this theme (SHAPE-013): its fill, its edge, and
+/// words on their own in it.
+pub fn shape_tone(t: &Tokens, color: InkColor) -> (Rgba, Rgba, Rgba) {
+    let i = color as usize;
+    (t.shape_fill[i], t.shape_edge[i], t.shape_words[i])
+}
 
-/// The colour picked last; red when none was, or what's stored isn't one.
+/// A link's colour (LINK-002): a quiet grey in Graphite, else its shape
+/// edge's.
+pub fn link_rgba(t: &Tokens, color: InkColor) -> Rgba {
+    match color {
+        InkColor::Graphite => t.link_line,
+        _ => shape_tone(t, color).1,
+    }
+}
+
+/// INKUI-004: where the pen's colour picked last is kept, app-wide and
+/// across restarts (`localStorage`, brought over from 0.9.4's).
+pub const COLOR_KEY: &str = "nodus.inkColor";
+/// SHAPE-017: and the shapes' and arrows' own.
+pub const SHAPE_COLOR_KEY: &str = "nodus.shapeColor";
+
+/// The pen's colour picked last; red when none was, or what's stored isn't one.
 pub(crate) fn stored_color(nodus: &nodus_core::Nodus) -> InkColor {
     nodus
         .local_storage()
         .get(COLOR_KEY)
         .and_then(|c| InkColor::parse(&c))
         .unwrap_or(InkColor::Red)
+}
+
+/// The shapes' colour picked last; Graphite when none was (SHAPE-017).
+pub(crate) fn stored_shape_color(nodus: &nodus_core::Nodus) -> InkColor {
+    nodus
+        .local_storage()
+        .get(SHAPE_COLOR_KEY)
+        .and_then(|c| InkColor::parse(&c))
+        .unwrap_or(InkColor::Graphite)
 }
 
 /// A label being typed: a new one, or one already on the board (`id`).
@@ -204,8 +231,11 @@ enum InkGesture {
 #[derive(Default)]
 pub(crate) struct Ink {
     pub tool: InkTool,
-    /// The current colour, read from storage the first time the dock is drawn.
+    /// The pen's colour, read from storage the first time the dock is drawn.
     color: Option<InkColor>,
+    /// The colour new shapes, words and arrows take (SHAPE-017), read the
+    /// same way.
+    shape_color: Option<InkColor>,
     pub selected: Option<String>,
     /// The selected link (LINK-012).
     pub link: Option<String>,
@@ -251,6 +281,17 @@ impl Ink {
 
     pub fn color(&self, _: &App) -> InkColor {
         self.color.unwrap_or(InkColor::Red)
+    }
+
+    /// SHAPE-017: the colour new shapes, words and arrows take.
+    pub fn shape_color(&self) -> InkColor {
+        self.shape_color.unwrap_or(InkColor::Graphite)
+    }
+
+    /// Whether the tool out draws shapes, words or arrows, whose colour the
+    /// palette then shows and sets (SHAPE-017).
+    pub fn tool_draws_shapes(&self) -> bool {
+        matches!(self.tool, InkTool::Shape | InkTool::Arrow | InkTool::Text)
     }
 
     pub fn shape_kind(&self) -> ShapeKind {

@@ -29,6 +29,7 @@ pub mod ink_draw;
 pub mod merge;
 pub mod notes;
 pub mod pictures;
+pub mod routes;
 mod runs;
 pub mod shapes;
 pub mod stop;

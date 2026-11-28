@@ -277,11 +277,11 @@ impl BoardCanvas {
     /// the end with the head.
     fn link_end_at(&self, p: Pt, tol: f64) -> Option<(String, bool)> {
         let id = self.overlays.ink.link.clone()?;
-        let curve = self.link(&id).and_then(|l| self.link_curve(l))?;
-        let near = |q: Point| (q.x - p[0]).hypot(q.y - p[1]) <= tol;
-        if near(curve[3]) {
+        let line = self.link(&id).and_then(|l| self.link_line(l))?;
+        let near = |q: &Point| (q.x - p[0]).hypot(q.y - p[1]) <= tol;
+        if line.last().is_some_and(near) {
             Some((id, true))
-        } else if near(curve[0]) {
+        } else if line.first().is_some_and(near) {
             Some((id, false))
         } else {
             None
@@ -322,8 +322,8 @@ impl BoardCanvas {
             .links()
             .iter()
             .filter(|l| {
-                self.link_curve(l)
-                    .is_some_and(|c| along.iter().any(|q| shapes::distance(&c, *q) <= tol))
+                self.link_line(l)
+                    .is_some_and(|line| along.iter().any(|q| shapes::distance(&line, *q) <= tol))
             })
             .map(|l| l.id.clone())
             .collect();
@@ -480,7 +480,7 @@ impl BoardCanvas {
                         x: end[0],
                         y: end[1],
                     },
-                    color: self.overlays.ink.color(cx),
+                    color: self.overlays.ink.shape_color(),
                     label: String::new(),
                     by: None,
                     created_at: crate::parity::now_ms(cx),

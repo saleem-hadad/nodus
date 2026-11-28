@@ -57,8 +57,8 @@ impl BoardCanvas {
     /// the shape, link and words draw themselves (MOTION-021, MOTION-022).
     fn tip(&self, step: &Step, p: f32) -> Option<Point> {
         if step.what == What::Link {
-            let curve = self.link_curve(self.link(&step.id)?)?;
-            return Some(shapes::at(&curve, f64::from(crate::theme::motion::ease_in_out(p))));
+            let line = self.link_line(self.link(&step.id)?)?;
+            return Some(shapes::at(&line, f64::from(crate::theme::motion::ease_in_out(p))));
         }
         let r = self.node(&step.id)?.rect();
         let centre = Point {

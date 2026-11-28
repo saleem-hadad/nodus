@@ -134,7 +134,7 @@ impl BoardCanvas {
                     nodus_board::geometry::Point { x: end[0], y: end[1] },
                     *square,
                 ),
-                ink_rgba(&t, ink.color.unwrap_or(InkColor::Red)),
+                shape_tone(&t, ink.shape_color()).1,
             )),
             _ => None,
         };

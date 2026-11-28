@@ -18,6 +18,8 @@ use crate::notes::{obstacles, rightmost_card};
 /// The smallest and largest a shape is, in board units.
 pub const SHAPE_MIN: f64 = 16.0;
 pub const SHAPE_MAX: f64 = 4000.0;
+/// How round a rectangle's corners are, in board units (SHAPE-013).
+pub const SHAPE_CORNER: f64 = 6.0;
 /// How much text a shape keeps, in UTF-16 units.
 pub const SHAPE_MAX_TEXT: usize = 2000;
 /// How long a sticker's emoji is at most.

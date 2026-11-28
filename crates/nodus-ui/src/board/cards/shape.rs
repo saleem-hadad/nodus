@@ -1,8 +1,8 @@
 //! Shapes on the board (spec 14, SHAPE-001, SHAPE-012…SHAPE-016): a
-//! rectangle, ellipse or diamond tinted with its colour and outlined in
-//! it, words centred in it; words on their own; a sticker's emoji; a
-//! picture. Selected, a shape shows an accent ring and resizes from its
-//! edges; a double-click writes in it.
+//! rectangle, ellipse or diamond filled with its colour's tint and edged
+//! in its tone, words centred in it; words on their own; a sticker's
+//! emoji; a picture. Selected, a shape shows an accent ring and resizes
+//! from its edges; a double-click writes in it.
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -20,9 +20,9 @@ use nodus_domain::ShapeKind;
 
 use super::note::WithCaret;
 use super::resize::{Handles, resize_zones};
-use super::{BoardEnv, Resized, anim, mix};
+use super::{BoardEnv, Resized, anim};
 use crate::board::nodes::ShapeNode;
-use crate::board::overlays::ink::{ink_rgba, shape_path};
+use crate::board::overlays::ink::{shape_path, shape_tone};
 use crate::board::shapes;
 use crate::theme::{self, fonts, motion};
 
@@ -40,7 +40,7 @@ pub fn render(env: &Rc<BoardEnv>, node: &ShapeNode<'_>, window: &mut Window, cx:
     let t = theme::tokens(cx);
     let shape = node.shape;
     let (w, h) = (node.node.size.width, node.node.size.height);
-    let color = ink_rgba(&t, shape.color);
+    let (tint, edge, word_color) = shape_tone(&t, shape.color);
     let editing = env.renaming.as_deref() == Some(shape.id.as_str()) && shape.kind.has_text();
     let selected = node.node.selected;
 
@@ -52,7 +52,7 @@ pub fn render(env: &Rc<BoardEnv>, node: &ShapeNode<'_>, window: &mut Window, cx:
         ShapeKind::Rect | ShapeKind::Ellipse | ShapeKind::Diamond => {
             let kind = shape.kind;
             let share = drawing.map(shapes::drawn_share);
-            let mut fill = mix(color, 0.14, t.bg_elevated);
+            let mut fill = tint;
             if let Some((_, f, _)) = share {
                 fill.a *= f;
             }
@@ -101,7 +101,7 @@ pub fn render(env: &Rc<BoardEnv>, node: &ShapeNode<'_>, window: &mut Window, cx:
                         None => shape_path(&mut line, kind, inner, &at),
                     }
                     if let Ok(line) = line.build() {
-                        window.paint_path(line, color);
+                        window.paint_path(line, edge);
                     }
                 },
             )
@@ -118,7 +118,7 @@ pub fn render(env: &Rc<BoardEnv>, node: &ShapeNode<'_>, window: &mut Window, cx:
                 env,
                 node,
                 TEXT,
-                FontWeight::MEDIUM,
+                FontWeight::SEMIBOLD,
                 t.text_primary,
                 (iw, ih),
                 editing,
@@ -149,7 +149,7 @@ pub fn render(env: &Rc<BoardEnv>, node: &ShapeNode<'_>, window: &mut Window, cx:
                 node,
                 WORDS,
                 FontWeight::SEMIBOLD,
-                color,
+                word_color,
                 (w, h),
                 editing,
                 drawing,
@@ -221,16 +221,21 @@ pub fn render(env: &Rc<BoardEnv>, node: &ShapeNode<'_>, window: &mut Window, cx:
         }
     };
 
-    // SHAPE-013: selected, an accent ring just outside it.
+    // SHAPE-013: selected, an accent ring just outside it, its corners
+    // round with a rectangle's.
     let ring = (selected || editing).then(|| {
         let gap = z.f(3.0);
+        let round = match shape.kind {
+            ShapeKind::Rect => nodus_board::shapes::SHAPE_CORNER as f32 + 3.0,
+            _ => 6.0,
+        };
         div()
             .absolute()
             .left(px(-gap))
             .top(px(-gap))
             .w(z.px(w) + px(2.0 * gap))
             .h(z.px(h) + px(2.0 * gap))
-            .rounded(z.px(6.0))
+            .rounded(z.px(round))
             .border(px(1.5))
             .border_color(t.accent)
     });

@@ -18,7 +18,8 @@ use nodus_board::frames::board_frames;
 use nodus_board::geometry::{note_size, view_size};
 use nodus_board::ink_draw::{LABEL_FONT, LABEL_LINE, PEN_WIDTH, Seg, fallback_width, stroke_box, stroke_path};
 use nodus_board::pictures::{picture_kind, picture_size};
-use nodus_board::shapes::item_rect;
+use nodus_board::routes::{self, End};
+use nodus_board::shapes::{SHAPE_CORNER, item_rect};
 use nodus_domain::{FolderColor, InkColor, InkKind, InkStroke, Rect, ShapeKind, js};
 use nodus_store::BoardState;
 use resvg::{tiny_skia, usvg};
@@ -72,6 +73,27 @@ fn ink_color(color: InkColor) -> &'static str {
         InkColor::Green => "#28cd41",
         InkColor::Blue => "#007aff",
         InkColor::Purple => "#af52de",
+    }
+}
+
+/// A shape's colours on the light board (SHAPE-013): its fill, its edge,
+/// and words on their own.
+fn shape_tone(color: InkColor) -> (&'static str, &'static str, &'static str) {
+    match color {
+        InkColor::Graphite => ("#ffffff", "#c4c4ca", "#1d1d1f"),
+        InkColor::Red => ("#fde4e1", "#ef7f75", "#d0342a"),
+        InkColor::Orange => ("#feecd6", "#f2a94a", "#b86a0a"),
+        InkColor::Green => ("#e1f4e4", "#62bd77", "#25893b"),
+        InkColor::Blue => ("#e1edfe", "#5f99ef", "#0a66d6"),
+        InkColor::Purple => ("#efe4fb", "#b383e4", "#9447c4"),
+    }
+}
+
+/// A link's colour (LINK-002): grey in Graphite, else its shape edge's.
+fn link_color(color: InkColor) -> &'static str {
+    match color {
+        InkColor::Graphite => "#a3a3aa",
+        _ => shape_tone(color).1,
     }
 }
 
@@ -635,62 +657,87 @@ pub(crate) fn look(
         tags.add('s', &shape.id, "sticker", &shape.text, corner(r), false);
     }
 
-    // Links, then ink, over the things.
+    // Links, then ink, over the things: along the board's right-angle
+    // routes (LINK-001).
     for link in board.links.values() {
         let end = |e: &nodus_domain::LinkEnd| match e.node.as_deref() {
-            Some(id) => item_rect(board, id).map(Some),
-            None => Some(None),
+            Some(id) => item_rect(board, id).map(End::Node),
+            None => Some(End::Point(nodus_board::geometry::Point { x: e.x, y: e.y })),
         };
         let (Some(from), Some(to)) = (end(&link.from), end(&link.to)) else {
             continue;
         };
-        let point =
-            |r: Option<Rect>, e: &nodus_domain::LinkEnd| r.map_or((e.x, e.y), |r| (r.x + r.w / 2.0, r.y + r.h / 2.0));
-        let (fc, tc) = (point(from, &link.from), point(to, &link.to));
-        let a = from.map_or(fc, |r| edge_toward(r, tc));
-        let b = to.map_or(tc, |r| edge_toward(r, fc));
-        let line = Rect {
-            x: a.0.min(b.0),
-            y: a.1.min(b.1),
-            w: (a.0 - b.0).abs().max(1.0),
-            h: (a.1 - b.1).abs().max(1.0),
+        let line = routes::route(from, to);
+        let (Some(first), Some(last)) = (line.first().copied(), line.last().copied()) else {
+            continue;
         };
-        if !seen(line) {
+        let (x0, y0, x1, y1) = line
+            .iter()
+            .fold((first.x, first.y, first.x, first.y), |(a, b, c, d), p| {
+                (a.min(p.x), b.min(p.y), c.max(p.x), d.max(p.y))
+            });
+        if !seen(Rect {
+            x: x0,
+            y: y0,
+            w: (x1 - x0).max(1.0),
+            h: (y1 - y0).max(1.0),
+        }) {
             continue;
         }
-        let color = ink_color(link.color);
-        let width = svg.line(2.0);
-        let head = 12.0_f64.max(8.0 / scale);
-        let d = path_string(&nodus_board::ink_draw::arrow_path([a.0, a.1], [b.0, b.1], head));
+        let color = link_color(link.color);
+        let width = svg.line(1.75);
+        let head = routes::head(&line, 10.0_f64.max(8.0 / scale));
+        // The line stops under the head when its last run is long enough to.
+        let before = line[line.len().saturating_sub(2)];
+        let under_head = (last.x - before.x).hypot(last.y - before.y) > 10.0;
+        let mut d = String::new();
+        for (i, p) in line.iter().enumerate() {
+            let p = if i == line.len() - 1 && under_head {
+                nodus_board::geometry::Point {
+                    x: (head[1].x + head[2].x) / 2.0,
+                    y: (head[1].y + head[2].y) / 2.0,
+                }
+            } else {
+                *p
+            };
+            let _ = write!(d, "{}{} {}", if i == 0 { "M" } else { "L" }, n(p.x), n(p.y));
+        }
         let _ = write!(
             svg.out,
-            r#"<path d="{d}" fill="none" stroke="{color}" stroke-width="{}" stroke-linecap="round" stroke-linejoin="round"/>"#,
-            n(width)
+            r#"<path d="{d}" fill="none" stroke="{color}" stroke-width="{}" stroke-linecap="round" stroke-linejoin="round"/><path d="M{} {}L{} {}L{} {}Z" fill="{color}"/>"#,
+            n(width),
+            n(head[0].x),
+            n(head[0].y),
+            n(head[1].x),
+            n(head[1].y),
+            n(head[2].x),
+            n(head[2].y)
         );
-        let mid = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
-        let mut under = mid;
+        let mid = routes::at(&line, 0.5);
+        let mut under = (mid.x, mid.y);
         if !link.label.is_empty() {
+            // LINK-004: a chip on the line.
             let size = svg.size(13.0);
-            let w = (js::utf16_len(&link.label).min(40) as f64 * size * 0.58 + 16.0).min(360.0);
+            let w = (js::utf16_len(&link.label).min(40) as f64 * size * 0.58 + 20.0).min(360.0);
             let h = size * 1.7;
-            let pill = Rect {
-                x: mid.0 - w / 2.0,
-                y: mid.1 - h / 2.0,
+            let chip = Rect {
+                x: mid.x - w / 2.0,
+                y: mid.y - h / 2.0,
                 w,
                 h,
             };
-            svg.rect(pill, 6.0, CARD, Some((color, svg.line(1.0))), false);
-            under.1 = pill.y + pill.h;
+            svg.rect(chip, h / 2.0, CARD, None, false);
+            under.1 = chip.y + chip.h;
             svg.words(
-                pill.x + 6.0,
-                pill.y + (h - size * 1.3) / 2.0,
-                w - 12.0,
+                chip.x + 8.0,
+                chip.y + (h - size * 1.3) / 2.0,
+                w - 16.0,
                 size * 1.3,
                 &Text {
                     text: &link.label,
                     size,
-                    weight: 600,
-                    fill: TEXT,
+                    weight: 500,
+                    fill: FAINT,
                     align: Align::Middle,
                 },
             );
@@ -914,11 +961,10 @@ fn draw_shape(
     files: &mut HashMap<String, Arc<Vec<u8>>>,
 ) {
     let r = shape.rect();
-    let color = ink_color(shape.color);
+    let (fill, color, words) = shape_tone(shape.color);
     let width = svg.line(2.0);
-    let fill = format!("{color}24");
     match shape.kind {
-        ShapeKind::Rect => svg.rect(r, 10.0, &fill, Some((color, width)), false),
+        ShapeKind::Rect => svg.rect(r, SHAPE_CORNER, fill, Some((color, width)), false),
         ShapeKind::Ellipse => {
             let _ = write!(
                 svg.out,
@@ -957,7 +1003,7 @@ fn draw_shape(
                     text: &shape.text,
                     size,
                     weight: 600,
-                    fill: color,
+                    fill: words,
                     align: Align::Middle,
                 },
             );
@@ -1031,7 +1077,7 @@ fn draw_shape(
         &Text {
             text: &shape.text,
             size,
-            weight: 500,
+            weight: 600,
             fill: TEXT,
             align: Align::Middle,
         },

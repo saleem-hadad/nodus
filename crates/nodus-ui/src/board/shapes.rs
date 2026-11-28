@@ -5,73 +5,22 @@
 
 use nodus_board::drawing::{Change, Outcome};
 use nodus_board::geometry::Point;
+use nodus_board::shapes::SHAPE_CORNER;
 use nodus_domain::{BoardLink, BoardShape, InkColor, LinkEnd, Rect, ShapeKind};
 
 use super::canvas::BoardCanvas;
-use super::edges;
 use super::scene::{FlowNode, NodeKind};
 use gpui::Context;
 
 /// How close the pointer must come to a link to take it, in screen px.
 pub const LINK_HIT_PX: f64 = 6.0;
 /// How thick a link is drawn, and its arrowhead, in board units.
-pub const LINK_WIDTH: f64 = 2.0;
-pub const LINK_HEAD: f64 = 12.0;
+pub const LINK_WIDTH: f64 = 1.75;
+pub const LINK_HEAD: f64 = 10.0;
 /// A link drawn shorter than this on screen, both ends loose, is a slip.
 pub const MIN_LINK_PX: f64 = 8.0;
 
-/// A link's end as drawn: the box holding it, or its point.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum End {
-    Node(Rect),
-    Point(Point),
-}
-
-/// A link's curve (start, two controls, end): between the facing sides of
-/// two boxes as lineage edges are, from a box's side out to a loose point,
-/// or straight between two points.
-pub fn curve(from: End, to: End) -> [Point; 4] {
-    let dot = |p: Point| Rect {
-        x: p.x,
-        y: p.y,
-        w: 0.0,
-        h: 0.0,
-    };
-    match (from, to) {
-        (End::Node(a), End::Node(b)) => edges::path(a, b),
-        (End::Node(a), End::Point(p)) => {
-            let (s, side) = edges::facing_side(a, dot(p));
-            [s, edges::control(side, s, p), p, p]
-        }
-        (End::Point(p), End::Node(b)) => {
-            let (t, side) = edges::facing_side(b, dot(p));
-            [p, p, edges::control(side, t, p), t]
-        }
-        (End::Point(p), End::Point(q)) => [p, p, q, q],
-    }
-}
-
-/// A point along the curve, `t` from 0 to 1.
-pub fn at(c: &[Point; 4], t: f64) -> Point {
-    let u = 1.0 - t;
-    let (a, b, cc, d) = (u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t);
-    Point {
-        x: a * c[0].x + b * c[1].x + cc * c[2].x + d * c[3].x,
-        y: a * c[0].y + b * c[1].y + cc * c[2].y + d * c[3].y,
-    }
-}
-
-/// The curve's first `t` (0…1), as a curve of its own (de Casteljau): a
-/// link Claude is drawing (MOTION-022).
-pub fn part(c: &[Point; 4], t: f64) -> [Point; 4] {
-    let lerp = |a: Point, b: Point| Point {
-        x: a.x + (b.x - a.x) * t,
-        y: a.y + (b.y - a.y) * t,
-    };
-    let (p01, p12, p23) = (lerp(c[0], c[1]), lerp(c[1], c[2]), lerp(c[2], c[3]));
-    let (p012, p123) = (lerp(p01, p12), lerp(p12, p23));
-    [c[0], p01, p012, lerp(p012, p123)]
-}
+pub use nodus_board::routes::{End, at, distance, head, line_part, route};
 
 /// How much of a rectangle, ellipse or diamond Claude has drawn `p` (0…1)
 /// through it (MOTION-021): its outline first, then its fill and words.
@@ -83,7 +32,7 @@ pub fn drawn_share(p: f32) -> (f32, f32, f32) {
     (outline, fill, words)
 }
 
-/// A rectangle's (10-unit corners), ellipse's or diamond's outline as a
+/// A rectangle's (rounded corners), ellipse's or diamond's outline as a
 /// line, clockwise from where Claude starts it: the top-left corner's end
 /// of the top edge, or the top.
 pub fn outline_line(kind: ShapeKind, r: Rect) -> Vec<Point> {
@@ -108,7 +57,7 @@ pub fn outline_line(kind: ShapeKind, r: Rect) -> Vec<Point> {
         ],
         _ => {
             use std::f64::consts::{FRAC_PI_2, PI};
-            let rad = 10.0f64.min(w / 2.0).min(h / 2.0);
+            let rad = SHAPE_CORNER.min(w / 2.0).min(h / 2.0);
             let arc = |cx: f64, cy: f64, from: f64| {
                 (1..=8).map(move |i| {
                     let a = from + FRAC_PI_2 * f64::from(i) / 8.0;
@@ -126,88 +75,6 @@ pub fn outline_line(kind: ShapeKind, r: Rect) -> Vec<Point> {
             line
         }
     }
-}
-
-/// The first `t` (0…1) of a line's length, and the point it ends at.
-pub fn line_part(line: &[Point], t: f64) -> (Vec<Point>, Point) {
-    let Some(&first) = line.first() else {
-        return (Vec::new(), Point { x: 0.0, y: 0.0 });
-    };
-    let len = |a: Point, b: Point| (b.x - a.x).hypot(b.y - a.y);
-    let total: f64 = line.windows(2).map(|w| len(w[0], w[1])).sum();
-    let mut left = total * t.clamp(0.0, 1.0);
-    let mut out = vec![first];
-    for w in line.windows(2) {
-        let l = len(w[0], w[1]);
-        if left <= l {
-            let k = if l > 0.0 { left / l } else { 0.0 };
-            let end = Point {
-                x: w[0].x + (w[1].x - w[0].x) * k,
-                y: w[0].y + (w[1].y - w[0].y) * k,
-            };
-            out.push(end);
-            return (out, end);
-        }
-        left -= l;
-        out.push(w[1]);
-    }
-    let end = *out.last().unwrap_or(&first);
-    (out, end)
-}
-
-/// The curve as a line of `steps` pieces.
-pub fn flatten(c: &[Point; 4], steps: usize) -> Vec<Point> {
-    (0..=steps).map(|i| at(c, i as f64 / steps as f64)).collect()
-}
-
-fn segment_distance(p: Point, a: Point, b: Point) -> f64 {
-    let (dx, dy) = (b.x - a.x, b.y - a.y);
-    let len = dx * dx + dy * dy;
-    let t = if len > 0.0 {
-        (((p.x - a.x) * dx + (p.y - a.y) * dy) / len).clamp(0.0, 1.0)
-    } else {
-        0.0
-    };
-    (p.x - a.x - t * dx).hypot(p.y - a.y - t * dy)
-}
-
-/// How far a point is from the curve.
-pub fn distance(c: &[Point; 4], p: Point) -> f64 {
-    flatten(c, 32)
-        .windows(2)
-        .map(|w| segment_distance(p, w[0], w[1]))
-        .fold(f64::INFINITY, f64::min)
-}
-
-/// The arrowhead at the curve's end: its tip and the two corners behind
-/// it, `len` long and as wide.
-pub fn head(c: &[Point; 4], len: f64) -> [Point; 3] {
-    let tip = c[3];
-    // The way the curve comes in: from its last control, else further back.
-    let from = [c[2], c[1], c[0]]
-        .into_iter()
-        .find(|q| (q.x - tip.x).hypot(q.y - tip.y) > 1e-6)
-        .unwrap_or(Point {
-            x: tip.x - 1.0,
-            y: tip.y,
-        });
-    let angle = (tip.y - from.y).atan2(tip.x - from.x);
-    let back = Point {
-        x: tip.x - len * angle.cos(),
-        y: tip.y - len * angle.sin(),
-    };
-    let (nx, ny) = (-angle.sin() * len / 2.0, angle.cos() * len / 2.0);
-    [
-        tip,
-        Point {
-            x: back.x + nx,
-            y: back.y + ny,
-        },
-        Point {
-            x: back.x - nx,
-            y: back.y - ny,
-        },
-    ]
 }
 
 /// Whether a link can hold on to a node: an active card, a free note, a
@@ -347,7 +214,7 @@ impl BoardCanvas {
             y: nodus_domain::js::round(rect.y),
             w: nodus_domain::js::round(rect.w.max(nodus_board::shapes::SHAPE_MIN)),
             h: nodus_domain::js::round(rect.h.max(nodus_board::shapes::SHAPE_MIN)),
-            color: self.overlays.ink.color(cx),
+            color: self.overlays.ink.shape_color(),
             text,
             image,
             by: None,
@@ -493,9 +360,10 @@ impl BoardCanvas {
         }
     }
 
-    /// LINK-001: where a link runs now; none while either end isn't drawn.
-    pub(crate) fn link_curve(&self, link: &BoardLink) -> Option<[Point; 4]> {
-        Some(curve(self.end(&link.from)?, self.end(&link.to)?))
+    /// LINK-001: where a link runs now, as a line; none while either end
+    /// isn't drawn.
+    pub(crate) fn link_line(&self, link: &BoardLink) -> Option<Vec<Point>> {
+        Some(route(self.end(&link.from)?, self.end(&link.to)?))
     }
 
     /// The top link within `tol` board units of a point.
@@ -503,7 +371,7 @@ impl BoardCanvas {
         self.links()
             .iter()
             .rev()
-            .find(|l| self.link_curve(l).is_some_and(|c| distance(&c, p) <= tol))
+            .find(|l| self.link_line(l).is_some_and(|line| distance(&line, p) <= tol))
             .map(|l| l.id.clone())
     }
 }
@@ -511,37 +379,6 @@ impl BoardCanvas {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    const A: Rect = Rect {
-        x: 0.0,
-        y: 0.0,
-        w: 200.0,
-        h: 100.0,
-    };
-
-    #[test]
-    fn runs_from_a_box_side_out_to_a_point() {
-        let p = Point { x: 500.0, y: 50.0 };
-        let c = curve(End::Node(A), End::Point(p));
-        assert_eq!(c[0], Point { x: 200.0, y: 50.0 });
-        assert_eq!(c[3], p);
-        // Straight between two points.
-        let q = Point { x: 0.0, y: 0.0 };
-        let c = curve(End::Point(q), End::Point(p));
-        assert!(distance(&c, Point { x: 250.0, y: 25.0 }) < 1e-9);
-    }
-
-    #[test]
-    fn points_the_head_along_the_way_in() {
-        let c = curve(
-            End::Point(Point { x: 0.0, y: 0.0 }),
-            End::Point(Point { x: 100.0, y: 0.0 }),
-        );
-        let [tip, l, r] = head(&c, 12.0);
-        assert_eq!(tip, Point { x: 100.0, y: 0.0 });
-        assert!((l.x - 88.0).abs() < 1e-9 && (r.x - 88.0).abs() < 1e-9);
-        assert!((l.y - r.y).abs() - 12.0 < 1e-9);
-    }
 
     #[test]
     fn boxes_from_corners_either_way() {

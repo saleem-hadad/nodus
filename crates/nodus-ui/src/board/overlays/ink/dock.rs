@@ -9,8 +9,17 @@ impl BoardCanvas {
         if self.overlays.ink.color.is_none() {
             self.overlays.ink.color = Some(stored_color(&self.state.read(cx).nodus));
         }
+        if self.overlays.ink.shape_color.is_none() {
+            self.overlays.ink.shape_color = Some(stored_shape_color(&self.state.read(cx).nodus));
+        }
         let tool = self.overlays.ink.tool;
-        let color = self.overlays.ink.color(cx);
+        // SHAPE-017: the colour the palette works on, the shapes' or the pen's.
+        let for_shapes = self.palette_for_shapes();
+        let color = if for_shapes {
+            self.overlays.ink.shape_color()
+        } else {
+            self.overlays.ink.color(cx)
+        };
         let palette = self.overlays.ink.palette;
         let empty = self.ink_strokes().is_empty();
         let me = cx.entity().downgrade();
@@ -88,13 +97,13 @@ impl BoardCanvas {
 
         // The colour button and its palette.
         let toggle = me.clone();
-        let dot = ink_rgba(&t, color);
+        let dot = swatch_rgba(&t, color, for_shapes);
         let color_button = tool_button(
             "ink-color",
             &t,
             false,
             false,
-            "Ink colour".to_owned(),
+            if for_shapes { "Shape colour" } else { "Ink colour" }.to_owned(),
             move |el, _| {
                 el.child(div().size(px(14.)).rounded_full().bg(dot).shadow(vec![inset_shadow(
                     0.,
@@ -115,7 +124,7 @@ impl BoardCanvas {
             window,
             cx,
         );
-        let palette_el = palette.then(|| self.render_ink_palette(&t, color, window, cx));
+        let palette_el = palette.then(|| self.render_ink_palette(&t, color, for_shapes, window, cx));
         let area = me.clone();
         children.push(
             div()
@@ -214,6 +223,7 @@ impl BoardCanvas {
         &mut self,
         t: &Tokens,
         current: InkColor,
+        for_shapes: bool,
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
@@ -227,7 +237,7 @@ impl BoardCanvas {
                 .size(px(18.))
                 .flex_none()
                 .rounded_full()
-                .bg(ink_rgba(t, c))
+                .bg(swatch_rgba(t, c, for_shapes))
                 .shadow(vec![inset_shadow(0., 0., 0., 0.5, theme::tokens::rgba(0, 0, 0, 0.25))])
                 .tooltip(native_tooltip(color_name(c).into()))
                 .on_click(move |_, _, cx| {
@@ -263,6 +273,16 @@ impl BoardCanvas {
             .translate(px(-4. * (1. - rise)), px(0.))
             .children(swatches)
             .into_any_element()
+    }
+}
+
+/// A colour as the palette shows it: as shapes are edged in it, or as the
+/// pen draws it.
+fn swatch_rgba(t: &Tokens, color: InkColor, for_shapes: bool) -> Rgba {
+    if for_shapes {
+        shape_tone(t, color).1
+    } else {
+        ink_rgba(t, color)
     }
 }
 
